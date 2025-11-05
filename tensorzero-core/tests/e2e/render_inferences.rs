@@ -275,6 +275,7 @@ pub async fn test_render_samples_normal() {
                         StoredInputMessageContent::File(Box::new(StoredFile(
                             ObjectStoragePointer {
                                 source_url: None,
+                                detail: None,
                                 mime_type: mime::IMAGE_PNG,
                                 storage_path: StoragePath {
                                     kind: StorageKind::S3Compatible {
@@ -833,6 +834,7 @@ pub async fn test_render_datapoints_normal() {
                         StoredInputMessageContent::File(Box::new(StoredFile(
                             ObjectStoragePointer {
                                 source_url: None,
+                                detail: None,
                                 mime_type: mime::IMAGE_PNG,
                                 storage_path: StoragePath {
                                     kind: StorageKind::S3Compatible {

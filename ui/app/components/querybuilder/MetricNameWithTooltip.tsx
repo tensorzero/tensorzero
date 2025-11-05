@@ -5,7 +5,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import type { MetricConfig } from "tensorzero-node";
+import type { MetricConfig } from "~/types/tensorzero";
 
 interface MetricNameWithTooltipProps {
   metricName: string;

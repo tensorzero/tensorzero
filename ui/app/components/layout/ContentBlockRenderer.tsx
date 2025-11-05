@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { DisplayInputMessageContent } from "~/utils/clickhouse/common";
-import type { ContentBlockChatOutput } from "tensorzero-node";
+import type { ContentBlockChatOutput } from "~/types/tensorzero";
 import {
   ToolCallMessage,
   ToolResultMessage,

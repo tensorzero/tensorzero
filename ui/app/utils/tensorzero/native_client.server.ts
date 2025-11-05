@@ -3,7 +3,7 @@ import {
   TensorZeroClient,
   runEvaluationStreaming,
 } from "tensorzero-node";
-import type { CacheEnabledMode, EvaluationRunEvent } from "tensorzero-node";
+import type { CacheEnabledMode, EvaluationRunEvent } from "~/types/tensorzero";
 import { getEnv } from "../env.server";
 
 let _tensorZeroClient: TensorZeroClient | undefined;

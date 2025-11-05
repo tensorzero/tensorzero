@@ -6,7 +6,7 @@ export const handle: RouteHandle = {
   crumb: () => ["Models"],
 };
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
-import type { TimeWindow } from "tensorzero-node";
+import type { TimeWindow } from "~/types/tensorzero";
 import { getQuantiles } from "tensorzero-node";
 import { ModelUsage } from "~/components/model/ModelUsage";
 import { ModelLatency } from "~/components/model/ModelLatency";

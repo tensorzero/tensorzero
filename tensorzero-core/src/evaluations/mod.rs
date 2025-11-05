@@ -17,7 +17,10 @@ use crate::{
     },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
-    inference::types::{extra_body::ExtraBodyConfig, extra_headers::ExtraHeadersConfig},
+    inference::types::{
+        chat_completion_inference_params::ServiceTier, extra_body::ExtraBodyConfig,
+        extra_headers::ExtraHeadersConfig,
+    },
     jsonschema_util::StaticJSONSchema,
     tool::create_implicit_tool_call_config,
     variant::{
@@ -559,6 +562,8 @@ struct UninitializedLLMJudgeChatCompletionVariantConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    service_tier: Option<ServiceTier>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     thinking_budget_tokens: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     verbosity: Option<String>,
@@ -617,6 +622,7 @@ fn convert_chat_completion_judge_to_variant(
         reasoning_effort: params.reasoning_effort,
         retries: params.retries,
         seed: params.seed,
+        service_tier: params.service_tier,
         stop_sequences: params.stop_sequences,
         system_template: Some(system_template.path),
         temperature: params.temperature,
@@ -791,6 +797,7 @@ impl UninitializedLLMJudgeVariantInfo {
                                 reasoning_effort: params.evaluator.reasoning_effort,
                                 retries: params.evaluator.retries,
                                 seed: params.evaluator.seed,
+                                service_tier: params.evaluator.service_tier,
                                 stop_sequences: params.evaluator.stop_sequences,
                                 system_template: Some(evaluator_system_template.path),
                                 temperature: params.evaluator.temperature,
@@ -862,6 +869,7 @@ impl UninitializedLLMJudgeVariantInfo {
                                 reasoning_effort: params.fuser.reasoning_effort,
                                 retries: params.fuser.retries,
                                 seed: params.fuser.seed,
+                                service_tier: params.fuser.service_tier,
                                 stop_sequences: params.fuser.stop_sequences,
                                 system_template: Some(fuser_system_template.path),
                                 temperature: params.fuser.temperature,
@@ -976,6 +984,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     extra_body: variant.extra_body().cloned(),
                     extra_headers: variant.extra_headers().cloned(),
                     reasoning_effort: variant.reasoning_effort().cloned(),
+                    service_tier: variant.service_tier().cloned(),
                     thinking_budget_tokens: variant.thinking_budget_tokens(),
                     verbosity: variant.verbosity().cloned(),
                 },
@@ -1006,6 +1015,7 @@ fn check_convert_variant_to_llm_judge_variant(
                         extra_body: variant.evaluator().inner.extra_body().cloned(),
                         extra_headers: variant.evaluator().inner.extra_headers().cloned(),
                         reasoning_effort: variant.evaluator().inner.reasoning_effort().cloned(),
+                        service_tier: variant.evaluator().inner.service_tier().cloned(),
                         thinking_budget_tokens: variant.evaluator().inner.thinking_budget_tokens(),
                         verbosity: variant.evaluator().inner.verbosity().cloned(),
                     },
@@ -1041,6 +1051,12 @@ fn check_convert_variant_to_llm_judge_variant(
                             .inner
                             .inference_params_v2
                             .reasoning_effort
+                            .clone(),
+                        service_tier: variant
+                            .fuser()
+                            .inner
+                            .inference_params_v2
+                            .service_tier
                             .clone(),
                         thinking_budget_tokens: variant
                             .fuser()
@@ -1098,6 +1114,7 @@ fn check_convert_variant_to_llm_judge_variant(
                             .inference_params_v2
                             .reasoning_effort
                             .clone(),
+                        service_tier: variant.inner.inference_params_v2.service_tier.clone(),
                         thinking_budget_tokens: variant
                             .inner
                             .inference_params_v2
@@ -1205,6 +1222,7 @@ mod tests {
                             extra_headers: Default::default(),
                             stop_sequences: None,
                             reasoning_effort: None,
+                            service_tier: None,
                             thinking_budget_tokens: None,
                             verbosity: None,
                         },
@@ -1332,6 +1350,7 @@ mod tests {
                             extra_headers: Default::default(),
                             stop_sequences: None,
                             reasoning_effort: None,
+                            service_tier: None,
                             thinking_budget_tokens: None,
                             verbosity: None,
                         },
@@ -1486,6 +1505,7 @@ mod tests {
                             extra_headers: Default::default(),
                             stop_sequences: None,
                             reasoning_effort: None,
+                            service_tier: None,
                             thinking_budget_tokens: None,
                             verbosity: None,
                         },
@@ -1517,6 +1537,7 @@ mod tests {
                             extra_headers: Default::default(),
                             stop_sequences: None,
                             reasoning_effort: None,
+                            service_tier: None,
                             thinking_budget_tokens: None,
                             verbosity: None,
                         },
@@ -1637,6 +1658,7 @@ mod tests {
                             extra_headers: Default::default(),
                             stop_sequences: None,
                             reasoning_effort: None,
+                            service_tier: None,
                             thinking_budget_tokens: None,
                             verbosity: None,
                         },
@@ -1711,6 +1733,7 @@ mod tests {
                             extra_headers: Default::default(),
                             stop_sequences: None,
                             reasoning_effort: None,
+                            service_tier: None,
                             thinking_budget_tokens: None,
                             verbosity: None,
                         },
@@ -1787,6 +1810,7 @@ mod tests {
                             extra_headers: Default::default(),
                             stop_sequences: None,
                             reasoning_effort: None,
+                            service_tier: None,
                             thinking_budget_tokens: None,
                             verbosity: None,
                         },

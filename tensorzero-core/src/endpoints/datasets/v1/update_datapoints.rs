@@ -559,6 +559,7 @@ mod tests {
                 source_url: Some("https://example.com/original.png".parse().unwrap()),
                 mime_type: mime::IMAGE_PNG,
                 storage_path: storage_path.clone(),
+                detail: None,
             });
 
             let input = Input {
@@ -631,6 +632,7 @@ mod tests {
                 source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
+                detail: None,
             });
 
             let input = Input {

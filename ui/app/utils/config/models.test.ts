@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { dump_optimizer_output } from "./models";
-import type { OptimizerOutput, TimeoutsConfig } from "tensorzero-node";
+import type { OptimizerOutput, TimeoutsConfig } from "~/types/tensorzero";
 
 describe("dump_optimizer_output", () => {
   it("should create correct config for fireworks model", async () => {

@@ -13,8 +13,12 @@ In simple terms, you define:
 - A [metric](/gateway/guides/metrics-feedback) to optimize for
 
 And TensorZero takes care of the rest.
-TensorZero's experimentation algorithm is designed to efficiently find the best variant of the system within a specified confidence interval.
+TensorZero's experimentation algorithm is designed to efficiently find the best variant of the system with a specified level of confidence.
 You can add more variants over time and TensorZero will adjust the experiment accordingly while maintaining its statistical soundness.
+
+You don't need to choose the sample size or experiment duration up front.
+TensorZero will automatically detect when there are enough samples to identify the best variant.
+Once it has done so, it will use that variant for all subsequent inferences.
 
 <Tip>
 

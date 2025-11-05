@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { FunctionConfig } from "tensorzero-node";
+import type { FunctionConfig } from "~/types/tensorzero";
 import {
   BasicInfoLayout,
   BasicInfoItem,

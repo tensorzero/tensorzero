@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { MetricConfigOptimize } from "tensorzero-node";
+import type { MetricConfigOptimize } from "~/types/tensorzero";
 import {
   contentBlockChatOutputSchema,
   CountSchema,
@@ -10,7 +10,7 @@ import {
   jsonInferenceOutputSchema,
 } from "./common";
 import { getClickhouseClient } from "./client.server";
-import type { FunctionConfig, JsonInferenceOutput } from "tensorzero-node";
+import type { FunctionConfig, JsonInferenceOutput } from "~/types/tensorzero";
 import { getComparisonOperator, type FeedbackConfig } from "../config/feedback";
 import {
   getInferenceJoinKey,

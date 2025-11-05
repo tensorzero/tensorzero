@@ -1,7 +1,7 @@
 import type {
   CumulativeFeedbackTimeSeriesPoint,
   TimeWindow,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { addPeriod, normalizePeriod } from "~/utils/date";
 
 type FeedbackTimeseriesPointByVariant = {

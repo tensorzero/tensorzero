@@ -167,6 +167,7 @@ async fn test_image_url_with_fetch_true() {
                         ClientInputMessageContent::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: None,
+                            detail: None,
                         })),
                     ],
                 }],
@@ -243,6 +244,7 @@ async fn test_image_url_with_fetch_false() {
                         ClientInputMessageContent::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: None,
+                            detail: None,
                         })),
                     ],
                 }],
@@ -301,6 +303,7 @@ async fn test_base64_image_with_fetch_true() {
                             source_url: None,
                             mime_type: mime::IMAGE_PNG,
                             data: IMAGE_BASE64.to_string(),
+                            detail: None,
                         })),
                     ],
                 }],
@@ -376,6 +379,7 @@ async fn test_base64_image_with_fetch_false() {
                             source_url: None,
                             mime_type: mime::IMAGE_PNG,
                             data: IMAGE_BASE64.to_string(),
+                            detail: None,
                         })),
                     ],
                 }],
@@ -452,6 +456,7 @@ async fn test_wikipedia_image_url_with_fetch_true() {
                         ClientInputMessageContent::File(File::Url(UrlFile {
                             url: wikipedia_url.clone(),
                             mime_type: None,
+                            detail: None,
                         })),
                     ],
                 }],
@@ -526,6 +531,7 @@ async fn test_wikipedia_image_url_with_fetch_false() {
                         ClientInputMessageContent::File(File::Url(UrlFile {
                             url: wikipedia_url.clone(),
                             mime_type: None,
+                            detail: None,
                         })),
                     ],
                 }],
@@ -602,6 +608,7 @@ async fn test_image_url_403_error() {
                         ClientInputMessageContent::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: None,
+                            detail: None,
                         })),
                     ],
                 }],

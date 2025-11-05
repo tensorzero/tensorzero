@@ -13,10 +13,14 @@ import {
 } from "~/components/layout/PageLayout";
 import { useState } from "react";
 import { logger } from "~/utils/logger";
-import { getPostgresClient } from "~/utils/postgres.server";
+import {
+  getPostgresClient,
+  isPostgresAvailable,
+} from "~/utils/postgres.server";
 import AuthTable from "./AuthTable";
 import { AuthActions } from "./AuthActions";
 import { GenerateApiKeyModal } from "./GenerateApiKeyModal";
+import { PostgresRequiredState } from "~/components/ui/PostgresRequiredState";
 
 export const handle: RouteHandle = {
   crumb: () => ["TensorZero API Keys"],
@@ -32,10 +36,20 @@ export async function loader({ request }: Route.LoaderArgs) {
     throw data("Page size cannot exceed 10,000", { status: 400 });
   }
 
+  if (!isPostgresAvailable()) {
+    return {
+      postgresAvailable: false,
+      apiKeys: [],
+      offset: 0,
+      pageSize: 0,
+    };
+  }
+
   const postgresClient = await getPostgresClient();
   const apiKeys = await postgresClient.listApiKeys(pageSize, offset);
 
   return {
+    postgresAvailable: true,
     apiKeys,
     offset,
     pageSize,
@@ -98,7 +112,13 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function AuthPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const { apiKeys, offset, pageSize } = loaderData;
+  const { postgresAvailable, apiKeys, offset, pageSize } = loaderData;
+  const [generateModalIsOpen, setGenerateModalIsOpen] = useState(false);
+  const [modalKey, setModalKey] = useState(0);
+
+  if (!postgresAvailable) {
+    return <PostgresRequiredState />;
+  }
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -111,9 +131,6 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
     searchParams.set("offset", String(Math.max(0, offset - pageSize)));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
-
-  const [generateModalIsOpen, setGenerateModalIsOpen] = useState(false);
-  const [modalKey, setModalKey] = useState(0);
 
   const handleOpenModal = () => {
     setModalKey((prev) => prev + 1);

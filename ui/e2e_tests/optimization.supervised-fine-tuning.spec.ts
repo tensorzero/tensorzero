@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import type { ProviderConfig } from "tensorzero-node";
+import type { ProviderConfig } from "~/types/tensorzero";
 import { formatProvider } from "~/utils/providers";
 
 test("should show the supervised fine-tuning page", async ({ page }) => {

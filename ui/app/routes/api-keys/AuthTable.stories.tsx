@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import AuthTable from "./AuthTable";
-import type { KeyInfo } from "tensorzero-node";
+import type { KeyInfo } from "~/types/tensorzero";
 
 const DEFAULT_ORGANIZATION = "default";
 const DEFAULT_WORKSPACE = "default";

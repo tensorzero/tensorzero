@@ -18,7 +18,7 @@ import type {
   StoredInput,
   StoredInputMessage,
   StoredInputMessageContent,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { getTensorZeroClient } from "./tensorzero.server";
 
 export async function resolveInput(

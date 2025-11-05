@@ -28,7 +28,7 @@ import type {
 } from "~/utils/clickhouse/workflow_evaluations";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
 import { formatDate } from "~/utils/date";
-import type { MetricConfig } from "tensorzero-node";
+import type { MetricConfig } from "~/types/tensorzero";
 
 interface WorkflowEvaluationProjectResultsTableProps {
   selected_run_infos: WorkflowEvaluationRun[];

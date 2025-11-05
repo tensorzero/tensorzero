@@ -8,7 +8,7 @@ import {
 } from "~/components/ui/dialog";
 import { CodeEditor } from "~/components/ui/code-editor";
 import { LegacyStructuredPromptBadge } from "~/components/ui/LegacyStructuredPromptBadge";
-import type { ChatCompletionConfig } from "tensorzero-node";
+import type { ChatCompletionConfig } from "~/types/tensorzero";
 
 interface TemplateDetailsDialogProps {
   variant: string;
