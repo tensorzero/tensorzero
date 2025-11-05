@@ -409,8 +409,7 @@ impl FunctionConfig {
         Ok(tool_config.map(std::convert::Into::into))
     }
 
-    /// Convert ToolCallConfigDatabaseInsert back to DynamicToolParams by subtracting static tools
-    /// Static tools (from function config) become allowed_tools, additional tools remain as additional_tools
+    /// Convert ToolCallConfigDatabaseInsert back to DynamicToolParams
     pub fn database_insert_to_dynamic_tool_params(
         &self,
         db_insert: ToolCallConfigDatabaseInsert,
@@ -423,11 +422,6 @@ impl FunctionConfig {
             parallel_tool_calls,
             .. // TODO: Ideally we can say all but private fields must be destructured here.
         } = db_insert;
-        // Get static tool names from function config
-        let _static_tool_names: HashSet<&str> = match self {
-            FunctionConfig::Chat(c) => c.tools.iter().map(std::string::String::as_str).collect(),
-            FunctionConfig::Json(_) => HashSet::new(),
-        };
 
         let allowed_tools = match allowed_tools.choice {
             AllowedToolsChoice::FunctionDefault => None,

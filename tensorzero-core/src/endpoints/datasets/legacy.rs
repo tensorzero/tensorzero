@@ -28,6 +28,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
+use crate::tool::LegacyToolCallConfigDatabaseInsert;
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
@@ -381,12 +382,38 @@ pub async fn update_datapoint_handler(
             function_config.validate_input(&chat.input)?;
             // If there are no tool params in the UpdateChatInferenceDatapointRequest, we use the default tool params (empty tools).
             // This is consistent with how they are serialized at inference time.
-            let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(
-                chat.tool_params
-                    .clone()
-                    .unwrap_or_default()
-                    .into_tool_call_config(&function_config, &app_state.config.tools)?,
-            );
+
+            // Convert legacy tool params to new format using existing pipeline
+            let tool_params_new = if let Some(legacy) = chat.tool_params.clone() {
+                // Convert to DynamicToolParams: treat all legacy tools as additional_tools
+                // and use FunctionDefault for allowed_tools
+                let dynamic_params = DynamicToolParams {
+                    allowed_tools: None, // FunctionDefault - use function's default tools
+                    additional_tools: Some(legacy.tools_available.clone()), // All legacy tools as dynamic
+                    tool_choice: Some(legacy.tool_choice.clone()),
+                    parallel_tool_calls: legacy.parallel_tool_calls,
+                    provider_tools: Some(vec![]),
+                };
+
+                // Use existing pipeline to convert to ToolCallConfigDatabaseInsert
+                function_config.dynamic_tool_params_to_database_insert(
+                    dynamic_params,
+                    &app_state.config.tools,
+                )?
+            } else {
+                None
+            };
+
+            // For demonstration validation, convert to ToolCallConfig
+            let dynamic_demonstration_info = if let Some(ref tool_params) = tool_params_new {
+                DynamicDemonstrationInfo::Chat(
+                    tool_params
+                        .clone()
+                        .into_tool_call_config(&function_config, &app_state.config.tools)?,
+                )
+            } else {
+                DynamicDemonstrationInfo::Chat(None)
+            };
 
             // Only validate and parse output if it exists
             let output = if let Some(output) = &chat.output {
@@ -417,7 +444,7 @@ pub async fn update_datapoint_handler(
                 episode_id: chat.episode_id,
                 input: resolved_input.into_stored_input()?,
                 output,
-                tool_params: chat.tool_params,
+                tool_params: tool_params_new,
                 tags: chat.tags,
                 auxiliary: chat.auxiliary,
                 is_deleted: chat.is_deleted,
@@ -866,8 +893,10 @@ pub async fn delete_datapoint(
     let chat_delete_query = r"
     INSERT INTO ChatInferenceDatapoint
     (dataset_name, function_name, name, id, episode_id, input, output, tool_params,
+    dynamic_tools, dynamic_provider_tools, tool_choice, parallel_tool_calls, allowed_tools,
      tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
     SELECT dataset_name, function_name, name, id, episode_id, input, output, tool_params,
+    dynamic_tools, dynamic_provider_tools, tool_choice, parallel_tool_calls, allowed_tools,
            tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM ChatInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
@@ -947,6 +976,11 @@ pub async fn list_datapoints(
             input,
             output,
             tool_params,
+            dynamic_tools,
+            dynamic_provider_tools,
+            parallel_tool_calls,
+            tool_choice,
+            allowed_tools,
             '\N' as output_schema, -- for column alignment in UNION ALL
             tags,
             auxiliary,
@@ -977,6 +1011,11 @@ pub async fn list_datapoints(
             input,
             output,
             '\N' as tool_params, -- for column alignment in UNION ALL
+            [] as dynamic_tools,
+            [] as dynamic_provider_tools,
+            NULL as parallel_tool_calls,
+            NULL as tool_choice,
+            NULL as allowed_tools,
             output_schema,
             tags,
             auxiliary,
@@ -1764,8 +1803,8 @@ pub struct UpdateChatInferenceDatapointRequest {
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_json_value")]
     pub output: Option<serde_json::Value>,
-    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    // #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
+    pub tool_params: Option<LegacyToolCallConfigDatabaseInsert>,
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
     #[serde(default)]

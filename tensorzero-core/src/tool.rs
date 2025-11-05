@@ -627,9 +627,22 @@ where
                     .get("tool_choice")
                     .ok_or_else(|| de::Error::missing_field("tool_choice"))?;
 
-                // Parse tool_choice - it comes as a bare string or object from the database
-                let tool_choice: ToolChoice = serde_json::from_value(tool_choice_value.clone())
-                    .map_err(|e| de::Error::custom(format!("failed to parse tool_choice: {e}")))?;
+                // Parse tool_choice - it's stored as a string in ClickHouse
+                // Simple variants (auto, none, required) are stored as plain strings like "auto"
+                // Complex variants (specific) are stored as JSON strings like "{\"specific\":\"tool_name\"}"
+                let tool_choice: ToolChoice = if let Some(tool_choice_str) = tool_choice_value.as_str() {
+                    // Try parsing as a plain string first (for simple variants)
+                    serde_json::from_value(Value::String(tool_choice_str.to_string()))
+                        .or_else(|_| {
+                            // If that fails, try parsing the string as JSON (for complex variants)
+                            serde_json::from_str(tool_choice_str)
+                        })
+                        .map_err(|e| de::Error::custom(format!("failed to parse tool_choice: {e}")))?
+                } else {
+                    // Fallback for non-string values (e.g., direct object for backwards compatibility)
+                    serde_json::from_value(tool_choice_value.clone())
+                        .map_err(|e| de::Error::custom(format!("failed to parse tool_choice: {e}")))?
+                };
 
                 let parallel_tool_calls: Option<bool> = values
                     .get("parallel_tool_calls")

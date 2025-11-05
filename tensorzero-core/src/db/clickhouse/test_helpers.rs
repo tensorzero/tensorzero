@@ -66,7 +66,31 @@ pub async fn select_chat_datapoint_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM ChatInferenceDatapoint FINAL WHERE id = '{inference_id}' LIMIT 1 FORMAT JSONEachRow"
+        "SELECT
+            dataset_name,
+            function_name,
+            id,
+            name,
+            episode_id,
+            input,
+            output,
+            tool_params,
+            dynamic_tools,
+            dynamic_provider_tools,
+            tool_choice,
+            parallel_tool_calls,
+            allowed_tools,
+            tags,
+            auxiliary,
+            is_deleted,
+            is_custom,
+            source_inference_id,
+            staled_at,
+            updated_at
+        FROM ChatInferenceDatapoint FINAL
+        WHERE id = '{inference_id}'
+        LIMIT 1
+        FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
@@ -113,6 +137,11 @@ pub async fn select_chat_dataset_clickhouse(
             input,
             output,
             tool_params,
+            dynamic_tools,
+            dynamic_provider_tools,
+            tool_choice,
+            parallel_tool_calls,
+            allowed_tools,
             tags,
             auxiliary,
             is_deleted,
@@ -466,6 +495,11 @@ pub async fn stale_datapoint_clickhouse(
             input,
             output,
             tool_params,
+            dynamic_tools,
+            dynamic_provider_tools,
+            tool_choice,
+            parallel_tool_calls,
+            allowed_tools,
             tags,
             auxiliary,
             is_deleted,
@@ -482,6 +516,11 @@ pub async fn stale_datapoint_clickhouse(
             input,
             output,
             tool_params,
+            dynamic_tools,
+            dynamic_provider_tools,
+            tool_choice,
+            parallel_tool_calls,
+            allowed_tools,
             tags,
             auxiliary,
             is_deleted,
