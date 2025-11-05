@@ -3,10 +3,16 @@ use std::process::Stdio;
 use std::str::FromStr;
 
 use http::{Method, StatusCode};
-use serde_json::json;
+use serde_json::{json, Value};
 use tensorzero_auth::key::TensorZeroApiKey;
-use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
+use tensorzero_core::{
+    db::clickhouse::test_helpers::{
+        get_clickhouse, select_chat_inference_clickhouse, select_feedback_clickhouse,
+    },
+    endpoints::status::TENSORZERO_VERSION,
+};
 use tokio::process::Command;
+use uuid::Uuid;
 
 use crate::common::start_gateway_on_random_port;
 use secrecy::ExposeSecret;
@@ -28,10 +34,18 @@ async fn test_tensorzero_auth_enabled() {
     let pool = get_postgres_pool_for_testing().await;
     let child_data = start_gateway_on_random_port(
         "
+    [gateway.observability]
+    enabled = true
+    
     [gateway.auth]
     enabled = true
     [gateway.auth.cache]
     enabled = false
+
+    [metrics.task_success]
+    type = \"boolean\"
+    optimize = \"max\"
+    level = \"inference\"
     ",
         None,
     )
@@ -40,6 +54,8 @@ async fn test_tensorzero_auth_enabled() {
     let key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
         .await
         .unwrap();
+
+    let parsed_key = TensorZeroApiKey::parse(key.expose_secret()).unwrap();
 
     let inference_response = reqwest::Client::new()
         .post(format!("http://{}/inference", child_data.addr))
@@ -56,6 +72,9 @@ async fn test_tensorzero_auth_enabled() {
                         "content": "Hello, world!",
                     }
                 ]
+            },
+            "tags": {
+                "my_tag": "my_value",
             }
         }))
         .send()
@@ -66,6 +85,74 @@ async fn test_tensorzero_auth_enabled() {
     let text = inference_response.text().await.unwrap();
     println!("API response: {text}");
     assert_eq!(status, StatusCode::OK);
+    let response_json: Value = serde_json::from_str(&text).unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep for one second to allow time for the inference to be inserted into ClickHouse
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+    // Check that we applied the API key as a tag
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let tags = result.get("tags").unwrap();
+    assert_eq!(
+        tags,
+        &json!({
+            "my_tag": "my_value",
+            "tensorzero::api_key_public_id": parsed_key.public_id,
+        })
+    );
+
+    let feedback_response = reqwest::Client::new()
+        .post(format!("http://{}/feedback", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", key.expose_secret()),
+        )
+        .json(&json!({
+            "inference_id": inference_id,
+            "metric_name": "task_success",
+            "value": true,
+            "tags": {
+                "my_feedback_tag": "my_feedback_value",
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = feedback_response.status();
+    let text = feedback_response.text().await.unwrap();
+    assert_eq!(status, StatusCode::OK);
+    let feedback_response_json: Value = serde_json::from_str(&text).unwrap();
+    let feedback_id = feedback_response_json
+        .get("feedback_id")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let feedback_id = Uuid::parse_str(feedback_id).unwrap();
+
+    // Sleep for one second to allow time for the feedback to be inserted into ClickHouse
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+    // Get the feedback from the database
+    let clickhouse = get_clickhouse().await;
+    let result = select_feedback_clickhouse(&clickhouse, "BooleanMetricFeedback", feedback_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, feedback_id);
+    assert_eq!(
+        result.get("tags").unwrap(),
+        &json!({
+            "my_feedback_tag": "my_feedback_value",
+            "tensorzero::api_key_public_id": parsed_key.public_id,
+        })
+    );
 
     // The key should stop working after we disable it
     let disabled_at = tensorzero_auth::postgres::disable_key(

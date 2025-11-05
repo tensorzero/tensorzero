@@ -4,7 +4,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use axum::extract::State;
-use axum::{debug_handler, Json};
+use axum::{debug_handler, Extension, Json};
 use human_feedback::write_static_evaluation_human_feedback_if_necessary;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 use crate::config::{Config, MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
@@ -93,9 +94,10 @@ pub struct FeedbackResponse {
 #[debug_handler(state = AppStateData)]
 pub async fn feedback_handler(
     State(app_state): AppState,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Json<FeedbackResponse>, Error> {
-    Ok(Json(feedback(app_state, params).await?))
+    Ok(Json(feedback(app_state, params, api_key_ext).await?))
 }
 
 // Helper function to avoid requiring axum types in the client
@@ -115,6 +117,7 @@ pub async fn feedback(
         ..
     }: AppStateData,
     mut params: Params,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<FeedbackResponse, Error> {
     let span = tracing::Span::current();
     if let Some(inference_id) = params.inference_id {
@@ -136,6 +139,12 @@ pub async fn feedback(
     }
     validate_tags(&params.tags, params.internal)?;
     validate_feedback_specific_tags(&params.tags)?;
+    if let Some(api_key_ext) = api_key_ext {
+        params.tags.insert(
+            "tensorzero::api_key_public_id".to_string(),
+            api_key_ext.0.api_key.get_public_id().into(),
+        );
+    }
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
         &config,
@@ -1108,6 +1117,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await;
@@ -1143,6 +1153,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await
@@ -1169,6 +1180,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await;
@@ -1215,6 +1227,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await
@@ -1239,6 +1252,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await;
@@ -1282,6 +1296,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await;

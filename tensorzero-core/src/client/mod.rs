@@ -555,10 +555,16 @@ impl Client {
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
+                // We currently ban auth-enabled configs in embedded gateway mode,
+                // so we don't have an API key here
                 Ok(with_embedded_timeout(*timeout, async {
-                    crate::endpoints::feedback::feedback(gateway.handle.app_state.clone(), params)
-                        .await
-                        .map_err(err_to_http)
+                    crate::endpoints::feedback::feedback(
+                        gateway.handle.app_state.clone(),
+                        params,
+                        None,
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
                 .await?)
             }
