@@ -7,6 +7,9 @@ mod update_datapoints;
 
 pub mod types;
 
+#[cfg(feature = "pyo3")]
+mod pyo3_impl;
+
 pub use create_datapoints::{create_datapoints, create_datapoints_handler};
 pub use create_from_inferences::{create_from_inferences, create_from_inferences_handler};
 pub use delete_datapoints::{

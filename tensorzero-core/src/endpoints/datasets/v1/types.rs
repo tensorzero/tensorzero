@@ -16,6 +16,7 @@ use crate::tool::DynamicToolParams;
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct UpdateDatapointsRequest {
     /// The datapoints to update.
     pub datapoints: Vec<UpdateDatapointRequest>,
@@ -43,6 +44,7 @@ pub enum UpdateDatapointRequest {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct UpdateChatDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -80,6 +82,7 @@ pub struct UpdateChatDatapointRequest {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct UpdateJsonDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -115,6 +118,7 @@ pub struct UpdateJsonDatapointRequest {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct JsonDatapointOutputUpdate {
     /// The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
     pub raw: String,
@@ -124,6 +128,7 @@ pub struct JsonDatapointOutputUpdate {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
@@ -134,6 +139,7 @@ pub struct DatapointMetadataUpdate {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct UpdateDatapointsResponse {
     /// The IDs of the datapoints that were updated.
     /// These are newly generated IDs for UpdateDatapoint requests, and they are the same IDs for UpdateDatapointMetadata requests.
@@ -145,6 +151,7 @@ pub struct UpdateDatapointsResponse {
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct UpdateDatapointsMetadataRequest {
     /// The datapoints to update metadata for.
     pub datapoints: Vec<UpdateDatapointMetadataRequest>,
@@ -154,6 +161,7 @@ pub struct UpdateDatapointsMetadataRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct UpdateDatapointMetadataRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -167,6 +175,7 @@ pub struct UpdateDatapointMetadataRequest {
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct ListDatapointsRequest {
     /// Optional function name to filter datapoints by.
     /// If provided, only datapoints from this function will be returned.
@@ -195,6 +204,7 @@ pub struct ListDatapointsRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct GetDatapointsRequest {
     /// The IDs of the datapoints to retrieve. Required.
     pub ids: Vec<Uuid>,
@@ -204,6 +214,7 @@ pub struct GetDatapointsRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct GetDatapointsResponse {
     /// The retrieved datapoints.
     pub datapoints: Vec<Datapoint>,
@@ -217,6 +228,7 @@ pub struct GetDatapointsResponse {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub enum CreateDatapointsFromInferenceOutputSource {
     /// Do not include any output in the datapoint.
     None,
@@ -230,6 +242,7 @@ pub enum CreateDatapointsFromInferenceOutputSource {
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct CreateDatapointsFromInferenceRequest {
     #[serde(flatten)]
     pub params: CreateDatapointsFromInferenceRequestParams,
@@ -272,6 +285,7 @@ pub enum CreateDatapointsFromInferenceRequestParams {
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct CreateDatapointsResponse {
     /// The IDs of the newly-generated datapoints.
     pub ids: Vec<Uuid>,
@@ -282,6 +296,7 @@ pub struct CreateDatapointsResponse {
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct CreateDatapointsRequest {
     /// The datapoints to create.
     pub datapoints: Vec<CreateDatapointRequest>,
@@ -303,6 +318,7 @@ pub enum CreateDatapointRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct CreateChatDatapointRequest {
     /// The function name for this datapoint. Required.
     pub function_name: String,
@@ -336,6 +352,7 @@ pub struct CreateChatDatapointRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct CreateJsonDatapointRequest {
     /// The function name for this datapoint. Required.
     pub function_name: String,
@@ -370,6 +387,7 @@ pub struct CreateJsonDatapointRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct DeleteDatapointsRequest {
     /// The IDs of the datapoints to delete.
     pub ids: Vec<Uuid>,
@@ -379,6 +397,7 @@ pub struct DeleteDatapointsRequest {
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct DeleteDatapointsResponse {
     /// The number of deleted datapoints.
     pub num_deleted_datapoints: u64,

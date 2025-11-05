@@ -27,6 +27,7 @@ use python_helpers::{
 use tensorzero_core::{
     config::{ConfigPyClass, FunctionsConfigPyClass, UninitializedVariantInfo},
     db::clickhouse::query_builder::OrderBy,
+    endpoints::datasets::v1::types::{DatapointMetadataUpdate},
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
         pyo3_helpers::{
@@ -63,10 +64,14 @@ use tensorzero_core::{
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
-    CreateDatapointsFromInferenceOutputSource, Datapoint, DynamicToolParams, FeedbackParams,
-    InferenceOutput, InferenceParams, InferenceStream, LaunchOptimizationParams,
-    ListDatapointsRequest, ListInferencesParams, OptimizationJobHandle, RenderedSample,
-    StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
+    CreateChatDatapointRequest, CreateDatapointsFromInferenceOutputSource,
+    CreateDatapointsResponse, CreateJsonDatapointRequest,
+    Datapoint, DeleteDatapointsResponse, DynamicToolParams, FeedbackParams,
+    GetDatapointsResponse, InferenceOutput, InferenceParams, InferenceStream,
+    JsonDatapointOutputUpdate, LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams,
+    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
+    UpdateChatDatapointRequest, UpdateDatapointMetadataRequest,
+    UpdateDatapointsResponse, UpdateJsonDatapointRequest, WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -110,6 +115,19 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
+    m.add_class::<CreateChatDatapointRequest>()?;
+    m.add_class::<CreateJsonDatapointRequest>()?;
+    m.add_class::<CreateDatapointsResponse>()?;
+    m.add_class::<UpdateChatDatapointRequest>()?;
+    m.add_class::<UpdateJsonDatapointRequest>()?;
+    m.add_class::<UpdateDatapointsResponse>()?;
+    m.add_class::<UpdateDatapointMetadataRequest>()?;
+    m.add_class::<DatapointMetadataUpdate>()?;
+    m.add_class::<JsonDatapointOutputUpdate>()?;
+    m.add_class::<ListDatapointsRequest>()?;
+    m.add_class::<GetDatapointsResponse>()?;
+    m.add_class::<DeleteDatapointsResponse>()?;
+    m.add_class::<CreateDatapointsFromInferenceOutputSource>()?;
     m.add_class::<ConfigPyClass>()?;
     m.add_class::<FunctionsConfigPyClass>()?;
     m.add_class::<FunctionConfigChatPyClass>()?;
