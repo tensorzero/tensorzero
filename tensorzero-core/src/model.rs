@@ -2423,7 +2423,6 @@ mod tests {
     };
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
@@ -2558,7 +2557,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_model_provider_infer_max_tokens_check() {
         let provider = ModelProvider {
             name: "test_provider".into(),
@@ -2659,8 +2657,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_model_config_infer_routing_fallback() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Test that fallback works with bad --> good model provider
 
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
@@ -2949,8 +2947,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_model_config_infer_stream_routing_fallback() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Test that fallback works with bad --> good model provider (streaming)
 
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {

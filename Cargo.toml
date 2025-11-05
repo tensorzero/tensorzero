@@ -17,7 +17,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.11.0"
+version = "2025.11.1"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 
@@ -33,7 +33,6 @@ serde_path_to_error = "0.1.17"
 uuid = { version = "1.18.1", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
-tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
 toml = "0.9.8"
 reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"

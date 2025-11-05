@@ -1,10 +1,10 @@
+#![recursion_limit = "256"]
 #![expect(
     clippy::expect_used,
     clippy::panic,
     clippy::print_stdout,
     clippy::unwrap_used
 )]
-#![recursion_limit = "256"]
 mod batch;
 mod best_of_n;
 mod cache;

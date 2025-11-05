@@ -3,7 +3,7 @@ import type {
   TagFilter,
   TagComparisonOperator,
   FloatComparisonOperator,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 
 // Tag Filter
 const tagFilterComparisonOperators =

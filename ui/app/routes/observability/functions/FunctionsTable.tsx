@@ -7,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { FunctionConfig } from "tensorzero-node";
+import type { FunctionConfig } from "~/types/tensorzero";
 import type { FunctionCountInfo } from "~/utils/clickhouse/inference.server";
 import { TableItemTime, TableItemFunction } from "~/components/ui/TableItems";
 import { toFunctionUrl } from "~/utils/urls";

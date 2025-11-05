@@ -209,7 +209,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             }
             None => "",
         };
-        let limit_clause = match params.page_size {
+        let limit_clause = match params.limit {
             Some(limit) => {
                 query_params_owned.insert("limit".to_string(), limit.to_string());
                 "LIMIT {limit:UInt32}"
@@ -1894,7 +1894,7 @@ mod tests {
 
         let params = GetDatasetMetadataParams {
             function_name: Some("test_function".to_string()),
-            page_size: Some(10),
+            limit: Some(10),
             offset: Some(20),
         };
 
@@ -1943,7 +1943,7 @@ mod tests {
 
         let params = GetDatasetMetadataParams {
             function_name: None,
-            page_size: None,
+            limit: None,
             offset: None,
         };
 

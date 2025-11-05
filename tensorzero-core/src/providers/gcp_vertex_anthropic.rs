@@ -583,6 +583,11 @@ impl<'a> GCPVertexAnthropicMessageContent<'a> {
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
                 let ObjectStorageFile { file, data } = &*resolved_file;
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "The image detail parameter is not supported by GCP Vertex Anthropic. The `detail` field will be ignored."
+                    );
+                }
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 Ok(Some(FlattenUnknown::Normal(
                     GCPVertexAnthropicMessageContent::Image {
@@ -688,6 +693,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -705,6 +711,10 @@ fn apply_inference_params(
             r#type: "enabled",
             budget_tokens: *budget_tokens,
         });
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if verbosity.is_some() {
@@ -1460,7 +1470,6 @@ mod tests {
     use super::*;
 
     use serde_json::json;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
@@ -2975,8 +2984,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_chunk_warn() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let res = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             GCPVertexAnthropicStreamMessage::ContentBlockStart {
@@ -2997,10 +3006,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_gcp_vertex_anthropic_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };

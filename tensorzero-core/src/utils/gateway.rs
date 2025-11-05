@@ -491,14 +491,12 @@ pub struct GatewayHandleTestOptions {
 
 #[cfg(test)]
 mod tests {
-    use tracing_test::traced_test;
-
     use super::*;
     use crate::config::{gateway::GatewayConfig, ObservabilityConfig};
 
     #[tokio::test]
-    #[traced_test]
     async fn test_setup_clickhouse() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Disabled observability
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {
@@ -622,8 +620,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_unhealthy_clickhouse() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Sensible URL that doesn't point to ClickHouse
         let gateway_config = GatewayConfig {
             observability: ObservabilityConfig {

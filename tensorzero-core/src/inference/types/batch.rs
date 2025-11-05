@@ -4,7 +4,8 @@ use std::{borrow::Cow, collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
 use super::{
-    ContentBlockOutput, FinishReason, ModelInferenceRequest, RequestMessage, StoredInput, Usage,
+    chat_completion_inference_params::ServiceTier, ContentBlockOutput, FinishReason,
+    ModelInferenceRequest, RequestMessage, StoredInput, Usage,
 };
 
 use crate::inference::types::StoredRequestMessage;
@@ -333,6 +334,8 @@ pub struct BatchChatCompletionInferenceParams {
     #[serde(default)]
     pub reasoning_effort: Option<Vec<Option<String>>>,
     #[serde(default)]
+    pub service_tier: Option<Vec<Option<ServiceTier>>>,
+    #[serde(default)]
     pub thinking_budget_tokens: Option<Vec<Option<i32>>>,
     #[serde(default)]
     pub verbosity: Option<Vec<Option<String>>>,
@@ -373,9 +376,15 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
             frequency_penalty,
             stop_sequences,
             reasoning_effort,
+            service_tier,
             thinking_budget_tokens,
             verbosity,
         } = params;
+
+        // Warn if service_tier is set (batch inference does not support it)
+        if service_tier.is_some() {
+            tracing::warn!("service_tier is not supported for batch inference and will be ignored");
+        }
         // Verify all provided Vecs have the same length
         if let Some(temperature) = &temperature {
             if temperature.len() != num_inferences {
@@ -531,6 +540,7 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
                 stop_sequences: stop_sequences_iter.next(),
                 json_mode: None,
                 reasoning_effort: reasoning_effort_iter.next().unwrap_or(None),
+                service_tier: None, // Not supported for batch inference
                 thinking_budget_tokens: thinking_budget_tokens_iter.next().unwrap_or(None),
                 verbosity: verbosity_iter.next().unwrap_or(None),
             });
@@ -663,6 +673,7 @@ mod tests {
                     frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
                     stop_sequences: None,
                     reasoning_effort: None,
+                    service_tier: None,
                     thinking_budget_tokens: None,
                     verbosity: None,
                 },
@@ -733,6 +744,7 @@ mod tests {
                     frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7), Some(0.8)]), // Too long
                     stop_sequences: None,
                     reasoning_effort: None,
+                    service_tier: None,
                     thinking_budget_tokens: None,
                     verbosity: None,
                 },
@@ -761,6 +773,7 @@ mod tests {
                     frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
                     stop_sequences: None,
                     reasoning_effort: None,
+                    service_tier: None,
                     thinking_budget_tokens: None,
                     verbosity: None,
                 },

@@ -1,4 +1,4 @@
-import type { FunctionConfig, SchemaData } from "tensorzero-node";
+import type { FunctionConfig, SchemaData } from "~/types/tensorzero";
 import {
   SnippetLayout,
   SnippetContent,

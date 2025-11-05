@@ -628,6 +628,11 @@ async fn convert_non_thought_content_block(
         ContentBlock::File(file) => {
             let resolved_file = file.resolve().await?;
             let ObjectStorageFile { file, data } = &*resolved_file;
+            if file.detail.is_some() {
+                tracing::warn!(
+                    "The image detail parameter is not supported by Google AI Studio Gemini. The `detail` field will be ignored."
+                );
+            }
             Ok(FlattenUnknown::Normal(GeminiPartData::InlineData {
                 inline_data: GeminiInlineData {
                     mime_type: file.mime_type.to_string(),
@@ -788,6 +793,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -821,6 +827,10 @@ fn apply_inference_params(
                 response_schema: None,
             });
         }
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if verbosity.is_some() {
@@ -1425,17 +1435,25 @@ fn handle_google_ai_studio_error(
 mod tests {
     use std::borrow::Cow;
 
+    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+    use base64::Engine;
     use serde_json::json;
-    use tracing_test::traced_test;
 
     use super::*;
-    use crate::inference::types::{FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode};
+    use crate::inference::types::file::Detail;
+    use crate::inference::types::resolved_input::LazyFile;
+    use crate::inference::types::storage::{StorageKind, StoragePath};
+    use crate::inference::types::{
+        ContentBlock, FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode,
+        ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile,
+    };
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{ToolCallConfig, ToolResult};
+    use crate::utils::testing::capture_logs;
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_content_block_warn() {
+        let logs_contain = capture_logs();
         use std::time::Duration;
         let content = GeminiResponseContent {
             parts: vec![GeminiResponseContentPart {
@@ -2826,10 +2844,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_google_ai_studio_gemini_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };
@@ -2861,6 +2880,35 @@ mod tests {
         // Test that verbosity warns
         assert!(logs_contain(
             "Google AI Studio Gemini does not support the inference parameter `verbosity`"
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_gemini_warns_on_detail() {
+        let logs_contain = capture_logs();
+
+        // Test with resolved file with detail
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let content_block = ContentBlock::File(Box::new(LazyFile::Base64(PendingObjectStoreFile(
+            ObjectStorageFile {
+                file: ObjectStoragePointer {
+                    source_url: None,
+                    mime_type: mime::IMAGE_PNG,
+                    storage_path: dummy_storage_path,
+                    detail: Some(Detail::Auto),
+                },
+                data: BASE64_STANDARD.encode(b"fake image data"),
+            },
+        ))));
+
+        let _result = convert_non_thought_content_block(&content_block).await;
+
+        // Should log a warning about detail not being supported
+        assert!(logs_contain(
+            "The image detail parameter is not supported by Google AI Studio Gemini"
         ));
     }
 }
