@@ -744,7 +744,7 @@ async fn test_clickhouse_migration_manager() {
             migration_name,
             gateway_version,
             gateway_git_sha,
-            execution_time_ms,
+            execution_time_ms: _,
             applied_at,
         } = migration_record;
         assert_eq!(*migration_id, migration.migration_num().unwrap());
