@@ -1178,7 +1178,9 @@ async fn test_parse_args() {
 
 #[tokio::test]
 async fn test_run_evaluation_binary() {
-    let bin_path = env!("CARGO_BIN_EXE_evaluations");
+    // Compatibility with 'cargo nextest archive': https://nexte.st/docs/ci-features/archiving/#making-tests-relocatable
+    let bin_path = std::env::var("NEXTEST_BIN_EXE_evaluations")
+        .unwrap_or_else(|_| env!("CARGO_BIN_EXE_evaluations").to_string());
     println!("Running evaluations binary at {bin_path}");
     let output = std::process::Command::new(bin_path)
         .output()
