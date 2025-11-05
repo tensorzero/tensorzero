@@ -93,5 +93,6 @@ pub trait WrappedProvider: Debug {
             Box<dyn Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static>,
         >,
         start_time: Instant,
+        raw_request: &str,
     ) -> ProviderInferenceResponseStreamInner;
 }

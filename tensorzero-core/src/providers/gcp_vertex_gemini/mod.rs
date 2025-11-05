@@ -1162,6 +1162,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             model_provider,
             model_name,
             provider_name,
+            &raw_request,
         )
         .peekable();
         Ok((stream, raw_request))
@@ -1498,7 +1499,9 @@ fn stream_gcp_vertex_gemini(
     model_provider: &ModelProvider,
     model_name: &str,
     provider_name: &str,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
     let model_name = model_name.to_string();
     let provider_name = provider_name.to_string();
@@ -1511,7 +1514,7 @@ fn stream_gcp_vertex_gemini(
                     if matches!(e, reqwest_eventsource::Error::StreamEnded) {
                         break;
                     }
-                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -1520,7 +1523,7 @@ fn stream_gcp_vertex_gemini(
                             Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing streaming JSON response: {}", DisplayOrDebugGateway::new(e)),
                                 provider_type: PROVIDER_TYPE.to_string(),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                             })
                         });
