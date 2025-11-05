@@ -377,7 +377,6 @@ pub async fn update_datapoint_handler(
                         message: format!("Failed to deserialize chat datapoint: {e}"),
                     })
                 })?;
-
             let resolved_input = chat
                 .input
                 .clone()
@@ -406,7 +405,7 @@ pub async fn update_datapoint_handler(
                     &app_state.config.tools,
                 )?
             } else {
-                None
+                Some(ToolCallConfigDatabaseInsert::default())
             };
 
             // For demonstration validation, convert to ToolCallConfig
