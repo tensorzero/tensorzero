@@ -15,6 +15,7 @@ use tensorzero_core::config::provider_types::{
     VLLMDefaults, XAIDefaults,
 };
 use tensorzero_core::http::TensorzeroHttpClient;
+use tensorzero_core::tool::Tool;
 
 use axum::body::Body;
 use axum::extract::{Query, State};
@@ -4354,6 +4355,91 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     .await;
 }
 
+// Helper function to verify new Migration 0041 tool call storage columns
+fn verify_tool_call_storage_columns(
+    result: &Value,
+    expected_tool_choice: &str,
+    expected_parallel_tool_calls: Option<bool>,
+    expected_allowed_tools_choice: &str,
+    expected_static_tool_names: &[&str],
+    expected_dynamic_tool_count: usize,
+    expected_provider_tool_count: usize,
+) {
+    // Verify allowed_tools column
+    let allowed_tools_str = result.get("allowed_tools").unwrap().as_str().unwrap();
+    let allowed_tools: Value = serde_json::from_str(allowed_tools_str).unwrap();
+    assert_eq!(
+        allowed_tools["choice"], expected_allowed_tools_choice,
+        "allowed_tools.choice mismatch"
+    );
+
+    let actual_tools = allowed_tools["tools"].as_array().unwrap();
+    assert_eq!(
+        actual_tools.len(),
+        expected_static_tool_names.len(),
+        "allowed_tools.tools length mismatch"
+    );
+    for expected_tool in expected_static_tool_names {
+        assert!(
+            actual_tools.contains(&json!(expected_tool)),
+            "allowed_tools.tools missing tool: {}",
+            expected_tool
+        );
+    }
+
+    // Verify dynamic_tools column
+    let dynamic_tools_unparsed = result.get("dynamic_tools").unwrap().as_array().unwrap();
+    let dynamic_tools: Result<Vec<Tool>, _> = dynamic_tools_unparsed
+        .iter()
+        .map(|x| serde_json::from_str::<Tool>(x.as_str().unwrap()))
+        .collect();
+    let dynamic_tools = dynamic_tools.unwrap();
+    assert_eq!(
+        dynamic_tools.len(),
+        expected_dynamic_tool_count,
+        "dynamic_tools length mismatch"
+    );
+
+    // Verify dynamic_provider_tools column
+    let dynamic_provider_tools_unparsed = result
+        .get("dynamic_provider_tools")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    let dynamic_provider_tools: Result<Vec<Tool>, _> = dynamic_provider_tools_unparsed
+        .iter()
+        .map(|x| serde_json::from_str::<Tool>(x.as_str().unwrap()))
+        .collect();
+    let dynamic_provider_tools = dynamic_provider_tools.unwrap();
+    assert_eq!(
+        dynamic_provider_tools.len(),
+        expected_provider_tool_count,
+        "dynamic_provider_tools length mismatch"
+    );
+
+    // Verify tool_choice column
+    let tool_choice = result.get("tool_choice").unwrap().as_str().unwrap();
+    assert_eq!(tool_choice, expected_tool_choice, "tool_choice mismatch");
+
+    // Verify parallel_tool_calls column
+    let parallel_tool_calls = result.get("parallel_tool_calls");
+    match expected_parallel_tool_calls {
+        Some(expected) => {
+            let actual = parallel_tool_calls
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            assert_eq!(actual, expected, "parallel_tool_calls mismatch");
+        }
+        None => {
+            // Should be null or not present
+            assert!(
+                parallel_tool_calls.is_none() || parallel_tool_calls.unwrap().is_null(),
+                "parallel_tool_calls should be null"
+            );
+        }
+    }
+}
+
 pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     response_json: Value,
     provider: &E2ETestProvider,
@@ -4509,6 +4595,17 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
+
+    // Verify new Migration 0041 columns (decomposed tool call storage format)
+    verify_tool_call_storage_columns(
+        &result,
+        "auto",               // expected_tool_choice
+        None,                 // expected_parallel_tool_calls (null/none)
+        "function_default",   // expected_allowed_tools_choice (tools from function config)
+        &["get_temperature"], // expected_static_tool_names
+        0,                    // expected_dynamic_tool_count
+        0,                    // expected_provider_tool_count
+    );
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)

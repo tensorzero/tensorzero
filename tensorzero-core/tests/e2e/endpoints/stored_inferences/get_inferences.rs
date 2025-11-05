@@ -626,3 +626,61 @@ pub async fn test_get_by_ids_duplicate_ids() {
     let returned_id = Uuid::parse_str(res[0]["inference_id"].as_str().unwrap()).unwrap();
     assert_eq!(returned_id, id);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_inferences_with_tool_calls_verifies_storage() {
+    // This test verifies that tool call storage (Migration 0041) is correctly read
+    // from the database when retrieving stored inferences
+
+    // Query for inferences from weather_helper function which uses tools
+    let list_request = json!({
+        "function_name": "weather_helper",
+        "output_source": "inference",
+        "limit": 5
+    });
+
+    let res = list_inferences(list_request).await.unwrap();
+
+    // Should have at least one inference with tools
+    assert!(!res.is_empty(), "Expected at least one weather_helper inference");
+
+    for inference in &res {
+        assert_eq!(inference["type"], "chat");
+        assert_eq!(inference["function_name"], "weather_helper");
+
+        // Verify that tool_params is present and contains the expected structure
+        let tool_params = &inference["tool_params"];
+
+        if !tool_params.is_null() {
+            // Verify the new Migration 0041 structure is readable
+            // The tool_params should have been deserialized from the database columns:
+            // - dynamic_tools
+            // - dynamic_provider_tools
+            // - allowed_tools
+            // - tool_choice
+            // - parallel_tool_calls
+
+            // For weather_helper, we expect static tools from function config
+            // Tool choice should be defined
+            assert!(
+                tool_params.get("tool_choice").is_some(),
+                "tool_choice should be present in tool_params"
+            );
+
+            // The tool_params structure may contain:
+            // - allowed_tools (list of tool names available)
+            // - additional_tools (dynamic tools provided at runtime)
+            // - tool_choice (the choice strategy)
+            // - parallel_tool_calls (whether parallel calls are enabled)
+            // - provider_tools (provider-specific tools)
+
+            // At minimum, verify the structure is valid JSON and contains expected fields
+            assert!(
+                tool_params.is_object(),
+                "tool_params should be a valid object"
+            );
+
+            println!("Successfully read tool_params from stored inference: {:#?}", tool_params);
+        }
+    }
+}

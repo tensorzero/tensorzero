@@ -2445,3 +2445,661 @@ async fn test_datapoint_with_mixed_file_types() {
         panic!("Expected chat datapoint");
     }
 }
+
+// Tool Call Storage Format Tests (Migration 0041)
+// These tests verify the new decomposed storage format for tool calls
+
+mod tool_call_storage_tests {
+    use super::*;
+    use serde_json::json;
+    use tensorzero_core::tool::{
+        AllowedTools, AllowedToolsChoice, ClientSideFunctionTool, ProviderTool, ProviderToolScope,
+        Tool, ToolCallConfigDatabaseInsert, ToolChoice,
+    };
+
+    #[tokio::test]
+    async fn test_tool_call_storage_static_tools_only() {
+        // Test Case 1: Static tools only (from function config, not provided dynamically)
+        let clickhouse = get_clickhouse().await;
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let datapoint = ChatInferenceDatapointInsert {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![], // No dynamic tools
+                vec![], // No provider tools
+                AllowedTools {
+                    tools: vec!["static_tool_1".to_string(), "static_tool_2".to_string()],
+                    choice: AllowedToolsChoice::DynamicAllowedTools,
+                },
+                ToolChoice::Auto,
+                None,
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+        clickhouse
+            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        // Verify by retrieving the datapoint
+        let retrieved_datapoint = clickhouse
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            // Verify roundtrip - tool_params should be reconstructed correctly
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // No dynamic tools
+            assert!(tool_params.dynamic_tools.is_empty());
+
+            // No provider tools
+            assert!(tool_params.dynamic_provider_tools.is_empty());
+
+            // Allowed tools should contain static tools
+            assert_eq!(tool_params.allowed_tools.tools.len(), 2);
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .contains(&"static_tool_1".to_string()));
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .contains(&"static_tool_2".to_string()));
+            assert_eq!(
+                tool_params.allowed_tools.choice,
+                AllowedToolsChoice::DynamicAllowedTools
+            );
+
+            assert_eq!(tool_params.tool_choice, ToolChoice::Auto);
+            assert_eq!(tool_params.parallel_tool_calls, None);
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tool_call_storage_dynamic_tools_only() {
+        // Test Case 2: Dynamic tools only (provided at runtime)
+        let clickhouse = get_clickhouse().await;
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let dynamic_tool = Tool::ClientSideFunction(ClientSideFunctionTool {
+            name: "runtime_tool".to_string(),
+            description: "A tool provided at runtime".to_string(),
+            parameters: json!({"type": "object", "properties": {}}),
+            strict: false,
+        });
+
+        let datapoint = ChatInferenceDatapointInsert {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![dynamic_tool], // Dynamic tool
+                vec![],             // No provider tools
+                AllowedTools {
+                    tools: vec![], // Empty static tools
+                    choice: AllowedToolsChoice::DynamicAllowedTools,
+                },
+                ToolChoice::Required,
+                Some(true),
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+        clickhouse
+            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let retrieved_datapoint = clickhouse
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // Verify dynamic tool is present
+            assert_eq!(tool_params.dynamic_tools.len(), 1);
+
+            let Tool::ClientSideFunction(tool) = &tool_params.dynamic_tools[0];
+            assert_eq!(tool.name, "runtime_tool");
+            assert_eq!(tool.description, "A tool provided at runtime");
+            assert_eq!(tool.strict, false);
+
+            // No static tools (empty allowed_tools)
+            assert!(tool_params.allowed_tools.tools.is_empty());
+            assert_eq!(
+                tool_params.allowed_tools.choice,
+                AllowedToolsChoice::DynamicAllowedTools
+            );
+
+            assert_eq!(tool_params.tool_choice, ToolChoice::Required);
+            assert_eq!(tool_params.parallel_tool_calls, Some(true));
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tool_call_storage_mixed_static_and_dynamic() {
+        // Test Case 3: Mixed static + dynamic tools
+        let clickhouse = get_clickhouse().await;
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let dynamic_tool = Tool::ClientSideFunction(ClientSideFunctionTool {
+            name: "dynamic_x".to_string(),
+            description: "Dynamic tool X".to_string(),
+            parameters: json!({"type": "object"}),
+            strict: true,
+        });
+
+        let datapoint = ChatInferenceDatapointInsert {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![dynamic_tool],
+                vec![],
+                AllowedTools {
+                    tools: vec!["static_a".to_string(), "static_b".to_string()],
+                    choice: AllowedToolsChoice::DynamicAllowedTools,
+                },
+                ToolChoice::Auto,
+                None,
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+        clickhouse
+            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let retrieved_datapoint = clickhouse
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // Verify both static and dynamic tools
+            assert_eq!(tool_params.dynamic_tools.len(), 1);
+            assert_eq!(tool_params.allowed_tools.tools.len(), 2);
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .contains(&"static_a".to_string()));
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .contains(&"static_b".to_string()));
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tool_call_storage_provider_tools() {
+        // Test Case 4: Provider tools (model-provider-specific tools)
+        let clickhouse = get_clickhouse().await;
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let provider_tool = ProviderTool {
+            scope: ProviderToolScope::ModelProvider {
+                model_name: "gpt-4".to_string(),
+                model_provider_name: "openai".to_string(),
+            },
+            tool: json!({
+                "type": "code_interpreter"
+            }),
+        };
+
+        let datapoint = ChatInferenceDatapointInsert {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![provider_tool],
+                AllowedTools {
+                    tools: vec![],
+                    choice: AllowedToolsChoice::FunctionDefault,
+                },
+                ToolChoice::Auto,
+                None,
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+        clickhouse
+            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let retrieved_datapoint = clickhouse
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // Verify provider tools are preserved (previously would have been lost!)
+            assert_eq!(tool_params.dynamic_provider_tools.len(), 1);
+            if let ProviderToolScope::ModelProvider {
+                model_name,
+                model_provider_name,
+            } = &tool_params.dynamic_provider_tools[0].scope
+            {
+                assert_eq!(model_name, "gpt-4");
+                assert_eq!(model_provider_name, "openai");
+            } else {
+                panic!("Expected ModelProvider scope");
+            }
+            assert_eq!(
+                tool_params.dynamic_provider_tools[0].tool["type"],
+                "code_interpreter"
+            );
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tool_call_storage_function_default_choice() {
+        // Test Case 5: AllowedToolsChoice::FunctionDefault
+        let clickhouse = get_clickhouse().await;
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let datapoint = ChatInferenceDatapointInsert {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![],
+                AllowedTools {
+                    tools: vec!["func_tool_1".to_string()],
+                    choice: AllowedToolsChoice::FunctionDefault, // Key: use function defaults
+                },
+                ToolChoice::None,
+                Some(false),
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+        clickhouse
+            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let retrieved_datapoint = clickhouse
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // FunctionDefault should preserve the choice
+            assert_eq!(
+                tool_params.allowed_tools.choice,
+                AllowedToolsChoice::FunctionDefault
+            );
+            assert_eq!(tool_params.tool_choice, ToolChoice::None);
+            assert_eq!(tool_params.parallel_tool_calls, Some(false));
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tool_call_storage_dynamic_allowed_tools_choice() {
+        // Test Case 6: AllowedToolsChoice::DynamicAllowedTools
+        let clickhouse = get_clickhouse().await;
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let datapoint = ChatInferenceDatapointInsert {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![],
+                AllowedTools {
+                    tools: vec!["explicit_tool_1".to_string(), "explicit_tool_2".to_string()],
+                    choice: AllowedToolsChoice::DynamicAllowedTools, // Explicit list
+                },
+                ToolChoice::Specific("explicit_tool_1".to_string()),
+                None,
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+        clickhouse
+            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let retrieved_datapoint = clickhouse
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // DynamicAllowedTools should preserve the explicit list
+            assert_eq!(
+                tool_params.allowed_tools.choice,
+                AllowedToolsChoice::DynamicAllowedTools
+            );
+            assert_eq!(tool_params.allowed_tools.tools.len(), 2);
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .contains(&"explicit_tool_1".to_string()));
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .contains(&"explicit_tool_2".to_string()));
+
+            if let ToolChoice::Specific(tool_name) = tool_params.tool_choice {
+                assert_eq!(tool_name, "explicit_tool_1");
+            } else {
+                panic!("Expected Specific tool choice");
+            }
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tool_call_storage_empty_none() {
+        // Test Case 7: Empty/None tool params
+        let clickhouse = get_clickhouse().await;
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let datapoint = ChatInferenceDatapointInsert {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: None, // No tools at all
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+        clickhouse
+            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let retrieved_datapoint = clickhouse
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            // Should have no tool params
+            assert!(chat_dp.tool_params.is_none());
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_tool_call_storage_roundtrip_comprehensive() {
+        // Test Case 8: Comprehensive roundtrip test
+        let clickhouse = get_clickhouse().await;
+        let datapoint_id = Uuid::now_v7();
+        let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
+
+        let dynamic_tool1 = Tool::ClientSideFunction(ClientSideFunctionTool {
+            name: "dynamic_tool_1".to_string(),
+            description: "First dynamic tool".to_string(),
+            parameters: json!({"type": "object", "properties": {"param1": {"type": "string"}}}),
+            strict: false,
+        });
+
+        let dynamic_tool2 = Tool::ClientSideFunction(ClientSideFunctionTool {
+            name: "dynamic_tool_2".to_string(),
+            description: "Second dynamic tool".to_string(),
+            parameters: json!({"type": "object", "properties": {"param2": {"type": "number"}}}),
+            strict: true,
+        });
+
+        let provider_tool = ProviderTool {
+            scope: ProviderToolScope::ModelProvider {
+                model_name: "claude-3-opus".to_string(),
+                model_provider_name: "anthropic".to_string(),
+            },
+            tool: json!({
+                "type": "computer_use"
+            }),
+        };
+
+        let datapoint = ChatInferenceDatapointInsert {
+            dataset_name: dataset_name.clone(),
+            function_name: "test_function".to_string(),
+            id: datapoint_id,
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![dynamic_tool1, dynamic_tool2],
+                vec![provider_tool],
+                AllowedTools {
+                    tools: vec!["static_1".to_string(), "static_2".to_string()],
+                    choice: AllowedToolsChoice::DynamicAllowedTools,
+                },
+                ToolChoice::Required,
+                Some(true),
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+
+        clickhouse
+            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
+            .await
+            .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let retrieved_datapoint = clickhouse
+            .get_datapoint(&GetDatapointParams {
+                dataset_name: dataset_name.clone(),
+                datapoint_id,
+                allow_stale: None,
+            })
+            .await
+            .unwrap();
+
+        if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
+            assert!(chat_dp.tool_params.is_some());
+            let tool_params = chat_dp.tool_params.unwrap();
+
+            // Verify all components survived the roundtrip
+            assert_eq!(tool_params.dynamic_tools.len(), 2);
+            assert_eq!(tool_params.dynamic_provider_tools.len(), 1);
+
+            assert_eq!(tool_params.allowed_tools.tools.len(), 2);
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .contains(&"static_1".to_string()));
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .contains(&"static_2".to_string()));
+
+            assert_eq!(tool_params.tool_choice, ToolChoice::Required);
+            assert_eq!(tool_params.parallel_tool_calls, Some(true));
+        } else {
+            panic!("Expected chat datapoint");
+        }
+    }
+}

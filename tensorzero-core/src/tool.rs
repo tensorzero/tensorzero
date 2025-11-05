@@ -526,6 +526,7 @@ where
     D: Deserializer<'de>,
 {
     struct ToolInfoVisitor;
+    println!("ENTERING DESERIALIZER");
 
     impl<'de> Visitor<'de> for ToolInfoVisitor {
         type Value = Option<ToolCallConfigDatabaseInsert>;
@@ -553,7 +554,9 @@ where
             while let Some(key) = map.next_key::<String>()? {
                 if tool_fields.contains(&key.as_str()) {
                     let value: Value = map.next_value()?;
-                    values.insert(key, value);
+                    if !value.is_null() {
+                        values.insert(key, value);
+                    }
                 } else {
                     // Skip non-tool fields (for flatten support)
                     map.next_value::<serde::de::IgnoredAny>()?;
@@ -562,43 +565,71 @@ where
 
             // If no tool fields present, return None
             if values.is_empty() {
+                println!("Values: EMPTY");
                 return Ok(None);
             }
+            println!("Value: {values:?}");
 
             // Determine format based on which fields are present
-            let has_full_fields = values.contains_key("dynamic_tools")
-                || values.contains_key("dynamic_provider_tools")
-                || values.contains_key("allowed_tools")
-                || values.contains_key("tool_choice");
+            // Since `dynamic_provider_tools` and `dynamic_tools` are going to return arrays
+            // and `tool_params` will be a string regardles of format, the distinguishing factor for new data
+            // is if `allowed_tools` is set (it always should be)
+            let has_full_fields =
+                values.contains_key("allowed_tools") || values.contains_key("tool_choice");
 
             if has_full_fields {
+                println!("FULL FIELDS");
                 // Full format: require ALL full format fields
                 let dynamic_tools_value = values
                     .get("dynamic_tools")
                     .ok_or_else(|| de::Error::missing_field("dynamic_tools"))?;
-                let dynamic_tools: Vec<Tool> = serde_json::from_value(dynamic_tools_value.clone())
-                    .map_err(|e| de::Error::custom(format!("invalid dynamic_tools: {e}")))?;
 
+                // Parse as array of JSON strings (database storage format)
+                let tool_strings: Vec<String> = serde_json::from_value(dynamic_tools_value.clone())
+                    .map_err(|e| de::Error::custom(format!("dynamic_tools must be an array of JSON strings: {e}")))?;
+
+                let dynamic_tools: Vec<Tool> = tool_strings
+                    .iter()
+                    .map(|s| serde_json::from_str(s).map_err(|e| {
+                        de::Error::custom(format!("failed to parse tool from JSON string: {e}"))
+                    }))
+                    .collect::<Result<Vec<Tool>, _>>()?;
                 let dynamic_provider_tools_value = values
                     .get("dynamic_provider_tools")
                     .ok_or_else(|| de::Error::missing_field("dynamic_provider_tools"))?;
-                let dynamic_provider_tools: Vec<ProviderTool> =
-                    serde_json::from_value(dynamic_provider_tools_value.clone()).map_err(|e| {
-                        de::Error::custom(format!("invalid dynamic_provider_tools: {e}"))
-                    })?;
+
+                // Parse as array of JSON strings (database storage format)
+                let provider_tool_strings: Vec<String> = serde_json::from_value(dynamic_provider_tools_value.clone())
+                    .map_err(|e| de::Error::custom(format!("dynamic_provider_tools must be an array of JSON strings: {e}")))?;
+
+                let dynamic_provider_tools: Vec<ProviderTool> = provider_tool_strings
+                    .iter()
+                    .map(|s| serde_json::from_str(s).map_err(|e| {
+                        de::Error::custom(format!("failed to parse provider tool from JSON string: {e}"))
+                    }))
+                    .collect::<Result<Vec<ProviderTool>, _>>()?;
 
                 let allowed_tools_value = values
                     .get("allowed_tools")
                     .ok_or_else(|| de::Error::missing_field("allowed_tools"))?;
-                let allowed_tools: AllowedTools =
+
+                // Parse as JSON string (database storage format)
+                let allowed_tools: AllowedTools = if let Some(allowed_tools_str) = allowed_tools_value.as_str() {
+                    serde_json::from_str(allowed_tools_str)
+                        .map_err(|e| de::Error::custom(format!("failed to parse allowed_tools from JSON string: {e}")))?
+                } else {
+                    // Fallback: try to deserialize as object (for backwards compatibility)
                     serde_json::from_value(allowed_tools_value.clone())
-                        .map_err(|e| de::Error::custom(format!("invalid allowed_tools: {e}")))?;
+                        .map_err(|e| de::Error::custom(format!("allowed_tools must be a JSON string or object: {e}")))?
+                };
 
                 let tool_choice_value = values
                     .get("tool_choice")
                     .ok_or_else(|| de::Error::missing_field("tool_choice"))?;
+
+                // Parse tool_choice - it comes as a bare string or object from the database
                 let tool_choice: ToolChoice = serde_json::from_value(tool_choice_value.clone())
-                    .map_err(|e| de::Error::custom(format!("invalid tool_choice: {e}")))?;
+                    .map_err(|e| de::Error::custom(format!("failed to parse tool_choice: {e}")))?;
 
                 let parallel_tool_calls: Option<bool> = values
                     .get("parallel_tool_calls")
@@ -652,6 +683,7 @@ where
                     tool_params: tool_config,
                 }))
             } else if values.contains_key("tool_params") {
+                println!("LEGACY FORMAT");
                 // Legacy format: only tool_config should be present
                 // The tool params are serialized as a string in ClickHouse
                 let tool_config_value = values
@@ -2286,25 +2318,26 @@ mod tests {
         tool_info: Option<ToolCallConfigDatabaseInsert>,
     }
 
+    // Helper function to assert that deserialization results in None for tool_info
+    fn assert_deserialize_to_none(json: serde_json::Value, expected_baz: &str) {
+        let result: ToolCallConfigDeserializeTestHelper =
+            serde_json::from_value(json).expect("Deserialization should succeed");
+        assert_eq!(result.baz, expected_baz);
+        assert_eq!(result.tool_info, None, "tool_info should be None");
+    }
+
     #[test]
     fn test_tool_call_config_database_insert_deserialize_ragged_with_flatten() {
         // Test with a flattened struct (ragged case)
+        // Note: dynamic_tools and dynamic_provider_tools are arrays of JSON strings
+        // allowed_tools is a JSON string, tool_choice is a bare string/object
         let json = json!({
             "baz": "test_value",
             "dynamic_tools": [
-                {
-                    "type": "client_side_function",
-                    "name": "ragged_tool",
-                    "description": "A ragged tool",
-                    "parameters": {"type": "string"},
-                    "strict": true
-                }
+                r#"{"type":"client_side_function","name":"ragged_tool","description":"A ragged tool","parameters":{"type":"string"},"strict":true}"#
             ],
             "dynamic_provider_tools": [],
-            "allowed_tools": {
-                "tools": ["ragged_tool"],
-                "choice": "function_default"
-            },
+            "allowed_tools": r#"{"tools":["ragged_tool"],"choice":"function_default"}"#,
             "tool_choice": {"specific": "ragged_tool"},
             "parallel_tool_calls": null,
             "tool_params": {
@@ -2364,11 +2397,48 @@ mod tests {
         let json = json!({
             "baz": "empty_value"
         });
+        assert_deserialize_to_none(json, "empty_value");
+    }
 
-        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_legacy_null_tool_params() {
+        // Test legacy format with explicit null tool_params
+        // Should return None, same as missing tool_params
+        let json = json!({
+            "baz": "test_value",
+            "tool_params": null
+        });
+        assert_deserialize_to_none(json, "test_value");
+    }
 
-        assert_eq!(result.baz, "empty_value");
-        assert_eq!(result.tool_info, None);
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_legacy_empty_tool_params() {
+        // Test legacy format with empty string tool_params
+        // Should return None
+        let json = json!({
+            "baz": "test_value",
+            "tool_params": ""
+        });
+        assert_deserialize_to_none(json, "test_value");
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_legacy_missing_vs_null() {
+        // Test that missing tool_params behaves the same as null tool_params
+        // Both should return None for tool_info
+
+        // Missing tool_params
+        let json_missing = json!({
+            "baz": "test_missing"
+        });
+        assert_deserialize_to_none(json_missing, "test_missing");
+
+        // Null tool_params
+        let json_null = json!({
+            "baz": "test_null",
+            "tool_params": null
+        });
+        assert_deserialize_to_none(json_null, "test_null");
     }
 
     #[test]
@@ -2377,19 +2447,11 @@ mod tests {
         let json = json!({
             "baz": "test",
             "dynamic_tools": [
-                {
-                    "type": "invalid_type",
-                    "name": "test_tool",
-                    "description": "A test tool",
-                    "parameters": {"type": "object"}
-                }
+                r#"{"type":"invalid_type","name":"test_tool","description":"A test tool","parameters":{"type":"object"}}"#
             ],
             "dynamic_provider_tools": [],
-            "allowed_tools": {
-                "tools": ["test_tool"],
-                "choice": "function_default"
-            },
-            "tool_choice": "auto",
+            "allowed_tools": r#"{"tools":["test_tool"],"choice":"function_default"}"#,
+            "tool_choice": r#""auto""#,
             "tool_params": {
                 "tools_available": [],
                 "tool_choice": "auto"
@@ -2406,18 +2468,11 @@ mod tests {
         let json = json!({
             "baz": "test",
             "dynamic_tools": [
-                {
-                    "type": "client_side_function",
-                    "description": "A test tool",
-                    "parameters": {"type": "object"}
-                }
+                r#"{"type":"client_side_function","description":"A test tool","parameters":{"type":"object"}}"#
             ],
             "dynamic_provider_tools": [],
-            "allowed_tools": {
-                "tools": ["test_tool"],
-                "choice": "function_default"
-            },
-            "tool_choice": "auto",
+            "allowed_tools": r#"{"tools":["test_tool"],"choice":"function_default"}"#,
+            "tool_choice": r#""auto""#,
             "tool_params": {
                 "tools_available": [],
                 "tool_choice": "auto"
@@ -2435,11 +2490,8 @@ mod tests {
             "baz": "test",
             "dynamic_tools": [],
             "dynamic_provider_tools": [],
-            "allowed_tools": {
-                "tools": [],
-                "choice": "function_default"
-            },
-            "tool_choice": "invalid_choice",
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
+            "tool_choice": r#""invalid_choice""#,
             "tool_params": {
                 "tools_available": [],
                 "tool_choice": "auto"
@@ -2457,11 +2509,8 @@ mod tests {
             "baz": "test",
             "dynamic_tools": [],
             "dynamic_provider_tools": [],
-            "allowed_tools": {
-                "tools": [],
-                "choice": "invalid_choice"
-            },
-            "tool_choice": "auto",
+            "allowed_tools": r#"{"tools":[],"choice":"invalid_choice"}"#,
+            "tool_choice": r#""auto""#,
             "tool_params": {
                 "tools_available": [],
                 "tool_choice": "auto"
@@ -2479,11 +2528,8 @@ mod tests {
             "baz": "test",
             "dynamic_tools": "not_an_array",
             "dynamic_provider_tools": [],
-            "allowed_tools": {
-                "tools": [],
-                "choice": "function_default"
-            },
-            "tool_choice": "auto",
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
+            "tool_choice": r#""auto""#,
             "tool_params": {
                 "tools_available": [],
                 "tool_choice": "auto"
@@ -2501,11 +2547,8 @@ mod tests {
             "baz": "test",
             "dynamic_tools": [],
             "dynamic_provider_tools": [],
-            "allowed_tools": {
-                "tools": [],
-                "choice": "function_default"
-            },
-            "tool_choice": "auto",
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
+            "tool_choice": r#""auto""#,
             "parallel_tool_calls": "not_a_bool",
             "tool_params": {
                 "tools_available": [],
@@ -2524,15 +2567,10 @@ mod tests {
             "baz": "test",
             "dynamic_tools": [],
             "dynamic_provider_tools": [
-                {
-                    "tool": {"type": "test"}
-                    // Missing scope field - should default to Unscoped
-                }
+                r#"{"tool":{"type":"test"}}"#
+                // Missing scope field - should default to Unscoped
             ],
-            "allowed_tools": {
-                "tools": [],
-                "choice": "function_default"
-            },
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
             "tool_choice": "auto",
             "tool_params": {
                 "tools_available": [],
@@ -2558,10 +2596,7 @@ mod tests {
             "baz": "test",
             "dynamic_tools": [],
             "dynamic_provider_tools": [],
-            "allowed_tools": {
-                "tools": [],
-                "choice": "function_default"
-            },
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
             "tool_choice": null,
             "tool_params": {
                 "tools_available": [],
@@ -2579,18 +2614,10 @@ mod tests {
         let json = json!({
             "baz": "test",
             "dynamic_tools": [
-                {
-                    "type": "client_side_function",
-                    "name": "",
-                    "description": "A test tool",
-                    "parameters": {"type": "object"}
-                }
+                r#"{"type":"client_side_function","name":"","description":"A test tool","parameters":{"type":"object"}}"#
             ],
             "dynamic_provider_tools": [],
-            "allowed_tools": {
-                "tools": [""],
-                "choice": "function_default"
-            },
+            "allowed_tools": r#"{"tools":[""],"choice":"function_default"}"#,
             "tool_choice": "auto",
             "tool_params": {
                 "tools_available": [],
@@ -2609,18 +2636,10 @@ mod tests {
         let json = json!({
             "baz": "test",
             "dynamic_tools": [
-                {
-                    "type": "client_side_function",
-                    "name": "specific_tool",
-                    "description": "A specific tool",
-                    "parameters": {"type": "object"}
-                }
+                r#"{"type":"client_side_function","name":"specific_tool","description":"A specific tool","parameters":{"type":"object"}}"#
             ],
             "dynamic_provider_tools": [],
-            "allowed_tools": {
-                "tools": ["specific_tool"],
-                "choice": "function_default"
-            },
+            "allowed_tools": r#"{"tools":["specific_tool"],"choice":"function_default"}"#,
             "tool_choice": {"specific": "specific_tool"},
             "tool_params": {
                 "tools_available": [],
@@ -2643,23 +2662,12 @@ mod tests {
         let json = json!({
             "baz": "test",
             "dynamic_tools": [
-                {
-                    "type": "client_side_function",
-                    "name": "valid_tool",
-                    "description": "A valid tool",
-                    "parameters": {"type": "object"}
-                },
-                {
-                    "type": "invalid_type",
-                    "name": "invalid_tool"
-                }
+                r#"{"type":"client_side_function","name":"valid_tool","description":"A valid tool","parameters":{"type":"object"}}"#,
+                r#"{"type":"invalid_type","name":"invalid_tool"}"#
             ],
             "dynamic_provider_tools": [],
-            "allowed_tools": {
-                "tools": ["valid_tool"],
-                "choice": "function_default"
-            },
-            "tool_choice": "auto",
+            "allowed_tools": r#"{"tools":["valid_tool"],"choice":"function_default"}"#,
+            "tool_choice": r#""auto""#,
             "tool_params": {
                 "tools_available": [],
                 "tool_choice": "auto"
@@ -2678,10 +2686,7 @@ mod tests {
             "unknown_field": "should_be_ignored",
             "dynamic_tools": [],
             "dynamic_provider_tools": [],
-            "allowed_tools": {
-                "tools": [],
-                "choice": "function_default"
-            },
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
             "tool_choice": "auto",
             "tool_params": {
                 "tools_available": [],
