@@ -89,9 +89,18 @@ export type ThoughtSummaryBlock = z.infer<typeof thoughtSummaryBlockSchema>;
 
 export const thoughtContentSchema = z.object({
   type: z.literal("thought"),
-  text: z.string().optional(),
-  signature: z.string().optional(),
-  summary: z.array(thoughtSummaryBlockSchema).optional(),
+  text: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? undefined),
+  signature: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? undefined),
+  summary: z
+    .array(thoughtSummaryBlockSchema)
+    .nullish()
+    .transform((val) => val ?? undefined),
   _internal_provider_type: z.string().optional(),
 });
 export type ThoughtContent = z.infer<typeof thoughtContentSchema>;

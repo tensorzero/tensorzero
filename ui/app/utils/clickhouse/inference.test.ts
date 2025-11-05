@@ -636,7 +636,7 @@ test("displayModelInferenceInputMessageContentSchema accepts thought content blo
   );
   expect(result3.success).toBe(true);
   if (result3.success && result3.data.type === "thought") {
-    expect(result3.data.text).toBeNull();
+    expect(result3.data.text).toBeUndefined();
     expect(result3.data.summary).toBeUndefined();
   }
 });
