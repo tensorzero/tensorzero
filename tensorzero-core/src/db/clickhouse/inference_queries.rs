@@ -266,6 +266,11 @@ fn generate_single_table_query_for_type(
 
     if is_chat {
         select_clauses.push("i.tool_params as tool_params".to_string());
+        select_clauses.push("i.dynamic_tools as dynamic_tools".to_string());
+        select_clauses.push("i.dynamic_provider_tools as dynamic_provider_tools".to_string());
+        select_clauses.push("i.allowed_tools as allowed_tools".to_string());
+        select_clauses.push("i.tool_choice as tool_choice".to_string());
+        select_clauses.push("i.parallel_tool_calls as parallel_tool_calls".to_string());
     } else {
         select_clauses.push("'' as tool_params".to_string());
     }

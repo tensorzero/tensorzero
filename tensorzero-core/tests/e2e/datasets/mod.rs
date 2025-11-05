@@ -234,7 +234,7 @@ async fn test_create_delete_datapoint_chat() {
         .collect::<Vec<_>>();
     assert_eq!(list_datapoints.len(), 3);
 
-    for (index, datapoint) in datapoints.iter().enumerate() {
+    for datapoint in &datapoints {
         let pretty_datapoint = serde_json::to_string_pretty(&datapoint).unwrap();
         println!("pretty_datapoint: {pretty_datapoint}");
         // Verify the datapoint structure and content
@@ -277,7 +277,6 @@ async fn test_create_delete_datapoint_chat() {
         assert!(list_datapoint.tags.as_ref().unwrap().is_empty());
         assert_eq!(list_datapoint.auxiliary, "");
 
-        let mut is_tool = false;
         // Verify input structure
         let input = &datapoint.input;
         assert!(match input.system.as_ref().unwrap() {
@@ -319,7 +318,6 @@ async fn test_create_delete_datapoint_chat() {
                     first_output,
                     ContentBlockChatOutput::ToolCall { .. }
                 ));
-                is_tool = true;
             }
         }
 
