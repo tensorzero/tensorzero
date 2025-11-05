@@ -39,11 +39,11 @@ import {
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
+import type { TimeWindow } from "~/types/tensorzero";
 import {
   getNativeDatabaseClient,
   getNativeTensorZeroClient,
 } from "~/utils/tensorzero/native_client.server";
-import type { TimeWindow } from "tensorzero-node";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;

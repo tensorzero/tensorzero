@@ -17,7 +17,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.11.0"
+version = "2025.11.1"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 
@@ -45,7 +45,7 @@ pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py39"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.99"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.49", features = ["derive"] }
+clap = { version = "4.5.51", features = ["derive"] }
 futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
 url = "2.5.4"

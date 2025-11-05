@@ -37,7 +37,7 @@ import type {
   MetricConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import {
   useColorAssigner,
   ColorAssignerProvider,

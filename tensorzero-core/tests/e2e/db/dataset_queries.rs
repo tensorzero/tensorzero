@@ -2167,6 +2167,7 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
     // Create a StoredFile with ObjectStorage
     let stored_file = StoredFile(ObjectStoragePointer {
         source_url: Some("https://example.com/original.png".parse().unwrap()),
+        detail: None,
         mime_type: mime::IMAGE_PNG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
@@ -2250,6 +2251,7 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
     // Create a StoredFile with ObjectStorage
     let stored_file = StoredFile(ObjectStoragePointer {
         source_url: Some("https://example.com/data.json".parse().unwrap()),
+        detail: None,
         mime_type: mime::APPLICATION_JSON,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
@@ -2334,6 +2336,7 @@ async fn test_datapoint_with_mixed_file_types() {
     // Create multiple StoredFiles
     let stored_file1 = StoredFile(ObjectStoragePointer {
         source_url: Some("https://example.com/image1.png".parse().unwrap()),
+        detail: None,
         mime_type: mime::IMAGE_PNG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
@@ -2343,6 +2346,7 @@ async fn test_datapoint_with_mixed_file_types() {
 
     let stored_file2 = StoredFile(ObjectStoragePointer {
         source_url: None, // No source URL
+        detail: None,
         mime_type: mime::IMAGE_JPEG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,

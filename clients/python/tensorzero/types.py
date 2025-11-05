@@ -89,10 +89,14 @@ class FileBase64(ContentBlock):
     type: str = "file"
 
 
+Detail = Literal["low", "high", "auto"]
+
+
 @dataclass
 class ImageUrl(ContentBlock):
     url: str
     mime_type: Optional[str] = None
+    detail: Optional[Detail] = None
     type: str = "image"
 
 

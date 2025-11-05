@@ -1,5 +1,5 @@
 import { Badge } from "~/components/ui/badge";
-import type { FeedbackRow } from "tensorzero-node";
+import type { FeedbackRow } from "~/types/tensorzero";
 import type { FeedbackConfig } from "~/utils/config/feedback";
 
 // Move the getBadgeStyle function from MetricSelector

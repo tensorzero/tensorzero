@@ -8,7 +8,7 @@ import type {
   StoredInput,
   StoragePath as BackendStoragePath,
   StorageKind as BackendStorageKind,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 
 /**
  * JSON types
@@ -89,7 +89,7 @@ export type ThoughtSummaryBlock = z.infer<typeof thoughtSummaryBlockSchema>;
 
 export const thoughtContentSchema = z.object({
   type: z.literal("thought"),
-  text: z.string().nullable(),
+  text: z.string().optional(),
   signature: z.string().optional(),
   summary: z.array(thoughtSummaryBlockSchema).optional(),
   _internal_provider_type: z.string().optional(),

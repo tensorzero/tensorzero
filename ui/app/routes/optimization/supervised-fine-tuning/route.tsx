@@ -22,7 +22,7 @@ import { ModelBadge } from "~/components/model/ModelBadge";
 import type {
   OptimizationJobHandle,
   OptimizationJobInfo,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { toSupervisedFineTuningJobUrl } from "~/utils/urls";
 
 export const handle: RouteHandle = {

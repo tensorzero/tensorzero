@@ -83,6 +83,7 @@ pub fn warn_cannot_forward_url_if_missing_mime_type(
             file_url: FileUrl {
                 url: _,
                 mime_type: None,
+                ..
             },
             future: _
         }

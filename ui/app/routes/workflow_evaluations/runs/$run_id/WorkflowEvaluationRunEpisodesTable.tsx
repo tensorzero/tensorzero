@@ -21,7 +21,7 @@ import { TableItemShortUuid } from "~/components/ui/TableItems";
 import KVChip from "~/components/ui/KVChip";
 import MetricValue from "~/components/metric/MetricValue";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
-import type { FeedbackRow } from "tensorzero-node";
+import type { FeedbackRow } from "~/types/tensorzero";
 
 export default function WorkflowEvaluationRunEpisodesTable({
   episodes,

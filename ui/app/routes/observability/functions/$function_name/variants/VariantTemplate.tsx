@@ -1,4 +1,4 @@
-import type { VariantConfig } from "tensorzero-node";
+import type { VariantConfig } from "~/types/tensorzero";
 import {
   SnippetLayout,
   SnippetContent,
