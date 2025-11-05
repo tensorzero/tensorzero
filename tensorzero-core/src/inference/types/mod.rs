@@ -1048,6 +1048,32 @@ pub enum ContentBlockChatOutput {
     },
 }
 
+impl ContentBlockChatOutput {
+    /// Validates a `ContentBlockChatOutput` and re-validate and re-parse structured fields.
+    /// (e.g. ToolCallOutput.name and .arguments). Returns a new `ContentBlockChatOutput` with the validated fields.
+    ///
+    /// This is used in CreateChatDatapointRequest, which accepts a ContentBlockChatOutput. In these cases where a
+    /// user specifies it, we cannot trust raw and parsed values agree, and we use the raw fields as the source of truth
+    /// and re-validate.
+    pub async fn into_validated(
+        self,
+        tool_call_config: Option<&ToolCallConfig>,
+    ) -> ContentBlockChatOutput {
+        if let ContentBlockChatOutput::ToolCall(input_tool_call) = self {
+            let unvalidated_tool_call = ToolCall {
+                name: input_tool_call.raw_name,
+                arguments: input_tool_call.raw_arguments,
+                id: input_tool_call.id,
+            };
+            let validated_tool_call =
+                InferenceResponseToolCall::new(unvalidated_tool_call, tool_call_config).await;
+            ContentBlockChatOutput::ToolCall(validated_tool_call)
+        } else {
+            self
+        }
+    }
+}
+
 /// A RequestMessage is a message sent to a model
 #[derive(Clone, Debug, Serialize)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]

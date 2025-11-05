@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use anyhow::{bail, Result};
 use serde_json::{json, Value};
-use tensorzero::{
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::client::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     DynamicToolParams, File, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
-use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tensorzero_core::evaluations::{
     get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
@@ -425,8 +425,7 @@ mod tests {
     use super::*;
 
     use serde_json::json;
-    use tensorzero::Role;
-    use tensorzero::{File, UrlFile};
+    use tensorzero_core::client::{File, Role, UrlFile};
     use tensorzero_core::endpoints::datasets::JsonInferenceDatapoint;
     use tensorzero_core::endpoints::datasets::StoredChatInferenceDatapoint;
     use tensorzero_core::endpoints::inference::ChatInferenceResponse;

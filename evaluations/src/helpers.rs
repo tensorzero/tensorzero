@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use serde_json::Value;
-use tensorzero::{CacheParamsOptions, InferenceResponse};
+use tensorzero_core::cache::CacheParamsOptions;
+use tensorzero_core::client::InferenceResponse;
 use tensorzero_core::db::clickhouse::escape_string_for_clickhouse_literal;
 use tensorzero_core::serde_util::deserialize_json_string;
 use tensorzero_core::{cache::CacheEnabledMode, db::clickhouse::ClickHouseConnectionInfo};
@@ -97,12 +98,14 @@ mod tests {
     use std::collections::{HashMap, HashSet};
 
     use serde_json::json;
-    use tensorzero::{ClientSideFunctionTool, DynamicToolParams};
     use tensorzero_core::{
         config::SchemaData,
         experimentation::ExperimentationConfig,
         function::{FunctionConfig, FunctionConfigChat},
-        tool::{AllowedTools, AllowedToolsChoice, Tool, ToolCallConfigDatabaseInsert, ToolChoice},
+        tool::{
+            AllowedTools, AllowedToolsChoice, ClientSideFunctionTool, DynamicToolParams, Tool,
+            ToolCallConfigDatabaseInsert, ToolChoice,
+        },
     };
 
     #[tokio::test]

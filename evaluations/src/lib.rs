@@ -10,13 +10,13 @@ use evaluators::{evaluate_inference, EvaluateInferenceParams};
 use helpers::get_cache_options;
 use serde::{Deserialize, Serialize};
 use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
-use tensorzero::{
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::client::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
     InferenceResponse,
 };
-use tensorzero::{ClientInput, StoragePath};
-use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::client::{ClientInput, StoragePath};
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
 use tensorzero_core::error::Error;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
@@ -94,7 +94,7 @@ pub struct Clients {
 /// This struct encapsulates all the necessary components for evaluation execution
 pub struct EvaluationCoreArgs {
     /// TensorZero client for making inference requests
-    pub tensorzero_client: tensorzero::Client,
+    pub tensorzero_client: Client,
 
     /// ClickHouse client for database operations
     pub clickhouse_client: ClickHouseConnectionInfo,
