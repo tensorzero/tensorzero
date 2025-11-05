@@ -28,9 +28,31 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
 
       - name: Check version consistency
         run: ./ci/check-version-consistency.sh
+
+  # This checks for specific markers in the codebase that require multiple files to be edited together.
+  check-if-edited-then-edit:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    # Should run on all PRs from forks as well, if the label is not present
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b
+        with:
+          python-version: "3.9"
+
+      - name: Check coordinated edits
+        run: python3 ci/check-coordinated-edits.py
 
   # Like 'check-docker-compose', but loads the freshly built 'gateway' and 'ui' container images first
   # This checks that all of our docker-compose files work with the changes in the PR
@@ -835,6 +857,7 @@ jobs:
     needs:
       [
         check-version-consistency,
+        check-if-edited-then-edit,
         check-docker-compose,
         check-latest-docker-compose,
         check-python-client-build,
