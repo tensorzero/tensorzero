@@ -1,0 +1,1003 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UpdateDatapointsRequest",
+  "description": "Request to update one or more datapoints in a dataset.",
+  "type": "object",
+  "properties": {
+    "datapoints": {
+      "description": "The datapoints to update.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/UpdateDatapointRequest"
+      }
+    }
+  },
+  "required": [
+    "datapoints"
+  ],
+  "$defs": {
+    "UpdateDatapointRequest": {
+      "description": "A tagged request to update a single datapoint in a dataset.",
+      "oneOf": [
+        {
+          "description": "Request to update a chat datapoint.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "chat"
+            }
+          },
+          "$ref": "#/$defs/UpdateChatDatapointRequest",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "Request to update a JSON datapoint.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "json"
+            }
+          },
+          "$ref": "#/$defs/UpdateJsonDatapointRequest",
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "Input": {
+      "description": "A request is made that contains an Input",
+      "type": "object",
+      "properties": {
+        "system": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/System"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InputMessage"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "System": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/Arguments"
+        }
+      ]
+    },
+    "Arguments": {
+      "description": "A newtype wrapper around Map<String, Value> for template and system arguments",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "InputMessage": {
+      "description": "InputMessage and Role are our representation of the input sent by the client\nprior to any processing into LLM representations below.\n`InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).",
+      "type": "object",
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/InputMessageContent"
+          }
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ]
+    },
+    "Role": {
+      "type": "string",
+      "enum": [
+        "user",
+        "assistant"
+      ]
+    },
+    "InputMessageContent": {
+      "oneOf": [
+        {
+          "description": "InputMessages are validated against the input schema of the Function\nand then templated and transformed into RequestMessages for a particular Variant.\nThey might contain tool calls or tool results along with text.\nThe abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.\nContentBlocks are collected into RequestMessages.\nThese RequestMessages are collected into a ModelInferenceRequest,\nwhich should contain all information needed by a ModelProvider to perform the\ninference that is called for.",
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "text"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "arguments": {
+              "$ref": "#/$defs/Arguments"
+            },
+            "type": {
+              "type": "string",
+              "const": "template"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name",
+            "arguments"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "tool_call"
+            }
+          },
+          "$ref": "#/$defs/ToolCallWrapper",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "A ToolResult is the outcome of a ToolCall, which we may want to present back to the model",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "result": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "tool_result"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name",
+            "result",
+            "id"
+          ]
+        },
+        {
+          "description": "Struct that represents raw text content that should be passed directly to the model\nwithout any template processing or validation",
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "raw_text"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "thought"
+            }
+          },
+          "$ref": "#/$defs/Thought",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "file"
+            }
+          },
+          "$ref": "#/$defs/File",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "description": "An unknown content block type, used to allow passing provider-specific\ncontent blocks (e.g. Anthropic's `redacted_thinking`) in and out\nof TensorZero.\nThe `data` field holds the original content block from the provider,\nwithout any validation or transformation by TensorZero.",
+          "type": "object",
+          "properties": {
+            "data": {
+              "description": "The underlying content block to be passed to the model provider."
+            },
+            "model_provider_name": {
+              "description": "A fully-qualified name specifying when this content block should\nbe included in the model provider input.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "unknown"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        }
+      ]
+    },
+    "ToolCall": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "arguments": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "arguments"
+      ]
+    },
+    "InferenceResponseToolCall": {
+      "description": "An InferenceResponseToolCall is a request by a model to call a Tool\nin the form that we return to the client / ClickHouse",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "A Tool Call ID to match up with tool call responses. See #4058.",
+          "type": "string"
+        },
+        "raw_name": {
+          "description": "The name of the tool to call, as generated by the model.",
+          "type": "string"
+        },
+        "raw_arguments": {
+          "description": "The raw arguments JSON string of the tool to call, as generated by the model.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name of the tool to call, validated against tool configs. If not present, it means the tool call was invalid.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "arguments": {
+          "description": "The arguments of the tool to call, validated against tool configs. If not present, it means the tool call arguments were invalid."
+        }
+      },
+      "required": [
+        "id",
+        "raw_name",
+        "raw_arguments"
+      ]
+    },
+    "ToolCallWrapper": {
+      "description": "`ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ToolCall"
+        },
+        {
+          "$ref": "#/$defs/InferenceResponseToolCall"
+        }
+      ]
+    },
+    "ThoughtSummaryBlock": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "summary_text"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ]
+        }
+      ]
+    },
+    "Thought": {
+      "description": "Struct that represents a model's reasoning",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signature": {
+          "description": "An optional signature - currently, this is only used with Anthropic,\nand is ignored by other providers.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThoughtSummaryBlock"
+          }
+        },
+        "_internal_provider_type": {
+          "description": "When set, this 'Thought' block will only be used for providers\nmatching this type (e.g. `anthropic`). Other providers will emit\na warning and discard the block.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "Detail": {
+      "description": "Detail level for input images (affects fidelity and token cost)",
+      "type": "string",
+      "enum": [
+        "low",
+        "high",
+        "auto"
+      ]
+    },
+    "UrlFile": {
+      "description": "A file that can be located at a URL",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "mime_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "Base64File": {
+      "description": "A file already encoded as base64",
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "mime_type",
+        "data"
+      ]
+    },
+    "ObjectStoragePointer": {
+      "description": "A file stored in an object storage backend, without data.\nThis struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).\nNote: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.",
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "storage_path": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "mime_type",
+        "storage_path"
+      ]
+    },
+    "ObjectStorageFile": {
+      "description": "A file stored in an object storage backend, with data.\nThis struct can NOT be stored in the database.\nNote: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.",
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "storage_path": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mime_type",
+        "storage_path",
+        "data"
+      ]
+    },
+    "ObjectStorageError": {
+      "description": "A file that we failed to read from object storage.\nThis struct can NOT be stored in the database.",
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "storage_path": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "mime_type",
+        "storage_path"
+      ]
+    },
+    "File": {
+      "description": "A file for an inference or a datapoint.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "file_type": {
+              "type": "string",
+              "const": "url"
+            }
+          },
+          "$ref": "#/$defs/UrlFile",
+          "required": [
+            "file_type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "file_type": {
+              "type": "string",
+              "const": "base64"
+            }
+          },
+          "$ref": "#/$defs/Base64File",
+          "required": [
+            "file_type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "file_type": {
+              "type": "string",
+              "const": "object_storage_pointer"
+            }
+          },
+          "$ref": "#/$defs/ObjectStoragePointer",
+          "required": [
+            "file_type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "file_type": {
+              "type": "string",
+              "const": "object_storage"
+            }
+          },
+          "$ref": "#/$defs/ObjectStorageFile",
+          "required": [
+            "file_type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "file_type": {
+              "type": "string",
+              "const": "object_storage_error"
+            }
+          },
+          "$ref": "#/$defs/ObjectStorageError",
+          "required": [
+            "file_type"
+          ]
+        }
+      ]
+    },
+    "ContentBlockChatOutput": {
+      "description": "Defines the types of content block that can come from a `chat` function",
+      "oneOf": [
+        {
+          "description": "InputMessages are validated against the input schema of the Function\nand then templated and transformed into RequestMessages for a particular Variant.\nThey might contain tool calls or tool results along with text.\nThe abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.\nContentBlocks are collected into RequestMessages.\nThese RequestMessages are collected into a ModelInferenceRequest,\nwhich should contain all information needed by a ModelProvider to perform the\ninference that is called for.",
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "text"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "tool_call"
+            }
+          },
+          "$ref": "#/$defs/InferenceResponseToolCall",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "thought"
+            }
+          },
+          "$ref": "#/$defs/Thought",
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": true,
+            "model_provider_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "unknown"
+            }
+          },
+          "required": [
+            "type",
+            "data"
+          ]
+        }
+      ]
+    },
+    "DynamicToolParams": {
+      "description": "Wire/API representation of dynamic tool parameters for inference requests.\n\nThis type is the **wire format** for tool configurations used in API requests and responses.\nIt distinguishes between static tools (configured in the function) and dynamic tools\n(provided at runtime), allowing clients to reference pre-configured tools by name or\nprovide new tools on-the-fly.\n\n# Purpose\n- Accept tool parameters in inference API requests (e.g., `/inference/{function_name}`)\n- Expose tool configurations in API responses for stored inferences\n- Support Python and TypeScript client bindings\n- Allow runtime customization of tool behavior\n\n# Fields\n- `allowed_tools`: Names of static tools from function config to use (subset selection)\n- `additional_tools`: New tools defined at runtime (not in static config)\n- `tool_choice`: Override the function's default tool choice strategy\n- `parallel_tool_calls`: Override whether parallel tool calls are enabled\n- `provider_tools`: Provider-specific tool configurations (not persisted to database)\n\n# Key Differences from ToolCallConfigDatabaseInsert\n- **Separate lists**: Maintains distinction between static (`allowed_tools`) and dynamic (`additional_tools`) tools\n- **By reference**: Static tools referenced by name, not duplicated\n- **Has provider_tools**: Can specify provider-specific tool configurations\n- **Has bindings**: Exposed to Python/TypeScript via `pyo3` and `ts_rs`\n\n# Conversion to Storage Format\nConverting from `DynamicToolParams` to `ToolCallConfigDatabaseInsert` is a **lossy** operation:\n1. Static tools (from `allowed_tools` names) are resolved from function config\n2. Dynamic tools (from `additional_tools`) are included as-is\n3. Both lists are merged into a single `tools_available` list\n4. The distinction between static and dynamic tools is lost\n5. `provider_tools` are dropped (not stored)\n\nUse `FunctionConfig::dynamic_tool_params_to_database_insert()` for this conversion.\n\n# Conversion from Storage Format\nConverting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` attempts to reconstruct the original:\n1. Tools that match function config tool names → `allowed_tools`\n2. Tools that don't match function config → `additional_tools`\n3. `provider_tools` is set to `None` (cannot be recovered)\n\nUse `FunctionConfig::database_insert_to_dynamic_tool_params()` for this conversion.\n\n# Example\n```rust,ignore\n// API request with dynamic tool params\nlet params = DynamicToolParams {\n    allowed_tools: Some(vec![\"calculator\".to_string()]),  // Use only the calculator tool from config\n    additional_tools: Some(vec![Tool {  runtime tool  }]),  // Add a new tool\n    tool_choice: Some(ToolChoice::Required),\n    parallel_tool_calls: Some(true),\n    provider_tools: None,\n};\n\n// Convert to storage format (merge tools, lose distinction)\nlet db_insert = function_config\n    .dynamic_tool_params_to_database_insert(params, &static_tools)?\n    .unwrap_or_default();\n\n// db_insert.tools_available now contains both the calculator tool (from config)\n// and the runtime tool (from additional_tools), merged together\n```\n\nSee also: [`ToolCallConfigDatabaseInsert`] for the storage/database format",
+      "type": "object",
+      "properties": {
+        "allowed_tools": {
+          "description": "A subset of static tools configured for the function that the inference is allowed to use. Optional.\nIf not provided, all static tools are allowed.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "additional_tools": {
+          "description": "Tools that the user provided at inference time (not in function config), in addition to the function-configured\ntools, that are also allowed.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Tool"
+          }
+        },
+        "tool_choice": {
+          "description": "User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.\nOptional.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolChoice"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "parallel_tool_calls": {
+          "description": "Whether to use parallel tool calls in the inference. Optional.\nIf provided during inference, it will override the function-configured parallel tool calls.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "provider_tools": {
+          "description": "Provider-specific tool configurations (not persisted to database)",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ProviderTool"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Tool": {
+      "description": "A Tool object describes how a tool can be dynamically configured by the user.",
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "parameters": true,
+        "name": {
+          "type": "string"
+        },
+        "strict": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "description",
+        "parameters",
+        "name"
+      ]
+    },
+    "ToolChoice": {
+      "description": "Most inference providers allow the user to force a tool to be used\nand even specify which tool to be used.\n\nThis enum is used to denote this tool choice.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "none",
+            "auto",
+            "required"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "specific": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "specific"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ProviderTool": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/ProviderToolScope",
+          "default": null
+        },
+        "tool": true
+      },
+      "required": [
+        "tool"
+      ]
+    },
+    "ProviderToolScope": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "model_name": {
+              "type": "string"
+            },
+            "model_provider_name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "model_name",
+            "model_provider_name"
+          ]
+        }
+      ]
+    },
+    "DatapointMetadataUpdate": {
+      "description": "A request to update the metadata of a datapoint.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      }
+    },
+    "UpdateChatDatapointRequest": {
+      "description": "An update request for a chat datapoint.\nFor any fields that are optional in ChatInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:\n- If the field is omitted, it will be left unchanged.\n- If the field is specified as `null`, it will be set to `null`.\n- If the field has a value, it will be set to the provided value.\n\nIn Rust this is modeled as an `Option<Option<T>>`, where `None` means \"unchanged\" and `Some(None)` means \"set to `null`\" and `Some(Some(T))` means \"set to the provided value\".",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The ID of the datapoint to update. Required.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "input": {
+          "description": "Datapoint input. If omitted, it will be left unchanged.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Input"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "output": {
+          "description": "Chat datapoint output. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,\nit will overwrite the existing output.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ContentBlockChatOutput"
+          },
+          "default": null
+        },
+        "tool_params": {
+          "description": "Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DynamicToolParams"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "tags": {
+          "description": "Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,\nit will be overwrite the existing tags.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": null
+        },
+        "metadata": {
+          "description": "Metadata fields. If omitted, it will be left unchanged.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DatapointMetadataUpdate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "JsonDatapointOutputUpdate": {
+      "description": "A request to update the output of a JSON datapoint.\nWe intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable\nfor users to run evals against them.",
+      "type": "object",
+      "properties": {
+        "raw": {
+          "description": "The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "raw"
+      ]
+    },
+    "UpdateJsonDatapointRequest": {
+      "description": "An update request for a JSON datapoint.\nFor any fields that are optional in JsonInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:\n- If the field is omitted, it will be left unchanged.\n- If the field is specified as `null`, it will be set to `null`.\n- If the field has a value, it will be set to the provided value.\n\nIn Rust this is modeled as an `Option<Option<T>>`, where `None` means \"unchanged\" and `Some(None)` means \"set to `null`\" and `Some(Some(T))` means \"set to the provided value\".",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The ID of the datapoint to update. Required.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "input": {
+          "description": "Datapoint input. If omitted, it will be left unchanged.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Input"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "output": {
+          "description": "JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.\nThis will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will\nalso be stored, because we allow invalid outputs in datapoints by design.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonDatapointOutputUpdate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "output_schema": {
+          "description": "The output schema of the JSON datapoint. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.\nIf not provided, the function's output schema will be used.",
+          "default": null
+        },
+        "tags": {
+          "description": "Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,\nit will be overwrite the existing tags.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": null
+        },
+        "metadata": {
+          "description": "Metadata fields. If omitted, it will be left unchanged.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DatapointMetadataUpdate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id"
+      ]
+    }
+  }
+}

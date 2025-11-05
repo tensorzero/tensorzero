@@ -3,6 +3,8 @@
 //! Run with: cargo run --example generate_schemas
 //!
 //! This will create a `schemas/` directory with separate JSON files for each type.
+//!
+//! To add a new type to schema generation, simply add it to the `generate_all_schemas!` macro below.
 
 use schemars::schema_for;
 use std::fs;
@@ -14,10 +16,32 @@ use tensorzero_core::endpoints::datasets::v1::types::{
     UpdateDatapointRequest, UpdateDatapointsRequest, UpdateDatapointsResponse,
     UpdateJsonDatapointRequest,
 };
-use tensorzero_core::inference::types::{
-    Arguments, ContentBlockChatOutput, Input, System,
-};
+use tensorzero_core::inference::types::{Arguments, ContentBlockChatOutput, Input, System};
 use tensorzero_core::tool::{DynamicToolParams, ToolCallChunk, ToolChoice};
+
+/// Macro to automatically generate schemas for a list of types
+macro_rules! generate_all_schemas {
+    (
+        output_dir: $output_dir:expr,
+        $(
+            $category:literal => [
+                $( $type:ty => $name:literal ),* $(,)?
+            ]
+        ),* $(,)?
+    ) => {
+        {
+            let mut count = 0;
+            $(
+                println!("\nGenerating {} schemas:", $category);
+                $(
+                    generate_and_save::<$type>($name, $output_dir);
+                    count += 1;
+                )*
+            )*
+            count
+        }
+    };
+}
 
 fn main() {
     println!("Generating JSON schemas for tensorzero-core types...\n");
@@ -30,50 +54,34 @@ fn main() {
         println!("Created output directory: {:?}\n", output_dir);
     }
 
-    let mut count = 0;
+    // Auto-generate schemas for all registered types
+    // To add a new type: just add a line like: TypeName => "TypeName",
+    let count = generate_all_schemas! {
+        output_dir: output_dir,
 
-    // Generate schemas for tool types
-    println!("Generating tool type schemas:");
-    generate_and_save::<DynamicToolParams>("DynamicToolParams", output_dir);
-    count += 1;
-    generate_and_save::<ToolChoice>("ToolChoice", output_dir);
-    count += 1;
-    generate_and_save::<ToolCallChunk>("ToolCallChunk", output_dir);
-    count += 1;
+        "tool type" => [
+            DynamicToolParams => "DynamicToolParams",
+            ToolChoice => "ToolChoice",
+            ToolCallChunk => "ToolCallChunk",
+        ],
 
-    // Generate schemas for inference types
-    println!("\nGenerating inference type schemas:");
-    generate_and_save::<Input>("Input", output_dir);
-    count += 1;
-    generate_and_save::<Arguments>("Arguments", output_dir);
-    count += 1;
-    generate_and_save::<System>("System", output_dir);
-    count += 1;
-    generate_and_save::<ContentBlockChatOutput>("ContentBlockChatOutput", output_dir);
-    count += 1;
+        "inference type" => [
+            Input => "Input",
+            Arguments => "Arguments",
+            System => "System",
+            ContentBlockChatOutput => "ContentBlockChatOutput",
+        ],
 
-    // Generate schemas for dataset API types
-    println!("\nGenerating dataset API type schemas:");
-    generate_and_save::<UpdateDatapointsRequest>("UpdateDatapointsRequest", output_dir);
-    count += 1;
-    generate_and_save::<UpdateDatapointRequest>("UpdateDatapointRequest", output_dir);
-    count += 1;
-    generate_and_save::<UpdateChatDatapointRequest>(
-        "UpdateChatDatapointRequest",
-        output_dir,
-    );
-    count += 1;
-    generate_and_save::<UpdateJsonDatapointRequest>(
-        "UpdateJsonDatapointRequest",
-        output_dir,
-    );
-    count += 1;
-    generate_and_save::<JsonDatapointOutputUpdate>("JsonDatapointOutputUpdate", output_dir);
-    count += 1;
-    generate_and_save::<DatapointMetadataUpdate>("DatapointMetadataUpdate", output_dir);
-    count += 1;
-    generate_and_save::<UpdateDatapointsResponse>("UpdateDatapointsResponse", output_dir);
-    count += 1;
+        "dataset API type" => [
+            UpdateDatapointsRequest => "UpdateDatapointsRequest",
+            UpdateDatapointRequest => "UpdateDatapointRequest",
+            UpdateChatDatapointRequest => "UpdateChatDatapointRequest",
+            UpdateJsonDatapointRequest => "UpdateJsonDatapointRequest",
+            JsonDatapointOutputUpdate => "JsonDatapointOutputUpdate",
+            DatapointMetadataUpdate => "DatapointMetadataUpdate",
+            UpdateDatapointsResponse => "UpdateDatapointsResponse",
+        ],
+    };
 
     println!(
         "\n✓ Schema generation complete! {} files saved in {:?}",
