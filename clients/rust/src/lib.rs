@@ -143,7 +143,7 @@ pub trait ClientExt {
     // ================================================================
     // Dataset operations
     // ================================================================
-    #[deprecated(since = "2025.11.1", note = "Use `create_datapoints` instead.")]
+    #[deprecated(since = "2025.11.2", note = "Use `create_datapoints` instead.")]
     async fn create_datapoints_legacy(
         &self,
         dataset_name: String,
@@ -170,14 +170,14 @@ pub trait ClientExt {
         datapoints: Vec<CreateDatapointRequest>,
     ) -> Result<CreateDatapointsResponse, TensorZeroError>;
 
-    #[deprecated(since = "2025.11.1", note = "Use `create_datapoints` instead.")]
+    #[deprecated(since = "2025.11.2", note = "Use `create_datapoints` instead.")]
     async fn bulk_insert_datapoints(
         &self,
         dataset_name: String,
         params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError>;
 
-    #[deprecated(since = "2025.11.1", note = "Use `delete_datapoints` instead.")]
+    #[deprecated(since = "2025.11.2", note = "Use `delete_datapoints` instead.")]
     async fn delete_datapoint(
         &self,
         dataset_name: String,
@@ -224,7 +224,7 @@ pub trait ClientExt {
         datapoints: Vec<UpdateDatapointRequest>,
     ) -> Result<UpdateDatapointsResponse, TensorZeroError>;
 
-    #[deprecated(since = "2025.11.1", note = "Use `get_datapoints` instead.")]
+    #[deprecated(since = "2025.11.2", note = "Use `get_datapoints` instead.")]
     async fn get_datapoint(
         &self,
         dataset_name: String,
@@ -329,7 +329,7 @@ pub trait ClientExt {
         output_source: Option<CreateDatapointsFromInferenceOutputSource>,
     ) -> Result<CreateDatapointsResponse, TensorZeroError>;
 
-    #[deprecated(since = "2025.11.1", note = "Use `delete_dataset` instead")]
+    #[deprecated(since = "2025.11.2", note = "Use `delete_dataset` instead")]
     async fn stale_dataset(
         &self,
         dataset_name: String,
