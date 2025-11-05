@@ -272,7 +272,7 @@ jobs:
       - name: Launch dependency services for E2E tests
         # We only launch some of the services, as we don't need or want things like 'fixtures'
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up mock-inference-provider clickhouse postgres gateway-postgres-migrations gateway-clickhouse-migrations -d --wait
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up mock-inference-provider clickhouse postgres gateway-postgres-migrations gateway-clickhouse-migrations memcached tempo otel-collector -d --wait
 
       - name: Print ClickHouse container logs
         if: always()
