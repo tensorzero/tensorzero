@@ -9,7 +9,9 @@ use tokio::{
 };
 
 pub fn gateway_path() -> String {
-    std::env::var("NEXTEST_BIN_EXE_gateway").unwrap_or(env!("CARGO_BIN_EXE_gateway").to_string())
+    // Compatibility with 'cargo nextest archive': https://nexte.st/docs/ci-features/archiving/#making-tests-relocatable
+    std::env::var("NEXTEST_BIN_EXE_gateway")
+        .unwrap_or_else(|_| env!("CARGO_BIN_EXE_gateway").to_string())
 }
 
 pub async fn start_gateway_on_random_port(
