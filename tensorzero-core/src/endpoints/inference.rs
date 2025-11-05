@@ -1741,6 +1741,7 @@ mod tests {
             InputMessageContent::File(File::Url(UrlFile {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: Some(mime::IMAGE_PNG),
+                detail: None,
             }))
         );
     }
@@ -1773,6 +1774,7 @@ mod tests {
                 source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 data: "fake_base64_data".to_string(),
+                detail: None,
             }))
         );
     }
@@ -1783,6 +1785,7 @@ mod tests {
         let file_url = File::Url(UrlFile {
             url: "https://example.com/file.txt".parse().unwrap(),
             mime_type: Some(mime::IMAGE_PNG),
+            detail: None,
         });
         let serialized = serde_json::to_value(&file_url).unwrap();
         assert_eq!(serialized["file_type"], "url");
@@ -1793,6 +1796,7 @@ mod tests {
             source_url: None,
             mime_type: mime::IMAGE_PNG,
             data: "fake_base64_data".to_string(),
+            detail: None,
         });
         let serialized = serde_json::to_value(&file_base64).unwrap();
         assert_eq!(serialized["file_type"], "base64");
@@ -1826,6 +1830,7 @@ mod tests {
             InputMessageContent::File(File::Url(UrlFile {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: None,
+                detail: None,
             }))
         );
     }
@@ -1858,6 +1863,7 @@ mod tests {
                 source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 data: "fake_base64_data".to_string(),
+                detail: None,
             }))
         );
     }
@@ -1910,6 +1916,7 @@ mod tests {
                     },
                     path: Path::from("test-path"),
                 },
+                detail: None,
             }))
         );
     }
@@ -1921,6 +1928,7 @@ mod tests {
             source_url: None,
             mime_type: mime::IMAGE_JPEG,
             data: "base64data".to_string(),
+            detail: None,
         });
 
         let serialized = serde_json::to_string(&original).unwrap();

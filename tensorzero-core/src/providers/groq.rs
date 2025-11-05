@@ -656,6 +656,11 @@ async fn tensorzero_to_groq_user_messages(
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
                 let ObjectStorageFile { file, data } = &*resolved_file;
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                    );
+                }
                 user_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         url: format!("data:{};base64,{}", file.mime_type, data),
@@ -720,6 +725,11 @@ async fn tensorzero_to_groq_assistant_messages(
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
                 let ObjectStorageFile { file, data } = &*resolved_file;
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                    );
+                }
                 assistant_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         url: format!("data:{};base64,{}", file.mime_type, data),
@@ -1319,16 +1329,25 @@ fn groq_to_tensorzero_chunk(
 }
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{
-        inference::types::{FunctionType, RequestMessage},
-        providers::test_helpers::{
-            MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
-        },
-        tool::ToolCallConfig,
-    };
-    use serde_json::json;
     use std::borrow::Cow;
+
+    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+    use base64::Engine;
+    use serde_json::json;
+
+    use super::*;
+    use crate::inference::types::file::Detail;
+    use crate::inference::types::resolved_input::LazyFile;
+    use crate::inference::types::storage::{StorageKind, StoragePath};
+    use crate::inference::types::{
+        ContentBlock, FunctionType, ObjectStorageFile, ObjectStoragePointer,
+        PendingObjectStoreFile, RequestMessage,
+    };
+    use crate::providers::test_helpers::{
+        MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
+    };
+    use crate::tool::ToolCallConfig;
+    use crate::utils::testing::capture_logs;
 
     #[test]
     fn test_handle_groq_error() {
@@ -2541,6 +2560,35 @@ mod tests {
         // Test that verbosity warns
         assert!(logs_contain(
             "Groq does not support the inference parameter `verbosity`"
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_groq_warns_on_detail() {
+        let logs_contain = capture_logs();
+
+        // Test with resolved file (base64 encoding path) with detail
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let content_blocks = vec![ContentBlock::File(Box::new(LazyFile::Base64(
+            PendingObjectStoreFile(ObjectStorageFile {
+                file: ObjectStoragePointer {
+                    source_url: None,
+                    mime_type: mime::IMAGE_PNG,
+                    storage_path: dummy_storage_path,
+                    detail: Some(Detail::High),
+                },
+                data: BASE64_STANDARD.encode(b"fake image data"),
+            }),
+        )))];
+
+        let _result = tensorzero_to_groq_user_messages(&content_blocks).await;
+
+        // Should log a warning about detail not being supported
+        assert!(logs_contain(
+            "The image detail parameter is not supported by Groq"
         ));
     }
 }

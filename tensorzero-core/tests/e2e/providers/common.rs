@@ -38,7 +38,7 @@ use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
 use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 
-use tensorzero_core::inference::types::file::{Base64File, ObjectStoragePointer, UrlFile};
+use tensorzero_core::inference::types::file::{Base64File, Detail, ObjectStoragePointer, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{Arguments, FinishReason, System, TextKind, Thought};
 use tensorzero_core::utils::gateway::AppStateData;
@@ -1662,6 +1662,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                             ClientInputMessageContent::File(File::Url(UrlFile {
                                 url: image_url.clone(),
                                 mime_type: None,
+                                detail: Some(Detail::Low),
                             })),
                         ],
                     }],
@@ -1724,6 +1725,7 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                                 source_url: None,
                                 mime_type: mime::APPLICATION_PDF,
                                 data: pdf_data.clone(),
+                                detail: None,
                             })),
                         ],
                     }],
@@ -1785,6 +1787,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                         source_url: None,
                         mime_type: mime::IMAGE_PNG,
                         data: image_data.clone(),
+                        detail: Some(Detail::Low),
                     })),
                 ],
             }],
@@ -1846,6 +1849,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
             source_url: None,
             mime_type: mime::IMAGE_PNG,
             data: updated_base64,
+            detail: None,
         }));
 
     let response = client.inference(params.clone()).await.unwrap();
@@ -2675,6 +2679,7 @@ pub async fn check_base64_pdf_response(
                     source_url: None,
                     mime_type: mime::APPLICATION_PDF,
                     storage_path: expected_storage_path.clone(),
+                    detail: None,
                 },)))
             ]
         },]
@@ -2790,6 +2795,7 @@ pub async fn check_base64_image_response(
                             "kind": kind_json,
                             "path": format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                         },
+                        "detail": "low"
                     }
                 ]
             }
@@ -2826,6 +2832,7 @@ pub async fn check_base64_image_response(
                     source_url: None,
                     mime_type: mime::IMAGE_PNG,
                     storage_path: expected_storage_path.clone(),
+                    detail: Some(Detail::Low),
                 },)))
             ]
         },]
@@ -2941,6 +2948,7 @@ pub async fn check_url_image_response(
                             "kind": kind_json,
                             "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                         },
+                        "detail": "low"
                     }
                 ]
             }
@@ -2975,6 +2983,7 @@ pub async fn check_url_image_response(
                             kind: kind.clone(),
                             path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
                         },
+                        detail: Some(Detail::Low),
                     },
                 )))]
             },

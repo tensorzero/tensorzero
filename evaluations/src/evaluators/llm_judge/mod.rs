@@ -491,6 +491,7 @@ mod tests {
                 content: vec![ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://example.com/image.png").unwrap(),
                     mime_type: None,
+                    detail: None,
                 }))],
             }],
         };

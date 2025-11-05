@@ -253,6 +253,7 @@ impl StoredInputMessageContent {
                             source_url: file.source_url.clone(),
                             mime_type: file.mime_type.clone(),
                             storage_path: file.storage_path.clone(),
+                            detail: file.detail.clone(),
                         },
                         data,
                     },
@@ -324,6 +325,7 @@ impl<'de> Deserialize<'de> for StoredFile {
                 source_url: legacy.file.source_url,
                 mime_type: legacy.file.mime_type,
                 storage_path: legacy.storage_path,
+                detail: None,
             }));
         }
 
@@ -655,6 +657,7 @@ mod tests {
                 kind: StorageKind::Disabled,
                 path: object_store::path::Path::parse("test/image.png").unwrap(),
             },
+            detail: None,
         });
 
         let json = serde_json::to_value(&stored_file).unwrap();
@@ -678,6 +681,7 @@ mod tests {
                 kind: StorageKind::Disabled,
                 path: object_store::path::Path::parse("test/path.png").unwrap(),
             },
+            detail: None,
         });
 
         let json = serde_json::to_value(&original).unwrap();
