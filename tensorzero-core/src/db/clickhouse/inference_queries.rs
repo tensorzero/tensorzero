@@ -427,6 +427,11 @@ mod tests {
             '' as output_schema,
             i.tags as tags,
             i.tool_params as tool_params,
+            i.dynamic_tools as dynamic_tools,
+            i.dynamic_provider_tools as dynamic_provider_tools,
+            i.allowed_tools as allowed_tools,
+            i.tool_choice as tool_choice,
+            i.parallel_tool_calls as parallel_tool_calls,
             i.variant_name as variant_name,
             i.output as output
         FROM

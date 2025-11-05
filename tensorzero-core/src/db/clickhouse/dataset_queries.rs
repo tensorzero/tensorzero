@@ -2386,6 +2386,11 @@ mod tests {
                     input,
                     output,
                     tool_params,
+                    dynamic_provider_tools,
+                    dynamic_tools,
+                    allowed_tools,
+                    parallel_tool_calls,
+                    tool_choice,
                     tags,
                     auxiliary,
                     is_deleted,
@@ -2405,6 +2410,11 @@ mod tests {
                     new_data.input,
                     new_data.output,
                     new_data.tool_params,
+                    new_data.dynamic_provider_tools,
+                    new_data.dynamic_tools,
+                    new_data.allowed_tools,
+                    new_data.parallel_tool_calls,
+                    new_data.tool_choice,
                     new_data.tags,
                     new_data.auxiliary,
                     new_data.is_deleted,
@@ -2420,7 +2430,7 @@ mod tests {
                 assert_eq!(external_data.format, "JSONEachRow");
                 assert!(external_data
                     .structure
-                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)"));
+                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, dynamic_tools Array(String), dynamic_provider_tools Array(String), allowed_tools Nullable(String), tool_choice Nullable(String), parallel_tool_calls Nullable(bool), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)"));
                 assert!(!external_data.structure.contains("updated_at"));
 
                 // Parse the data - should contain 3 datapoints separated by newlines
