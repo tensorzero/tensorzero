@@ -7,6 +7,8 @@
 //! 3. Tests cover both get_datapoints (by ID) and list_datapoints (pagination)
 //! 4. Update API uses Option<Option<DynamicToolParams>> for omit/null/value
 
+#![allow(deprecated)]
+
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::time::Duration;

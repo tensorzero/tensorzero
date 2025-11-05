@@ -201,7 +201,10 @@ impl DatabaseClient {
 
     #[napi]
     pub async fn get_datapoint(&self, params: String) -> Result<String, napi::Error> {
-        napi_call!(&self, get_datapoint, params, GetDatapointParams)
+        #[allow(deprecated)]
+        {
+            napi_call!(&self, get_datapoint, params, GetDatapointParams)
+        }
     }
 
     #[napi]

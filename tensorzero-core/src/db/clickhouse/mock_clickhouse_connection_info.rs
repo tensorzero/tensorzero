@@ -103,6 +103,7 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
             .await
     }
 
+    #[expect(deprecated)]
     async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<StoredDatapoint, Error> {
         self.dataset_queries.get_datapoint(params).await
     }

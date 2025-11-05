@@ -316,6 +316,7 @@ pub struct GetDatapointsParams {
 
 #[async_trait]
 #[cfg_attr(test, automock)]
+#[cfg_attr(test, allow(deprecated))]
 pub trait DatasetQueries {
     /// Counts rows for a dataset based on query parameters
     async fn count_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error>;
@@ -359,8 +360,10 @@ pub trait DatasetQueries {
         params: &GetAdjacentDatapointIdsParams,
     ) -> Result<AdjacentDatapointIds, Error>;
 
-    /// Gets a single datapoint by dataset name and ID
-    /// TODO(shuyangli): To deprecate in favor of `get_datapoints`
+    #[cfg_attr(
+        test,
+        allow(unused_attributes, useless_deprecated, clippy::allow_attributes)
+    )] // automock is not interacting nicely with deprecated annotations
     #[deprecated(since = "2025.11.1", note = "Use `get_datapoints` instead")]
     async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<StoredDatapoint, Error>;
 

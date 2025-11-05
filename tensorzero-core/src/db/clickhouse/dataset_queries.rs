@@ -3073,6 +3073,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(deprecated)]
     async fn test_get_datapoint_chat_executes_successfully() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
         mock_clickhouse_client
@@ -3180,6 +3181,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(deprecated)]
     async fn test_get_datapoint_json_executes_successfully() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
         mock_clickhouse_client
@@ -3230,6 +3232,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(deprecated)]
     async fn test_get_datapoint_returns_not_found() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
         mock_clickhouse_client
@@ -3278,6 +3281,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(deprecated)]
     async fn test_get_datapoint_allows_staled() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
         mock_clickhouse_client
@@ -3312,6 +3316,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(deprecated)]
     async fn test_get_datapoint_not_found() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
         mock_clickhouse_client

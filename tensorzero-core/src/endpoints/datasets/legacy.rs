@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::datasets::{
-    ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, GetDatapointParams,
+    ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, GetDatapointsParams,
     JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::v1::create_datapoints;
@@ -1039,14 +1039,28 @@ pub async fn get_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<GetDatapointPathParams>,
 ) -> Result<Json<Datapoint>, Error> {
-    let datapoint = app_state
+    let datapoints = app_state
         .clickhouse_connection_info
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: path_params.dataset_name,
-            datapoint_id: path_params.datapoint_id,
-            allow_stale: None,
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(path_params.dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![path_params.datapoint_id]),
+            limit: 1,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
         })
         .await?;
+
+    // get_datapoints returns a Vec, so we need to get the first element
+    let datapoint =
+        datapoints
+            .into_iter()
+            .next()
+            .ok_or_else(|| ErrorDetails::DatapointNotFound {
+                dataset_name: path_params.dataset_name,
+                datapoint_id: path_params.datapoint_id,
+            })?;
 
     // Convert storage type to wire type
     let wire = datapoint.into_datapoint(&app_state.config)?;
