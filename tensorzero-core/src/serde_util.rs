@@ -262,7 +262,8 @@ where
 }
 
 /// Serializes a double option field.
-/// - `None` is omitted from the JSON output (field not present)
+/// Should be used with `skip_serializing_if = "Option::is_none"` to omit outer `None` values.
+/// - `None` should be skipped by `skip_serializing_if` (not present in JSON)
 /// - `Some(None)` is serialized as `null`
 /// - `Some(Some(value))` is serialized as the value
 pub fn serialize_double_option<S, T>(
@@ -274,6 +275,7 @@ where
     T: Serialize,
 {
     match value {
+        // With skip_serializing_if, this should never be called, but handle it gracefully
         None => serializer.serialize_none(),
         Some(None) => serializer.serialize_none(),
         Some(Some(v)) => v.serialize(serializer),

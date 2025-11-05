@@ -155,6 +155,7 @@ pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(
         default,
+        skip_serializing_if = "Option::is_none",
         deserialize_with = "deserialize_double_option",
         serialize_with = "serialize_double_option"
     )]
