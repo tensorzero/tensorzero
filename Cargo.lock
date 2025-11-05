@@ -1807,7 +1807,6 @@ dependencies = [
  "indicatif",
  "serde",
  "serde_json",
- "tensorzero",
  "tensorzero-core",
  "tokio",
  "tracing",
