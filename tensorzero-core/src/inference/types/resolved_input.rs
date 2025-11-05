@@ -6,6 +6,7 @@ use futures::future::Shared;
 use futures::FutureExt;
 use mime::MediaType;
 use object_store::{PutMode, PutOptions};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -44,7 +45,7 @@ pub struct LazyResolvedInputMessage {
 
 // This gets serialized as part of a `ModelInferenceRequest` when we compute a cache key.
 // TODO: decide on the precise caching behavior that we want for file URLs and object storage paths.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 pub enum LazyFile {
     // Client sent a file URL → must fetch & store
     Url {
@@ -57,6 +58,7 @@ pub enum LazyFile {
     // Client sent an object storage file → must fetch, skip store
     ObjectStoragePointer {
         metadata: Base64FileMetadata,
+        #[schemars(with = "String")]
         storage_path: StoragePath,
         #[serde(skip)]
         future: FileFuture,
@@ -88,9 +90,11 @@ impl LazyFile {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 pub struct FileUrl {
+    #[schemars(with = "String")]
     pub url: Url,
+    #[schemars(with = "Option<String>")]
     pub mime_type: Option<MediaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<Detail>,

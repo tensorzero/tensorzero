@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Arguments",
+  "description": "A newtype wrapper around Map<String, Value> for template and system arguments",
+  "type": "object",
+  "additionalProperties": true
+}

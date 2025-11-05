@@ -63,7 +63,7 @@ use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
-use schemars::{schema_for, JsonSchema};
+use schemars::JsonSchema;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
@@ -585,7 +585,7 @@ impl LazyResolvedInputMessageContent {
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 /// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct InputMessage {
@@ -599,7 +599,7 @@ pub struct InputMessage {
 #[serde(transparent)]
 pub struct Arguments(pub Map<String, Value>);
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct Template {
@@ -615,7 +615,7 @@ pub enum System {
     Template(Arguments),
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
@@ -686,7 +686,7 @@ impl<'de> Deserialize<'de> for TextKind {
 /// These RequestMessages are collected into a ModelInferenceRequest,
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
@@ -717,7 +717,7 @@ impl Text {
 
 /// Struct that represents raw text content that should be passed directly to the model
 /// without any template processing or validation
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
@@ -747,7 +747,7 @@ impl RawText {
 
 /// Struct that represents an unknown provider-specific content block.
 /// We pass this along as-is without any validation or transformation.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(deny_unknown_fields)]
@@ -774,7 +774,7 @@ impl Unknown {
     }
 }
 
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -783,7 +783,7 @@ pub enum ThoughtSummaryBlock {
 }
 
 /// Struct that represents a model's reasoning
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
@@ -832,7 +832,7 @@ impl RateLimitedInputContent for Thought {
 /// test-only to prevent production code from panicking.
 /// This *does not* implement `Deserialize`, since we need object store information
 /// to produce a `LazyFile::Url`
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {

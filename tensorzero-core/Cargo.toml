@@ -166,5 +166,3 @@ mockall = "0.13"
 
 [build-dependencies]
 built = { version = "0.8.0", features = ["git2"] }
-schemars = { workspace = true, features = ["uuid1"] }
-serde_json = { workspace = true }

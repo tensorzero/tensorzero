@@ -48,6 +48,7 @@ use std::borrow::Cow;
 
 use futures::FutureExt;
 use mime::MediaType;
+use schemars::JsonSchema;
 use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -73,7 +74,7 @@ pub enum FileEncoding {
 }
 
 /// Detail level for input images (affects fidelity and token cost)
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Detail {
@@ -93,15 +94,17 @@ pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), E
 }
 
 /// A file already encoded as base64
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[ts(export)]
 pub struct Base64File {
     // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
     #[ts(optional)]
+    #[schemars(with = "Option<String>")]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
+    #[schemars(with = "String")]
     pub mime_type: MediaType,
     // TODO: should we add a wrapper type to enforce base64?
     pub data: String,
@@ -149,15 +152,17 @@ impl<'de> Deserialize<'de> for Base64File {
 }
 
 /// Like `Base64File`, but without the data field.
-#[derive(ts_rs::TS, Clone, Debug, Serialize, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, PartialEq, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64FileMetadata {
     // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
     #[ts(optional)]
+    #[schemars(with = "Option<String>")]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
+    #[schemars(with = "String")]
     pub mime_type: MediaType,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -241,11 +246,13 @@ pub fn serialize_with_file_data<T: Serialize>(value: &T) -> Result<Value, Error>
 }
 
 /// A file that can be located at a URL
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 pub struct UrlFile {
+    #[schemars(with = "String")]
     pub url: Url,
     #[ts(type = "string | null")]
+    #[schemars(with = "Option<String>")]
     pub mime_type: Option<MediaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -255,14 +262,17 @@ pub struct UrlFile {
 /// A file stored in an object storage backend, without data.
 /// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 pub struct ObjectStoragePointer {
     #[serde(alias = "url")] // DEPRECATED (SEE IMPORTANT NOTE BELOW)
     #[ts(optional)]
+    #[schemars(with = "Option<String>")]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
+    #[schemars(with = "String")]
     pub mime_type: MediaType,
+    #[schemars(with = "String")]
     pub storage_path: StoragePath,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -272,7 +282,7 @@ pub struct ObjectStoragePointer {
 /// A file stored in an object storage backend, with data.
 /// This struct can NOT be stored in the database.
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 pub struct ObjectStorageFile {
     #[serde(flatten)]
@@ -284,7 +294,7 @@ pub struct ObjectStorageFile {
 
 /// A file that we failed to read from object storage.
 /// This struct can NOT be stored in the database.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 pub struct ObjectStorageError {
     #[serde(flatten)]
@@ -297,7 +307,7 @@ pub struct ObjectStorageError {
 /// from a base64 input that needs to be written to object storage.
 /// The `storage_path` inside is content-addressed (computed from data) and represents
 /// where the file WILL be written, not where it currently exists.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 pub struct PendingObjectStoreFile(pub ObjectStorageFile);
 
 impl std::ops::Deref for PendingObjectStoreFile {
@@ -349,7 +359,7 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 }
 
 /// A file for an inference or a datapoint.
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(tag = "file_type", rename_all = "snake_case")]
 #[ts(export)]
 // NOTE(shuyangli, 2025-10-21): we're manually implementing Serialize and Deserialize for a while until we're confident
