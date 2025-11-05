@@ -105,13 +105,6 @@ mod tests {
         tool::{AllowedTools, AllowedToolsChoice, Tool, ToolCallConfigDatabaseInsert, ToolChoice},
     };
 
-    // fn get_tool_params_args(
-    //     tool_database_insert: &ToolCallConfigDatabaseInsert,
-    //     function_config: &FunctionConfig,
-    // ) -> DynamicToolParams {
-    //     function_config.database_insert_to_dynamic_tool_params(tool_database_insert.clone())
-    // }
-
     #[tokio::test]
     async fn test_get_tool_params_args() {
         // Dynamic tool params with tool_choice set to "tool_1"
