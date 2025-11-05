@@ -13,8 +13,6 @@ use secrecy::ExposeSecret;
 
 mod common;
 
-const GATEWAY_PATH: &str = env!("CARGO_BIN_EXE_gateway");
-
 /// `#[sqlx::test]` doesn't work here because it needs to share the DB with `start_gateway_on_random_port`.
 async fn get_postgres_pool_for_testing() -> sqlx::PgPool {
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
@@ -580,7 +578,7 @@ async fn test_auth_cache_requires_full_key_match() {
 #[tokio::test]
 async fn test_create_api_key_cli() {
     // This test verifies that the --create-api-key CLI command works correctly
-    let output = Command::new(GATEWAY_PATH)
+    let output = Command::new(common::gateway_path())
         .args(["--create-api-key"])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

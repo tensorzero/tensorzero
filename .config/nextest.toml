@@ -28,10 +28,6 @@ slow-timeout = { period = "20s", terminate-after = 3 }
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse) | test(db::))"
 junit.path = "junit.xml"
-archive.include = [
-    { path = "evaluations", relative-to = "target", on-missing = "error" },
-    { path = "gateway", relative-to = "target", on-missing = "error" },
-]
 
 [profile.batch]
 default-filter = 'test(batch)'
