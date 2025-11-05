@@ -4382,8 +4382,7 @@ fn verify_tool_call_storage_columns(
     for expected_tool in expected_static_tool_names {
         assert!(
             actual_tools.contains(&json!(expected_tool)),
-            "allowed_tools.tools missing tool: {}",
-            expected_tool
+            "allowed_tools.tools missing tool: {expected_tool}"
         );
     }
 

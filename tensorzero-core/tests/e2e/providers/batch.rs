@@ -1782,7 +1782,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
             2 => "required",
             3 => "none",
             4 => "specific",
-            _ => unreachable!(),
+            _ => panic!("Unexpected index: {i}"),
         };
         assert_eq!(
             tool_choice_col, expected_tool_choice,

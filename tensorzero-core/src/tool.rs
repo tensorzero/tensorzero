@@ -526,7 +526,6 @@ where
     D: Deserializer<'de>,
 {
     struct ToolInfoVisitor;
-    println!("ENTERING DESERIALIZER");
 
     impl<'de> Visitor<'de> for ToolInfoVisitor {
         type Value = Option<ToolCallConfigDatabaseInsert>;
@@ -565,10 +564,8 @@ where
 
             // If no tool fields present, return None
             if values.is_empty() {
-                println!("Values: EMPTY");
                 return Ok(None);
             }
-            println!("Value: {values:?}");
 
             // Determine format based on which fields are present
             // Since `dynamic_provider_tools` and `dynamic_tools` are going to return arrays
@@ -578,7 +575,6 @@ where
                 values.contains_key("allowed_tools") || values.contains_key("tool_choice");
 
             if has_full_fields {
-                println!("FULL FIELDS");
                 // Full format: require ALL full format fields
                 let dynamic_tools_value = values
                     .get("dynamic_tools")
@@ -586,27 +582,41 @@ where
 
                 // Parse as array of JSON strings (database storage format)
                 let tool_strings: Vec<String> = serde_json::from_value(dynamic_tools_value.clone())
-                    .map_err(|e| de::Error::custom(format!("dynamic_tools must be an array of JSON strings: {e}")))?;
+                    .map_err(|e| {
+                        de::Error::custom(format!(
+                            "dynamic_tools must be an array of JSON strings: {e}"
+                        ))
+                    })?;
 
                 let dynamic_tools: Vec<Tool> = tool_strings
                     .iter()
-                    .map(|s| serde_json::from_str(s).map_err(|e| {
-                        de::Error::custom(format!("failed to parse tool from JSON string: {e}"))
-                    }))
+                    .map(|s| {
+                        serde_json::from_str(s).map_err(|e| {
+                            de::Error::custom(format!("failed to parse tool from JSON string: {e}"))
+                        })
+                    })
                     .collect::<Result<Vec<Tool>, _>>()?;
                 let dynamic_provider_tools_value = values
                     .get("dynamic_provider_tools")
                     .ok_or_else(|| de::Error::missing_field("dynamic_provider_tools"))?;
 
                 // Parse as array of JSON strings (database storage format)
-                let provider_tool_strings: Vec<String> = serde_json::from_value(dynamic_provider_tools_value.clone())
-                    .map_err(|e| de::Error::custom(format!("dynamic_provider_tools must be an array of JSON strings: {e}")))?;
+                let provider_tool_strings: Vec<String> =
+                    serde_json::from_value(dynamic_provider_tools_value.clone()).map_err(|e| {
+                        de::Error::custom(format!(
+                            "dynamic_provider_tools must be an array of JSON strings: {e}"
+                        ))
+                    })?;
 
                 let dynamic_provider_tools: Vec<ProviderTool> = provider_tool_strings
                     .iter()
-                    .map(|s| serde_json::from_str(s).map_err(|e| {
-                        de::Error::custom(format!("failed to parse provider tool from JSON string: {e}"))
-                    }))
+                    .map(|s| {
+                        serde_json::from_str(s).map_err(|e| {
+                            de::Error::custom(format!(
+                                "failed to parse provider tool from JSON string: {e}"
+                            ))
+                        })
+                    })
                     .collect::<Result<Vec<ProviderTool>, _>>()?;
 
                 let allowed_tools_value = values
@@ -614,14 +624,21 @@ where
                     .ok_or_else(|| de::Error::missing_field("allowed_tools"))?;
 
                 // Parse as JSON string (database storage format)
-                let allowed_tools: AllowedTools = if let Some(allowed_tools_str) = allowed_tools_value.as_str() {
-                    serde_json::from_str(allowed_tools_str)
-                        .map_err(|e| de::Error::custom(format!("failed to parse allowed_tools from JSON string: {e}")))?
-                } else {
-                    // Fallback: try to deserialize as object (for backwards compatibility)
-                    serde_json::from_value(allowed_tools_value.clone())
-                        .map_err(|e| de::Error::custom(format!("allowed_tools must be a JSON string or object: {e}")))?
-                };
+                let allowed_tools: AllowedTools =
+                    if let Some(allowed_tools_str) = allowed_tools_value.as_str() {
+                        serde_json::from_str(allowed_tools_str).map_err(|e| {
+                            de::Error::custom(format!(
+                                "failed to parse allowed_tools from JSON string: {e}"
+                            ))
+                        })?
+                    } else {
+                        // Fallback: try to deserialize as object (for backwards compatibility)
+                        serde_json::from_value(allowed_tools_value.clone()).map_err(|e| {
+                            de::Error::custom(format!(
+                                "allowed_tools must be a JSON string or object: {e}"
+                            ))
+                        })?
+                    };
 
                 let tool_choice_value = values
                     .get("tool_choice")
@@ -630,19 +647,23 @@ where
                 // Parse tool_choice - it's stored as a string in ClickHouse
                 // Simple variants (auto, none, required) are stored as plain strings like "auto"
                 // Complex variants (specific) are stored as JSON strings like "{\"specific\":\"tool_name\"}"
-                let tool_choice: ToolChoice = if let Some(tool_choice_str) = tool_choice_value.as_str() {
-                    // Try parsing as a plain string first (for simple variants)
-                    serde_json::from_value(Value::String(tool_choice_str.to_string()))
-                        .or_else(|_| {
-                            // If that fails, try parsing the string as JSON (for complex variants)
-                            serde_json::from_str(tool_choice_str)
-                        })
-                        .map_err(|e| de::Error::custom(format!("failed to parse tool_choice: {e}")))?
-                } else {
-                    // Fallback for non-string values (e.g., direct object for backwards compatibility)
-                    serde_json::from_value(tool_choice_value.clone())
-                        .map_err(|e| de::Error::custom(format!("failed to parse tool_choice: {e}")))?
-                };
+                let tool_choice: ToolChoice =
+                    if let Some(tool_choice_str) = tool_choice_value.as_str() {
+                        // Try parsing as a plain string first (for simple variants)
+                        serde_json::from_value(Value::String(tool_choice_str.to_string()))
+                            .or_else(|_| {
+                                // If that fails, try parsing the string as JSON (for complex variants)
+                                serde_json::from_str(tool_choice_str)
+                            })
+                            .map_err(|e| {
+                                de::Error::custom(format!("failed to parse tool_choice: {e}"))
+                            })?
+                    } else {
+                        // Fallback for non-string values (e.g., direct object for backwards compatibility)
+                        serde_json::from_value(tool_choice_value.clone()).map_err(|e| {
+                            de::Error::custom(format!("failed to parse tool_choice: {e}"))
+                        })?
+                    };
 
                 let parallel_tool_calls: Option<bool> = values
                     .get("parallel_tool_calls")
@@ -696,7 +717,6 @@ where
                     tool_params: tool_config,
                 }))
             } else if values.contains_key("tool_params") {
-                println!("LEGACY FORMAT");
                 // Legacy format: only tool_config should be present
                 // The tool params are serialized as a string in ClickHouse
                 let tool_config_value = values

@@ -16,7 +16,6 @@ use tensorzero_core::{
     },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
     inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
-    tool::Tool,
 };
 
 use uuid::Uuid;

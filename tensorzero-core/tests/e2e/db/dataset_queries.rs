@@ -2614,7 +2614,7 @@ mod tool_call_storage_tests {
             let Tool::ClientSideFunction(tool) = &tool_params.dynamic_tools[0];
             assert_eq!(tool.name, "runtime_tool");
             assert_eq!(tool.description, "A tool provided at runtime");
-            assert_eq!(tool.strict, false);
+            assert!(!tool.strict);
 
             // No static tools (empty allowed_tools)
             assert!(tool_params.allowed_tools.tools.is_empty());

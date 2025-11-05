@@ -749,7 +749,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         }
 
         let mut written_rows = 0;
-        println!("Chat datapoints: {chat_datapoints:?}");
 
         let (chat_written_rows, json_written_rows) = futures::join!(
             self.insert_chat_datapoints_internal(&chat_datapoints),
@@ -778,7 +777,6 @@ impl ClickHouseConnectionInfo {
 
         let serialized_datapoints: Vec<String> =
             datapoints.iter().map(serde_json::to_string).try_collect()?;
-        println!("datapoints: {serialized_datapoints:?}");
 
         let query = r"
         INSERT INTO ChatInferenceDatapoint
