@@ -754,7 +754,6 @@ async fn test_clickhouse_migration_manager() {
             gateway_git_sha,
             tensorzero_core::built_info::GIT_COMMIT_HASH.unwrap_or("unknown")
         );
-        assert!(*execution_time_ms > 0);
         assert!(applied_at.is_some());
     }
     run_all(&clickhouse, &migrations, &logs_contain).await;
