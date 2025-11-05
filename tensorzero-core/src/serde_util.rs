@@ -261,6 +261,25 @@ where
     }
 }
 
+/// Serializes a double option field.
+/// - `None` is omitted from the JSON output (field not present)
+/// - `Some(None)` is serialized as `null`
+/// - `Some(Some(value))` is serialized as the value
+pub fn serialize_double_option<S, T>(
+    value: &Option<Option<T>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+    T: Serialize,
+{
+    match value {
+        None => serializer.serialize_none(),
+        Some(None) => serializer.serialize_none(),
+        Some(Some(v)) => v.serialize(serializer),
+    }
+}
+
 /// Deserializes a defaulted "maybe-doubly-serialized" field of a struct.
 /// If you have a struct like this:
 /// ```ignore

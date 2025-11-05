@@ -8,7 +8,7 @@ use crate::db::clickhouse::query_builder::{DatapointFilter, InferenceFilter};
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput};
 use crate::jsonschema_util::DynamicJSONSchema;
-use crate::serde_util::deserialize_double_option;
+use crate::serde_util::{deserialize_double_option, serialize_double_option};
 use crate::tool::DynamicToolParams;
 
 #[derive(Debug, Deserialize)]
@@ -148,12 +148,16 @@ impl JsonDatapointOutputUpdate {
 }
 
 /// A request to update the metadata of a datapoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_double_option",
+        serialize_with = "serialize_double_option"
+    )]
     pub name: Option<Option<String>>,
 }
 
@@ -169,7 +173,7 @@ pub struct UpdateDatapointsResponse {
 
 /// Request to update metadata for one or more datapoints in a dataset.
 /// Used by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct UpdateDatapointsMetadataRequest {
@@ -178,7 +182,7 @@ pub struct UpdateDatapointsMetadataRequest {
 }
 
 /// A request to update the metadata of a single datapoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct UpdateDatapointMetadataRequest {

@@ -755,10 +755,17 @@ impl DatasetQueries for ClickHouseConnectionInfo {
 
     async fn update_datapoints_metadata(
         &self,
-        dataset_name: &str,
-        request: UpdateDatapointsMetadataRequest,
+        dataset_name: String,
+        request: String,
     ) -> Result<UpdateDatapointsResponse, Error> {
-        validate_dataset_name(dataset_name)?;
+        validate_dataset_name(&dataset_name)?;
+
+        let request: UpdateDatapointsMetadataRequest =
+            serde_json::from_str(&request).map_err(|e| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Failed to parse request: {e}"),
+                })
+            })?;
 
         if request.datapoints.is_empty() {
             return Err(Error::new(ErrorDetails::InvalidRequest {
@@ -779,7 +786,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         let datapoint_ids: Vec<Uuid> = request.datapoints.iter().map(|d| d.id).collect();
         let datapoints_vec = self
             .get_datapoints(&GetDatapointsParams {
-                dataset_name: Some(dataset_name.to_string()),
+                dataset_name: Some(dataset_name.clone()),
                 function_name: None,
                 ids: Some(datapoint_ids.clone()),
                 limit: u32::MAX,
@@ -799,7 +806,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             let datapoint_id = update.id;
             let existing = datapoints_map.remove(&datapoint_id).ok_or_else(|| {
                 Error::new(ErrorDetails::DatapointNotFound {
-                    dataset_name: dataset_name.to_string(),
+                    dataset_name: dataset_name.clone(),
                     datapoint_id,
                 })
             })?;
@@ -4040,11 +4047,10 @@ mod tests {
             .times(0); // Should not make any DB calls
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
+        let request = UpdateDatapointsMetadataRequest { datapoints: vec![] };
+        let request_json = serde_json::to_string(&request).unwrap();
         let result = conn
-            .update_datapoints_metadata(
-                "test_dataset",
-                UpdateDatapointsMetadataRequest { datapoints: vec![] },
-            )
+            .update_datapoints_metadata("test_dataset".to_string(), request_json)
             .await;
 
         assert!(result.is_err());
@@ -4067,26 +4073,25 @@ mod tests {
 
         let duplicate_id = Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap();
 
-        let result = conn
-            .update_datapoints_metadata(
-                "test_dataset",
-                UpdateDatapointsMetadataRequest {
-                    datapoints: vec![
-                        UpdateDatapointMetadataRequest {
-                            id: duplicate_id,
-                            metadata: DatapointMetadataUpdate {
-                                name: Some(Some("name1".to_string())),
-                            },
-                        },
-                        UpdateDatapointMetadataRequest {
-                            id: duplicate_id,
-                            metadata: DatapointMetadataUpdate {
-                                name: Some(Some("name2".to_string())),
-                            },
-                        },
-                    ],
+        let request = UpdateDatapointsMetadataRequest {
+            datapoints: vec![
+                UpdateDatapointMetadataRequest {
+                    id: duplicate_id,
+                    metadata: DatapointMetadataUpdate {
+                        name: Some(Some("name1".to_string())),
+                    },
                 },
-            )
+                UpdateDatapointMetadataRequest {
+                    id: duplicate_id,
+                    metadata: DatapointMetadataUpdate {
+                        name: Some(Some("name2".to_string())),
+                    },
+                },
+            ],
+        };
+        let request_json = serde_json::to_string(&request).unwrap();
+        let result = conn
+            .update_datapoints_metadata("test_dataset".to_string(), request_json)
             .await;
 
         assert!(result.is_err());
@@ -4117,18 +4122,17 @@ mod tests {
 
         let id = Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap();
 
-        let result = conn
-            .update_datapoints_metadata(
-                "test_dataset",
-                UpdateDatapointsMetadataRequest {
-                    datapoints: vec![UpdateDatapointMetadataRequest {
-                        id,
-                        metadata: DatapointMetadataUpdate {
-                            name: Some(Some("new_name".to_string())),
-                        },
-                    }],
+        let request = UpdateDatapointsMetadataRequest {
+            datapoints: vec![UpdateDatapointMetadataRequest {
+                id,
+                metadata: DatapointMetadataUpdate {
+                    name: Some(Some("new_name".to_string())),
                 },
-            )
+            }],
+        };
+        let request_json = serde_json::to_string(&request).unwrap();
+        let result = conn
+            .update_datapoints_metadata("test_dataset".to_string(), request_json)
             .await;
 
         assert!(result.is_err());
@@ -4225,18 +4229,17 @@ mod tests {
 
         let id = Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap();
 
-        let result = conn
-            .update_datapoints_metadata(
-                "test_dataset",
-                UpdateDatapointsMetadataRequest {
-                    datapoints: vec![UpdateDatapointMetadataRequest {
-                        id,
-                        metadata: DatapointMetadataUpdate {
-                            name: Some(Some("new_name".to_string())),
-                        },
-                    }],
+        let request = UpdateDatapointsMetadataRequest {
+            datapoints: vec![UpdateDatapointMetadataRequest {
+                id,
+                metadata: DatapointMetadataUpdate {
+                    name: Some(Some("new_name".to_string())),
                 },
-            )
+            }],
+        };
+        let request_json = serde_json::to_string(&request).unwrap();
+        let result = conn
+            .update_datapoints_metadata("test_dataset".to_string(), request_json)
             .await;
 
         assert!(result.is_ok(), "Expected success but got: {result:?}");
@@ -4332,18 +4335,17 @@ mod tests {
 
         let id = Uuid::parse_str("223e4567-e89b-12d3-a456-426614174000").unwrap();
 
-        let result = conn
-            .update_datapoints_metadata(
-                "test_dataset",
-                UpdateDatapointsMetadataRequest {
-                    datapoints: vec![UpdateDatapointMetadataRequest {
-                        id,
-                        metadata: DatapointMetadataUpdate {
-                            name: Some(Some("new_name".to_string())),
-                        },
-                    }],
+        let request = UpdateDatapointsMetadataRequest {
+            datapoints: vec![UpdateDatapointMetadataRequest {
+                id,
+                metadata: DatapointMetadataUpdate {
+                    name: Some(Some("new_name".to_string())),
                 },
-            )
+            }],
+        };
+        let request_json = serde_json::to_string(&request).unwrap();
+        let result = conn
+            .update_datapoints_metadata("test_dataset".to_string(), request_json)
             .await;
 
         assert!(result.is_ok(), "Expected success but got: {result:?}");

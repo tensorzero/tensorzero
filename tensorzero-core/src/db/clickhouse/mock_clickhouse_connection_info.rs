@@ -10,9 +10,7 @@ use crate::db::datasets::{
     GetDatasetMetadataParams, GetDatasetRowsParams, MockDatasetQueries, StaleDatapointParams,
 };
 use crate::db::inferences::{InferenceQueries, ListInferencesParams, MockInferenceQueries};
-use crate::endpoints::datasets::v1::types::{
-    UpdateDatapointsMetadataRequest, UpdateDatapointsResponse,
-};
+use crate::endpoints::datasets::v1::types::UpdateDatapointsResponse;
 use crate::endpoints::datasets::StoredDatapoint;
 use crate::error::Error;
 use crate::stored_inference::StoredInferenceDatabase;
@@ -129,8 +127,8 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
 
     async fn update_datapoints_metadata(
         &self,
-        dataset_name: &str,
-        request: UpdateDatapointsMetadataRequest,
+        dataset_name: String,
+        request: String,
     ) -> Result<UpdateDatapointsResponse, Error> {
         self.dataset_queries
             .update_datapoints_metadata(dataset_name, request)

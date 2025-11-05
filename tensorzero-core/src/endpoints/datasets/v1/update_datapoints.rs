@@ -402,9 +402,15 @@ pub async fn update_datapoints_metadata_handler(
     Path(path_params): Path<UpdateDatapointsMetadataPathParams>,
     StructuredJson(request): StructuredJson<UpdateDatapointsMetadataRequest>,
 ) -> Result<Json<UpdateDatapointsResponse>, Error> {
+    let request_json = serde_json::to_string(&request).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize request: {e}"),
+        })
+    })?;
+
     let response = app_state
         .clickhouse_connection_info
-        .update_datapoints_metadata(&path_params.dataset_name, request)
+        .update_datapoints_metadata(path_params.dataset_name.clone(), request_json)
         .await?;
     Ok(Json(response))
 }
