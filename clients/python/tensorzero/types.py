@@ -15,7 +15,9 @@ from typing_extensions import NotRequired, TypedDict
 class Omitted:
     pass
 
+
 OMITTED = Omitted()
+
 
 def serialize_to_api_json(value: Any) -> Any:
     """Serialize an object to a JSON string for the API.
@@ -73,6 +75,7 @@ def serialize_to_api_json(value: Any) -> Any:
 
     # For other types (primitives, etc.), return as-is
     return value
+
 
 @dataclass
 class Usage:

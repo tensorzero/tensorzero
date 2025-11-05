@@ -1,31 +1,48 @@
 # Type stubs for tensorzero.tensorzero
-# This file defines type signatures for the Rust extension module
+# Auto-generated - DO NOT EDIT MANUALLY
+# Run: uv run python generate_stubs.py > tensorzero/tensorzero.pyi
 
-from typing import Any, ClassVar, Dict, List, Optional, final
+from typing import Any, Coroutine, Dict, List, Literal, Optional, Type, Union
+from uuid import UUID
+from typing_extensions import final
 
 __all__ = [
-    # Dataset V1 API Types
-    "JsonDatapointOutputUpdate",
-    "DatapointMetadataUpdate",
+    "BaseTensorZeroGateway",
+    "AsyncTensorZeroGateway",
+    "TensorZeroGateway",
+    "LocalHttpGateway",
+    "RenderedSample",
+    "StoredInference",
+    "EvaluationJobHandler",
+    "AsyncEvaluationJobHandler",
+    "OpenAIRFTConfig",
+    "OpenAISFTConfig",
+    "FireworksSFTConfig",
+    "DICLOptimizationConfig",
+    "GCPVertexGeminiSFTConfig",
+    "TogetherSFTConfig",
+    "Datapoint",
+    "ResolvedInput",
+    "ResolvedInputMessage",
     "CreateChatDatapointRequest",
     "CreateJsonDatapointRequest",
+    "CreateDatapointsRequest",
+    "CreateDatapointsResponse",
     "UpdateChatDatapointRequest",
     "UpdateJsonDatapointRequest",
-    "UpdateDatapointMetadataRequest",
-    "CreateDatapointsRequest",
     "UpdateDatapointsRequest",
-    "UpdateDatapointsMetadataRequest",
-    "GetDatapointsRequest",
-    "DeleteDatapointsRequest",
-    "CreateDatapointsFromInferenceRequest",
-    "CreateDatapointsFromInferenceOutputSource",
-    "Datapoint",
-    "CreateDatapointsResponse",
     "UpdateDatapointsResponse",
-    "GetDatapointsResponse",
-    "DeleteDatapointsResponse",
+    "UpdateDatapointMetadataRequest",
+    "UpdateDatapointsMetadataRequest",
+    "DatapointMetadataUpdate",
+    "JsonDatapointOutputUpdate",
     "ListDatapointsRequest",
-    # Configuration Types
+    "GetDatapointsRequest",
+    "GetDatapointsResponse",
+    "DeleteDatapointsRequest",
+    "DeleteDatapointsResponse",
+    "CreateDatapointsFromInferenceOutputSource",
+    "CreateDatapointsFromInferenceRequest",
     "Config",
     "FunctionsConfig",
     "FunctionConfigChat",
@@ -33,33 +50,13 @@ __all__ = [
     "VariantsConfig",
     "ChatCompletionConfig",
     "BestOfNSamplingConfig",
+    "DICLConfig",
     "MixtureOfNConfig",
     "ChainOfThoughtConfig",
-    # Gateway Types
-    "BaseTensorZeroGateway",
-    "TensorZeroGateway",
-    "AsyncTensorZeroGateway",
-    "LocalHttpGateway",
-    # Inference Types
-    "StoredInference",
-    "RenderedSample",
-    "ResolvedInput",
-    "ResolvedInputMessage",
-    # Optimization Types
     "OptimizationJobHandle",
     "OptimizationJobInfo",
     "OptimizationJobStatus",
-    # Evaluation Types
-    "EvaluationJobHandler",
-    "AsyncEvaluationJobHandler",
-    # Optimization Config Types
-    "OpenAISFTConfig",
-    "OpenAIRFTConfig",
-    "FireworksSFTConfig",
-    "TogetherSFTConfig",
-    "GCPVertexGeminiSFTConfig",
-    "DICLConfig",
-    "DICLOptimizationConfig",
+    "_start_http_gateway",
 ]
 
 # ============================================================================
@@ -76,9 +73,9 @@ class JsonDatapointOutputUpdate:
 @final
 class DatapointMetadataUpdate:
     """Update for datapoint metadata."""
-    def __init__(self, *args: Any, name: Optional[Optional[str]], **kwargs: Any) -> None: ...
+    def __init__(self, *args: Any, name: Optional[str], **kwargs: Any) -> None: ...
     @property
-    def name(self) -> Optional[Optional[str]]: ...
+    def name(self) -> Optional[str]: ...
 
 @final
 class CreateChatDatapointRequest:
@@ -86,10 +83,10 @@ class CreateChatDatapointRequest:
     def __init__(
         self,
         function_name: str,
-        input: Any,
-        episode_id: Optional[Any] = None,
-        output: Optional[Any] = None,
-        dynamic_tool_params: Optional[Any] = None,
+        input: Dict[str, Any],
+        episode_id: Optional[UUID] = None,
+        output: Optional[Dict[str, Any]] = None,
+        dynamic_tool_params: Optional[Dict[str, Any]] = None,
         tags: Optional[Dict[str, str]] = None,
         name: Optional[str] = None,
         *args: Any,
@@ -98,17 +95,17 @@ class CreateChatDatapointRequest:
     @property
     def function_name(self) -> str: ...
     @property
-    def episode_id(self) -> Optional[Any]: ...
+    def episode_id(self) -> UUID: ...
     @property
-    def input(self) -> Any: ...
+    def input(self) -> Dict[str, Any]: ...
     @property
-    def output(self) -> Optional[Any]: ...
+    def output(self) -> Dict[str, Any]: ...
     @property
-    def dynamic_tool_params(self) -> Any: ...
+    def dynamic_tool_params(self) -> Dict[str, Any]: ...
     @property
-    def tags(self) -> Optional[Dict[str, str]]: ...
+    def tags(self) -> Dict[str, str]: ...
     @property
-    def name(self) -> Optional[str]: ...
+    def name(self) -> str: ...
 
 @final
 class CreateJsonDatapointRequest:
@@ -116,10 +113,10 @@ class CreateJsonDatapointRequest:
     def __init__(
         self,
         function_name: str,
-        input: Any,
-        episode_id: Optional[Any] = None,
+        input: Dict[str, Any],
+        episode_id: Optional[UUID] = None,
         output: Optional[JsonDatapointOutputUpdate] = None,
-        output_schema: Optional[Any] = None,
+        output_schema: Optional[Dict[str, Any]] = None,
         tags: Optional[Dict[str, str]] = None,
         name: Optional[str] = None,
         *args: Any,
@@ -128,122 +125,117 @@ class CreateJsonDatapointRequest:
     @property
     def function_name(self) -> str: ...
     @property
-    def episode_id(self) -> Optional[Any]: ...
+    def episode_id(self) -> UUID: ...
     @property
-    def input(self) -> Any: ...
+    def input(self) -> Dict[str, Any]: ...
     @property
-    def output(self) -> Optional[JsonDatapointOutputUpdate]: ...
+    def output(self) -> Dict[str, Any]: ...
     @property
-    def output_schema(self) -> Optional[Any]: ...
+    def output_schema(self) -> Dict[str, Any]: ...
     @property
-    def tags(self) -> Optional[Dict[str, str]]: ...
+    def tags(self) -> Dict[str, str]: ...
     @property
-    def name(self) -> Optional[str]: ...
+    def name(self) -> str: ...
 
 @final
 class UpdateChatDatapointRequest:
     """Request to update a chat datapoint."""
-    def __init__(
-        self,
-        *,
-        id: Any,
-        input: Optional[Any] = None,
-        output: Optional[Any] = None,
-        tool_params: Optional[Optional[Any]],
-        tags: Optional[Dict[str, str]] = None,
-        metadata: Optional[DatapointMetadataUpdate] = None,
-        **kwargs: Any,
-    ) -> None: ...
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
     @property
-    def id(self) -> Any: ...
+    def id(self) -> UUID: ...
     @property
-    def input(self) -> Optional[Any]: ...
+    def input(self) -> Dict[str, Any]: ...
     @property
-    def output(self) -> Optional[Any]: ...
+    def output(self) -> Dict[str, Any]: ...
     @property
-    def tool_params(self) -> Optional[Optional[Any]]: ...
+    def tool_params(self) -> Dict[str, Any]: ...
     @property
-    def tags(self) -> Optional[Dict[str, str]]: ...
+    def tags(self) -> Dict[str, str]: ...
     @property
-    def metadata(self) -> Optional[DatapointMetadataUpdate]: ...
+    def metadata(self) -> Dict[str, Any]: ...
 
 @final
 class UpdateJsonDatapointRequest:
     """Request to update a JSON datapoint."""
-    def __init__(
-        self,
-        *,
-        id: Any,
-        input: Optional[Any] = None,
-        output: Optional[Optional[JsonDatapointOutputUpdate]],
-        output_schema: Optional[Any] = None,
-        tags: Optional[Dict[str, str]] = None,
-        metadata: Optional[DatapointMetadataUpdate] = None,
-        **kwargs: Any,
-    ) -> None: ...
+    def __init__(self, *args: Any, **kwargs: Any) -> None: ...
     @property
-    def id(self) -> Any: ...
+    def id(self) -> UUID: ...
     @property
-    def input(self) -> Optional[Any]: ...
+    def input(self) -> Dict[str, Any]: ...
     @property
-    def output(self) -> Optional[Optional[JsonDatapointOutputUpdate]]: ...
+    def output(self) -> Dict[str, Any]: ...
     @property
-    def output_schema(self) -> Optional[Any]: ...
+    def output_schema(self) -> Dict[str, Any]: ...
     @property
-    def tags(self) -> Optional[Dict[str, str]]: ...
+    def tags(self) -> Dict[str, str]: ...
     @property
-    def metadata(self) -> Optional[DatapointMetadataUpdate]: ...
+    def metadata(self) -> Dict[str, Any]: ...
 
 @final
 class UpdateDatapointMetadataRequest:
     """Request to update datapoint metadata."""
-    def __init__(self, id: Any, metadata: DatapointMetadataUpdate, *args: Any, **kwargs: Any) -> None: ...
+    def __init__(self, id: UUID, metadata: DatapointMetadataUpdate, *args: Any, **kwargs: Any) -> None: ...
     @property
-    def id(self) -> Any: ...
+    def id(self) -> UUID: ...
     @property
     def metadata(self) -> DatapointMetadataUpdate: ...
 
 @final
-class ListDatapointsRequest:
-    """Request to list datapoints with pagination and filters."""
+class CreateDatapointsRequest:
+    """CreateDatapointsRequest"""
     def __init__(
-        self,
-        function_name: Optional[str] = None,
-        limit: Optional[int] = None,
-        page_size: Optional[int] = None,
-        offset: Optional[int] = None,
-        filter: Optional[Any] = None,
-        *args: Any,
-        **kwargs: Any,
+        self, datapoints: List[Union[CreateChatDatapointRequest, CreateJsonDatapointRequest]], *args: Any, **kwargs: Any
     ) -> None: ...
     @property
-    def function_name(self) -> Optional[str]: ...
+    def datapoints(self) -> List[Union[CreateChatDatapointRequest, CreateJsonDatapointRequest]]: ...
+
+@final
+class UpdateDatapointsRequest:
+    """UpdateDatapointsRequest"""
+    def __init__(
+        self, datapoints: List[Union[UpdateChatDatapointRequest, UpdateJsonDatapointRequest]], *args: Any, **kwargs: Any
+    ) -> None: ...
     @property
-    def limit(self) -> Optional[int]: ...
+    def datapoints(self) -> List[Union[UpdateChatDatapointRequest, UpdateJsonDatapointRequest]]: ...
+
+@final
+class UpdateDatapointsMetadataRequest:
+    """UpdateDatapointsMetadataRequest"""
+    def __init__(self, datapoints: List[UpdateDatapointMetadataRequest], *args: Any, **kwargs: Any) -> None: ...
     @property
-    def page_size(self) -> Optional[int]: ...
+    def datapoints(self) -> List[UpdateDatapointMetadataRequest]: ...
+
+@final
+class GetDatapointsRequest:
+    """GetDatapointsRequest"""
+    def __init__(self, ids: List[UUID], *args: Any, **kwargs: Any) -> None: ...
     @property
-    def offset(self) -> Optional[int]: ...
+    def ids(self) -> List[UUID]: ...
+
+@final
+class DeleteDatapointsRequest:
+    """DeleteDatapointsRequest"""
+    def __init__(self, ids: List[UUID], *args: Any, **kwargs: Any) -> None: ...
     @property
-    def filter(self) -> Optional[Any]: ...
+    def ids(self) -> List[UUID]: ...
 
 @final
 class CreateDatapointsResponse:
     """Response from creating datapoints."""
     @property
-    def ids(self) -> List[Any]: ...
+    def ids(self) -> List[UUID]: ...
 
 @final
 class UpdateDatapointsResponse:
     """Response from updating datapoints."""
     @property
-    def ids(self) -> List[Any]: ...
+    def ids(self) -> List[UUID]: ...
 
 @final
 class GetDatapointsResponse:
     """Response containing retrieved datapoints."""
     @property
-    def datapoints(self) -> List[Any]: ...
+    def datapoints(self) -> List["Datapoint"]: ...
 
 @final
 class DeleteDatapointsResponse:
@@ -252,99 +244,83 @@ class DeleteDatapointsResponse:
     def num_deleted_datapoints(self) -> int: ...
 
 @final
-class CreateDatapointsRequest:
-    """Request to create multiple datapoints."""
-    def __init__(self, datapoints: List[Any], *args: Any, **kwargs: Any) -> None: ...
+class ListDatapointsRequest:
+    """Request to list datapoints."""
+    def __init__(
+        self,
+        function_name: Optional[str] = None,
+        limit: Optional[int] = None,
+        page_size: Optional[int] = None,
+        offset: Optional[int] = None,
+        filter: Optional[Dict[str, Any]] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None: ...
     @property
-    def datapoints(self) -> List[Any]: ...
-
-@final
-class UpdateDatapointsRequest:
-    """Request to update multiple datapoints."""
-    def __init__(self, datapoints: List[Any], *args: Any, **kwargs: Any) -> None: ...
+    def function_name(self) -> str: ...
     @property
-    def datapoints(self) -> List[Any]: ...
-
-@final
-class UpdateDatapointsMetadataRequest:
-    """Request to update metadata for multiple datapoints."""
-    def __init__(self, datapoints: List[Any], *args: Any, **kwargs: Any) -> None: ...
+    def limit(self) -> int: ...
     @property
-    def datapoints(self) -> List[Any]: ...
-
-@final
-class GetDatapointsRequest:
-    """Request to get specific datapoints by their IDs."""
-    def __init__(self, ids: List[Any], *args: Any, **kwargs: Any) -> None: ...
+    def page_size(self) -> int: ...
     @property
-    def ids(self) -> List[Any]: ...
-
-@final
-class DeleteDatapointsRequest:
-    """Request to delete specific datapoints by their IDs."""
-    def __init__(self, ids: List[Any], *args: Any, **kwargs: Any) -> None: ...
+    def offset(self) -> int: ...
     @property
-    def ids(self) -> List[Any]: ...
+    def filter(self) -> Dict[str, Any]: ...
 
 @final
 class CreateDatapointsFromInferenceRequest:
     """Request to create datapoints from inferences."""
     def __init__(
         self,
-        params: Any,
-        output_source: Optional[CreateDatapointsFromInferenceOutputSource] = None,
+        params: Dict[str, Any],
+        output_source: Optional["CreateDatapointsFromInferenceOutputSource"] = None,
         *args: Any,
         **kwargs: Any,
     ) -> None: ...
     @property
-    def params(self) -> Any: ...
+    def params(self) -> Dict[str, Any]: ...
     @property
-    def output_source(self) -> Optional[CreateDatapointsFromInferenceOutputSource]: ...
+    def output_source(self) -> Optional["CreateDatapointsFromInferenceOutputSource"]: ...
 
 @final
 class CreateDatapointsFromInferenceOutputSource:
-    """Specifies the source of output when creating datapoints from inferences.
+    """Output source for creating datapoints from inferences."""
 
-    Variants (accessed as class attributes):
-        - CreateDatapointsFromInferenceOutputSource.None
-        - CreateDatapointsFromInferenceOutputSource.Inference
-        - CreateDatapointsFromInferenceOutputSource.Demonstration
-    """
-    # Note: Cannot annotate None as it's a Python keyword, but it exists at runtime
-    Inference: ClassVar["CreateDatapointsFromInferenceOutputSource"]
-    Demonstration: ClassVar["CreateDatapointsFromInferenceOutputSource"]
+    Demonstration: Type["CreateDatapointsFromInferenceOutputSource"]
+    Inference: Type["CreateDatapointsFromInferenceOutputSource"]
+    NoOutput: Type["CreateDatapointsFromInferenceOutputSource"]
     def __init__(self, *args: Any) -> None: ...
-    def __getattribute__(self, name: str) -> Any: ...  # Allow runtime access to None
 
 @final
 class Datapoint:
-    """A datapoint retrieved from the dataset."""
-    def Chat(self, *args: Any, **kwargs: Any) -> Any: ...
-    def Json(self, *args: Any, **kwargs: Any) -> Any: ...
+    """A datapoint - tagged enum with Chat and Json variants."""
+
+    Chat: Type["Datapoint"]
+    Json: Type["Datapoint"]
     @property
-    def additional_tools(self) -> Any: ...
+    def additional_tools(self) -> List[Dict[str, Any]]: ...
     @property
-    def allowed_tools(self) -> Any: ...
+    def allowed_tools(self) -> List[str]: ...
     @property
     def dataset_name(self) -> str: ...
     @property
     def function_name(self) -> str: ...
     @property
-    def id(self) -> Any: ...
+    def id(self) -> UUID: ...
     @property
-    def input(self) -> Any: ...
+    def input(self) -> Dict[str, Any]: ...
     @property
     def is_custom(self) -> bool: ...
     @property
-    def name(self) -> Optional[str]: ...
+    def name(self) -> str: ...
     @property
-    def output(self) -> Any: ...
+    def output(self) -> Dict[str, Any]: ...
     @property
-    def output_schema(self) -> Optional[Any]: ...
+    def output_schema(self) -> Dict[str, Any]: ...
     @property
-    def parallel_tool_calls(self) -> Any: ...
+    def parallel_tool_calls(self) -> bool: ...
     @property
-    def provider_tools(self) -> Any: ...
+    def provider_tools(self) -> List[Dict[str, Any]]: ...
 
 # ============================================================================
 # Configuration Types
@@ -352,75 +328,80 @@ class Datapoint:
 
 @final
 class Config:
-    """TensorZero configuration."""
+    """Config"""
     @property
     def functions(self) -> FunctionsConfig: ...
 
 @final
 class FunctionsConfig:
-    """Functions configuration."""
+    """FunctionsConfig"""
+
     ...
 
 @final
 class FunctionConfigChat:
-    """Chat function configuration."""
+    """FunctionConfigChat"""
     @property
-    def assistant_schema(self) -> Optional[Any]: ...
+    def assistant_schema(self) -> Dict[str, Any]: ...
     @property
-    def system_schema(self) -> Optional[Any]: ...
+    def system_schema(self) -> Dict[str, Any]: ...
     @property
     def type(self) -> str: ...
     @property
-    def user_schema(self) -> Optional[Any]: ...
+    def user_schema(self) -> Dict[str, Any]: ...
     @property
     def variants(self) -> VariantsConfig: ...
 
 @final
 class FunctionConfigJson:
-    """JSON function configuration."""
+    """FunctionConfigJson"""
     @property
-    def assistant_schema(self) -> Optional[Any]: ...
+    def assistant_schema(self) -> Dict[str, Any]: ...
     @property
-    def output_schema(self) -> Any: ...
+    def output_schema(self) -> Dict[str, Any]: ...
     @property
-    def system_schema(self) -> Optional[Any]: ...
+    def system_schema(self) -> Dict[str, Any]: ...
     @property
     def type(self) -> str: ...
     @property
-    def user_schema(self) -> Optional[Any]: ...
+    def user_schema(self) -> Dict[str, Any]: ...
     @property
     def variants(self) -> VariantsConfig: ...
 
 @final
 class VariantsConfig:
-    """Variants configuration."""
+    """VariantsConfig"""
+
     ...
 
 @final
 class ChatCompletionConfig:
-    """Chat completion configuration."""
+    """ChatCompletionConfig"""
     @property
-    def assistant_template(self) -> Optional[Any]: ...
+    def assistant_template(self) -> str: ...
     @property
     def model(self) -> str: ...
     @property
-    def system_template(self) -> Optional[Any]: ...
+    def system_template(self) -> str: ...
     @property
-    def user_template(self) -> Optional[Any]: ...
+    def user_template(self) -> str: ...
 
 @final
 class BestOfNSamplingConfig:
-    """Best of N sampling configuration."""
+    """BestOfNSamplingConfig"""
+
     ...
 
 @final
 class MixtureOfNConfig:
-    """Mixture of N configuration."""
+    """MixtureOfNConfig"""
+
     ...
 
 @final
 class ChainOfThoughtConfig:
-    """Chain of thought configuration."""
+    """ChainOfThoughtConfig"""
+
     ...
 
 # ============================================================================
@@ -433,92 +414,130 @@ class BaseTensorZeroGateway:
 
 @final
 class TensorZeroGateway(BaseTensorZeroGateway):
-    """Synchronous TensorZero gateway."""
-    @staticmethod
+    """A synchronous client for a TensorZero gateway."""
+    def __enter__(self) -> "TensorZeroGateway": ...
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None: ...
+    @classmethod
     def build_embedded(
+        cls,
         *,
         config_file: Optional[str] = None,
         clickhouse_url: Optional[str] = None,
         postgres_url: Optional[str] = None,
         timeout: Optional[float] = None,
-        async_setup: bool = True,
     ) -> "TensorZeroGateway": ...
-    @staticmethod
+    @classmethod
     def build_http(
+        cls,
         *,
         gateway_url: str,
         timeout: Optional[float] = None,
         verbose_errors: bool = False,
-        async_setup: bool = True,
         api_key: Optional[str] = None,
     ) -> "TensorZeroGateway": ...
-    def bulk_insert_datapoints(
-        self, *, dataset_name: str, datapoints: List[Any]
-    ) -> List[Any]: ...
-    def close(self) -> None: ...
-    def create_datapoints(
-        self, *, dataset_name: str, datapoints: List[Any]
+    def bulk_insert_datapoints(self, *, dataset_name: str, datapoints: List[Dict[str, Any]]) -> Any: ...
+    def close(
+        self,
     ) -> Any: ...
+    def create_datapoints(self, *, dataset_name: str, datapoints: List[Dict[str, Any]]) -> CreateDatapointsResponse: ...
     def create_from_inferences(
-        self, *, dataset_name: str, params: Any, output_source: Optional[str] = None
-    ) -> List[Any]: ...
-    def delete_datapoint(self, *, dataset_name: str, datapoint_id: Any) -> None: ...
-    def delete_datapoints(self, *, dataset_name: str, ids: List[Any]) -> int: ...
-    def delete_dataset(self, *, dataset_name: str) -> int: ...
+        self, *, dataset_name: str, params: Dict[str, Any], output_source: Optional[str] = None
+    ) -> Any: ...
+    def delete_datapoint(self, *, dataset_name: str, datapoint_id: UUID) -> DeleteDatapointsResponse: ...
+    def delete_datapoints(self, *, dataset_name: str, ids: List[UUID]) -> DeleteDatapointsResponse: ...
+    def delete_dataset(self, *, dataset_name: str) -> Any: ...
     def dynamic_evaluation_run(
         self,
         *,
-        variants: Dict[str, str],
+        variants: List[str],
         tags: Optional[Dict[str, str]] = None,
-        project_name: Optional[str] = None,
-        display_name: Optional[str] = None,
+        project_name: Any = None,
+        display_name: Any = None,
     ) -> EvaluationJobHandler: ...
     def dynamic_evaluation_run_episode(
-        self, *, run_id: Any, task_name: Optional[str] = None, tags: Optional[Dict[str, str]] = None
+        self, *, run_id: UUID, task_name: Any = None, tags: Optional[Dict[str, str]] = None
+    ) -> Any: ...
+    def experimental_get_config(
+        self,
     ) -> Any: ...
     def experimental_launch_optimization(
-        self, *, train_samples: List[Any], val_samples: Optional[List[Any]] = None, optimization_config: Any
+        self,
+        *,
+        train_samples: Any,
+        val_samples: Any = None,
+        optimization_config: Union[
+            OpenAISFTConfig,
+            OpenAIRFTConfig,
+            FireworksSFTConfig,
+            TogetherSFTConfig,
+            GCPVertexGeminiSFTConfig,
+            DICLConfig,
+            DICLOptimizationConfig,
+        ],
     ) -> OptimizationJobHandle: ...
     def experimental_list_inferences(
         self,
         *,
         function_name: str,
         variant_name: Optional[str] = None,
-        filters: Optional[Any] = None,
-        output_source: str = "inference",
+        filters: Optional[Dict[str, Any]] = None,
+        output_source: Optional[str] = "inference",
         order_by: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-    ) -> List[StoredInference]: ...
+    ) -> Any: ...
     def experimental_poll_optimization(self, *, job_handle: OptimizationJobHandle) -> OptimizationJobInfo: ...
-    def experimental_render_inferences(self, *, stored_inferences: List[StoredInference], variants: Dict[str, str]) -> List[RenderedSample]: ...
-    def experimental_render_samples(self, *, stored_samples: List[Any], variants: Dict[str, str]) -> List[RenderedSample]: ...
+    def experimental_render_inferences(self, *, stored_inferences: Any, variants: List[str]) -> Any: ...
+    def experimental_render_samples(self, *, stored_samples: Any, variants: List[str]) -> Any: ...
     def experimental_run_evaluation(
         self,
         *,
         evaluation_name: str,
         dataset_name: str,
         variant_name: str,
-        concurrency: int = 1,
-        inference_cache: str = "on",
+        concurrency: Optional[int] = 1,
+        inference_cache: Optional[str] = "on",
     ) -> EvaluationJobHandler: ...
-    def feedback(self, *, inference_id: Any, metric_name: str, value: Any, tags: Optional[Dict[str, str]] = None) -> None: ...
-    def get_datapoint(self, *, dataset_name: str, datapoint_id: Any) -> Datapoint: ...
-    def get_datapoints(self, ids: List[Any]) -> GetDatapointsResponse: ...
+    def feedback(
+        self,
+        *,
+        metric_name: str,
+        value: float,
+        inference_id: Optional[UUID] = None,
+        episode_id: Optional[UUID] = None,
+        dryrun: Optional[bool] = None,
+        internal: Optional[bool] = None,
+        tags: Optional[Dict[str, str]] = None,
+    ) -> Any: ...
+    def get_datapoint(self, *, dataset_name: str, datapoint_id: UUID) -> Union[Datapoint, GetDatapointsResponse]: ...
+    def get_datapoints(self, *, ids: List[UUID]) -> Union[Datapoint, GetDatapointsResponse]: ...
     def inference(
         self,
         *,
-        function_name: str,
-        input: Any,
-        stream: bool = False,
-        episode_id: Optional[Any] = None,
-        dryrun: bool = False,
+        input: Dict[str, Any],
+        function_name: Optional[str] = None,
+        model_name: Optional[str] = None,
+        episode_id: Optional[UUID] = None,
+        stream: Optional[bool] = None,
+        params: Optional[Dict[str, Any]] = None,
         variant_name: Optional[str] = None,
+        dryrun: Optional[bool] = None,
+        output_schema: Optional[Dict[str, Any]] = None,
+        allowed_tools: Optional[List[str]] = None,
+        additional_tools: Optional[List[Dict[str, Any]]] = None,
+        provider_tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[str] = None,
+        parallel_tool_calls: Optional[bool] = None,
+        internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
-        credentials: Optional[Dict[str, str]] = None,
-        params: Optional[Any] = None,
-        dynamic_tool_params: Optional[Any] = None,
-    ) -> Any: ...
+        credentials: Optional[Dict[str, Any]] = None,
+        cache_options: Optional[Dict[str, Any]] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
+        include_original_response: Optional[bool] = None,
+        otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
+        internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]: ...
     def list_datapoints(
         self,
         *,
@@ -526,138 +545,198 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         function_name: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        filter: Optional[Any] = None,
+        filter: Optional[Dict[str, Any]] = None,
     ) -> List[Datapoint]: ...
-    def update_datapoints(self, *, dataset_name: str, requests: List[Any]) -> List[Any]: ...
-    def update_datapoints_metadata(self, *, dataset_name: str, datapoints: List[Any]) -> List[Any]: ...
+    def update_datapoints(
+        self, *, dataset_name: str, requests: List[Union[UpdateChatDatapointRequest, UpdateJsonDatapointRequest]]
+    ) -> UpdateDatapointsResponse: ...
+    def update_datapoints_metadata(
+        self, *, dataset_name: str, datapoints: List[Dict[str, Any]]
+    ) -> UpdateDatapointsResponse: ...
     def workflow_evaluation_run(
         self,
         *,
-        variants: Dict[str, str],
+        variants: List[str],
         tags: Optional[Dict[str, str]] = None,
-        project_name: Optional[str] = None,
-        display_name: Optional[str] = None,
+        project_name: Any = None,
+        display_name: Any = None,
     ) -> EvaluationJobHandler: ...
     def workflow_evaluation_run_episode(
-        self, *, run_id: Any, task_name: Optional[str] = None, tags: Optional[Dict[str, str]] = None
+        self, *, run_id: UUID, task_name: Any = None, tags: Optional[Dict[str, str]] = None
     ) -> Any: ...
 
 @final
 class AsyncTensorZeroGateway(BaseTensorZeroGateway):
-    """Asynchronous TensorZero gateway."""
+    """An async client for a TensorZero gateway."""
     async def __aenter__(self) -> "AsyncTensorZeroGateway": ...
-    async def __aexit__(self, *args: Any) -> None: ...
-    @staticmethod
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None: ...
+    @classmethod
     def build_embedded(
+        cls,
         *,
         config_file: Optional[str] = None,
         clickhouse_url: Optional[str] = None,
         postgres_url: Optional[str] = None,
         timeout: Optional[float] = None,
         async_setup: bool = True,
-    ) -> "AsyncTensorZeroGateway": ...
-    @staticmethod
+    ) -> Coroutine[Any, Any, "AsyncTensorZeroGateway"]: ...
+    @classmethod
     def build_http(
+        cls,
         *,
         gateway_url: str,
         timeout: Optional[float] = None,
         verbose_errors: bool = False,
         async_setup: bool = True,
         api_key: Optional[str] = None,
-    ) -> "AsyncTensorZeroGateway": ...
-    async def bulk_insert_datapoints(
-        self, *, dataset_name: str, datapoints: List[Any]
-    ) -> List[Any]: ...
-    async def close(self) -> None: ...
-    async def create_datapoints(
-        self, *, dataset_name: str, datapoints: List[Any]
+    ) -> Coroutine[Any, Any, "AsyncTensorZeroGateway"]: ...
+    def bulk_insert_datapoints(
+        self, *, dataset_name: str, datapoints: List[Dict[str, Any]]
+    ) -> Coroutine[Any, Any, Any]: ...
+    def close(
+        self,
     ) -> Any: ...
-    async def create_from_inferences(
-        self, *, dataset_name: str, params: Any, output_source: Optional[str] = None
-    ) -> List[Any]: ...
-    async def delete_datapoint(self, *, dataset_name: str, datapoint_id: Any) -> None: ...
-    async def delete_datapoints(self, *, dataset_name: str, ids: List[Any]) -> int: ...
-    async def delete_dataset(self, *, dataset_name: str) -> int: ...
-    async def dynamic_evaluation_run(
+    def create_datapoints(
+        self, *, dataset_name: str, datapoints: List[Dict[str, Any]]
+    ) -> Coroutine[Any, Any, CreateDatapointsResponse]: ...
+    def create_from_inferences(
+        self, *, dataset_name: str, params: Dict[str, Any], output_source: Optional[str] = None
+    ) -> Coroutine[Any, Any, Any]: ...
+    def delete_datapoint(
+        self, *, dataset_name: str, datapoint_id: UUID
+    ) -> Coroutine[Any, Any, DeleteDatapointsResponse]: ...
+    def delete_datapoints(
+        self, *, dataset_name: str, ids: List[UUID]
+    ) -> Coroutine[Any, Any, DeleteDatapointsResponse]: ...
+    def delete_dataset(self, *, dataset_name: str) -> Coroutine[Any, Any, Any]: ...
+    def dynamic_evaluation_run(
         self,
         *,
-        variants: Dict[str, str],
+        variants: List[str],
         tags: Optional[Dict[str, str]] = None,
-        project_name: Optional[str] = None,
-        display_name: Optional[str] = None,
-    ) -> AsyncEvaluationJobHandler: ...
-    async def dynamic_evaluation_run_episode(
-        self, *, run_id: Any, task_name: Optional[str] = None, tags: Optional[Dict[str, str]] = None
-    ) -> Any: ...
-    async def experimental_launch_optimization(
-        self, *, train_samples: List[Any], val_samples: Optional[List[Any]] = None, optimization_config: Any
-    ) -> OptimizationJobHandle: ...
-    async def experimental_list_inferences(
+        project_name: Any = None,
+        display_name: Any = None,
+    ) -> Coroutine[Any, Any, AsyncEvaluationJobHandler]: ...
+    def dynamic_evaluation_run_episode(
+        self, *, run_id: UUID, task_name: Any = None, tags: Optional[Dict[str, str]] = None
+    ) -> Coroutine[Any, Any, Any]: ...
+    def experimental_get_config(
+        self,
+    ) -> Config: ...
+    def experimental_launch_optimization(
+        self,
+        *,
+        train_samples: Any,
+        val_samples: Any = None,
+        optimization_config: Union[
+            OpenAISFTConfig,
+            OpenAIRFTConfig,
+            FireworksSFTConfig,
+            TogetherSFTConfig,
+            GCPVertexGeminiSFTConfig,
+            DICLConfig,
+            DICLOptimizationConfig,
+        ],
+    ) -> Coroutine[Any, Any, OptimizationJobHandle]: ...
+    def experimental_list_inferences(
         self,
         *,
         function_name: str,
         variant_name: Optional[str] = None,
-        filters: Optional[Any] = None,
-        output_source: str = "inference",
+        filters: Optional[Dict[str, Any]] = None,
+        output_source: Optional[str] = "inference",
         order_by: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-    ) -> List[StoredInference]: ...
-    async def experimental_poll_optimization(self, *, job_handle: OptimizationJobHandle) -> OptimizationJobInfo: ...
-    async def experimental_render_inferences(self, *, stored_inferences: List[StoredInference], variants: Dict[str, str]) -> List[RenderedSample]: ...
-    async def experimental_render_samples(self, *, stored_samples: List[Any], variants: Dict[str, str]) -> List[RenderedSample]: ...
-    async def experimental_run_evaluation(
+    ) -> Coroutine[Any, Any, Any]: ...
+    def experimental_poll_optimization(
+        self, *, job_handle: OptimizationJobHandle
+    ) -> Coroutine[Any, Any, OptimizationJobInfo]: ...
+    def experimental_render_inferences(
+        self, *, stored_inferences: Any, variants: List[str]
+    ) -> Coroutine[Any, Any, Any]: ...
+    def experimental_render_samples(self, *, stored_samples: Any, variants: List[str]) -> Coroutine[Any, Any, Any]: ...
+    def experimental_run_evaluation(
         self,
         *,
         evaluation_name: str,
         dataset_name: str,
         variant_name: str,
-        concurrency: int = 1,
-        inference_cache: str = "on",
-    ) -> AsyncEvaluationJobHandler: ...
-    async def feedback(self, *, inference_id: Any, metric_name: str, value: Any, tags: Optional[Dict[str, str]] = None) -> None: ...
-    async def get_datapoint(self, *, dataset_name: str, datapoint_id: Any) -> Datapoint: ...
-    async def get_datapoints(self, ids: List[Any]) -> GetDatapointsResponse: ...
-    async def inference(
+        concurrency: Optional[int] = 1,
+        inference_cache: Optional[str] = "on",
+    ) -> Coroutine[Any, Any, AsyncEvaluationJobHandler]: ...
+    def feedback(
         self,
         *,
-        function_name: str,
-        input: Any,
-        stream: bool = False,
-        episode_id: Optional[Any] = None,
-        dryrun: bool = False,
-        variant_name: Optional[str] = None,
+        metric_name: str,
+        value: float,
+        inference_id: Optional[UUID] = None,
+        episode_id: Optional[UUID] = None,
+        dryrun: Optional[bool] = None,
+        internal: Optional[bool] = None,
         tags: Optional[Dict[str, str]] = None,
-        credentials: Optional[Dict[str, str]] = None,
-        params: Optional[Any] = None,
-        dynamic_tool_params: Optional[Any] = None,
-    ) -> Any: ...
-    async def list_datapoints(
+    ) -> Coroutine[Any, Any, Any]: ...
+    def get_datapoint(
+        self, *, dataset_name: str, datapoint_id: UUID
+    ) -> Coroutine[Any, Any, Union[Datapoint, GetDatapointsResponse]]: ...
+    def get_datapoints(self, *, ids: List[UUID]) -> Coroutine[Any, Any, Union[Datapoint, GetDatapointsResponse]]: ...
+    def inference(
+        self,
+        *,
+        input: Dict[str, Any],
+        function_name: Optional[str] = None,
+        model_name: Optional[str] = None,
+        episode_id: Optional[UUID] = None,
+        stream: Optional[bool] = None,
+        params: Optional[Dict[str, Any]] = None,
+        variant_name: Optional[str] = None,
+        dryrun: Optional[bool] = None,
+        output_schema: Optional[Dict[str, Any]] = None,
+        allowed_tools: Optional[List[str]] = None,
+        additional_tools: Optional[List[Dict[str, Any]]] = None,
+        provider_tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[str] = None,
+        parallel_tool_calls: Optional[bool] = None,
+        internal: Optional[bool] = None,
+        tags: Optional[Dict[str, str]] = None,
+        credentials: Optional[Dict[str, Any]] = None,
+        cache_options: Optional[Dict[str, Any]] = None,
+        extra_body: Optional[Dict[str, Any]] = None,
+        extra_headers: Optional[Dict[str, str]] = None,
+        include_original_response: Optional[bool] = None,
+        otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
+        internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
+    ) -> Coroutine[Any, Any, Dict[str, Any]]: ...
+    def list_datapoints(
         self,
         *,
         dataset_name: str,
         function_name: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
-        filter: Optional[Any] = None,
-    ) -> List[Datapoint]: ...
-    async def update_datapoints(self, *, dataset_name: str, requests: List[Any]) -> List[Any]: ...
-    async def update_datapoints_metadata(self, *, dataset_name: str, datapoints: List[Any]) -> List[Any]: ...
-    async def workflow_evaluation_run(
+        filter: Optional[Dict[str, Any]] = None,
+    ) -> Coroutine[Any, Any, List[Datapoint]]: ...
+    def update_datapoints(
+        self, *, dataset_name: str, requests: List[Union[UpdateChatDatapointRequest, UpdateJsonDatapointRequest]]
+    ) -> Coroutine[Any, Any, UpdateDatapointsResponse]: ...
+    def update_datapoints_metadata(
+        self, *, dataset_name: str, datapoints: List[Dict[str, Any]]
+    ) -> Coroutine[Any, Any, UpdateDatapointsResponse]: ...
+    def workflow_evaluation_run(
         self,
         *,
-        variants: Dict[str, str],
+        variants: List[str],
         tags: Optional[Dict[str, str]] = None,
-        project_name: Optional[str] = None,
-        display_name: Optional[str] = None,
-    ) -> AsyncEvaluationJobHandler: ...
-    async def workflow_evaluation_run_episode(
-        self, *, run_id: Any, task_name: Optional[str] = None, tags: Optional[Dict[str, str]] = None
-    ) -> Any: ...
+        project_name: Any = None,
+        display_name: Any = None,
+    ) -> Coroutine[Any, Any, AsyncEvaluationJobHandler]: ...
+    def workflow_evaluation_run_episode(
+        self, *, run_id: UUID, task_name: Any = None, tags: Optional[Dict[str, str]] = None
+    ) -> Coroutine[Any, Any, Any]: ...
 
 @final
-class LocalHttpGateway:
-    """Local HTTP gateway."""
+class LocalHttpGateway(BaseTensorZeroGateway):
+    """LocalHttpGateway"""
     @property
     def base_url(self) -> str: ...
     def close(self) -> None: ...
@@ -668,35 +747,36 @@ class LocalHttpGateway:
 
 @final
 class StoredInference:
-    """A stored inference result."""
-    def Chat(self, *args: Any, **kwargs: Any) -> Any: ...
-    def Json(self, *args: Any, **kwargs: Any) -> Any: ...
+    """StoredInference - tagged enum."""
+
+    Chat: Type["StoredInference"]
+    Json: Type["StoredInference"]
     @property
-    def additional_tools(self) -> Any: ...
+    def additional_tools(self) -> List[Dict[str, Any]]: ...
     @property
-    def allowed_tools(self) -> Any: ...
+    def allowed_tools(self) -> List[str]: ...
     @property
-    def dispreferred_outputs(self) -> Any: ...
+    def dispreferred_outputs(self) -> List[Dict[str, Any]]: ...
     @property
-    def episode_id(self) -> Optional[Any]: ...
+    def episode_id(self) -> UUID: ...
     @property
     def function_name(self) -> str: ...
     @property
-    def inference_id(self) -> Any: ...
+    def inference_id(self) -> UUID: ...
     @property
-    def input(self) -> Any: ...
+    def input(self) -> Dict[str, Any]: ...
     @property
-    def output(self) -> Any: ...
+    def output(self) -> Dict[str, Any]: ...
     @property
-    def output_schema(self) -> Optional[Any]: ...
+    def output_schema(self) -> Dict[str, Any]: ...
     @property
-    def parallel_tool_calls(self) -> Any: ...
+    def parallel_tool_calls(self) -> bool: ...
     @property
-    def provider_tools(self) -> Any: ...
+    def provider_tools(self) -> List[Dict[str, Any]]: ...
     @property
     def tags(self) -> Dict[str, str]: ...
     @property
-    def timestamp(self) -> Any: ...
+    def timestamp(self) -> str: ...
     @property
     def type(self) -> str: ...
     @property
@@ -704,49 +784,49 @@ class StoredInference:
 
 @final
 class RenderedSample:
-    """A rendered sample for evaluation."""
+    """RenderedSample"""
     @property
-    def additional_tools(self) -> Any: ...
+    def additional_tools(self) -> List[Dict[str, Any]]: ...
     @property
-    def allowed_tools(self) -> Any: ...
+    def allowed_tools(self) -> List[str]: ...
     @property
-    def dispreferred_outputs(self) -> Any: ...
+    def dispreferred_outputs(self) -> List[Dict[str, Any]]: ...
     @property
-    def episode_id(self) -> Optional[Any]: ...
+    def episode_id(self) -> UUID: ...
     @property
     def function_name(self) -> str: ...
     @property
-    def inference_id(self) -> Optional[Any]: ...
+    def inference_id(self) -> UUID: ...
     @property
-    def input(self) -> Any: ...
+    def input(self) -> Dict[str, Any]: ...
     @property
-    def output(self) -> Any: ...
+    def output(self) -> Dict[str, Any]: ...
     @property
-    def output_schema(self) -> Optional[Any]: ...
+    def output_schema(self) -> Dict[str, Any]: ...
     @property
-    def parallel_tool_calls(self) -> Any: ...
+    def parallel_tool_calls(self) -> bool: ...
     @property
-    def provider_tools(self) -> Any: ...
+    def provider_tools(self) -> List[Dict[str, Any]]: ...
     @property
-    def stored_input(self) -> Any: ...
+    def stored_input(self) -> Dict[str, Any]: ...
     @property
-    def stored_output(self) -> Any: ...
+    def stored_output(self) -> Dict[str, Any]: ...
     @property
     def tags(self) -> Dict[str, str]: ...
 
 @final
 class ResolvedInput:
-    """Resolved input for inference."""
+    """ResolvedInput"""
     @property
-    def messages(self) -> List[ResolvedInputMessage]: ...
+    def messages(self) -> List[Dict[str, Any]]: ...
     @property
-    def system(self) -> Optional[str]: ...
+    def system(self) -> str: ...
 
 @final
 class ResolvedInputMessage:
-    """Resolved input message."""
+    """ResolvedInputMessage"""
     @property
-    def content(self) -> Any: ...
+    def content(self) -> str: ...
     @property
     def role(self) -> str: ...
 
@@ -756,32 +836,34 @@ class ResolvedInputMessage:
 
 @final
 class OptimizationJobHandle:
-    """Handle for an optimization job."""
-    def Dicl(self, *args: Any, **kwargs: Any) -> Any: ...
-    def FireworksSFT(self, *args: Any, **kwargs: Any) -> Any: ...
-    def GCPVertexGeminiSFT(self, *args: Any, **kwargs: Any) -> Any: ...
-    def OpenAIRFT(self, *args: Any, **kwargs: Any) -> Any: ...
-    def OpenAISFT(self, *args: Any, **kwargs: Any) -> Any: ...
-    def TogetherSFT(self, *args: Any, **kwargs: Any) -> Any: ...
+    """OptimizationJobHandle - tagged enum."""
+
+    Dicl: Type["OptimizationJobHandle"]
+    FireworksSFT: Type["OptimizationJobHandle"]
+    GCPVertexGeminiSFT: Type["OptimizationJobHandle"]
+    OpenAIRFT: Type["OptimizationJobHandle"]
+    OpenAISFT: Type["OptimizationJobHandle"]
+    TogetherSFT: Type["OptimizationJobHandle"]
 
 @final
 class OptimizationJobInfo:
-    """Information about an optimization job."""
+    """OptimizationJobInfo"""
     @property
-    def estimated_finish(self) -> Optional[Any]: ...
+    def estimated_finish(self) -> str: ...
     @property
-    def message(self) -> Optional[str]: ...
+    def message(self) -> str: ...
     @property
-    def output(self) -> Optional[Any]: ...
+    def output(self) -> Dict[str, Any]: ...
     @property
     def status(self) -> OptimizationJobStatus: ...
 
 @final
 class OptimizationJobStatus:
-    """Status of an optimization job."""
-    Completed: ClassVar["OptimizationJobStatus"]
-    Failed: ClassVar["OptimizationJobStatus"]
-    Pending: ClassVar["OptimizationJobStatus"]
+    """OptimizationJobStatus - enum."""
+
+    Completed: Type["OptimizationJobStatus"]
+    Failed: Type["OptimizationJobStatus"]
+    Pending: Type["OptimizationJobStatus"]
 
 # ============================================================================
 # Evaluation Types
@@ -789,19 +871,19 @@ class OptimizationJobStatus:
 
 @final
 class EvaluationJobHandler:
-    """Synchronous evaluation job handler."""
+    """EvaluationJobHandler"""
     @property
-    def run_info(self) -> Any: ...
-    def results(self) -> Any: ...
-    def summary_stats(self) -> Any: ...
+    def run_info(self) -> Dict[str, Any]: ...
+    def results(self) -> Dict[str, Any]: ...
+    def summary_stats(self) -> Dict[str, Any]: ...
 
 @final
 class AsyncEvaluationJobHandler:
-    """Asynchronous evaluation job handler."""
+    """AsyncEvaluationJobHandler"""
     @property
-    def run_info(self) -> Any: ...
-    async def results(self) -> Any: ...
-    async def summary_stats(self) -> Any: ...
+    def run_info(self) -> Dict[str, Any]: ...
+    def results(self) -> Dict[str, Any]: ...
+    def summary_stats(self) -> Dict[str, Any]: ...
 
 # ============================================================================
 # Optimization Config Types
@@ -809,35 +891,150 @@ class AsyncEvaluationJobHandler:
 
 @final
 class OpenAISFTConfig:
-    """OpenAI SFT configuration."""
-    ...
+    """OpenAISFTConfig"""
+    def __init__(
+        self,
+        *,
+        model: str,
+        batch_size: Optional[int] = None,
+        learning_rate_multiplier: Any = None,
+        n_epochs: Any = None,
+        credentials: Optional[Dict[str, Any]] = None,
+        api_base: Any = None,
+        seed: Any = None,
+        suffix: Any = None,
+    ) -> None: ...
 
 @final
 class OpenAIRFTConfig:
-    """OpenAI RFT configuration."""
-    ...
+    """OpenAIRFTConfig"""
+    def __init__(
+        self,
+        *,
+        model: str,
+        grader: Any,
+        response_format: Any = None,
+        batch_size: Optional[int] = None,
+        compute_multiplier: Any = None,
+        eval_interval: Any = None,
+        eval_samples: Any = None,
+        learning_rate_multiplier: Any = None,
+        n_epochs: Any = None,
+        reasoning_effort: Any = None,
+        credentials: Optional[Dict[str, Any]] = None,
+        api_base: Any = None,
+        seed: Any = None,
+        suffix: Any = None,
+    ) -> None: ...
 
 @final
 class FireworksSFTConfig:
-    """Fireworks SFT configuration."""
-    ...
+    """FireworksSFTConfig"""
+    def __init__(
+        self,
+        *,
+        model: str,
+        early_stop: Any = None,
+        epochs: Any = None,
+        learning_rate: Any = None,
+        max_context_length: Any = None,
+        lora_rank: Any = None,
+        batch_size: Optional[int] = None,
+        display_name: Any = None,
+        output_model: Any = None,
+        warm_start_from: Any = None,
+        is_turbo: Any = None,
+        eval_auto_carveout: Any = None,
+        nodes: Any = None,
+        mtp_enabled: Any = None,
+        mtp_num_draft_tokens: Any = None,
+        mtp_freeze_base_model: Any = None,
+        credentials: Optional[Dict[str, Any]] = None,
+        account_id: str,
+        api_base: Any = None,
+    ) -> None: ...
 
 @final
 class TogetherSFTConfig:
-    """Together SFT configuration."""
-    ...
+    """TogetherSFTConfig"""
+    def __init__(
+        self,
+        *,
+        model: str,
+        credentials: Optional[Dict[str, Any]] = None,
+        api_base: Any = None,
+        n_epochs: Any = None,
+        n_checkpoints: Any = None,
+        n_evals: Any = None,
+        batch_size: Optional[int] = None,
+        learning_rate: Any = None,
+        warmup_ratio: Any = None,
+        max_grad_norm: Any = None,
+        weight_decay: Any = None,
+        suffix: Any = None,
+        lr_scheduler: Any = None,
+        wandb_api_key: Any = None,
+        wandb_base_url: Any = None,
+        wandb_project_name: Any = None,
+        wandb_name: Any = None,
+        training_method: Any = None,
+        training_type: Any = None,
+        from_checkpoint: Any = None,
+        from_hf_model: Any = None,
+        hf_model_revision: Any = None,
+        hf_api_token: Any = None,
+        hf_output_repo_name: Any = None,
+    ) -> None: ...
 
 @final
 class GCPVertexGeminiSFTConfig:
-    """GCP Vertex Gemini SFT configuration."""
-    ...
+    """GCPVertexGeminiSFTConfig"""
+    def __init__(
+        self,
+        *,
+        model: str,
+        bucket_name: Any,
+        project_id: Any,
+        region: Any,
+        learning_rate_multiplier: Any = None,
+        adapter_size: Any = None,
+        n_epochs: Any = None,
+        export_last_checkpoint_only: Any = None,
+        credentials: Optional[Dict[str, Any]] = None,
+        api_base: Any = None,
+        seed: Any = None,
+        service_account: Any = None,
+        kms_key_name: Any = None,
+        tuned_model_display_name: Any = None,
+        bucket_path_prefix: Any = None,
+    ) -> None: ...
 
 @final
 class DICLConfig:
-    """DICL configuration."""
-    ...
+    """DICLConfig"""
+    def __init__(self, args: Any, kwargs: Any) -> None: ...
+    __deprecated__: str
 
 @final
 class DICLOptimizationConfig:
-    """DICL optimization configuration."""
-    ...
+    """DICLOptimizationConfig"""
+    def __init__(
+        self,
+        *,
+        embedding_model: str,
+        variant_name: str,
+        function_name: str,
+        dimensions: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        max_concurrency: Optional[int] = None,
+        k: Optional[int] = None,
+        model: Optional[str] = None,
+        append_to_existing_variants: Optional[bool] = None,
+        credentials: Optional[Dict[str, Any]] = None,
+    ) -> None: ...
+
+# ============================================================================
+# Internal Functions
+# ============================================================================
+
+def _start_http_gateway(*, config_file: str, clickhouse_url: str, postgres_url: str, async_setup: bool) -> Any: ...

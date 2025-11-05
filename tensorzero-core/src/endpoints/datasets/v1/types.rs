@@ -231,6 +231,7 @@ pub struct GetDatapointsResponse {
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub enum CreateDatapointsFromInferenceOutputSource {
     /// Do not include any output in the datapoint.
+    #[pyo3(name = "NoOutput")]
     None,
     /// Include the original inference output in the datapoint.
     Inference,
