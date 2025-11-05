@@ -645,11 +645,6 @@ mod tests {
         let candidate_variants = BTreeMap::new(); // No candidate variants
         let fallback_variants = vec!["A".to_string(), "B".to_string(), "C".to_string()];
 
-        // With 3 fallback variants:
-        // A: [0.0, 1.0/3.0) -> [0.0, 0.333...)
-        // B: [1.0/3.0, 2.0/3.0) -> [0.333..., 0.666...)
-        // C: [2.0/3.0, 3.0/3.0) -> [0.666..., 1.0)
-
         // Test sample that should select A
         // With ranked list, always returns the first active variant (A)
         let result = sample_static_weights(
