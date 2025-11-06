@@ -406,6 +406,7 @@ async fn embed_insert_example(
         deferred_tasks: tokio_util::task::TaskTracker::new(),
         scope_info: ScopeInfo {
             tags: Arc::new(HashMap::new()),
+            api_key_public_id: None,
         },
     };
     let response = provider_config

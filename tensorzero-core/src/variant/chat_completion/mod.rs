@@ -20,8 +20,8 @@ use crate::utils::retries::RetryConfig;
 
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata,
-    chat_completion_inference_params::ChatCompletionInferenceParamsV2, ContentBlock,
-    InferenceResultStream, ModelInferenceRequest, RequestMessage, Role, System, Text,
+    chat_completion_inference_params::{ChatCompletionInferenceParamsV2, ServiceTier},
+    ContentBlock, InferenceResultStream, ModelInferenceRequest, RequestMessage, Role, System, Text,
 };
 use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
 use crate::jsonschema_util::StaticJSONSchema;
@@ -135,6 +135,10 @@ impl ChatCompletionConfig {
         self.inference_params_v2.thinking_budget_tokens
     }
 
+    pub fn service_tier(&self) -> Option<&ServiceTier> {
+        self.inference_params_v2.service_tier.as_ref()
+    }
+
     pub fn verbosity(&self) -> Option<&String> {
         self.inference_params_v2.verbosity.as_ref()
     }
@@ -204,6 +208,9 @@ pub struct UninitializedChatCompletionConfig {
     pub reasoning_effort: Option<String>,
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<ServiceTier>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget_tokens: Option<i32>,
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -240,6 +247,7 @@ impl UninitializedChatCompletionConfig {
             stop_sequences: self.stop_sequences,
             inference_params_v2: ChatCompletionInferenceParamsV2 {
                 reasoning_effort: self.reasoning_effort,
+                service_tier: self.service_tier,
                 thinking_budget_tokens: self.thinking_budget_tokens,
                 verbosity: self.verbosity,
             },
@@ -1219,6 +1227,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let templates = Arc::new(get_test_template_config());
@@ -2222,6 +2231,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let templates = Box::leak(Box::new(get_test_template_config()));

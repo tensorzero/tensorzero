@@ -3,7 +3,7 @@ import FineTuningStatus from "./FineTuningStatus";
 import type {
   OptimizationJobInfo,
   OptimizationJobHandle,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 
 const meta = {
   title: "SFT/FineTuningStatus",

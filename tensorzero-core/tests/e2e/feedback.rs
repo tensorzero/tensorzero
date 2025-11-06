@@ -17,7 +17,6 @@ use tensorzero_core::{
     utils::gateway::GatewayHandle,
 };
 use tokio::time::{sleep, Duration};
-use tracing_test::traced_test;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -201,7 +200,9 @@ async fn e2e_test_comment_feedback_validation_disabled() {
         value: json!("foo bar"),
         ..Default::default()
     };
-    let val = feedback(handle.app_state.clone(), params).await.unwrap();
+    let val = feedback(handle.app_state.clone(), params, None)
+        .await
+        .unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse
@@ -1233,7 +1234,9 @@ async fn e2e_test_float_feedback_validation_disabled() {
         value: json!(3.1),
         ..Default::default()
     };
-    let val = feedback(handle.app_state.clone(), params).await.unwrap();
+    let val = feedback(handle.app_state.clone(), params, None)
+        .await
+        .unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse
@@ -1470,7 +1473,9 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         value: json!(true),
         ..Default::default()
     };
-    let val = feedback(handle.app_state.clone(), params).await.unwrap();
+    let val = feedback(handle.app_state.clone(), params, None)
+        .await
+        .unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse
@@ -1487,8 +1492,8 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[traced_test]
 async fn test_fast_inference_then_feedback() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     use serde_json::json;
     use std::collections::HashMap;
     use std::sync::Arc;

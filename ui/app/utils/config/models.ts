@@ -1,5 +1,5 @@
 import { stringify } from "smol-toml";
-import type { OptimizerOutput } from "tensorzero-node";
+import type { OptimizerOutput } from "~/types/tensorzero";
 
 export function dump_optimizer_output(optimizerOutput: OptimizerOutput) {
   if (optimizerOutput.type !== "model") {

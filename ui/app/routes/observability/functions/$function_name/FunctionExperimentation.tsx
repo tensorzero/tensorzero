@@ -1,7 +1,7 @@
 import type {
   CumulativeFeedbackTimeSeriesPoint,
   FunctionConfig,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import {
   ExperimentationPieChart,
   type VariantWeight,

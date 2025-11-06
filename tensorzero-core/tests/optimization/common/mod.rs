@@ -194,6 +194,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
                 scope_info: ScopeInfo {
                     tags: Arc::new(HashMap::new()),
+                    api_key_public_id: None,
                 },
             };
             // We didn't produce a real model, so there's nothing to test
@@ -491,6 +492,7 @@ fn generate_image_example() -> RenderedSample {
                                     "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                                 ).unwrap(),
                             },
+                            detail: None,
                         },
                         data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
                     })),
@@ -515,6 +517,7 @@ fn generate_image_example() -> RenderedSample {
                                     "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                                 ).unwrap(),
                             },
+                            detail: None,
                         },
                     ))),
                 ],

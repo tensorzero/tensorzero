@@ -15,6 +15,7 @@ use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::clickhouse_client::DisabledClickHouseClient;
 use crate::db::clickhouse::clickhouse_client::ProductionClickHouseClient;
 use crate::db::HealthCheckable;
+use crate::error::DelayedError;
 use crate::error::{Error, ErrorDetails};
 
 pub use clickhouse_client::ClickHouseClient;
@@ -223,14 +224,13 @@ impl ClickHouseConnectionInfo {
         self.inner.run_query_synchronous(query, parameters).await
     }
 
-    pub async fn run_query_synchronous_with_err_logging(
+    pub async fn run_query_synchronous_delayed_err(
         &self,
         query: String,
         parameters: &HashMap<&str, &str>,
-        err_logging: bool,
-    ) -> Result<ClickHouseResponse, Error> {
+    ) -> Result<ClickHouseResponse, DelayedError> {
         self.inner
-            .run_query_synchronous_with_err_logging(query, parameters, err_logging)
+            .run_query_synchronous_delayed_err(query, parameters)
             .await
     }
 

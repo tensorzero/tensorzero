@@ -7,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { EpisodeByIdRow } from "tensorzero-node";
+import type { EpisodeByIdRow } from "~/types/tensorzero";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
 import { toEpisodeUrl } from "~/utils/urls";
 

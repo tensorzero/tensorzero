@@ -113,6 +113,11 @@ jobs:
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.yml logs -t
 
+      - name: Print Docker Compose status
+        if: always()
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.yml ps --all
+
       - name: Make sure the current commit short hash is in the Docker Compose gateway logs
         if: always()
         working-directory: ui
@@ -125,8 +130,10 @@ jobs:
 
       - name: Print ClickHouse error logs
         if: always()
-        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+        working-directory: ui
+        run: docker cp fixtures-clickhouse-1:/var/log/clickhouse-server/clickhouse-server.err.log -
 
       - name: Print ClickHouse trace logs
         if: always()
-        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
+        working-directory: ui
+        run: docker cp fixtures-clickhouse-1:/var/log/clickhouse-server/clickhouse-server.log -

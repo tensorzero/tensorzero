@@ -8,7 +8,11 @@ use tokio::{
     process::{Child, ChildStdout, Command},
 };
 
-const GATEWAY_PATH: &str = env!("CARGO_BIN_EXE_gateway");
+pub fn gateway_path() -> String {
+    // Compatibility with 'cargo nextest archive': https://nexte.st/docs/ci-features/archiving/#making-tests-relocatable
+    std::env::var("NEXTEST_BIN_EXE_gateway")
+        .unwrap_or_else(|_| env!("CARGO_BIN_EXE_gateway").to_string())
+}
 
 pub async fn start_gateway_on_random_port(
     config_suffix: &str,
@@ -17,7 +21,6 @@ pub async fn start_gateway_on_random_port(
     let config_str = format!(
         r#"
         [gateway]
-        observability.enabled = false
         bind_address = "0.0.0.0:0"
         {config_suffix}
     "#
@@ -26,7 +29,7 @@ pub async fn start_gateway_on_random_port(
     let tmpfile = NamedTempFile::new().unwrap();
     std::fs::write(tmpfile.path(), config_str).unwrap();
 
-    let mut builder = Command::new(GATEWAY_PATH);
+    let mut builder = Command::new(gateway_path());
     builder
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())

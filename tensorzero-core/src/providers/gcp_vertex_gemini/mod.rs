@@ -713,7 +713,7 @@ struct GCPVertexGeminiRequestMinimal {
 #[serde(rename_all = "camelCase")]
 struct GCPVertexBatchResponseLine {
     request: Box<RawValue>,
-    response: GCPVertexGeminiResponse,
+    response: Box<RawValue>,
 }
 fn make_provider_batch_inference_output(
     line: GCPVertexBatchResponseLine,
@@ -726,9 +726,10 @@ fn make_provider_batch_inference_output(
             message: format!("Error deserializing batch request: {e}"),
         })
     })?;
-    let raw_response = serde_json::to_string(&line.response).map_err(|e| {
+    let raw_response = line.response.to_string();
+    let response = GCPVertexGeminiResponse::deserialize(&*line.response).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
-            message: format!("Error serializing batch response: {e}"),
+            message: format!("Error deserializing batch response: {e}"),
         })
     })?;
     let inference_id = request.labels.get(INFERENCE_ID_LABEL).ok_or_else(|| {
@@ -737,8 +738,7 @@ fn make_provider_batch_inference_output(
         })
     })?;
 
-    let usage = line
-        .response
+    let usage = response
         .usage_metadata
         .clone()
         .ok_or_else(|| {
@@ -752,7 +752,7 @@ fn make_provider_batch_inference_output(
         .into();
 
     let (output, finish_reason) = get_response_content(
-        line.response,
+        response,
         &raw_request,
         &raw_response,
         model_name,
@@ -1849,6 +1849,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -1882,6 +1883,10 @@ fn apply_inference_params(
                 response_schema: None,
             });
         }
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if verbosity.is_some() {
@@ -2684,15 +2689,13 @@ fn handle_gcp_vertex_gemini_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-    use std::borrow::Cow;
-    use std::sync::Arc;
-    use tracing_test::traced_test;
-
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{StaticToolConfig, ToolCallConfig, ToolConfig, ToolResult};
+    use serde_json::json;
+    use std::borrow::Cow;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_gcp_vertex_content_try_from() {
@@ -2812,7 +2815,7 @@ mod tests {
     #[test]
     fn test_from_tool_choice() {
         let tool_choice = ToolChoice::Auto;
-        let supports_any_model_name = "gemini-2.5-pro-preview-06-05";
+        let supports_any_model_name = "gemini-2.5-pro";
         let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
         assert_eq!(
             tool_config,
@@ -2978,9 +2981,7 @@ mod tests {
             ..Default::default()
         };
         // JSON schema should be supported for Gemini Pro models
-        let result =
-            GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro-preview-06-05", false)
-                .await;
+        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro", false).await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -3463,8 +3464,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) =
-            prepare_tools(&request_with_tools, "gemini-2.5-pro-preview-06-05");
+        let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-2.5-pro");
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -4105,8 +4105,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_content_block_warn() {
+        let logs_contain = crate::utils::testing::capture_logs();
         use std::time::Duration;
 
         // Test with text content
@@ -4790,10 +4790,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_gcp_vertex_gemini_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };

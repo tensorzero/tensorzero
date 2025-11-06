@@ -2,6 +2,7 @@
 import type { JsonMode } from "./JsonMode";
 import type { ResolvedTomlPath } from "./ResolvedTomlPath";
 import type { RetryConfig } from "./RetryConfig";
+import type { ServiceTier } from "./ServiceTier";
 import type { UninitializedChatTemplates } from "./UninitializedChatTemplates";
 import type { UninitializedInputWrappers } from "./UninitializedInputWrappers";
 
@@ -21,6 +22,7 @@ export type UninitializedChatCompletionConfig = {
   seed: number | null;
   stop_sequences: Array<string> | null;
   reasoning_effort?: string;
+  service_tier?: ServiceTier;
   thinking_budget_tokens?: number;
   verbosity?: string;
   json_mode: JsonMode | null;

@@ -62,6 +62,7 @@ pub struct ChatInferenceDatapointInsert {
     pub input: StoredInput,
 
     /// Output of the function that generated this datapoint. Optional.
+    /// TODO(#4405): this should be a new type StoredContentBlockChatOutput that takes the storage ToolCallOutput format.
     #[serde(
         default,
         deserialize_with = "deserialize_optional_string_or_parsed_json"
@@ -204,9 +205,13 @@ pub struct GetDatasetRowsParams {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct GetDatasetMetadataParams {
-    // Only select datasets matching a specific function
+    /// Only select datasets matching a specific function.
     pub function_name: Option<String>,
-    pub page_size: Option<u32>,
+
+    /// The maximum number of datasets to return.
+    pub limit: Option<u32>,
+
+    /// The number of datasets to skip before starting to return results.
     pub offset: Option<u32>,
 }
 

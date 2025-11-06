@@ -1235,6 +1235,7 @@ async fn test_embedding_request() {
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
                 scope_info: ScopeInfo {
                     tags: Arc::new(HashMap::new()),
+                    api_key_public_id: None,
                 },
             },
         )
@@ -1323,6 +1324,7 @@ async fn test_embedding_request() {
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
                 scope_info: ScopeInfo {
                     tags: Arc::new(HashMap::new()),
+                    api_key_public_id: None,
                 },
             },
         )
@@ -1396,6 +1398,7 @@ async fn test_embedding_sanity_check() {
         deferred_tasks: tokio_util::task::TaskTracker::new(),
         scope_info: ScopeInfo {
             tags: Arc::new(HashMap::new()),
+            api_key_public_id: None,
         },
     };
 
@@ -1946,6 +1949,7 @@ pub async fn test_start_batch_inference_write_file() {
                     InputMessageContent::File(File::Url(UrlFile {
                         url: "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png".parse().unwrap(),
                         mime_type: None,
+                        detail: None,
                     }))],
                 }],
             }],
@@ -2050,7 +2054,8 @@ async fn test_forward_image_url() {
                 content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
                 ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
-                    mime_type: Some(mime::IMAGE_PNG)
+                    mime_type: Some(mime::IMAGE_PNG),
+                    detail: None,
                 })),
                 ],
             }],
@@ -2127,7 +2132,8 @@ async fn test_forward_file_url() {
                 content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
                 ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
-                    mime_type: Some(mime::APPLICATION_PDF)
+                    mime_type: Some(mime::APPLICATION_PDF),
+                    detail: None,
                 })),
                 ],
             }],

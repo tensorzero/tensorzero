@@ -14,7 +14,7 @@ import type {
   GetDatasetMetadataParams,
   DatasetMetadata,
   StaleDatapointParams,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 
 // TODO(shuyangli): Once we remove all custom logic from the Node client, make mocking more ergonomic by providing a mock client at the tensorzero-node level.
 

@@ -1,6 +1,6 @@
 # ========== base ==========
 
-FROM rust:1.88.0-slim AS base
+FROM rust:1.90.0-slim AS base
 
 # Install required system dependencies
 RUN apt-get update && \
@@ -21,7 +21,7 @@ RUN curl -L --proto '=https' --tlsv1.2 -sSf \
 
 # ========== build-env ==========
 
-FROM rust:1.88.0 AS builder
+FROM rust:1.90.0 AS builder
 
 # Install cargo-binstall for faster tool installation
 RUN curl -L --proto '=https' --tlsv1.2 -sSf \
@@ -34,9 +34,6 @@ COPY . .
 
 # Install cargo-nextest using binstall
 RUN cargo binstall -y cargo-nextest --secure
-
-# Build the binaries that the tests will use
-RUN cargo build -p evaluations -p gateway --features e2e_tests
 
 # Fetch all dependencies first (including dev-dependencies needed by trybuild)
 RUN cargo fetch --locked
@@ -53,11 +50,6 @@ WORKDIR /app
 # Copy workspace structure but exclude target directory
 COPY . ./
 RUN rm -rf target
-
-# Copy over just the evaluations and gateway binaries
-# they live in /app/target/debug/evaluations and /app/target/debug/gateway
-COPY --from=builder /app/target/debug/evaluations /app/target/debug/
-COPY --from=builder /app/target/debug/gateway /app/target/debug/
 
 # Copy only the test archive instead of entire target directory
 COPY --from=builder /app/tests.tar.zst /app/tests.tar.zst

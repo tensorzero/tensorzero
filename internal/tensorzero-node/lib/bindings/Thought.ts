@@ -2,10 +2,10 @@
 import type { ThoughtSummaryBlock } from "./ThoughtSummaryBlock";
 
 /**
- * Struct that represents Chain of Thought reasoning
+ * Struct that represents a model's reasoning
  */
 export type Thought = {
-  text: string | null;
+  text?: string;
   /**
    * An optional signature - currently, this is only used with Anthropic,
    * and is ignored by other providers.
