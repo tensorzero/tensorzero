@@ -101,13 +101,13 @@ export default function EpisodeInferenceTable({
         </TableBody>
       </Table>
 
-      {openSheetInferenceId && getInferenceData && isInferenceLoading && getError && onCloseSheet && (
+      {openSheetInferenceId && (
         <InferenceDetailSheet
-          inference={getInferenceData(openSheetInferenceId)}
-          isLoading={isInferenceLoading(openSheetInferenceId)}
-          error={getError(openSheetInferenceId)}
+          inference={getInferenceData?.(openSheetInferenceId) ?? null}
+          isLoading={isInferenceLoading?.(openSheetInferenceId) ?? false}
+          error={getError?.(openSheetInferenceId) ?? null}
           isOpen={!!openSheetInferenceId}
-          onClose={onCloseSheet}
+          onClose={onCloseSheet!}
         />
       )}
     </>

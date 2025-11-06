@@ -26,7 +26,7 @@ export function useInferenceHover(episodeRoute: string): {
   const [openSheetInferenceId, setOpenSheetInferenceId] = useState<string | null>(null);
   const [inferenceCache, setInferenceCache] = useState<Record<string, InferenceState>>({});
   const fetcher = useFetcher<ActionData>();
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleInferenceHover = (inferenceId: string) => {
     if (timeoutRef.current) {
