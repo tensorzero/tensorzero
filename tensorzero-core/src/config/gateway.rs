@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::{ExportConfig, ObservabilityConfig, TemplateFilesystemAccess},
     error::Error,
+    http::DEFAULT_HTTP_CLIENT_TIMEOUT,
     inference::types::storage::StorageKind,
 };
 
@@ -111,12 +112,10 @@ impl UninitializedGatewayConfig {
             global_outbound_http_timeout: self
                 .global_outbound_http_timeout_ms
                 .map(|ms| Duration::milliseconds(ms as i64))
-                .unwrap_or(DEFAULT_GLOBAL_HTTP_TIMEOUT),
+                .unwrap_or(DEFAULT_HTTP_CLIENT_TIMEOUT),
         })
     }
 }
-
-pub const DEFAULT_GLOBAL_HTTP_TIMEOUT: Duration = Duration::seconds(5 * 60);
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -155,7 +154,7 @@ impl Default for GatewayConfig {
             fetch_and_encode_input_files_before_inference:
                 default_fetch_and_encode_input_files_before_inference(),
             auth: Default::default(),
-            global_outbound_http_timeout: DEFAULT_GLOBAL_HTTP_TIMEOUT,
+            global_outbound_http_timeout: DEFAULT_HTTP_CLIENT_TIMEOUT,
         }
     }
 }

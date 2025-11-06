@@ -397,7 +397,8 @@ impl ClientBuilder {
             // if a TLS backend cannot be initialized.
             // This explicit `expect` does not actually increase the risk of panics,
             #[expect(clippy::expect_used)]
-            TensorzeroHttpClient::new_testing().expect("Failed to construct TensorzeroHttpClient"),
+            TensorzeroHttpClient::new(crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT)
+                .expect("Failed to construct TensorzeroHttpClient"),
         );
         Client {
             mode: Arc::new(ClientMode::EmbeddedGateway {

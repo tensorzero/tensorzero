@@ -465,7 +465,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 
 // This is set high enough that it should never be hit for a normal model response.
 // Users can customize it via `gateway.global_outbound_http_timeout_ms` in the config file.
-pub(crate) const DEFAULT_HTTP_CLIENT_TIMEOUT: Duration = Duration::seconds(5 * 60);
+pub const DEFAULT_HTTP_CLIENT_TIMEOUT: Duration = Duration::seconds(5 * 60);
 
 fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error> {
     let mut http_client_builder = Client::builder()
