@@ -17,6 +17,9 @@ use crate::{
     rate_limiting::ScopeInfo,
 };
 
+#[cfg(test)]
+use crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT;
+
 use super::inference::InferenceCredentials;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -141,6 +144,7 @@ mod tests {
                 crate::embeddings::EmbeddingModelTable::new(
                     embedding_models,
                     Arc::new(ProviderTypeDefaultCredentials::new(&provider_types)),
+                    DEFAULT_HTTP_CLIENT_TIMEOUT,
                 )
                 .unwrap(),
             ),
@@ -149,7 +153,7 @@ mod tests {
 
         let config = Arc::new(config);
 
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let params = Params {
             input: EmbeddingInput::Single("test input".to_string()),
             model_name: "test-model".to_string(),
@@ -185,7 +189,7 @@ mod tests {
         // Create an empty config with no embedding models
         let config = Arc::new(Config::default());
 
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let params = Params {
             input: EmbeddingInput::Single("test input".to_string()),
             model_name: "nonexistent-model".to_string(),

@@ -2291,6 +2291,53 @@ async fn test_config_invalid_template_no_schema() {
 }
 
 #[tokio::test]
+async fn deny_timeout_with_default_global_timeout() {
+    let config = r#"
+    [models.slow_with_timeout]
+    routing = ["slow"]
+
+    [models.slow_with_timeout.providers.slow]
+    type = "dummy"
+    model_name = "good"
+    timeouts = { non_streaming.total_ms = 99999999 }
+    "#;
+    let config = toml::from_str(config).unwrap();
+
+    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect_err("Config should fail to load");
+
+    assert_eq!(
+            err.to_string(),
+            "The `timeouts.non_streaming.total_ms` value `99999999` is greater than `gateway.global_outbound_http_timeout_ms`: `300000`"
+        );
+}
+
+#[tokio::test]
+async fn deny_timeout_with_non_default_global_timeout() {
+    let config = r#"
+    gateway.global_outbound_http_timeout_ms = 200
+    [models.slow_with_timeout]
+    routing = ["slow"]
+
+    [models.slow_with_timeout.providers.slow]
+    type = "dummy"
+    model_name = "good"
+    timeouts = { non_streaming.total_ms = 500 }
+    "#;
+    let config = toml::from_str(config).unwrap();
+
+    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect_err("Config should fail to load");
+
+    assert_eq!(
+            err.to_string(),
+            "The `timeouts.non_streaming.total_ms` value `500` is greater than `gateway.global_outbound_http_timeout_ms`: `200`"
+        );
+}
+
+#[tokio::test]
 async fn deny_bad_timeout_fields() {
     let config = r#"
     [models.slow_with_timeout]

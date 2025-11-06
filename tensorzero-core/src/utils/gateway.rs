@@ -163,7 +163,7 @@ impl GatewayHandle {
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
-        let http_client = TensorzeroHttpClient::new()?;
+        let http_client = TensorzeroHttpClient::new(config.gateway.global_outbound_http_timeout)?;
         Self::new_with_database_and_http_client(
             config,
             clickhouse_connection_info,
@@ -177,7 +177,7 @@ impl GatewayHandle {
     /// Panics if a `TensorzeroHttpClient` cannot be constructed
     #[cfg(test)]
     pub fn new_unit_test_data(config: Arc<Config>, test_options: GatewayHandleTestOptions) -> Self {
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info =
             ClickHouseConnectionInfo::new_mock(test_options.clickhouse_client);
         let postgres_connection_info =
@@ -515,6 +515,7 @@ mod tests {
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
+            global_outbound_http_timeout: Default::default(),
         };
 
         let config = Box::leak(Box::new(Config {
@@ -578,6 +579,7 @@ mod tests {
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
+            global_outbound_http_timeout: Default::default(),
         };
 
         let config = Box::leak(Box::new(Config {
@@ -608,6 +610,7 @@ mod tests {
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
+            global_outbound_http_timeout: Default::default(),
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -640,6 +643,7 @@ mod tests {
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
             auth: Default::default(),
+            global_outbound_http_timeout: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,

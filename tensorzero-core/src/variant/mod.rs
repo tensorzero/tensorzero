@@ -10,7 +10,6 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::time::error::Elapsed;
-use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -224,6 +223,7 @@ pub trait Variant {
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error>;
 
+    #[expect(clippy::too_many_arguments)]
     async fn validate(
         &self,
         function: Arc<FunctionConfig>,
@@ -232,6 +232,7 @@ pub trait Variant {
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &chrono::Duration,
     ) -> Result<(), Error>;
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents>;
@@ -356,7 +357,7 @@ impl Variant for VariantInfo {
             }
         };
         if let Some(timeout) = self.timeouts.non_streaming.total_ms {
-            let timeout = Duration::from_millis(timeout);
+            let timeout = tokio::time::Duration::from_millis(timeout);
             tokio::time::timeout(timeout, fut)
                 .await
                 // Convert the outer `Elapsed` error into a TensorZero error,
@@ -458,7 +459,7 @@ impl Variant for VariantInfo {
         // This future includes a call to `peek_first_chunk`, so applying
         // `streaming_ttft_timeout` is correct.
         if let Some(timeout) = self.timeouts.streaming.ttft_ms {
-            let timeout = Duration::from_millis(timeout);
+            let timeout = tokio::time::Duration::from_millis(timeout);
             tokio::time::timeout(timeout, fut)
                 .await
                 .unwrap_or_else(|_: Elapsed| {
@@ -511,7 +512,9 @@ impl Variant for VariantInfo {
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &chrono::Duration,
     ) -> Result<(), Error> {
+        self.timeouts.validate(global_outbound_http_timeout)?;
         match &self.inner {
             VariantConfig::ChatCompletion(params) => {
                 params
@@ -522,6 +525,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -534,6 +538,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -546,6 +551,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -558,6 +564,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -570,6 +577,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -1136,7 +1144,7 @@ mod tests {
     async fn test_infer_model_request() {
         // Setup common variables
         let api_keys = InferenceCredentials::default();
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: client.clone(),
@@ -1442,7 +1450,7 @@ mod tests {
         let logs_contain = crate::utils::testing::capture_logs();
         // Setup common variables
         let api_keys = InferenceCredentials::default();
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: client.clone(),
@@ -1611,7 +1619,7 @@ mod tests {
     #[tokio::test]
     async fn test_infer_model_request_stream() {
         // Set up the HTTP client and ClickHouse connection info
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
@@ -1767,7 +1775,7 @@ mod tests {
         let logs_contain = crate::utils::testing::capture_logs();
         // Setup common variables
         let api_keys = InferenceCredentials::default();
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: client.clone(),

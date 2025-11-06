@@ -1,5 +1,6 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
+use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
 ///            IT IS MEANT FOR INTERNAL USE ONLY.
 ///            EXPECT FREQUENT, UNANNOUNCED BREAKING CHANGES.
@@ -129,6 +130,34 @@ pub struct TimeoutsConfig {
     pub non_streaming: NonStreamingTimeouts,
     #[serde(default)]
     pub streaming: StreamingTimeouts,
+}
+
+impl TimeoutsConfig {
+    pub fn validate(&self, global_outbound_http_timeout: &Duration) -> Result<(), Error> {
+        let TimeoutsConfig {
+            non_streaming: NonStreamingTimeouts { total_ms },
+            streaming: StreamingTimeouts { ttft_ms },
+        } = self;
+
+        let global_ms = global_outbound_http_timeout.num_milliseconds();
+
+        if let Some(total_ms) = total_ms {
+            if Duration::milliseconds(*total_ms as i64) > *global_outbound_http_timeout {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!("The `timeouts.non_streaming.total_ms` value `{total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"),
+                }));
+            }
+        }
+        if let Some(ttft_ms) = ttft_ms {
+            if Duration::milliseconds(*ttft_ms as i64) > *global_outbound_http_timeout {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!("The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"),
+                }));
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -770,6 +799,12 @@ impl Config {
 
         let mut templates = TemplateConfig::new();
 
+        let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
+
+        let gateway_config = uninitialized_config
+            .gateway
+            .load(object_store_info.as_ref())?;
+
         let functions = uninitialized_config
             .functions
             .into_iter()
@@ -820,7 +855,6 @@ impl Config {
         .into_iter()
         .collect::<HashMap<_, _>>();
 
-        let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
         let optimizers = try_join_all(uninitialized_config.optimizers.into_iter().map(
             |(name, config)| async {
                 config
@@ -832,25 +866,29 @@ impl Config {
         .await?
         .into_iter()
         .collect::<HashMap<_, _>>();
-        let models =
-            ModelTable::new(models, provider_type_default_credentials.clone()).map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Failed to load models: {e}"),
-                })
-            })?;
-        let embedding_models =
-            EmbeddingModelTable::new(embedding_models, provider_type_default_credentials).map_err(
-                |e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!("Failed to load embedding models: {e}"),
-                    })
-                },
-            )?;
+        let models = ModelTable::new(
+            models,
+            provider_type_default_credentials.clone(),
+            gateway_config.global_outbound_http_timeout,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Failed to load models: {e}"),
+            })
+        })?;
+        let embedding_models = EmbeddingModelTable::new(
+            embedding_models,
+            provider_type_default_credentials,
+            gateway_config.global_outbound_http_timeout,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Failed to load embedding models: {e}"),
+            })
+        })?;
 
         let mut config = Config {
-            gateway: uninitialized_config
-                .gateway
-                .load(object_store_info.as_ref())?,
+            gateway: gateway_config,
             models: Arc::new(models),
             embedding_models: Arc::new(embedding_models),
             functions,
@@ -940,6 +978,7 @@ impl Config {
                         &config.embedding_models,
                         &templates,
                         &evaluation_function_name,
+                        &config.gateway.global_outbound_http_timeout,
                     )
                     .await?;
                 config
@@ -1005,6 +1044,7 @@ impl Config {
                     &self.embedding_models,
                     &self.templates,
                     function_name,
+                    &self.gateway.global_outbound_http_timeout,
                 )
                 .await?;
         }
@@ -1033,7 +1073,7 @@ impl Config {
                 }
                 .into());
             }
-            model.validate(model_name)?;
+            model.validate(model_name, &self.gateway.global_outbound_http_timeout)?;
         }
 
         for embedding_model_name in self.embedding_models.table.keys() {
