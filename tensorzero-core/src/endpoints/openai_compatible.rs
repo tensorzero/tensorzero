@@ -972,6 +972,9 @@ struct OpenAICompatibleFile {
 struct OpenAICompatibleInputAudio {
     // The `data` field contains *unprefixed* base64-encoded audio data.
     data: String,
+    // The `format` field contains the audio format (e.g. `"mp3"`).
+    // Under the hood, we detect the MIME type using magic bytes in the audio data. If the inferred MIME type is not
+    // consistent with the `format` field, the gateway warns and the inferred MIME type takes priority.
     format: String,
 }
 
