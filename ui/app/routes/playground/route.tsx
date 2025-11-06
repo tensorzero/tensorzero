@@ -21,7 +21,7 @@ import { listDatapoints } from "~/utils/tensorzero.server";
 import { tensorZeroStoredInputToInput } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
-import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
+import type { Datapoint as TensorZeroDatapoint } from "~/types/tensorzero";
 import { useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
@@ -50,6 +50,7 @@ import {
   QueryClient,
 } from "@tanstack/react-query";
 import { toDatapointUrl } from "~/utils/urls";
+import clsx from "clsx";
 
 const DEFAULT_LIMIT = 5;
 
@@ -348,8 +349,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
           disabled={!functionName || !datasetName}
         />
       </div>
-      {variants.length > 0 &&
-        datapoints &&
+      {datapoints &&
         datapoints.length > 0 &&
         datasetName &&
         inputs &&
@@ -359,79 +359,81 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
             <div className="overflow-x-auto rounded border">
               <div className="min-w-fit">
                 {/* Header row with sticky positioning */}
-                <div className="bg-background sticky top-0 z-20 grid grid-cols-[400px_1fr] border-b">
+                <GridRow as="header" variantCount={variants.length}>
                   <div className="bg-background sticky left-0 z-30 flex items-center border-r p-4 font-medium">
                     Datapoints
                   </div>
-                  <div className="grid auto-cols-[minmax(480px,1fr)] grid-flow-col">
-                    {variants.map((variant) => {
-                      const isEditable =
-                        variant.type === "edited" ||
-                        functionConfig?.variants?.[variant.name]?.inner.type ===
-                          "chat_completion";
-                      return (
-                        <div
-                          key={variant.name}
-                          className="flex items-center gap-2 border-r p-4 font-mono font-medium last:border-r-0"
-                        >
-                          <div className="flex min-w-0 flex-1 items-center gap-2">
-                            {variant.type === "builtin" ? (
-                              <Link
-                                to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variant.name)}`}
-                                className="min-w-0 truncate font-mono text-blue-600 hover:text-blue-800 hover:underline"
-                                title={variant.name}
-                              >
-                                {getDisplayVariantName(variant)}
-                              </Link>
-                            ) : (
-                              <span
-                                className="min-w-0 truncate font-mono text-gray-500"
-                                title={variant.name}
-                              >
-                                {getDisplayVariantName(variant)}
-                              </span>
-                            )}
-                            <EditButton
-                              onClick={() => {
-                                setEditingVariant(variant);
-                              }}
-                              disabled={!isEditable}
-                              tooltip={
-                                isEditable
-                                  ? "Edit variant"
-                                  : "Editing is currently only supported for chat completion variants."
-                              }
-                            />
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="shrink-0"
-                            onClick={() => {
-                              updateSearchParams({
-                                variants: JSON.stringify(
-                                  variants.filter((v) => v !== variant),
-                                ),
-                              });
-                            }}
+                  {variants.length > 0 && (
+                    <div className="grid auto-cols-[minmax(480px,1fr)] grid-flow-col">
+                      {variants.map((variant) => {
+                        const isEditable =
+                          variant.type === "edited" ||
+                          functionConfig?.variants?.[variant.name]?.inner
+                            .type === "chat_completion";
+                        return (
+                          <div
+                            key={variant.name}
+                            className="flex items-center gap-2 border-r p-4 font-mono font-medium last:border-r-0"
                           >
-                            <span className="sr-only">
-                              Remove {variant.name}
-                            </span>
-                            <X aria-hidden />
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                            <div className="flex min-w-0 flex-1 items-center gap-2">
+                              {variant.type === "builtin" ? (
+                                <Link
+                                  to={`/observability/functions/${encodeURIComponent(functionName)}/variants/${encodeURIComponent(variant.name)}`}
+                                  className="min-w-0 truncate font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                                  title={variant.name}
+                                >
+                                  {getDisplayVariantName(variant)}
+                                </Link>
+                              ) : (
+                                <span
+                                  className="min-w-0 truncate font-mono text-gray-500"
+                                  title={variant.name}
+                                >
+                                  {getDisplayVariantName(variant)}
+                                </span>
+                              )}
+                              <EditButton
+                                onClick={() => {
+                                  setEditingVariant(variant);
+                                }}
+                                disabled={!isEditable}
+                                tooltip={
+                                  isEditable
+                                    ? "Edit variant"
+                                    : "Editing is currently only supported for chat completion variants."
+                                }
+                              />
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="shrink-0"
+                              onClick={() => {
+                                updateSearchParams({
+                                  variants: JSON.stringify(
+                                    variants.filter((v) => v !== variant),
+                                  ),
+                                });
+                              }}
+                            >
+                              <span className="sr-only">
+                                Remove {variant.name}
+                              </span>
+                              <X aria-hidden />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </GridRow>
 
                 <HydrationBoundary state={dehydratedState}>
                   {datapoints.map(
                     (datapoint: TensorZeroDatapoint, index: number) => (
-                      <div
+                      <GridRow
                         key={datapoint.id}
-                        className="grid grid-cols-[400px_1fr] border-b last:border-b-0"
+                        variantCount={variants.length}
                       >
                         <div className="bg-background sticky left-0 z-10 flex flex-col gap-2 border-r p-4 text-sm">
                           <div className="text-xs font-medium text-gray-500">
@@ -464,26 +466,28 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                             )}
                           </div>
                         </div>
-                        <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
-                          {variants.map((variant) => {
-                            return (
-                              <div
-                                key={`${datapoint.id}-${variant.name}`}
-                                className="border-r p-4 last:border-r-0"
-                              >
-                                <DatapointPlaygroundOutput
-                                  datapoint={datapoint}
-                                  variant={variant}
-                                  input={inputs[index]}
-                                  functionName={functionName}
-                                  functionConfig={functionConfig}
-                                  toolsConfig={config.tools}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
+                        {variants.length > 0 && (
+                          <div className="grid auto-cols-[minmax(320px,1fr)] grid-flow-col">
+                            {variants.map((variant) => {
+                              return (
+                                <div
+                                  key={`${datapoint.id}-${variant.name}`}
+                                  className="border-r p-4 last:border-r-0"
+                                >
+                                  <DatapointPlaygroundOutput
+                                    datapoint={datapoint}
+                                    variant={variant}
+                                    input={inputs[index]}
+                                    functionName={functionName}
+                                    functionConfig={functionConfig}
+                                    toolsConfig={config.tools}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </GridRow>
                     ),
                   )}
                 </HydrationBoundary>
@@ -621,4 +625,26 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
       </PageLayout>
     );
   }
+}
+
+function GridRow({
+  as = "datapoint",
+  variantCount,
+  ...props
+}: {
+  as?: "header" | "datapoint";
+  variantCount: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      {...props}
+      className={clsx(
+        "grid border-b",
+        variantCount > 0 && "grid-cols-[400px_1fr]",
+        as === "header" && "bg-background sticky top-0 z-20",
+        as === "datapoint" && "last:border-b-0",
+      )}
+    />
+  );
 }

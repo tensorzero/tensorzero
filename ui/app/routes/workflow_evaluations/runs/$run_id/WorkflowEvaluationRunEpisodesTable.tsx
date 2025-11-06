@@ -7,7 +7,6 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import { formatDate } from "~/utils/date";
 import { toEpisodeUrl } from "~/utils/urls";
 import type {
   WorkflowEvaluationRunEpisodeWithFeedback,
@@ -17,11 +16,11 @@ import { TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { Tooltip } from "~/components/ui/tooltip";
 import { useConfig } from "~/context/config";
 import { formatMetricSummaryValue } from "~/utils/config/feedback";
-import { TableItemShortUuid } from "~/components/ui/TableItems";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import KVChip from "~/components/ui/KVChip";
 import MetricValue from "~/components/metric/MetricValue";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
-import type { FeedbackRow } from "tensorzero-node";
+import type { FeedbackRow } from "~/types/tensorzero";
 
 export default function WorkflowEvaluationRunEpisodesTable({
   episodes,
@@ -74,7 +73,9 @@ export default function WorkflowEvaluationRunEpisodesTable({
                     link={toEpisodeUrl(episode.episode_id)}
                   />
                 </TableCell>
-                <TableCell>{formatDate(new Date(episode.timestamp))}</TableCell>
+                <TableCell>
+                  <TableItemTime timestamp={episode.timestamp} />
+                </TableCell>
                 <TableCell>
                   {(() => {
                     const filteredTags = Object.entries(episode.tags).filter(

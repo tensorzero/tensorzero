@@ -26,9 +26,8 @@ import type {
   GroupedWorkflowEvaluationRunEpisodeWithFeedback,
   WorkflowEvaluationRunStatisticsByMetricName,
 } from "~/utils/clickhouse/workflow_evaluations";
-import { TableItemShortUuid } from "~/components/ui/TableItems";
-import { formatDate } from "~/utils/date";
-import type { MetricConfig } from "tensorzero-node";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
+import type { MetricConfig } from "~/types/tensorzero";
 
 interface WorkflowEvaluationProjectResultsTableProps {
   selected_run_infos: WorkflowEvaluationRun[];
@@ -159,7 +158,7 @@ export function WorkflowEvaluationProjectResultsTable({
 
                           {/* Timestamp cell */}
                           <TableCell className="text-center align-middle">
-                            {formatDate(new Date(result.timestamp))}
+                            <TableItemTime timestamp={result.timestamp} />
                           </TableCell>
 
                           {/* Metrics cells */}

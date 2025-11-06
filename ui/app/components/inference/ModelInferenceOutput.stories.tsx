@@ -39,7 +39,7 @@ const shortToolCallArgumentsFixture2 = JSON.stringify({
   location: "Paris",
 });
 
-export const ToolCallOutput: Story = {
+export const InferenceResponseToolCall: Story = {
   args: {
     output: [
       {
@@ -90,18 +90,18 @@ export const MassiveTextOutput: Story = {
   },
 };
 
-const massiveToolCallOutputFixture = JSON.stringify({
+const massiveInferenceResponseToolCallFixture = JSON.stringify({
   text: massiveTextOutputFixture,
 });
 
-export const MassiveToolCallOutput: Story = {
+export const MassiveInferenceResponseToolCall: Story = {
   args: {
     output: [
       {
         type: "tool_call",
         id: "tc-1234567890",
         name: "summarize_text",
-        arguments: massiveToolCallOutputFixture,
+        arguments: massiveInferenceResponseToolCallFixture,
       },
     ],
   },

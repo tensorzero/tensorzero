@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import type { ChatCompletionConfig } from "tensorzero-node";
+import type { ChatCompletionConfig } from "~/types/tensorzero";
 import { TemplateDetailsDialog } from "./TemplateDetailsDialog";
 
 type VariantSelectorProps = {

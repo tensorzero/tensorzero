@@ -80,7 +80,6 @@ pub mod estimate_optimal_probabilities;
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct TrackAndStopConfig {
-    // TODO: validate all of these fields
     metric: String,
     candidate_variants: Vec<String>,
     fallback_variants: Vec<String>,
@@ -303,6 +302,13 @@ impl UninitializedTrackAndStopConfig {
                     self.metric,
                     metrics.keys().collect::<Vec<_>>()
                 ),
+            }));
+        }
+
+        // Validate candidate_variants is non-empty
+        if self.candidate_variants.is_empty() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "Track-and-Stop candidate_variants cannot be empty".to_string(),
             }));
         }
 
@@ -535,11 +541,11 @@ impl VariantSampler for TrackAndStopConfig {
                 set_variant
             } else {
                 // The variant that was already set for this episode is not active, fall back
-                fallback_sample(active_variants, &self.fallback_variants, uniform_sample)?
+                fallback_sample(active_variants, &self.fallback_variants)?
             }
         } else {
-            // State couldn't provide a variant, fall back to uniform sampling from fallback_variants
-            fallback_sample(active_variants, &self.fallback_variants, uniform_sample)?
+            // State couldn't provide a variant, fall back to fallback_variants
+            fallback_sample(active_variants, &self.fallback_variants)?
         };
 
         // Remove and return the sampled variant
@@ -570,15 +576,19 @@ impl VariantSampler for TrackAndStopConfig {
                 Ok(probs)
             }
             TrackAndStopState::NurseryOnly(nursery) => {
-                let num_nursery = nursery.variants.len();
-                let uniform_prob = if num_nursery > 0 {
-                    1.0 / (num_nursery as f64)
+                // Count only active nursery variants
+                let active_nursery_variants: Vec<_> = active_variants
+                    .keys()
+                    .filter(|k| nursery.variants.contains(k))
+                    .collect();
+                let num_active_nursery = active_nursery_variants.len();
+                let uniform_prob = if num_active_nursery > 0 {
+                    1.0 / (num_active_nursery as f64)
                 } else {
                     0.0
                 };
-                let probs = active_variants
-                    .keys()
-                    .filter(|k| nursery.variants.contains(k))
+                let probs = active_nursery_variants
+                    .into_iter()
                     .map(|k| (k.as_str(), uniform_prob))
                     .collect();
                 Ok(probs)
@@ -586,7 +596,8 @@ impl VariantSampler for TrackAndStopConfig {
             TrackAndStopState::BanditsOnly {
                 sampling_probabilities,
             } => {
-                let probs = active_variants
+                // Collect active bandit probabilities
+                let mut probs: HashMap<&str, f64> = active_variants
                     .keys()
                     .filter_map(|k| {
                         sampling_probabilities
@@ -594,35 +605,60 @@ impl VariantSampler for TrackAndStopConfig {
                             .map(|&prob| (k.as_str(), prob))
                     })
                     .collect();
+
+                // Renormalize if some variants are inactive
+                let total: f64 = probs.values().sum();
+                if total > 0.0 && (total - 1.0).abs() > 1e-9 {
+                    for prob in probs.values_mut() {
+                        *prob /= total;
+                    }
+                }
+
                 Ok(probs)
             }
             TrackAndStopState::NurseryAndBandits {
                 nursery,
                 sampling_probabilities,
             } => {
-                let num_nursery = nursery.variants.len();
-                let num_bandits = sampling_probabilities.len();
-                let nursery_mass = nursery.nursery_total_mass(num_bandits);
+                // Count only active nursery and bandit variants
+                let active_nursery_variants: Vec<_> = active_variants
+                    .keys()
+                    .filter(|k| nursery.variants.contains(k))
+                    .collect();
+                let active_bandit_variants: Vec<_> = active_variants
+                    .keys()
+                    .filter(|k| sampling_probabilities.contains_key(k.as_str()))
+                    .collect();
+
+                let num_active_nursery = active_nursery_variants.len();
+                let num_active_bandits = active_bandit_variants.len();
+
+                // Compute mass allocation based on active variants
+                let nursery_mass = nursery.nursery_total_mass(num_active_bandits);
                 let bandit_mass = 1.0 - nursery_mass;
 
                 let mut probs = HashMap::new();
 
-                // Assign uniform probability to each nursery variant
-                let uniform_nursery_prob = if num_nursery > 0 {
-                    nursery_mass / (num_nursery as f64)
+                // Assign uniform probability to each active nursery variant
+                let uniform_nursery_prob = if num_active_nursery > 0 {
+                    nursery_mass / (num_active_nursery as f64)
                 } else {
                     0.0
                 };
-                for key in active_variants.keys() {
-                    if nursery.variants.contains(key) {
-                        probs.insert(key.as_str(), uniform_nursery_prob);
-                    }
+                for key in active_nursery_variants {
+                    probs.insert(key.as_str(), uniform_nursery_prob);
                 }
 
-                // Scale bandit probabilities by bandit_mass
-                for key in active_variants.keys() {
-                    if let Some(&prob) = sampling_probabilities.get(key) {
-                        probs.insert(key.as_str(), prob * bandit_mass);
+                // For active bandit variants, renormalize and scale by bandit_mass
+                let active_bandit_probs: Vec<_> = active_bandit_variants
+                    .iter()
+                    .filter_map(|k| sampling_probabilities.get(k.as_str()).map(|&p| (*k, p)))
+                    .collect();
+
+                let bandit_total: f64 = active_bandit_probs.iter().map(|(_, p)| p).sum();
+                if bandit_total > 0.0 {
+                    for (key, prob) in active_bandit_probs {
+                        probs.insert(key.as_str(), (prob / bandit_total) * bandit_mass);
                     }
                 }
 
@@ -632,25 +668,33 @@ impl VariantSampler for TrackAndStopConfig {
                 nursery,
                 stopped_variant_name,
             } => {
-                let num_nursery = nursery.variants.len();
-                let nursery_mass = nursery.nursery_total_mass(1); // 1 other variant (stopped)
+                // Count only active nursery variants and check if stopped variant is active
+                let active_nursery_variants: Vec<_> = active_variants
+                    .keys()
+                    .filter(|k| nursery.variants.contains(k))
+                    .collect();
+                let stopped_is_active = active_variants.contains_key(stopped_variant_name);
+
+                let num_active_nursery = active_nursery_variants.len();
+                let num_active_other = if stopped_is_active { 1 } else { 0 };
+
+                // Compute mass allocation based on active variants
+                let nursery_mass = nursery.nursery_total_mass(num_active_other);
                 let stopped_mass = 1.0 - nursery_mass;
 
                 let mut probs = HashMap::new();
 
-                // Assign uniform probability to each nursery variant
-                let uniform_nursery_prob = if num_nursery > 0 {
-                    nursery_mass / (num_nursery as f64)
+                // Assign uniform probability to each active nursery variant
+                let uniform_nursery_prob = if num_active_nursery > 0 {
+                    nursery_mass / (num_active_nursery as f64)
                 } else {
                     0.0
                 };
-                for key in active_variants.keys() {
-                    if nursery.variants.contains(key) {
-                        probs.insert(key.as_str(), uniform_nursery_prob);
-                    }
+                for key in active_nursery_variants {
+                    probs.insert(key.as_str(), uniform_nursery_prob);
                 }
 
-                // Assign probability to stopped variant
+                // Assign probability to stopped variant if active
                 if let Some(key) = active_variants.keys().find(|k| *k == stopped_variant_name) {
                     probs.insert(key.as_str(), stopped_mass);
                 }
@@ -814,30 +858,21 @@ fn get_count_by_variant<'a>(
         .collect()
 }
 
-/// Perform uniform sampling from fallback_variants that are in active_variants.
+/// Select the first variant from the ranked fallback_variants list that is active.
 /// Returns an error if no fallback variants are active.
 fn fallback_sample(
     active_variants: &BTreeMap<String, Arc<VariantInfo>>,
     fallback_variants: &[String],
-    uniform_sample: f64,
 ) -> Result<String, Error> {
-    let intersection: Vec<&String> = active_variants
-        .keys()
-        .filter(|variant_name| fallback_variants.contains(variant_name))
-        .collect();
-
-    if intersection.is_empty() {
-        return Err(ErrorDetails::NoFallbackVariantsRemaining.into());
+    // Select the first variant from the ranked fallback_variants list that is active
+    for variant_name in fallback_variants {
+        if active_variants.contains_key(variant_name) {
+            return Ok(variant_name.clone());
+        }
     }
 
-    let random_index = (uniform_sample * intersection.len() as f64).floor() as usize;
-    intersection
-        .get(random_index)
-        .ok_or_else(|| {
-            Error::new(ErrorDetails::InternalError { message:
-                format!("Failed to sample variant from nonempty intersection. {IMPOSSIBLE_ERROR_MESSAGE}.")})
-        })
-        .map(std::string::ToString::to_string)
+    // No active fallback variants found
+    Err(ErrorDetails::NoFallbackVariantsRemaining.into())
 }
 
 /// Sample a variant from active_variants using weighted probabilities.
@@ -894,9 +929,12 @@ impl TrackAndStopState {
 
     /// Initializes a new TrackAndStopState instance based on the current statistics
     /// and configured parameters.
-    /// NOTE: This function may do some CPU-bound work to compute probabilities
-    // TODO: should we validate that candidate_variances and variant_performances have the same length?
-    // TODO: Where do we validate upstream that there are > 0 variants?
+    ///
+    /// NOTE: This function may do some CPU-bound work to compute probabilities.
+    ///
+    /// # Assumptions
+    /// - `candidate_variants` is non-empty (validated in `UninitializedTrackAndStopConfig::load()`)
+    /// - `variant_performances` may contain feedback for non-candidate variants (these are filtered out)
     fn new(
         candidate_variants: &[String],
         variant_performances: Vec<FeedbackByVariant>,
@@ -906,6 +944,7 @@ impl TrackAndStopState {
         min_prob: Option<f64>,
         metric_optimize: MetricConfigOptimize,
     ) -> Result<Self, TrackAndStopError> {
+        // Filter out feedback for non-candidate variants (can happen if config changed)
         let variant_performances = if variant_performances.len() > candidate_variants.len() {
             tracing::warn!("Feedback is being filtered out for non-candidate variants. Current candidate variants: {candidate_variants:?}");
             variant_performances
@@ -1113,7 +1152,10 @@ impl TrackAndStopState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ErrorContext, SchemaData};
+    use crate::config::{
+        ErrorContext, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
+        SchemaData,
+    };
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::db::feedback::FeedbackByVariant;
     use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
@@ -1235,19 +1277,9 @@ mod tests {
         let active = create_test_variants(&["A", "B", "C"]);
         let fallbacks = vec!["A".to_string(), "B".to_string(), "C".to_string()];
 
-        // With 3 variants:
-        // A: [0.0, 1/3) -> [0.0, 0.333...)
-        // B: [1/3, 2/3) -> [0.333..., 0.666...)
-        // C: [2/3, 1.0) -> [0.666..., 1.0)
-
-        let result = fallback_sample(&active, &fallbacks, 0.1);
+        // With ranked list behavior, always returns the first active variant
+        let result = fallback_sample(&active, &fallbacks);
         assert_eq!(result.unwrap(), "A");
-
-        let result = fallback_sample(&active, &fallbacks, 0.5);
-        assert_eq!(result.unwrap(), "B");
-
-        let result = fallback_sample(&active, &fallbacks, 0.9);
-        assert_eq!(result.unwrap(), "C");
     }
 
     #[test]
@@ -1255,14 +1287,18 @@ mod tests {
         let active = create_test_variants(&["A", "C"]);
         let fallbacks = vec!["A".to_string(), "B".to_string(), "C".to_string()];
 
-        // With 2 active fallbacks (A, C):
-        // A: [0.0, 0.5)
-        // C: [0.5, 1.0)
-
-        let result = fallback_sample(&active, &fallbacks, 0.2);
+        // With ranked list, returns the first active variant (A)
+        let result = fallback_sample(&active, &fallbacks);
         assert_eq!(result.unwrap(), "A");
+    }
 
-        let result = fallback_sample(&active, &fallbacks, 0.7);
+    #[test]
+    fn test_fallback_sample_first_inactive() {
+        let active = create_test_variants(&["C"]);
+        let fallbacks = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+
+        // With ranked list, returns the first active variant (C, skipping A and B)
+        let result = fallback_sample(&active, &fallbacks);
         assert_eq!(result.unwrap(), "C");
     }
 
@@ -1272,10 +1308,7 @@ mod tests {
         let fallbacks = vec!["B".to_string(), "C".to_string()];
 
         // Only B is active, should always return B
-        let result = fallback_sample(&active, &fallbacks, 0.0);
-        assert_eq!(result.unwrap(), "B");
-
-        let result = fallback_sample(&active, &fallbacks, 0.999);
+        let result = fallback_sample(&active, &fallbacks);
         assert_eq!(result.unwrap(), "B");
     }
 
@@ -1284,7 +1317,7 @@ mod tests {
         let active = create_test_variants(&["A", "B"]);
         let fallbacks = vec!["C".to_string(), "D".to_string()];
 
-        let result = fallback_sample(&active, &fallbacks, 0.5);
+        let result = fallback_sample(&active, &fallbacks);
         assert!(result.is_err());
     }
 
@@ -1293,7 +1326,7 @@ mod tests {
         let active = create_test_variants(&["A", "B"]);
         let fallbacks = vec![];
 
-        let result = fallback_sample(&active, &fallbacks, 0.5);
+        let result = fallback_sample(&active, &fallbacks);
         assert!(result.is_err());
     }
 
@@ -1302,7 +1335,7 @@ mod tests {
         let active: BTreeMap<String, Arc<VariantInfo>> = create_test_variants(&[]);
         let fallbacks = vec!["A".to_string(), "B".to_string()];
 
-        let result = fallback_sample(&active, &fallbacks, 0.5);
+        let result = fallback_sample(&active, &fallbacks);
         assert!(result.is_err());
     }
 
@@ -2555,8 +2588,205 @@ mod tests {
             .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
-        // Only A should appear
+        // Only A should appear, and since it's the only active variant,
+        // it should be renormalized to have probability 1.0
         assert_eq!(probs.len(), 1);
-        assert!((probs["A"] - 0.4).abs() < 1e-9);
+        assert!((probs["A"] - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_get_current_display_probabilities_inactive_variants_sum_to_one() {
+        // This test verifies that probabilities always sum to 1.0 when some configured
+        // variants are inactive, across all state types.
+        let postgres = PostgresConnectionInfo::new_disabled();
+
+        // Test 1: NurseryOnly with some inactive nursery variants
+        {
+            let nursery = Nursery {
+                variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
+                index: AtomicU64::new(0),
+            };
+            let config = TrackAndStopConfig {
+                metric: "test_metric".to_string(),
+                candidate_variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
+                fallback_variants: vec![],
+                min_samples_per_variant: 10,
+                delta: 0.05,
+                epsilon: 0.0,
+                update_period: Duration::from_secs(60),
+                min_prob: None,
+                metric_optimize: MetricConfigOptimize::Max,
+                state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::NurseryOnly(
+                    nursery,
+                )))),
+                task_spawned: AtomicBool::new(false),
+            };
+            // Only A is active
+            let active_variants: HashMap<_, _> = create_test_variants(&["A"]).into_iter().collect();
+            let probs = config
+                .get_current_display_probabilities("test", &active_variants, &postgres)
+                .unwrap();
+            let sum: f64 = probs.values().sum();
+            assert!((sum - 1.0).abs() < 1e-9, "NurseryOnly: sum={sum}");
+        }
+
+        // Test 2: BanditsOnly with some inactive bandit variants
+        {
+            let mut sampling_probs = HashMap::new();
+            sampling_probs.insert("A".to_string(), 0.2);
+            sampling_probs.insert("B".to_string(), 0.3);
+            sampling_probs.insert("C".to_string(), 0.5);
+            let config = TrackAndStopConfig {
+                metric: "test_metric".to_string(),
+                candidate_variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
+                fallback_variants: vec![],
+                min_samples_per_variant: 10,
+                delta: 0.05,
+                epsilon: 0.0,
+                update_period: Duration::from_secs(60),
+                min_prob: None,
+                metric_optimize: MetricConfigOptimize::Max,
+                state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::BanditsOnly {
+                    sampling_probabilities: sampling_probs,
+                }))),
+                task_spawned: AtomicBool::new(false),
+            };
+            // Only A is active
+            let active_variants: HashMap<_, _> = create_test_variants(&["A"]).into_iter().collect();
+            let probs = config
+                .get_current_display_probabilities("test", &active_variants, &postgres)
+                .unwrap();
+            let sum: f64 = probs.values().sum();
+            assert!((sum - 1.0).abs() < 1e-9, "BanditsOnly: sum={sum}");
+        }
+
+        // Test 3: NurseryAndBandits with some inactive variants in both
+        {
+            let nursery = Nursery {
+                variants: vec!["A".to_string(), "B".to_string()],
+                index: AtomicU64::new(0),
+            };
+            let mut sampling_probs = HashMap::new();
+            sampling_probs.insert("C".to_string(), 0.4);
+            sampling_probs.insert("D".to_string(), 0.6);
+            let config = TrackAndStopConfig {
+                metric: "test_metric".to_string(),
+                candidate_variants: vec![
+                    "A".to_string(),
+                    "B".to_string(),
+                    "C".to_string(),
+                    "D".to_string(),
+                ],
+                fallback_variants: vec![],
+                min_samples_per_variant: 10,
+                delta: 0.05,
+                epsilon: 0.0,
+                update_period: Duration::from_secs(60),
+                min_prob: None,
+                metric_optimize: MetricConfigOptimize::Max,
+                state: Arc::new(ArcSwap::new(Arc::new(
+                    TrackAndStopState::NurseryAndBandits {
+                        nursery,
+                        sampling_probabilities: sampling_probs,
+                    },
+                ))),
+                task_spawned: AtomicBool::new(false),
+            };
+            // Only A and C are active
+            let active_variants: HashMap<_, _> =
+                create_test_variants(&["A", "C"]).into_iter().collect();
+            let probs = config
+                .get_current_display_probabilities("test", &active_variants, &postgres)
+                .unwrap();
+            let sum: f64 = probs.values().sum();
+            assert!((sum - 1.0).abs() < 1e-9, "NurseryAndBandits: sum={sum}");
+        }
+
+        // Test 4: NurseryAndStopped with some inactive nursery variants
+        {
+            let nursery = Nursery {
+                variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
+                index: AtomicU64::new(0),
+            };
+            let config = TrackAndStopConfig {
+                metric: "test_metric".to_string(),
+                candidate_variants: vec![
+                    "A".to_string(),
+                    "B".to_string(),
+                    "C".to_string(),
+                    "D".to_string(),
+                ],
+                fallback_variants: vec![],
+                min_samples_per_variant: 10,
+                delta: 0.05,
+                epsilon: 0.0,
+                update_period: Duration::from_secs(60),
+                min_prob: None,
+                metric_optimize: MetricConfigOptimize::Max,
+                state: Arc::new(ArcSwap::new(Arc::new(
+                    TrackAndStopState::NurseryAndStopped {
+                        nursery,
+                        stopped_variant_name: "D".to_string(),
+                    },
+                ))),
+                task_spawned: AtomicBool::new(false),
+            };
+            // Only A and D are active
+            let active_variants: HashMap<_, _> =
+                create_test_variants(&["A", "D"]).into_iter().collect();
+            let probs = config
+                .get_current_display_probabilities("test", &active_variants, &postgres)
+                .unwrap();
+            let sum: f64 = probs.values().sum();
+            assert!((sum - 1.0).abs() < 1e-9, "NurseryAndStopped: sum={sum}");
+        }
+    }
+
+    #[test]
+    fn test_load_error_empty_candidate_variants() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec![], // Empty!
+            fallback_variants: vec!["A".to_string()],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+        };
+
+        let mut variants = HashMap::new();
+        variants.insert(
+            "A".to_string(),
+            Arc::new(VariantInfo {
+                inner: VariantConfig::ChatCompletion(
+                    UninitializedChatCompletionConfig {
+                        weight: None,
+                        model: "model-name".into(),
+                        ..Default::default()
+                    }
+                    .load(&SchemaData::default(), &ErrorContext::new_test())
+                    .unwrap(),
+                ),
+                timeouts: Default::default(),
+            }),
+        );
+
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+            },
+        );
+
+        let result = config.load(&variants, &metrics);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("candidate_variants cannot be empty"));
     }
 }

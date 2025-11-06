@@ -89,10 +89,14 @@ class FileBase64(ContentBlock):
     type: str = "file"
 
 
+Detail = Literal["low", "high", "auto"]
+
+
 @dataclass
 class ImageUrl(ContentBlock):
     url: str
     mime_type: Optional[str] = None
+    detail: Optional[Detail] = None
     type: str = "image"
 
 
@@ -203,6 +207,14 @@ System = Union[str, Dict[str, Any]]
 class InferenceInput(TypedDict):
     messages: NotRequired[List[Message]]
     system: NotRequired[System]
+
+
+class EvaluatorStatsDict(TypedDict):
+    """Statistics computed about a particular evaluator."""
+
+    mean: float
+    stderr: float
+    count: int
 
 
 InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
@@ -624,4 +636,4 @@ class NotFilter(InferenceFilter):
 class OrderBy:
     by: Literal["timestamp", "metric"]
     name: Optional[str] = None
-    direction: Literal["ASC", "DESC"] = "DESC"
+    direction: Literal["ascending", "descending"] = "descending"

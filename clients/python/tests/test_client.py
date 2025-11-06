@@ -2294,9 +2294,7 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
         "type": "tool_call",
         "id": "1",
         "name": "test_tool",
-        "arguments": {"arg": "value"},
-        "raw_name": "test_tool",
-        "raw_arguments": '{"arg": "value"}',
+        "arguments": '{"arg":"value"}',
     }
     assert request["input"]["messages"][1]["content"][0] == {
         "type": "tool_result",
@@ -3234,7 +3232,7 @@ def test_sync_invalid_input(sync_client: TensorZeroGateway):
 
     assert (
         str(exc_info.value)
-        == 'Failed to deserialize JSON to tensorzero::client_input::ClientInput: messages[0].content[0]: invalid type: string "Invalid", expected object at line 1 column 54'
+        == 'Failed to deserialize JSON to tensorzero_core::client::client_input::ClientInput: messages[0].content[0]: invalid type: string "Invalid", expected object at line 1 column 54'
     )
 
 

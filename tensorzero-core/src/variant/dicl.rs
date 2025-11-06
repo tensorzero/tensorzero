@@ -917,6 +917,7 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
             seed: self.seed,
             inference_params_v2: ChatCompletionInferenceParamsV2 {
                 reasoning_effort: self.reasoning_effort,
+                service_tier: None,
                 thinking_budget_tokens: self.thinking_budget_tokens,
                 verbosity: self.verbosity,
             },
@@ -949,7 +950,7 @@ mod tests {
             storage::{StorageKind, StoragePath},
             Arguments, ResolvedInputMessage, ResolvedInputMessageContent, Role, Template, Text,
         },
-        tool::{ToolCall, ToolCallOutput},
+        tool::{InferenceResponseToolCall, ToolCall},
     };
     use serde_json::json;
     use std::collections::HashMap;
@@ -988,7 +989,7 @@ mod tests {
             ContentBlockChatOutput::Text(Text {
                 text: "This is a test response.".to_string(),
             }),
-            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 id: "tool_call_1".to_string(),
                 raw_name: "search_tool".to_string(),
                 raw_arguments: "{\"query\": \"rust programming\"}".to_string(),
@@ -1157,6 +1158,7 @@ mod tests {
                                         kind: StorageKind::Disabled,
                                         path: Default::default(),
                                     },
+                                    detail: None,
                                 },
                             ))),
                         ],

@@ -50,7 +50,8 @@ use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::FullExtraHeadersConfig;
 use file::sanitize_raw_request;
 pub use file::{
-    Base64File, File, ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile, UrlFile,
+    Base64File, File, ObjectStorageError, ObjectStorageFile, ObjectStoragePointer,
+    PendingObjectStoreFile, UrlFile,
 };
 use futures::future::{join_all, try_join_all};
 use futures::FutureExt;
@@ -75,8 +76,11 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::cache::NonStreamingCacheData;
+use crate::cache::{CacheData, NonStreamingCacheData};
+use crate::config::ObjectStoreInfo;
+use crate::endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceParams};
 use crate::endpoints::object_storage::get_object;
+use crate::error::{Error, ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens};
 use crate::function::FunctionConfigType;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
@@ -94,16 +98,11 @@ use crate::rate_limiting::{
 use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
 };
-use crate::tool::ToolCallConfigDatabaseInsert;
-use crate::tool::ToolCallInput;
-use crate::tool::{ToolCall, ToolCallConfig, ToolCallOutput, ToolResult};
-use crate::{cache::CacheData, config::ObjectStoreInfo};
-use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
-use crate::{
-    endpoints::inference::InferenceParams,
-    error::{ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens},
+use crate::tool::{
+    InferenceResponseToolCall, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
+    ToolCallWrapper, ToolResult,
 };
-use crate::{error::Error, variant::JsonMode};
+use crate::variant::{InferenceConfig, JsonMode};
 
 pub mod batch;
 pub mod chat_completion_inference_params;
@@ -305,7 +304,11 @@ impl InputMessageContent {
                     // 1. Fetches the file from the URL
                     // 2. Computes a content-addressed `storage_path`
                     // 3. Returns a `ObjectStorageFile` with the data
-                    File::Url(UrlFile { url, mime_type }) => {
+                    File::Url(UrlFile {
+                        url,
+                        mime_type,
+                        detail,
+                    }) => {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
                         // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
@@ -320,6 +323,8 @@ impl InputMessageContent {
                         // we will skip downloading the file entirely.
                         let url = url.clone();
                         let mime_type = mime_type.clone();
+                        let detail_clone = detail.clone();
+                        let detail_for_future = detail.clone();
                         let delayed_file_future = async move {
                             let base64_file = file.take_or_fetch(&client).await?;
                             let path = storage_kind.file_path(&base64_file)?;
@@ -328,12 +333,17 @@ impl InputMessageContent {
                                     source_url: base64_file.source_url,
                                     mime_type: base64_file.mime_type,
                                     storage_path: path,
+                                    detail: detail_for_future,
                                 },
                                 data: base64_file.data,
                             })
                         };
                         LazyResolvedInputMessageContent::File(Box::new(LazyFile::Url {
-                            file_url: FileUrl { url, mime_type },
+                            file_url: FileUrl {
+                                url,
+                                mime_type,
+                                detail: detail_clone,
+                            },
                             future: delayed_file_future.boxed().shared(),
                         }))
                     }
@@ -347,12 +357,19 @@ impl InputMessageContent {
                         source_url,
                         mime_type,
                         data,
+                        detail,
                     }) => {
                         let storage_kind = get_storage_kind(&context)?;
                         let base64_file = Base64File {
                             source_url: source_url.clone(),
                             mime_type: mime_type.clone(),
                             data: data.clone(),
+                            // We explicitly set detail to None when computing the storage path.
+                            // This is intentional for content-addressing: the detail parameter controls
+                            // how providers process the image (resolution/token cost), but shouldn't
+                            // affect the file's hash or storage location. The same image file with
+                            // different detail values should map to the same storage path for deduplication.
+                            detail: None,
                         };
                         let path = storage_kind.file_path(&base64_file)?;
 
@@ -362,25 +379,31 @@ impl InputMessageContent {
                                     source_url: source_url.clone(),
                                     mime_type: mime_type.clone(),
                                     storage_path: path,
+                                    detail: detail.clone(),
                                 },
                                 data: data.clone(),
                             }),
                         )))
                     }
+                    // # File::ObjectStoragePointer
+                    //
                     // User provided a reference to a file already in object storage.
                     // We create a lazy future that will fetch the file data when needed.
                     // The future is not executed immediately - it only runs when awaited.
                     // This allows us to skip fetching if the file data isn't needed (e.g., just storing metadata).
                     // When the future does run, it fetches the file from object storage.
-                    File::ObjectStoragePointer(ObjectStoragePointer {
-                        source_url,
-                        mime_type,
-                        storage_path,
-                    }) => {
-                        let source_url_for_future = source_url.clone();
+                    //
+                    // # File::ObjectStorageError
+                    //
+                    // User provided a failed that we previously attempted and failed to fetch from object storage.
+                    // Here, we disregard the previous attempt and retry, as if the user had only sent the pointer.
+                    File::ObjectStoragePointer(file)
+                    | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
+                        let source_url_for_future = file.source_url.clone();
                         let object_store_info = context.object_store_info.clone();
-                        let owned_storage_path = storage_path.clone();
-                        let mime_type_for_closure = mime_type.clone();
+                        let owned_storage_path = file.storage_path.clone();
+                        let mime_type_for_closure = file.mime_type.clone();
+                        let detail_for_future = file.detail.clone();
                         // Construct a future that will fetch the file from the object store.
                         // Important: the future will not actually begin executing (including opening the network connection)
                         // until the first time the `Shared` wrapper is `.await`ed.
@@ -393,6 +416,7 @@ impl InputMessageContent {
                                     source_url: source_url_for_future,
                                     mime_type: mime_type_for_closure,
                                     storage_path: owned_storage_path,
+                                    detail: detail_for_future,
                                 },
                                 data: object_response.data,
                             })
@@ -400,10 +424,11 @@ impl InputMessageContent {
                         LazyResolvedInputMessageContent::File(Box::new(
                             LazyFile::ObjectStoragePointer {
                                 metadata: Base64FileMetadata {
-                                    source_url: source_url.clone(),
-                                    mime_type: mime_type.clone(),
+                                    source_url: file.source_url.clone(),
+                                    mime_type: file.mime_type.clone(),
+                                    detail: file.detail.clone(),
                                 },
-                                storage_path: storage_path.clone(),
+                                storage_path: file.storage_path.clone(),
                                 future: delayed_file_future.boxed().shared(),
                             },
                         ))
@@ -498,6 +523,7 @@ impl LazyResolvedInputMessageContent {
                     source_url: metadata.source_url,
                     mime_type: metadata.mime_type,
                     storage_path,
+                    detail: metadata.detail,
                 }))),
                 // File reference to object storage with data in memory.
                 // Origin: Roundtripping from database (e.g., list_inferences → update_datapoints)
@@ -521,6 +547,7 @@ impl LazyResolvedInputMessageContent {
                             source_url: resolved_file.file.source_url.clone(),
                             mime_type: resolved_file.file.mime_type.clone(),
                             data: resolved_file.data.clone(),
+                            detail: resolved_file.file.detail.clone(),
                         },
                         resolved_file.file.storage_path.clone(),
                     )
@@ -539,6 +566,7 @@ impl LazyResolvedInputMessageContent {
                             source_url: pending.0.file.source_url.clone(),
                             mime_type: pending.0.file.mime_type.clone(),
                             data: pending.0.data.clone(),
+                            detail: pending.0.file.detail.clone(),
                         },
                         pending.0.file.storage_path.clone(),
                     )
@@ -593,7 +621,7 @@ pub enum System {
 pub enum InputMessageContent {
     Text(Text),
     Template(Template),
-    ToolCall(ToolCallInput),
+    ToolCall(ToolCallWrapper),
     ToolResult(ToolResult),
     RawText(RawText),
     Thought(Thought),
@@ -753,11 +781,12 @@ pub enum ThoughtSummaryBlock {
     SummaryText { text: String },
 }
 
-/// Struct that represents Chain of Thought reasoning
+/// Struct that represents a model's reasoning
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
+    #[ts(optional)]
     pub text: Option<String>,
     /// An optional signature - currently, this is only used with Anthropic,
     /// and is ignored by other providers.
@@ -1013,12 +1042,38 @@ pub enum ContentBlockOutput {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockChatOutput {
     Text(Text),
-    ToolCall(ToolCallOutput),
+    ToolCall(InferenceResponseToolCall),
     Thought(Thought),
     Unknown {
         data: Value,
         model_provider_name: Option<String>,
     },
+}
+
+impl ContentBlockChatOutput {
+    /// Validates a `ContentBlockChatOutput` and re-validate and re-parse structured fields.
+    /// (e.g. ToolCallOutput.name and .arguments). Returns a new `ContentBlockChatOutput` with the validated fields.
+    ///
+    /// This is used in CreateChatDatapointRequest, which accepts a ContentBlockChatOutput. In these cases where a
+    /// user specifies it, we cannot trust raw and parsed values agree, and we use the raw fields as the source of truth
+    /// and re-validate.
+    pub async fn into_validated(
+        self,
+        tool_call_config: Option<&ToolCallConfig>,
+    ) -> ContentBlockChatOutput {
+        if let ContentBlockChatOutput::ToolCall(input_tool_call) = self {
+            let unvalidated_tool_call = ToolCall {
+                name: input_tool_call.raw_name,
+                arguments: input_tool_call.raw_arguments,
+                id: input_tool_call.id,
+            };
+            let validated_tool_call =
+                InferenceResponseToolCall::new(unvalidated_tool_call, tool_call_config).await;
+            ContentBlockChatOutput::ToolCall(validated_tool_call)
+        } else {
+            self
+        }
+    }
 }
 
 /// A RequestMessage is a message sent to a model
@@ -1911,8 +1966,11 @@ pub async fn parse_chat_output(
             }
             ContentBlockOutput::ToolCall(tool_call) => {
                 // Parse the tool call arguments
-                let tool_call_output = ToolCallOutput::new(tool_call, tool_config).await;
-                output.push(ContentBlockChatOutput::ToolCall(tool_call_output));
+                let inference_response_tool_call =
+                    InferenceResponseToolCall::new(tool_call, tool_config).await;
+                output.push(ContentBlockChatOutput::ToolCall(
+                    inference_response_tool_call,
+                ));
             }
             ContentBlockOutput::Thought(thought) => {
                 output.push(ContentBlockChatOutput::Thought(thought));
@@ -2027,8 +2085,8 @@ impl ProviderInferenceResponseChunk {
     }
 }
 
-impl From<ToolCallOutput> for ToolCall {
-    fn from(output: ToolCallOutput) -> Self {
+impl From<InferenceResponseToolCall> for ToolCall {
+    fn from(output: InferenceResponseToolCall) -> Self {
         Self {
             id: output.id,
             name: output.raw_name,
@@ -2041,8 +2099,8 @@ impl From<ContentBlockChatOutput> for ContentBlock {
     fn from(output: ContentBlockChatOutput) -> Self {
         match output {
             ContentBlockChatOutput::Text(text) => ContentBlock::Text(text),
-            ContentBlockChatOutput::ToolCall(tool_call_output) => {
-                ContentBlock::ToolCall(tool_call_output.into())
+            ContentBlockChatOutput::ToolCall(inference_response_tool_call) => {
+                ContentBlock::ToolCall(inference_response_tool_call.into())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlock::Thought(thought),
             ContentBlockChatOutput::Unknown {
@@ -2838,13 +2896,20 @@ mod tests {
             _ => panic!("Expected Text content"),
         }
         match &message.content[1] {
-            InputMessageContent::ToolCall(tool_call) => {
-                assert_eq!(tool_call.id, "123");
-                assert_eq!(tool_call.name, Some("test_tool".to_string()));
-                assert_eq!(tool_call.arguments, Some(json!("{}")));
-                assert_eq!(tool_call.raw_name, None);
-                assert_eq!(tool_call.raw_arguments, None);
-            }
+            InputMessageContent::ToolCall(wrapper) => match wrapper {
+                ToolCallWrapper::ToolCall(tc) => {
+                    assert_eq!(tc.id, "123");
+                    assert_eq!(tc.name, "test_tool");
+                    assert_eq!(tc.arguments, "{}");
+                }
+                ToolCallWrapper::InferenceResponseToolCall(tc) => {
+                    assert_eq!(tc.id, "123");
+                    assert_eq!(tc.name, Some("test_tool".to_string()));
+                    assert_eq!(tc.arguments, Some(json!("{}")));
+                    assert_eq!(tc.raw_name, "test_tool");
+                    assert_eq!(tc.raw_arguments, "{}");
+                }
+            },
             _ => panic!("Expected ToolCall content"),
         }
         // Test case for multiple content items with JSON object in text block
@@ -2871,13 +2936,18 @@ mod tests {
             _ => panic!("Expected Text content with JSON object"),
         }
         match &message.content[1] {
-            InputMessageContent::ToolCall(tool_call) => {
-                assert_eq!(tool_call.id, "456");
-                assert_eq!(tool_call.name, Some("another_tool".to_string()));
-                assert_eq!(tool_call.arguments, Some(json!({"key":"value"})));
-                assert_eq!(tool_call.raw_name, None);
-                assert_eq!(tool_call.raw_arguments, None,);
-            }
+            InputMessageContent::ToolCall(wrapper) => match wrapper {
+                ToolCallWrapper::ToolCall(tc) => {
+                    assert_eq!(tc.id, "456");
+                    assert_eq!(tc.name, "another_tool");
+                    assert_eq!(tc.arguments, json!({"key":"value"}).to_string());
+                }
+                ToolCallWrapper::InferenceResponseToolCall(tc) => {
+                    assert_eq!(tc.id, "456");
+                    assert_eq!(tc.name, Some("another_tool".to_string()));
+                    assert_eq!(tc.arguments, Some(json!({"key":"value"})));
+                }
+            },
             _ => panic!("Expected ToolCall content"),
         }
 

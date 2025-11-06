@@ -3,6 +3,6 @@ import type { StaticWeightsConfig } from "./StaticWeightsConfig";
 import type { TrackAndStopConfig } from "./TrackAndStopConfig";
 
 export type ExperimentationConfig =
-  | ({ type: "static_weights" } & StaticWeightsConfig)
   | { type: "uniform" }
+  | ({ type: "static_weights" } & StaticWeightsConfig)
   | ({ type: "track_and_stop" } & TrackAndStopConfig);

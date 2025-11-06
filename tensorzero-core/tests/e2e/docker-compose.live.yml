@@ -2,12 +2,9 @@ include:
   - docker-compose-common.yml
 
 volumes:
+  # Note that we don't actually make this a tmpfs, since it can be quite large
+  # We need this for e2e tests that write to a tmpdir from a test, and then read it from the gateway
   shared-tmpdir:
-    driver: local
-    driver_opts:
-      type: tmpfs
-      device: tmpfs
-      o: size=8G,uid=1000,gid=1000,mode=1777
 
 services:
   mock-inference-provider:
@@ -57,8 +54,11 @@ services:
     image: tensorzero/gateway-e2e:${TENSORZERO_COMMIT_TAG}
     build:
       context: ../../..
-      dockerfile: tensorzero-core/tests/e2e/Dockerfile.gateway.e2e
+      dockerfile: gateway/Dockerfile
       target: gateway
+      args:
+        CARGO_BUILD_FLAGS: --features e2e_tests
+        PROFILE: dev
     environment:
       # Test environment variables
       TENSORZERO_GATEWAY_URL: http://gateway:3000
@@ -174,12 +174,13 @@ services:
     environment:
       # Test environment variables
       TENSORZERO_GATEWAY_URL: http://gateway:3000
+      TENSORZERO_GATEWAY_HOST: gateway
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/tensorzero_e2e_tests
-      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_e2e_tests
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
       TENSORZERO_MINIO_URL: http://minio:9000
       TENSORZERO_MOCK_INFERENCE_PROVIDER_BASE_URL: http://mock-inference-provider:3030
-      TENSORZERO_TEMPO_URL: http://tempo:16686
+      TENSORZERO_TEMPO_URL: http://tempo:3200
       OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://otel-collector:4317
       TENSORZERO_E2E_PROXY: http://provider-proxy:3003
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
@@ -243,4 +244,6 @@ services:
       minio:
         condition: service_healthy
       otel-collector:
+        condition: service_started
+      tempo:
         condition: service_started

@@ -1,0 +1,168 @@
+---
+title: Run adaptive A/B tests
+description: Learn how to use experimentation to test and iterate on your LLM applications with confidence.
+---
+
+You can set up adaptive A/B tests with the TensorZero Gateway to automatically distribute inference requests to the best performing variants (prompts, models, etc.) of your system.
+TensorZero supports any number of variants in an adaptive A/B test.
+
+In simple terms, you define:
+
+- A TensorZero function ("task")
+- A set of candidate variants (prompts, models, etc.) to experiment with
+- A [metric](/gateway/guides/metrics-feedback) to optimize for
+
+And TensorZero takes care of the rest.
+TensorZero's experimentation algorithm is designed to efficiently find the best variant of the system with a specified level of confidence.
+You can add more variants over time and TensorZero will adjust the experiment accordingly while maintaining its statistical soundness.
+
+You don't need to choose the sample size or experiment duration up front.
+TensorZero will automatically detect when there are enough samples to identify the best variant.
+Once it has done so, it will use that variant for all subsequent inferences.
+
+<Tip>
+
+See the [Tutorial](/gateway/tutorial) to learn more about functions and variants in TensorZero.
+
+</Tip>
+
+## Configure
+
+Let's set up an adaptive A/B test with TensorZero.
+
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/experimentation/run-adaptive-ab-tests) of this guide on GitHub.
+
+</Tip>
+
+<Steps>
+
+<Step title="Configure your function">
+
+Let's configure a function ("task") with two variants (`gpt-5-mini` with two different prompts), a metric to optimize for, and the experimentation configuration.
+
+```toml title="tensorzero.toml"
+# Define a function for the task we're tackling
+[functions.extract_entities]
+type = "json"
+output_schema = "output_schema.json"
+
+# Define variants to experiment with (here, we have two different prompts)
+[functions.extract_entities.variants.gpt-5-mini-good-prompt]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+templates.system.path = "good_system_template.minijinja"
+json_mode = "strict"
+
+[functions.extract_entities.variants.gpt-5-mini-bad-prompt]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+templates.system.path = "bad_system_template.minijinja"
+json_mode = "strict"
+
+# Define the experiment configuration
+[functions.extract_entities.experimentation]
+type = "track_and_stop" # the experimentation algorithm
+candidate_variants = ["gpt-5-mini-good-prompt", "gpt-5-mini-bad-prompt"]
+metric = "exact_match"
+update_period_s = 60  # low for the sake of the demo (recommended: 300)
+
+# Define the metric we're optimizing for
+[metrics.exact_match]
+type = "boolean"
+level = "inference"
+optimize = "max"
+```
+
+</Step>
+
+<Step title="Deploy TensorZero">
+
+You must set up Postgres to use TensorZero's automated experimentation features.
+
+- [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway)
+- [Deploy the TensorZero UI](/deployment/tensorzero-ui)
+- [Deploy ClickHouse](/deployment/clickhouse)
+- [Deploy Postgres](/deployment/postgres)
+
+</Step>
+
+<Step title="Make inference requests">
+
+Make an inference request just like you normally would and keep track of the inference ID or episode ID.
+You can use the TensorZero Inference API or the OpenAI-compatible Inference API.
+
+```python
+response = t0.inference(
+    function_name="extract_entities",
+    input={
+        "messages": [
+            {
+                "role": "user",
+                "content": datapoint.input,
+            }
+        ]
+    },
+)
+```
+
+</Step>
+
+<Step title="Send feedback for your metric">
+
+Send feedback for your metric and assign it to the inference ID or episode ID.
+
+```python
+t0.feedback(
+    metric_name="exact_match",
+    value=True,
+    inference_id=response.inference_id,
+)
+```
+
+</Step>
+
+<Step title="Track your experiment">
+
+That's it.
+TensorZero will automatically adjust the distribution of inference requests between the two candidate variants based on their performance.
+
+You can track the experiment in the TensorZero UI.
+Visit the function's detail page to see the variant weights and the estimated performance.
+
+If you run the code example, TensorZero starts by splitting traffic between the two variants but quickly starts shifting more and more traffic towards the `gpt-5-mini-good-prompt` variant.
+After a few hundred inferences, TensorZero becomes confident enough to declare it the winner and starts serving all the traffic to it.
+
+<Frame>
+
+![Experimentation in the TensorZero UI](/experimentation/run-adaptive-ab-tests.gif)
+
+</Frame>
+
+You can add more variants at any time and TensorZero will adjust the experiment accordingly in a principled way.
+
+</Step>
+
+</Steps>
+
+## Advanced
+
+### Configure fallback-only variants
+
+In addition to `candidate_variants`, you can also specify `fallback_variants` in your configuration.
+
+If a variant fails for any reason, TensorZero first resamples from `candidate_variants`.
+Once they are exhausted, it attempts to use the first variant in `fallback_variants`; if that fails, it goes to the second fallback variant, etc.
+
+Note that episodes that contain inferences that use different variants for the same function (e.g. as a result of a fallback) are not used by the adaptive A/B testing algorithm.
+
+See the [Configuration Reference](/gateway/configuration-reference) for more details.
+
+### Customize the experimentation algorithm
+
+The `track_and_stop` algorithm has multiple parameters that can be customized.
+For example, you can trade off the speed of the experiment with the statistical confidence of the results.
+The default parameters are sensible for most use cases, but advanced users might want to customize them.
+
+See the [Configuration Reference](/gateway/configuration-reference) for more details.

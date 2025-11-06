@@ -2,7 +2,7 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::{debug_handler, Json};
+use axum::{debug_handler, Extension, Json};
 use futures::stream::Stream;
 use futures::FutureExt;
 use futures_core::FusedStream;
@@ -27,12 +27,15 @@ use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedV
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
+use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::experimentation::ExperimentationConfig;
 use crate::function::FunctionConfig;
 use crate::function::FunctionConfigChat;
 use crate::http::TensorzeroHttpClient;
-use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
+use crate::inference::types::chat_completion_inference_params::{
+    ChatCompletionInferenceParamsV2, ServiceTier,
+};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::resolved_input::LazyResolvedInput;
@@ -53,8 +56,8 @@ use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
-use super::validate_tags;
-use super::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
+use crate::endpoints::validate_tags;
+use crate::endpoints::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Default, Deserialize)]
@@ -161,6 +164,7 @@ pub async fn inference_handler(
         deferred_tasks,
         ..
     }): AppState,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
     let inference_output = inference(
@@ -170,6 +174,7 @@ pub async fn inference_handler(
         postgres_connection_info,
         deferred_tasks,
         params,
+        api_key_ext,
     )
     .await?;
     match inference_output {
@@ -228,6 +233,7 @@ pub async fn inference(
     postgres_connection_info: PostgresConnectionInfo,
     deferred_tasks: TaskTracker,
     mut params: Params,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<InferenceOutput, Error> {
     let span = tracing::Span::current();
     if let Some(function_name) = &params.function_name {
@@ -279,6 +285,12 @@ pub async fn inference(
     // Record the episode id if we didn't already have one
     if params.episode_id.is_none() {
         tracing::Span::current().record("episode_id", episode_id.to_string());
+    }
+    if let Some(api_key_ext) = &api_key_ext {
+        params.tags.insert(
+            "tensorzero::api_key_public_id".to_string(),
+            api_key_ext.0.api_key.get_public_id().into(),
+        );
     }
 
     let (function, function_name) = find_function(&params, &config)?;
@@ -357,7 +369,7 @@ pub async fn inference(
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
-        scope_info: ScopeInfo { tags: tags.clone() },
+        scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
     };
 
     let inference_models = InferenceModels {
@@ -1343,6 +1355,9 @@ pub struct ChatCompletionInferenceParams {
     pub reasoning_effort: Option<String>,
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<ServiceTier>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget_tokens: Option<i32>,
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1385,12 +1400,16 @@ impl ChatCompletionInferenceParams {
         }
         let ChatCompletionInferenceParamsV2 {
             reasoning_effort,
+            service_tier,
             thinking_budget_tokens,
             verbosity,
         } = inference_params_v2;
 
         if self.reasoning_effort.is_none() {
             self.reasoning_effort = reasoning_effort;
+        }
+        if self.service_tier.is_none() {
+            self.service_tier = service_tier;
         }
         if self.thinking_budget_tokens.is_none() {
             self.thinking_budget_tokens = thinking_budget_tokens;
@@ -1728,6 +1747,7 @@ mod tests {
             InputMessageContent::File(File::Url(UrlFile {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: Some(mime::IMAGE_PNG),
+                detail: None,
             }))
         );
     }
@@ -1760,6 +1780,7 @@ mod tests {
                 source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 data: "fake_base64_data".to_string(),
+                detail: None,
             }))
         );
     }
@@ -1770,6 +1791,7 @@ mod tests {
         let file_url = File::Url(UrlFile {
             url: "https://example.com/file.txt".parse().unwrap(),
             mime_type: Some(mime::IMAGE_PNG),
+            detail: None,
         });
         let serialized = serde_json::to_value(&file_url).unwrap();
         assert_eq!(serialized["file_type"], "url");
@@ -1780,6 +1802,7 @@ mod tests {
             source_url: None,
             mime_type: mime::IMAGE_PNG,
             data: "fake_base64_data".to_string(),
+            detail: None,
         });
         let serialized = serde_json::to_value(&file_base64).unwrap();
         assert_eq!(serialized["file_type"], "base64");
@@ -1813,6 +1836,7 @@ mod tests {
             InputMessageContent::File(File::Url(UrlFile {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: None,
+                detail: None,
             }))
         );
     }
@@ -1845,6 +1869,7 @@ mod tests {
                 source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 data: "fake_base64_data".to_string(),
+                detail: None,
             }))
         );
     }
@@ -1897,6 +1922,7 @@ mod tests {
                     },
                     path: Path::from("test-path"),
                 },
+                detail: None,
             }))
         );
     }
@@ -1908,6 +1934,7 @@ mod tests {
             source_url: None,
             mime_type: mime::IMAGE_JPEG,
             data: "base64data".to_string(),
+            detail: None,
         });
 
         let serialized = serde_json::to_string(&original).unwrap();

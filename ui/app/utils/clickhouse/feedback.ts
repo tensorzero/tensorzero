@@ -3,7 +3,7 @@ import { getClickhouseClient } from "./client.server";
 import { getNativeDatabaseClient } from "../tensorzero/native_client.server";
 import { z } from "zod";
 import { logger } from "~/utils/logger";
-import type { FeedbackRow } from "tensorzero-node";
+import type { FeedbackRow } from "~/types/tensorzero";
 
 export const booleanMetricFeedbackRowSchema = z.object({
   type: z.literal("boolean"),

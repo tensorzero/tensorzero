@@ -2,6 +2,7 @@ use reqwest::Client;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use tensorzero::ClientExt;
 use tensorzero_core::config::Config;
 use tensorzero_core::db::clickhouse::query_builder::{
     InferenceFilter, TagComparisonOperator, TagFilter,

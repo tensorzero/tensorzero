@@ -4,7 +4,7 @@ import { useState } from "react";
 import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { Output } from "../inference/Output";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/button";

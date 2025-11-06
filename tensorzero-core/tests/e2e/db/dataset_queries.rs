@@ -476,7 +476,7 @@ async fn test_count_rows_json_datapoints_with_float_metric_filter_and_demonstrat
 async fn test_get_dataset_metadata_returns_correct_counts_for_all_datasets() {
     let params = GetDatasetMetadataParams {
         function_name: None,
-        page_size: None,
+        limit: None,
         offset: None,
     };
     let metadata = get_clickhouse()
@@ -503,7 +503,7 @@ async fn test_get_dataset_metadata_returns_correct_counts_for_all_datasets() {
 async fn test_get_dataset_metadata_returns_correct_counts_for_specific_function() {
     let params = GetDatasetMetadataParams {
         function_name: Some("write_haiku".to_string()),
-        page_size: None,
+        limit: None,
         offset: None,
     };
     let metadata = get_clickhouse()
@@ -1607,7 +1607,7 @@ async fn test_get_datapoints_with_empty_ids() {
             dataset_name: Some("test_dataset".to_string()),
             function_name: None,
             ids: None,
-            page_size: 20,
+            limit: 20,
             offset: 0,
             allow_stale: false,
             filter: None,
@@ -1660,7 +1660,7 @@ async fn test_get_datapoints_with_single_chat_datapoint() {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
             ids: Some(vec![datapoint_id]),
-            page_size: 20,
+            limit: 20,
             offset: 0,
             allow_stale: false,
             filter: None,
@@ -1722,7 +1722,7 @@ async fn test_get_datapoints_with_single_json_datapoint() {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
             ids: Some(vec![datapoint_id]),
-            page_size: 20,
+            limit: 20,
             offset: 0,
             allow_stale: false,
             filter: None,
@@ -1842,7 +1842,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
             ids: Some(vec![chat_id1, json_id, chat_id2]),
-            page_size: 20,
+            limit: 20,
             offset: 0,
             allow_stale: false,
             filter: None,
@@ -1920,7 +1920,7 @@ async fn test_get_datapoints_with_non_existent_ids() {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
             ids: Some(vec![datapoint_id, non_existent_id, another_non_existent_id]),
-            page_size: 20,
+            limit: 20,
             offset: 0,
             allow_stale: false,
             filter: None,
@@ -1978,7 +1978,7 @@ async fn test_get_datapoints_respects_allow_stale_false() {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
             ids: Some(vec![datapoint_id]),
-            page_size: 20,
+            limit: 20,
             offset: 0,
             allow_stale: false,
             filter: None,
@@ -2006,7 +2006,7 @@ async fn test_get_datapoints_respects_allow_stale_false() {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
             ids: Some(vec![datapoint_id]),
-            page_size: 20,
+            limit: 20,
             offset: 0,
             allow_stale: false,
             filter: None,
@@ -2076,7 +2076,7 @@ async fn test_get_datapoints_respects_allow_stale_true() {
             dataset_name: Some(dataset_name.clone()),
             function_name: None,
             ids: Some(vec![datapoint_id]),
-            page_size: 20,
+            limit: 20,
             offset: 0,
             allow_stale: true,
             filter: None,
@@ -2143,7 +2143,7 @@ async fn test_get_datapoints_with_wrong_dataset_name() {
             dataset_name: Some(wrong_dataset),
             function_name: None,
             ids: Some(vec![datapoint_id]),
-            page_size: 20,
+            limit: 20,
             offset: 0,
             allow_stale: false,
             filter: None,
@@ -2167,6 +2167,7 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
     // Create a StoredFile with ObjectStorage
     let stored_file = StoredFile(ObjectStoragePointer {
         source_url: Some("https://example.com/original.png".parse().unwrap()),
+        detail: None,
         mime_type: mime::IMAGE_PNG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
@@ -2250,6 +2251,7 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
     // Create a StoredFile with ObjectStorage
     let stored_file = StoredFile(ObjectStoragePointer {
         source_url: Some("https://example.com/data.json".parse().unwrap()),
+        detail: None,
         mime_type: mime::APPLICATION_JSON,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
@@ -2334,6 +2336,7 @@ async fn test_datapoint_with_mixed_file_types() {
     // Create multiple StoredFiles
     let stored_file1 = StoredFile(ObjectStoragePointer {
         source_url: Some("https://example.com/image1.png".parse().unwrap()),
+        detail: None,
         mime_type: mime::IMAGE_PNG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
@@ -2343,6 +2346,7 @@ async fn test_datapoint_with_mixed_file_types() {
 
     let stored_file2 = StoredFile(ObjectStoragePointer {
         source_url: None, // No source URL
+        detail: None,
         mime_type: mime::IMAGE_JPEG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,

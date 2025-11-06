@@ -10,20 +10,25 @@ export type ListDatapointsRequest = {
    * Optional function name to filter datapoints by.
    * If provided, only datapoints from this function will be returned.
    */
-  function_name: string | null;
+  function_name?: string;
   /**
    * The maximum number of datapoints to return.
    * Defaults to 20.
    */
-  page_size: number | null;
+  limit?: number;
+  /**
+   * The maximum number of datapoints to return. Defaults to 20.
+   * Deprecated: please use `limit`. If `limit` is provided, `page_size` is ignored.
+   */
+  page_size?: number;
   /**
    * The number of datapoints to skip before starting to return results.
    * Defaults to 0.
    */
-  offset: number | null;
+  offset?: number;
   /**
    * Optional filter to apply when querying datapoints.
    * Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
    */
-  filter: DatapointFilter | null;
+  filter?: DatapointFilter;
 };

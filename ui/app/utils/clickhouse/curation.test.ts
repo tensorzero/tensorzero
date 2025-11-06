@@ -8,7 +8,7 @@ import {
   countCuratedInferences,
   getCuratedInferences,
 } from "./curation.server";
-import type { FunctionConfig } from "tensorzero-node";
+import type { FunctionConfig } from "~/types/tensorzero";
 
 // Test boolean metrics
 test("countCuratedInferences for boolean metrics", async () => {

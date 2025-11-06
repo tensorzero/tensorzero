@@ -102,7 +102,10 @@
           },
           {
             "group": "Experimentation",
-            "pages": ["experimentation/run-ab-tests"]
+            "pages": [
+              "experimentation/run-adaptive-ab-tests",
+              "experimentation/run-static-ab-tests"
+            ]
           },
           {
             "group": "Deployment",
@@ -118,6 +121,7 @@
             "group": "Operations",
             "pages": [
               "operations/manage-credentials",
+              "operations/set-up-auth-for-tensorzero",
               "operations/enforce-custom-rate-limits",
               "operations/organize-your-configuration",
               "operations/export-opentelemetry-traces",
@@ -264,11 +268,19 @@
     },
     {
       "source": "/gateway/guides/experimentation",
-      "destination": "/experimentation/run-ab-tests"
+      "destination": "/experimentation/run-static-ab-tests"
     },
     {
       "source": "/gateway/guides/experimentation/",
-      "destination": "/experimentation/run-ab-tests"
+      "destination": "/experimentation/run-static-ab-tests"
+    },
+    {
+      "source": "/experimentation/run-ab-tests",
+      "destination": "/experimentation/run-static-ab-tests"
+    },
+    {
+      "source": "/experimentation/run-ab-tests/",
+      "destination": "/experimentation/run-static-ab-tests"
     },
     {
       "source": "/gateway/deployment",
