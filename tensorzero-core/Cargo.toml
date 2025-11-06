@@ -132,6 +132,7 @@ walkdir = "2.5.0"
 enum-map = "2.7.3"
 tokio-util = { version = "0.7.17", features = ["rt"] }
 ts-rs = { workspace = true }
+utoipa = { workspace = true }
 moka = { version = "0.12.10", features = ["sync"] }
 tonic = { version = "0.14.2", default-features = false }
 sqlx = { workspace = true }

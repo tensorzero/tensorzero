@@ -60,6 +60,7 @@ ts-rs = { version = "11.1.0", features = [
     "chrono-impl",
     "no-serde-warnings",
 ] }
+utoipa = { version = "5.3.1", features = ["uuid", "chrono"] }
 pin-project = "1.1.10"
 chrono = { version = "0.4.41", features = ["serde"] }
 git2 = { version = "0.20.2", default-features = false }
