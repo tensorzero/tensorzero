@@ -57,7 +57,7 @@ impl StorageKind {
         // Compute a content-addressed hash from the file data only.
         // Intentionally excludes the `detail` field so that the same file with different
         // detail settings (low/high/auto) will map to the same storage location for deduplication.
-        let hash = blake3::hash(image.data.as_bytes());
+        let hash = blake3::hash(image.data().as_bytes());
         // This is a best-effort attempt to get a suffix in the object-store path, to make things
         // nicer for people browsing the object store.
         // None of our code depends on this file extension being correct, as we store the original

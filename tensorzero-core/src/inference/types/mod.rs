@@ -330,12 +330,12 @@ impl InputMessageContent {
                             let path = storage_kind.file_path(&base64_file)?;
                             Ok(ObjectStorageFile {
                                 file: ObjectStoragePointer {
-                                    source_url: base64_file.source_url,
-                                    mime_type: base64_file.mime_type,
+                                    source_url: base64_file.source_url.clone(),
+                                    mime_type: base64_file.mime_type.clone(),
                                     storage_path: path,
                                     detail: detail_for_future,
                                 },
-                                data: base64_file.data,
+                                data: base64_file.data().to_string(),
                             })
                         };
                         LazyResolvedInputMessageContent::File(Box::new(LazyFile::Url {
@@ -353,25 +353,25 @@ impl InputMessageContent {
                     // 2. Wrap the data in `PendingObjectStoreFile` to signal it needs writing
                     // The data is ready to use but not yet persisted to object storage.
                     // The write will happen later in `into_stored_input_message_content`.
-                    File::Base64(Base64File {
-                        source_url,
-                        mime_type,
-                        data,
-                        detail,
-                    }) => {
+                    File::Base64(base64_file) => {
+                        let source_url = &base64_file.source_url;
+                        let mime_type = &base64_file.mime_type;
+                        let data = base64_file.data();
+                        let detail = &base64_file.detail;
+
                         let storage_kind = get_storage_kind(&context)?;
-                        let base64_file = Base64File {
-                            source_url: source_url.clone(),
-                            mime_type: mime_type.clone(),
-                            data: data.clone(),
+                        let base64_file_for_path = Base64File::new(
+                            source_url.clone(),
+                            mime_type.clone(),
+                            data.to_string(),
                             // We explicitly set detail to None when computing the storage path.
                             // This is intentional for content-addressing: the detail parameter controls
                             // how providers process the image (resolution/token cost), but shouldn't
                             // affect the file's hash or storage location. The same image file with
                             // different detail values should map to the same storage path for deduplication.
-                            detail: None,
-                        };
-                        let path = storage_kind.file_path(&base64_file)?;
+                            None,
+                        )?;
+                        let path = storage_kind.file_path(&base64_file_for_path)?;
 
                         LazyResolvedInputMessageContent::File(Box::new(LazyFile::Base64(
                             PendingObjectStoreFile(ObjectStorageFile {
@@ -381,7 +381,7 @@ impl InputMessageContent {
                                     storage_path: path,
                                     detail: detail.clone(),
                                 },
-                                data: data.clone(),
+                                data: data.to_string(),
                             }),
                         )))
                     }
@@ -541,14 +541,15 @@ impl LazyResolvedInputMessageContent {
                     file_url: _,
                 } => {
                     let resolved_file = future.await?;
+                    let base64_file = Base64File::new(
+                        resolved_file.file.source_url.clone(),
+                        resolved_file.file.mime_type.clone(),
+                        resolved_file.data.clone(),
+                        resolved_file.file.detail.clone(),
+                    )?;
                     write_file(
                         object_store_info,
-                        Base64File {
-                            source_url: resolved_file.file.source_url.clone(),
-                            mime_type: resolved_file.file.mime_type.clone(),
-                            data: resolved_file.data.clone(),
-                            detail: resolved_file.file.detail.clone(),
-                        },
+                        base64_file,
                         resolved_file.file.storage_path.clone(),
                     )
                     .await?;
@@ -560,14 +561,15 @@ impl LazyResolvedInputMessageContent {
                 // We write the base64 data to object storage.
                 // The PendingObjectStoreFile wrapper type signals this write requirement.
                 LazyFile::Base64(pending) => {
+                    let base64_file = Base64File::new(
+                        pending.0.file.source_url.clone(),
+                        pending.0.file.mime_type.clone(),
+                        pending.0.data.clone(),
+                        pending.0.file.detail.clone(),
+                    )?;
                     write_file(
                         object_store_info,
-                        Base64File {
-                            source_url: pending.0.file.source_url.clone(),
-                            mime_type: pending.0.file.mime_type.clone(),
-                            data: pending.0.data.clone(),
-                            detail: pending.0.file.detail.clone(),
-                        },
+                        base64_file,
                         pending.0.file.storage_path.clone(),
                     )
                     .await?;

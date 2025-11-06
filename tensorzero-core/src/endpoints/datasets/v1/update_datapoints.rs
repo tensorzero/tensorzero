@@ -629,12 +629,15 @@ mod tests {
             // - File::ObjectStorage: future is discarded, no async operations, just metadata passthrough
             // - File::Base64: goes through async resolve() -> write_file() -> storage write (or no-op if disabled)
 
-            let file = File::Base64(Base64File {
-                source_url: None,
-                mime_type: mime::IMAGE_PNG,
-                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
-                detail: None,
-            });
+            let file = File::Base64(
+                Base64File::new(
+                    None,
+                    mime::IMAGE_PNG,
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
+                    None,
+                )
+                .expect("test data should be valid"),
+            );
 
             let input = Input {
                 system: None,
