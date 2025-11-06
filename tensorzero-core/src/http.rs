@@ -1,3 +1,4 @@
+use chrono::Duration;
 use once_cell::sync::OnceCell;
 use std::{
     pin::Pin,
@@ -6,7 +7,6 @@ use std::{
         Arc,
     },
     task::{Context, Poll},
-    time::Duration,
 };
 use tracing::Span;
 use tracing_futures::Instrument;
@@ -130,10 +130,15 @@ pub struct TensorzeroHttpClient {
     // it stays alive for the lifetime of the `TensorzeroHttpClient` instance.
     clients: Arc<[OnceCell<LimitedClient>]>,
     fallback_client: Arc<LimitedClient>,
+    global_outbound_http_timeout: Duration,
 }
 
 impl TensorzeroHttpClient {
-    pub fn new() -> Result<Self, Error> {
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub fn new_testing() -> Result<Self, Error> {
+        Self::new(DEFAULT_HTTP_CLIENT_TIMEOUT)
+    }
+    pub fn new(global_outbound_http_timeout: Duration) -> Result<Self, Error> {
         let clients = (0..MAX_NUM_CLIENTS)
             .map(|_| OnceCell::new())
             .collect::<Vec<_>>();
@@ -141,8 +146,9 @@ impl TensorzeroHttpClient {
             clients: clients.into(),
             fallback_client: Arc::new(LimitedClient {
                 concurrent_requests: Arc::new(AtomicU8::new(0)),
-                client: build_client()?,
+                client: build_client(global_outbound_http_timeout)?,
             }),
+            global_outbound_http_timeout,
         };
         // Eagerly initialize the first `OnceCell` in the array
         client.take_ticket();
@@ -154,7 +160,7 @@ impl TensorzeroHttpClient {
             let client = match client_cell.get_or_try_init(|| {
                 Ok::<_, Error>(LimitedClient {
                     concurrent_requests: Arc::new(AtomicU8::new(0)),
-                    client: build_client()?,
+                    client: build_client(self.global_outbound_http_timeout)?,
                 })
             }) {
                 Ok(client) => client,
@@ -323,7 +329,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         }
     }
 
-    pub fn timeout(self, timeout: Duration) -> TensorzeroRequestBuilder<'a> {
+    pub fn timeout(self, timeout: std::time::Duration) -> TensorzeroRequestBuilder<'a> {
         Self {
             builder: self.builder.timeout(timeout),
             ticket: self.ticket,
@@ -458,12 +464,16 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 }
 
 // This is set high enough that it should never be hit for a normal model response.
-// In the future, we may want to allow overriding this at the model provider level.
-const DEFAULT_HTTP_CLIENT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+// Users can customize it via `gateway.global_outbound_http_timeout_ms` in the config file.
+pub(crate) const DEFAULT_HTTP_CLIENT_TIMEOUT: Duration = Duration::seconds(5 * 60);
 
-fn build_client() -> Result<Client, Error> {
+fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error> {
     let mut http_client_builder = Client::builder()
-        .timeout(DEFAULT_HTTP_CLIENT_TIMEOUT)
+        .timeout(global_outbound_http_timeout.to_std().map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to convert Duration to std::time::Duration: {e}"),
+            })
+        })?)
         .user_agent(format!("TensorZero/{TENSORZERO_VERSION}"));
 
     if cfg!(feature = "e2e_tests") {
@@ -558,7 +568,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_concurrent_requests_helper() {
         let (addr, _handle) = start_target_server().await;
-        let mut client = super::TensorzeroHttpClient::new().unwrap();
+        let mut client = super::TensorzeroHttpClient::new_testing().unwrap();
 
         // Send one non-stream request, and check that it didn't require using a new client
         let response = client

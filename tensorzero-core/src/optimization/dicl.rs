@@ -883,6 +883,7 @@ mod tests {
                     EmbeddingModelTable::new(
                         HashMap::from([(Arc::from(model_name), embedding_model_config)]),
                         ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                        chrono::Duration::seconds(120),
                     )
                     .unwrap(),
                 ),
@@ -899,7 +900,7 @@ mod tests {
     async fn test_process_embedding_batch_success() {
         let config = create_test_embedding_model_config();
 
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string(), "world".to_string()];
 
@@ -926,7 +927,7 @@ mod tests {
     async fn test_process_embedding_batch_with_dimensions() {
         let config = create_test_embedding_model_config();
 
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string()];
         let dimensions = Some(512);
@@ -952,7 +953,7 @@ mod tests {
     async fn test_process_embedding_batch_failure() {
         let config = create_test_embedding_model_with_failure_config();
 
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["test".to_string()];
 
@@ -974,7 +975,7 @@ mod tests {
     async fn test_process_embeddings_with_batching_success() {
         let config = create_test_embedding_model_config();
 
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec![
             "text1".to_string(),
@@ -1007,7 +1008,7 @@ mod tests {
     async fn test_process_embeddings_with_batching_respects_concurrency() {
         let config = create_test_embedding_model_config();
 
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec!["1".to_string(), "2".to_string(), "3".to_string()];
 

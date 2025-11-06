@@ -382,7 +382,7 @@ async fn embed_insert_example(
             .await
             .unwrap();
 
-    let client = TensorzeroHttpClient::new().unwrap();
+    let client = TensorzeroHttpClient::new_testing().unwrap();
     let request = EmbeddingRequest {
         input: serde_json::to_string(&input.clone().into_stored_input().unwrap())
             .unwrap()

@@ -585,7 +585,7 @@ mod tests {
 
             // Create fetch context with NO actual object storage info.
             // If the code tries to access object storage, it will fail with an error.
-            let http_client = TensorzeroHttpClient::new().unwrap();
+            let http_client = TensorzeroHttpClient::new_testing().unwrap();
             let object_store_info: Option<ObjectStoreInfo> = None;
             let fetch_context = FetchContext {
                 client: &http_client,
@@ -658,7 +658,7 @@ mod tests {
 
             // Create fetch context with disabled storage
             // File::Base64 will call write_file() but it no-ops with disabled storage
-            let http_client = TensorzeroHttpClient::new().unwrap();
+            let http_client = TensorzeroHttpClient::new_testing().unwrap();
             let object_store_info = Some(ObjectStoreInfo {
                 object_store: None, // Disabled storage - write_file() returns Ok(()) without writing
                 kind: StorageKind::Disabled,
