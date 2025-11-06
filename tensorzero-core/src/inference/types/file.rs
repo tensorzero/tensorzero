@@ -92,16 +92,6 @@ pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), E
     Ok(())
 }
 
-pub fn require_audio(mime_type: &MediaType, provider_type: &str) -> Result<(), Error> {
-    if mime_type.type_() != mime::AUDIO {
-        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
-            content_block_type: format!("file: {mime_type}"),
-            provider_type: provider_type.to_string(),
-        }));
-    }
-    Ok(())
-}
-
 /// A file already encoded as base64
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass)]

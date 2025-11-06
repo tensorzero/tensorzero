@@ -970,6 +970,7 @@ struct OpenAICompatibleFile {
 
 #[derive(Deserialize, Debug)]
 struct OpenAICompatibleInputAudio {
+    // The `data` field contains *unprefixed* base64-encoded audio data.
     data: String,
     format: String,
 }
@@ -1103,7 +1104,7 @@ fn convert_openai_message_content(
                             // Log warning if detected MIME type differs from format field
                             // Map common format strings to expected MIME types for comparison
                             let expected_mime = match input_audio.format.as_str() {
-                                "wav" => Some("audio/wav"),
+                                "wav" => Some("audio/x-wav"),
                                 "mp3" => Some("audio/mpeg"),
                                 _ => None,
                             };
@@ -1558,6 +1559,7 @@ mod tests {
     use crate::inference::types::file::Detail;
     use crate::inference::types::{System, Text, TextChunk};
     use crate::tool::ToolCallChunk;
+    use crate::utils::testing::capture_logs;
 
     #[test]
     fn test_try_from_openai_compatible_params() {
@@ -2186,6 +2188,87 @@ mod tests {
             }
             _ => panic!("Expected InvalidOpenAICompatibleRequest error"),
         }
+    }
+
+    #[test]
+    fn test_input_audio_format_mismatch_warning() {
+        let logs_contain = capture_logs();
+
+        // Test WAV file with wrong format field - should warn
+        let wav_bytes = b"RIFF\x00\x00\x00\x00WAVEfmt ";
+        let wav_base64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, wav_bytes);
+
+        let content = json!([{
+            "type": "input_audio",
+            "input_audio": {
+                "data": wav_base64,
+                "format": "mp3"  // Wrong format!
+            }
+        }]);
+
+        let result = convert_openai_message_content("user".to_string(), content).unwrap();
+        assert_eq!(result.len(), 1);
+
+        // Should log a warning about mismatch
+        assert!(
+            logs_contain("Inferred audio MIME type `audio/x-wav` differs from format field `mp3`"),
+            "Expected warning about MIME type mismatch"
+        );
+    }
+
+    #[test]
+    fn test_input_audio_wav_format_correct_no_warning() {
+        let logs_contain = capture_logs();
+
+        // Test WAV file with correct format field - should NOT warn
+        let wav_bytes = b"RIFF\x00\x00\x00\x00WAVEfmt ";
+        let wav_base64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, wav_bytes);
+
+        let content = json!([{
+            "type": "input_audio",
+            "input_audio": {
+                "data": wav_base64,
+                "format": "wav"  // Correct format
+            }
+        }]);
+
+        let result = convert_openai_message_content("user".to_string(), content).unwrap();
+        assert_eq!(result.len(), 1);
+
+        // Should NOT log a warning
+        assert!(
+            !logs_contain("Inferred audio MIME type"),
+            "Should not warn when WAV format matches detected type"
+        );
+    }
+
+    #[test]
+    fn test_input_audio_mp3_format_correct_no_warning() {
+        let logs_contain = capture_logs();
+
+        // Test MP3 file with correct format field - should NOT warn
+        let mp3_bytes = [0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00];
+        let mp3_base64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, mp3_bytes);
+
+        let content = json!([{
+            "type": "input_audio",
+            "input_audio": {
+                "data": mp3_base64,
+                "format": "mp3"  // Correct format
+            }
+        }]);
+
+        let result = convert_openai_message_content("user".to_string(), content).unwrap();
+        assert_eq!(result.len(), 1);
+
+        // Should NOT log a warning
+        assert!(
+            !logs_contain("Inferred audio MIME type"),
+            "Should not warn when MP3 format matches detected type"
+        );
     }
 
     #[test]
