@@ -1,6 +1,7 @@
 # This Dockerfile is used to load fixtures into a (separate) ClickHouse server
 FROM clickhouse:24.12
 
+RUN apt-get update && apt-get install -y cmake
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Copy Python project files and install dependencies
