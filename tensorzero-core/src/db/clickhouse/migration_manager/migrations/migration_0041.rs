@@ -22,7 +22,7 @@ impl Migration for Migration0041<'_> {
             "ChatInferenceDatapoint",
             "ChatInference",
             "BatchModelInference",
-            "EpisodeByIdChatView", // Since we use CREATE OR REPLACE VIEW, we don't strictly need to ensure these exist
+            "EpisodeByIdChatView",
             "EpisodeByIdJsonView",
         ];
 
