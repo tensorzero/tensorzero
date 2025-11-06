@@ -8,8 +8,10 @@ For fields that can distinguish between:
 - Value (set to value): represented as the actual value
 
 Based on Rust fields with #[serde(deserialize_with = "deserialize_double_option")]
+marked with x-double-option: true in the OpenAPI schema.
 """
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -34,16 +36,23 @@ Usage:
 '''
 
 
-# Map of (class_name, field_name) tuples that should use UNSET
-# These correspond to Rust's Option<Option<T>> fields
-DOUBLE_OPTION_FIELDS = {
-    ('UpdateChatDatapointRequest', 'tool_params'),
-    ('UpdateJsonDatapointRequest', 'output'),
-    ('DatapointMetadataUpdate', 'name'),
-}
+def extract_double_option_fields(openapi_path: Path) -> set[tuple[str, str]]:
+    """Extract (class_name, field_name) tuples from OpenAPI schema with x-double-option: true."""
+    spec = json.loads(openapi_path.read_text())
+    double_option_fields = set()
+
+    schemas = spec.get('components', {}).get('schemas', {})
+
+    for class_name, schema in schemas.items():
+        properties = schema.get('properties', {})
+        for field_name, field_schema in properties.items():
+            if field_schema.get('x-double-option') is True:
+                double_option_fields.add((class_name, field_name))
+
+    return double_option_fields
 
 
-def post_process_file(file_path: Path) -> None:
+def post_process_file(file_path: Path, double_option_fields: set[tuple[str, str]]) -> None:
     """Post-process the generated types file."""
     content = file_path.read_text()
 
@@ -59,6 +68,7 @@ def post_process_file(file_path: Path) -> None:
     current_class = None
     lines = content.split('\n')
     result_lines = []
+    modified_count = 0
 
     for i, line in enumerate(lines):
         # Track which class we're in
@@ -73,30 +83,45 @@ def post_process_file(file_path: Path) -> None:
                 field_name = field_match.group(1)
                 field_type = field_match.group(2)
 
-                if (current_class, field_name) in DOUBLE_OPTION_FIELDS:
+                if (current_class, field_name) in double_option_fields:
                     # Replace the type to include UNSET
                     # Change: field_name: T | None = None
                     # To: field_name: T | None | _UnsetType = UNSET
                     new_type = field_type.replace(' | None', ' | None | _UnsetType')
                     new_line = f'    {field_name}: {new_type} = UNSET'
                     result_lines.append(new_line)
+                    modified_count += 1
+                    print(f"✓ Modified {current_class}.{field_name} to use UNSET")
                     continue
 
         result_lines.append(line)
 
     # Write back
     file_path.write_text('\n'.join(result_lines))
-    print(f"✓ Added UNSET sentinel and updated {len(DOUBLE_OPTION_FIELDS)} fields")
+    print(f"✓ Added UNSET sentinel and updated {modified_count} fields")
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <types_file.py>")
+    if len(sys.argv) != 3:
+        print(f"Usage: {sys.argv[0]} <openapi_schema.json> <types_file.py>")
         sys.exit(1)
 
-    file_path = Path(sys.argv[1])
-    if not file_path.exists():
-        print(f"Error: File not found: {file_path}")
+    openapi_path = Path(sys.argv[1])
+    types_path = Path(sys.argv[2])
+
+    if not openapi_path.exists():
+        print(f"Error: OpenAPI schema not found: {openapi_path}")
         sys.exit(1)
 
-    post_process_file(file_path)
+    if not types_path.exists():
+        print(f"Error: Types file not found: {types_path}")
+        sys.exit(1)
+
+    # Extract fields marked with x-double-option from OpenAPI schema
+    print(f"Reading OpenAPI schema from {openapi_path}...")
+    double_option_fields = extract_double_option_fields(openapi_path)
+    print(f"Found {len(double_option_fields)} fields marked with x-double-option")
+
+    # Post-process the generated types file
+    print(f"Post-processing {types_path}...")
+    post_process_file(types_path, double_option_fields)

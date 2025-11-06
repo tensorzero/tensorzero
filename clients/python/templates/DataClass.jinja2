@@ -1,0 +1,16 @@
+{% if class_name %}@dataclass
+class {{ class_name }}:
+    {% if docstring -%}
+    """
+    {{ docstring }}
+    """
+
+    {% endif -%}
+    {% for field in fields -%}
+    {% if field.extras and field.extras.get('double-option') -%}
+    {{ field.name }}: {{ field.type_hint }} | _UnsetType{% if field.required == false %} = UNSET{% endif %}
+    {% else -%}
+    {{ field.name }}: {{ field.type_hint }}{% if field.required == false and field.represented_default %} = {{ field.represented_default }}{% endif %}
+    {% endif %}
+    {% endfor %}
+{% endif %}

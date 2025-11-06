@@ -14,7 +14,12 @@ echo "Generating OpenAPI schema from Rust..."
 cd "$PROJECT_ROOT"
 cargo test --lib -p tensorzero-core export_openapi_schema -- --nocapture
 
-# Step 2: Generate Python dataclasses from OpenAPI schema
+# Step 2: Add x-double-option extensions to OpenAPI schema
+echo "Adding x-double-option extensions to OpenAPI schema..."
+cd "$SCRIPT_DIR"
+python3 "$SCRIPT_DIR/add_double_option_extensions.py" "$PROJECT_ROOT/tensorzero-core/openapi/datasets_v1.json"
+
+# Step 3: Generate Python dataclasses from OpenAPI schema
 echo "Generating Python dataclasses from OpenAPI schema..."
 cd "$SCRIPT_DIR"
 
@@ -34,11 +39,11 @@ uvx --from="datamodel-code-generator[http]" datamodel-codegen \
   --collapse-root-models \
   --use-one-literal-as-default
 
-# Step 3: Post-process to add UNSET sentinel for Option<Option<T>> fields
+# Step 4: Post-process to add UNSET sentinel for Option<Option<T>> fields
 echo "Post-processing types to handle null vs omitted..."
-python3 "$SCRIPT_DIR/post_process_types.py" tensorzero/types_generated.py
+python3 "$SCRIPT_DIR/post_process_types.py" "$PROJECT_ROOT/tensorzero-core/openapi/datasets_v1.json" tensorzero/types_generated.py
 
-# Step 4: Format the generated file
+# Step 5: Format the generated file
 echo "Formatting generated Python file..."
 uvx black tensorzero/types_generated.py
 
