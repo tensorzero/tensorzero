@@ -78,6 +78,7 @@ secrecy = { workspace = true }
 serde = { workspace = true }
 serde-untagged = { workspace = true }
 serde_json = { workspace = true }
+serde_with = "3.15"
 http = { workspace = true }
 serde_path_to_error = { workspace = true }
 sha2 = "0.10.9"

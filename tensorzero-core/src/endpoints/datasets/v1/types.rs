@@ -7,28 +7,8 @@ use uuid::Uuid;
 use crate::db::clickhouse::query_builder::{DatapointFilter, InferenceFilter};
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input};
-use crate::serde_util::deserialize_double_option;
 use crate::tool::DynamicToolParams;
 
-#[cfg(test)]
-use utoipa::openapi::{schema::OneOfBuilder, Schema};
-
-/// Helper function to create a schema with x-double-option extension for Option<Option<T>>
-#[cfg(test)]
-fn double_option_schema<T: utoipa::ToSchema>() -> Schema {
-    let inner_schema = T::schema();
-
-    Schema::OneOf(
-        OneOfBuilder::new()
-            .item(inner_schema)
-            .extensions(Some(
-                utoipa::openapi::extensions::ExtensionsBuilder::new()
-                    .add("x-double-option", true)
-                    .build(),
-            ))
-            .build(),
-    )
-}
 
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -75,8 +55,8 @@ pub struct UpdateChatDatapointRequest {
     pub output: Option<Vec<ContentBlockChatOutput>>,
 
     /// Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    #[serde(default, deserialize_with = "deserialize_double_option")]
-    #[cfg_attr(test, schema(schema_with = double_option_schema::<DynamicToolParams>))]
+    #[serde(default, with = "::serde_with::rust::double_option")]
+    #[cfg_attr(test, ts(type = "DynamicToolParams | null"))]
     pub tool_params: Option<Option<DynamicToolParams>>,
 
     /// Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
@@ -110,8 +90,8 @@ pub struct UpdateJsonDatapointRequest {
     /// JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     /// This will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will
     /// also be stored, because we allow invalid outputs in datapoints by design.
-    #[serde(default, deserialize_with = "deserialize_double_option")]
-    #[cfg_attr(test, schema(schema_with = double_option_schema::<JsonDatapointOutputUpdate>))]
+    #[serde(default, with = "::serde_with::rust::double_option")]
+    #[cfg_attr(test, ts(type = "JsonDatapointOutputUpdate | null"))]
     pub output: Option<Option<JsonDatapointOutputUpdate>>,
 
     /// The output schema of the JSON datapoint. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
@@ -146,8 +126,8 @@ pub struct JsonDatapointOutputUpdate {
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    #[serde(default, deserialize_with = "deserialize_double_option")]
-    #[cfg_attr(test, schema(schema_with = double_option_schema::<String>))]
+    #[serde(default, with = "::serde_with::rust::double_option")]
+    #[cfg_attr(test, ts(type = "string | null"))]
     pub name: Option<Option<String>>,
 }
 
@@ -440,9 +420,65 @@ mod openapi_generation_tests {
     )]
     struct DatasetsV1Api;
 
+    /// Add x-double-option extensions to fields that use Option<Option<T>> pattern.
+    /// This is determined by fields using serde_with::rust::double_option.
+    fn add_double_option_extensions(openapi: &mut utoipa::openapi::OpenApi) {
+        use utoipa::openapi::{RefOr, schema::Schema};
+
+        // List of (schema_name, field_name) tuples that use double_option
+        // This is the single source of truth in Rust for which fields need the extension
+        const DOUBLE_OPTION_FIELDS: &[(&str, &str)] = &[
+            ("UpdateChatDatapointRequest", "tool_params"),
+            ("UpdateJsonDatapointRequest", "output"),
+            ("DatapointMetadataUpdate", "name"),
+        ];
+
+        if let Some(components) = openapi.components.as_mut() {
+            for (schema_name, field_name) in DOUBLE_OPTION_FIELDS {
+                if let Some(RefOr::T(schema)) = components.schemas.get_mut(*schema_name) {
+                    // Match on Schema enum to get Object variant
+                    if let Schema::Object(obj) = schema {
+                        // Access properties map and get the specific field
+                        if let Some(RefOr::T(field_schema)) = obj.properties.get_mut(*field_name) {
+                            // Add the x-double-option extension based on the field schema type
+                            match field_schema {
+                                Schema::Object(field_obj) => {
+                                    field_obj
+                                        .extensions
+                                        .get_or_insert_with(Default::default)
+                                        .insert(
+                                            "x-double-option".to_string(),
+                                            serde_json::Value::Bool(true),
+                                        );
+                                }
+                                Schema::OneOf(one_of) => {
+                                    one_of
+                                        .extensions
+                                        .get_or_insert_with(Default::default)
+                                        .insert(
+                                            "x-double-option".to_string(),
+                                            serde_json::Value::Bool(true),
+                                        );
+                                }
+                                _ => {
+                                    // For other schema types, we might need a different approach
+                                    eprintln!("Warning: Unexpected schema type for {}.{}", schema_name, field_name);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn export_openapi_schema() {
-        let openapi = DatasetsV1Api::openapi();
+        let mut openapi = DatasetsV1Api::openapi();
+
+        // Add x-double-option extensions for Option<Option<T>> fields
+        add_double_option_extensions(&mut openapi);
+
         let json =
             serde_json::to_string_pretty(&openapi).expect("Failed to serialize OpenAPI spec");
 

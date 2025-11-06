@@ -364,11 +364,11 @@
         "description": "A request to update the metadata of a datapoint.",
         "properties": {
           "name": {
-            "oneOf": [
-              {
-                "type": "string"
-              }
+            "type": [
+              "string",
+              "null"
             ],
+            "description": "Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.",
             "x-double-option": true
           }
         }
@@ -1262,59 +1262,11 @@
           "tool_params": {
             "oneOf": [
               {
-                "type": "object",
-                "description": "Wire/API representation of dynamic tool parameters for inference requests.\n\nThis type is the **wire format** for tool configurations used in API requests and responses.\nIt distinguishes between static tools (configured in the function) and dynamic tools\n(provided at runtime), allowing clients to reference pre-configured tools by name or\nprovide new tools on-the-fly.\n\n# Purpose\n- Accept tool parameters in inference API requests (e.g., `/inference/{function_name}`)\n- Expose tool configurations in API responses for stored inferences\n- Support Python and TypeScript client bindings\n- Allow runtime customization of tool behavior\n\n# Fields\n- `allowed_tools`: Names of static tools from function config to use (subset selection)\n- `additional_tools`: New tools defined at runtime (not in static config)\n- `tool_choice`: Override the function's default tool choice strategy\n- `parallel_tool_calls`: Override whether parallel tool calls are enabled\n- `provider_tools`: Provider-specific tool configurations (not persisted to database)\n\n# Key Differences from ToolCallConfigDatabaseInsert\n- **Separate lists**: Maintains distinction between static (`allowed_tools`) and dynamic (`additional_tools`) tools\n- **By reference**: Static tools referenced by name, not duplicated\n- **Has provider_tools**: Can specify provider-specific tool configurations\n- **Has bindings**: Exposed to Python/TypeScript via `pyo3` and `ts_rs`\n\n# Conversion to Storage Format\nConverting from `DynamicToolParams` to `ToolCallConfigDatabaseInsert` is a **lossy** operation:\n1. Static tools (from `allowed_tools` names) are resolved from function config\n2. Dynamic tools (from `additional_tools`) are included as-is\n3. Both lists are merged into a single `tools_available` list\n4. The distinction between static and dynamic tools is lost\n5. `provider_tools` are dropped (not stored)\n\nUse `FunctionConfig::dynamic_tool_params_to_database_insert()` for this conversion.\n\n# Conversion from Storage Format\nConverting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` attempts to reconstruct the original:\n1. Tools that match function config tool names → `allowed_tools`\n2. Tools that don't match function config → `additional_tools`\n3. `provider_tools` is set to `None` (cannot be recovered)\n\nUse `FunctionConfig::database_insert_to_dynamic_tool_params()` for this conversion.\n\n# Example\n```rust,ignore\n// API request with dynamic tool params\nlet params = DynamicToolParams {\n    allowed_tools: Some(vec![\"calculator\".to_string()]),  // Use only the calculator tool from config\n    additional_tools: Some(vec![Tool {  runtime tool  }]),  // Add a new tool\n    tool_choice: Some(ToolChoice::Required),\n    parallel_tool_calls: Some(true),\n    provider_tools: None,\n};\n\n// Convert to storage format (merge tools, lose distinction)\nlet db_insert = function_config\n    .dynamic_tool_params_to_database_insert(params, &static_tools)?\n    .unwrap_or_default();\n\n// db_insert.tools_available now contains both the calculator tool (from config)\n// and the runtime tool (from additional_tools), merged together\n```\n\nSee also: [`ToolCallConfigDatabaseInsert`] for the storage/database format",
-                "properties": {
-                  "additional_tools": {
-                    "type": [
-                      "array",
-                      "null"
-                    ],
-                    "items": {
-                      "$ref": "#/components/schemas/Tool"
-                    },
-                    "description": "Tools that the user provided at inference time (not in function config), in addition to the function-configured\ntools, that are also allowed."
-                  },
-                  "allowed_tools": {
-                    "type": [
-                      "array",
-                      "null"
-                    ],
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "A subset of static tools configured for the function that the inference is allowed to use. Optional.\nIf not provided, all static tools are allowed."
-                  },
-                  "parallel_tool_calls": {
-                    "type": [
-                      "boolean",
-                      "null"
-                    ],
-                    "description": "Whether to use parallel tool calls in the inference. Optional.\nIf provided during inference, it will override the function-configured parallel tool calls."
-                  },
-                  "provider_tools": {
-                    "type": [
-                      "array",
-                      "null"
-                    ],
-                    "items": {
-                      "$ref": "#/components/schemas/ProviderTool"
-                    },
-                    "description": "Provider-specific tool configurations (not persisted to database)"
-                  },
-                  "tool_choice": {
-                    "oneOf": [
-                      {
-                        "type": "null"
-                      },
-                      {
-                        "$ref": "#/components/schemas/ToolChoice",
-                        "description": "User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.\nOptional."
-                      }
-                    ]
-                  }
-                },
-                "additionalProperties": false
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DynamicToolParams",
+                "description": "Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value."
               }
             ],
             "x-double-option": true
@@ -1477,17 +1429,11 @@
           "output": {
             "oneOf": [
               {
-                "type": "object",
-                "description": "A request to update the output of a JSON datapoint.\nWe intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable\nfor users to run evals against them.",
-                "required": [
-                  "raw"
-                ],
-                "properties": {
-                  "raw": {
-                    "type": "string",
-                    "description": "The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string."
-                  }
-                }
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonDatapointOutputUpdate",
+                "description": "JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.\nThis will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will\nalso be stored, because we allow invalid outputs in datapoints by design."
               }
             ],
             "x-double-option": true
