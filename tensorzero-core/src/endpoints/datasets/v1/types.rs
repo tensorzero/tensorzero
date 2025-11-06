@@ -10,6 +10,26 @@ use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
 use crate::tool::DynamicToolParams;
 
+#[cfg(test)]
+use utoipa::openapi::{schema::OneOfBuilder, Schema};
+
+/// Helper function to create a schema with x-double-option extension for Option<Option<T>>
+#[cfg(test)]
+fn double_option_schema<T: utoipa::ToSchema>() -> Schema {
+    let inner_schema = T::schema();
+
+    Schema::OneOf(
+        OneOfBuilder::new()
+            .item(inner_schema)
+            .extensions(Some(
+                utoipa::openapi::extensions::ExtensionsBuilder::new()
+                    .add("x-double-option", true)
+                    .build(),
+            ))
+            .build(),
+    )
+}
+
 #[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -56,6 +76,7 @@ pub struct UpdateChatDatapointRequest {
 
     /// Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[cfg_attr(test, schema(schema_with = double_option_schema::<DynamicToolParams>))]
     pub tool_params: Option<Option<DynamicToolParams>>,
 
     /// Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
@@ -90,6 +111,7 @@ pub struct UpdateJsonDatapointRequest {
     /// This will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will
     /// also be stored, because we allow invalid outputs in datapoints by design.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[cfg_attr(test, schema(schema_with = double_option_schema::<JsonDatapointOutputUpdate>))]
     pub output: Option<Option<JsonDatapointOutputUpdate>>,
 
     /// The output schema of the JSON datapoint. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
@@ -125,6 +147,7 @@ pub struct JsonDatapointOutputUpdate {
 pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[cfg_attr(test, schema(schema_with = double_option_schema::<String>))]
     pub name: Option<Option<String>>,
 }
 
@@ -420,7 +443,8 @@ mod openapi_generation_tests {
     #[test]
     fn export_openapi_schema() {
         let openapi = DatasetsV1Api::openapi();
-        let json = serde_json::to_string_pretty(&openapi).expect("Failed to serialize OpenAPI spec");
+        let json =
+            serde_json::to_string_pretty(&openapi).expect("Failed to serialize OpenAPI spec");
 
         // Create output directory if it doesn't exist
         let output_dir = "openapi";

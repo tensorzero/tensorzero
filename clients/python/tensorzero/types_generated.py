@@ -280,6 +280,17 @@ class UpdateDatapointsResponse:
 
 
 @dataclass
+class Output:
+    """
+    A request to update the output of a JSON datapoint.
+    We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
+    for users to run evals against them.
+    """
+
+    raw: str
+
+
+@dataclass
 class UrlFile:
     """
     A file that can be located at a URL
@@ -422,6 +433,85 @@ class Thought:
     signature: str | None = None
     summary: list[ThoughtSummaryBlock] | None = None
     text: str | None = None
+
+
+@dataclass
+class ToolParams:
+    """
+    Wire/API representation of dynamic tool parameters for inference requests.
+
+    This type is the **wire format** for tool configurations used in API requests and responses.
+    It distinguishes between static tools (configured in the function) and dynamic tools
+    (provided at runtime), allowing clients to reference pre-configured tools by name or
+    provide new tools on-the-fly.
+
+    # Purpose
+    - Accept tool parameters in inference API requests (e.g., `/inference/{function_name}`)
+    - Expose tool configurations in API responses for stored inferences
+    - Support Python and TypeScript client bindings
+    - Allow runtime customization of tool behavior
+
+    # Fields
+    - `allowed_tools`: Names of static tools from function config to use (subset selection)
+    - `additional_tools`: New tools defined at runtime (not in static config)
+    - `tool_choice`: Override the function's default tool choice strategy
+    - `parallel_tool_calls`: Override whether parallel tool calls are enabled
+    - `provider_tools`: Provider-specific tool configurations (not persisted to database)
+
+    # Key Differences from ToolCallConfigDatabaseInsert
+    - **Separate lists**: Maintains distinction between static (`allowed_tools`) and dynamic (`additional_tools`) tools
+    - **By reference**: Static tools referenced by name, not duplicated
+    - **Has provider_tools**: Can specify provider-specific tool configurations
+    - **Has bindings**: Exposed to Python/TypeScript via `pyo3` and `ts_rs`
+
+    # Conversion to Storage Format
+    Converting from `DynamicToolParams` to `ToolCallConfigDatabaseInsert` is a **lossy** operation:
+    1. Static tools (from `allowed_tools` names) are resolved from function config
+    2. Dynamic tools (from `additional_tools`) are included as-is
+    3. Both lists are merged into a single `tools_available` list
+    4. The distinction between static and dynamic tools is lost
+    5. `provider_tools` are dropped (not stored)
+
+    Use `FunctionConfig::dynamic_tool_params_to_database_insert()` for this conversion.
+
+    # Conversion from Storage Format
+    Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` attempts to reconstruct the original:
+    1. Tools that match function config tool names → `allowed_tools`
+    2. Tools that don't match function config → `additional_tools`
+    3. `provider_tools` is set to `None` (cannot be recovered)
+
+    Use `FunctionConfig::database_insert_to_dynamic_tool_params()` for this conversion.
+
+    # Example
+    ```rust,ignore
+    // API request with dynamic tool params
+    let params = DynamicToolParams {
+        allowed_tools: Some(vec!["calculator".to_string()]),  // Use only the calculator tool from config
+        additional_tools: Some(vec![Tool {  runtime tool  }]),  // Add a new tool
+        tool_choice: Some(ToolChoice::Required),
+        parallel_tool_calls: Some(true),
+        provider_tools: None,
+    };
+
+    // Convert to storage format (merge tools, lose distinction)
+    let db_insert = function_config
+        .dynamic_tool_params_to_database_insert(params, &static_tools)?
+        .unwrap_or_default();
+
+    // db_insert.tools_available now contains both the calculator tool (from config)
+    // and the runtime tool (from additional_tools), merged together
+    ```
+
+    See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
+    """
+
+    additional_tools: list[Tool] | None = None
+    allowed_tools: list[str] | None = None
+    parallel_tool_calls: bool | None = None
+    provider_tools: list[ProviderTool] | None = None
+    tool_choice: (
+        Literal["none"] | Literal["auto"] | Literal["required"] | ToolChoice1 | None
+    ) = None
 
 
 @dataclass
@@ -599,7 +689,7 @@ class UpdateChatDatapointRequest:
         | None
     ) = None
     tags: dict[str, Any] | None = None
-    tool_params: DynamicToolParams | None | _UnsetType = UNSET
+    tool_params: ToolParams | None | _UnsetType = UNSET
 
 
 @dataclass
@@ -626,7 +716,7 @@ class UpdateJsonDatapointRequest:
     id: str
     input: Input | None = None
     metadata: DatapointMetadataUpdate | None = None
-    output: JsonDatapointOutputUpdate | None | _UnsetType = UNSET
+    output: Output | None | _UnsetType = UNSET
     output_schema: Any | None = None
     tags: dict[str, Any] | None = None
 

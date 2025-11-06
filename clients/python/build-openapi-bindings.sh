@@ -9,17 +9,12 @@ echo "Building Python bindings from OpenAPI schema..."
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
 
-# Step 1: Generate OpenAPI schema from Rust code
+# Step 1: Generate OpenAPI schema from Rust code (includes x-double-option extensions)
 echo "Generating OpenAPI schema from Rust..."
 cd "$PROJECT_ROOT"
 cargo test --lib -p tensorzero-core export_openapi_schema -- --nocapture
 
-# Step 2: Add x-double-option extensions to OpenAPI schema
-echo "Adding x-double-option extensions to OpenAPI schema..."
-cd "$SCRIPT_DIR"
-python3 "$SCRIPT_DIR/add_double_option_extensions.py" "$PROJECT_ROOT/tensorzero-core/openapi/datasets_v1.json"
-
-# Step 3: Generate Python dataclasses from OpenAPI schema
+# Step 2: Generate Python dataclasses from OpenAPI schema
 echo "Generating Python dataclasses from OpenAPI schema..."
 cd "$SCRIPT_DIR"
 
@@ -42,7 +37,7 @@ uvx --from="datamodel-code-generator[http]" datamodel-codegen \
   --custom-template-dir "$SCRIPT_DIR/templates" \
   --custom-file-header-path "$SCRIPT_DIR/file_header.py"
 
-# Step 4: Format the generated file
+# Step 3: Format the generated file
 echo "Formatting generated Python file..."
 uvx black tensorzero/types_generated.py
 

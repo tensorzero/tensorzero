@@ -46,10 +46,10 @@ We use `ts-rs` and `n-api` for TypeScript-Rust interoperability.
 We use `utoipa` to generate OpenAPI schemas from Rust types, then use `datamodel-code-generator` to generate Python dataclasses.
 
 - To generate Python types, run `clients/python/build-openapi-bindings.sh` which:
-  1. Generates OpenAPI schemas from Rust types using `cargo test` (creates `openapi/datasets_v1.json`)
-  2. Adds `x-double-option` extensions to mark fields with `Option<Option<T>>`
-  3. Generates Python dataclasses using `datamodel-code-generator` with custom templates
-  4. Formats the output with `black`
+  1. Generates OpenAPI schemas from Rust types using `cargo test` (creates `openapi/datasets_v1.json` with `x-double-option` extensions)
+  2. Generates Python dataclasses using `datamodel-code-generator` with custom templates
+  3. Formats the output with `black`
+- The `x-double-option` extensions are added during schema generation using `schema_with` attributes in Rust
 - The custom template (`clients/python/templates/dataclass.jinja2`) checks for `x-double-option` and generates UNSET sentinel types
 - Note: Some types with recursive structures (DatapointFilter, InferenceFilter, Datapoint) are excluded from the OpenAPI generation due to stack overflow issues during schema generation
 
@@ -62,7 +62,7 @@ The generated Python types include an `UNSET` sentinel value to distinguish betw
 
 Fields with UNSET support are marked with `x-double-option: true` in the OpenAPI schema. To add a new field:
 1. Use `Option<Option<T>>` in Rust with `#[serde(deserialize_with = "deserialize_double_option")]`
-2. Add the field to `DOUBLE_OPTION_FIELDS` in `clients/python/add_double_option_extensions.py`
+2. Add `#[cfg_attr(test, schema(schema_with = double_option_schema::<T>))]` to the field
 3. Run `clients/python/build-openapi-bindings.sh`
 
 See `clients/python/UNSET_USAGE.md` for usage examples.
