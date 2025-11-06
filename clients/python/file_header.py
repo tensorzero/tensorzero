@@ -10,9 +10,6 @@ To regenerate, run:
     python generate_schema_types.py
 """
 
-from __future__ import annotations
-
-
 class _UnsetType:
     """Sentinel value to distinguish between omitted fields and null values."""
 

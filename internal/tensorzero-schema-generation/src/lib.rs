@@ -79,6 +79,7 @@ pub fn export_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let schema_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
                 .parent()
                 .expect("Failed to find repository root")
+                .join("clients")
                 .join("schemas");
 
             fs::create_dir_all(&schema_dir)

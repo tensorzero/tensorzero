@@ -88,7 +88,7 @@ def find_schema_files(schema_dir: Path) -> List[Path]:
     return schema_files
 
 
-def merge_schemas(schema_files: List[Path], output_file: Path) -> Dict[str, List[str]]:
+def merge_schemas(schema_files: List[Path], output_file: Path) -> None:
     """
     Merge all JSON schemas into a single schema file with shared $defs.
 
@@ -99,14 +99,13 @@ def merge_schemas(schema_files: List[Path], output_file: Path) -> Dict[str, List
         output_file: Path to write the merged schema
 
     Returns:
-        Dict mapping type names to lists of field names that are double-optional
+        None
     """
     print(f"Merging {len(schema_files)} schemas...")
 
     # Collect all schemas and their definitions
     all_defs = {}
     root_schemas = {}
-    double_optional_fields = {}  # Track fields with x-double-optional annotation
 
     for schema_file in schema_files:
         with open(schema_file, 'r') as f:
@@ -127,14 +126,6 @@ def merge_schemas(schema_files: List[Path], output_file: Path) -> Dict[str, List
         root_schema = {k: v for k, v in schema.items() if k != "$defs"}
         root_schemas[schema_name] = root_schema
 
-        # Track fields with x-double-optional annotation
-        if "properties" in schema:
-            for field_name, field_schema in schema["properties"].items():
-                if isinstance(field_schema, dict) and field_schema.get("x-double-optional"):
-                    if schema_name not in double_optional_fields:
-                        double_optional_fields[schema_name] = []
-                    double_optional_fields[schema_name].append(field_name)
-
     # Create merged schema with all definitions in $defs
     # and all root schemas in a oneOf with discriminator
     merged = {
@@ -152,64 +143,10 @@ def merge_schemas(schema_files: List[Path], output_file: Path) -> Dict[str, List
         json.dump(merged, f, indent=2)
 
     print(f"✓ Merged schema written to {output_file}")
-    if double_optional_fields:
-        print(f"✓ Found {len(double_optional_fields)} types with double-optional fields")
-
-    return double_optional_fields
-
-
-def post_process_double_optional_fields(
-    generated_code: str,
-    double_optional_fields: Dict[str, List[str]]
-) -> str:
-    """
-    Post-process generated Python code to replace `= None` with `= UNSET` for double-optional fields.
-
-    Args:
-        generated_code: The generated Python code
-        double_optional_fields: Dict mapping type names to lists of double-optional field names
-
-    Returns:
-        Modified Python code with UNSET defaults for double-optional fields
-    """
-    import re
-
-    lines = generated_code.split('\n')
-    result_lines = []
-    current_class = None
-
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-
-        # Track current class
-        class_match = re.match(r'^class (\w+):', line)
-        if class_match:
-            current_class = class_match.group(1)
-
-        # Check if this line is a field assignment with = None
-        if current_class and current_class in double_optional_fields:
-            # Match field assignments like: field_name: type | None = None
-            field_match = re.match(r'^    (\w+): (.+) = None$', line)
-            if field_match:
-                field_name = field_match.group(1)
-                type_hint = field_match.group(2)
-
-                # Check if this field is marked as double-optional
-                if field_name in double_optional_fields[current_class]:
-                    # Replace = None with = UNSET and add _UnsetType to type hint
-                    line = f'    {field_name}: {type_hint} | _UnsetType = UNSET'
-
-        result_lines.append(line)
-        i += 1
-
-    return '\n'.join(result_lines)
-
 
 def generate_dataclasses_from_schema(
     schema_file: Path,
     output_file: Path,
-    double_optional_fields: Dict[str, List[str]]
 ) -> None:
     """
     Generate Python dataclasses from a merged JSON schema file.
@@ -236,18 +173,19 @@ def generate_dataclasses_from_schema(
             "--output-model-type", "dataclasses.dataclass",
             "--use-standard-collections",
             "--use-union-operator",
-            "--target-python-version", "3.10",
+            "--target-python-version", "3.12",
             "--use-schema-description",
             # "--enum-field-as-literal", "one",
             # "--use-title-as-name",
             "--disable-timestamp",
             "--use-annotated",
             "--field-constraints",
-            "--collapse-root-models",
+            # "--collapse-root-models",
             "--use-one-literal-as-default",
             "--field-extra-keys", "x-double-optional",
             "--custom-template-dir", str(script_dir / "templates"),
             "--custom-file-header-path", str(script_dir / "file_header.py"),
+            "--keyword-only",
             "--use-field-description",
         ]
 
@@ -279,7 +217,7 @@ def main() -> None:
     """Main entry point for the script."""
     # Determine paths
     script_dir = Path(__file__).parent
-    schema_dir = script_dir / ".." / ".." / "schemas"
+    schema_dir = script_dir / ".." / "schemas"
     schema_dir = schema_dir.resolve()
     output_dir = script_dir / "tensorzero"
     output_file = output_dir / "generated_types.py"
@@ -303,10 +241,26 @@ def main() -> None:
 
         # Merge all schemas into one and track double-optional fields
         merged_schema_file = temp_dir / "merged_schema.json"
-        double_optional_fields = merge_schemas(schema_files, merged_schema_file)
+        merge_schemas(schema_files, merged_schema_file)
 
         # Generate dataclasses from merged schema
-        generate_dataclasses_from_schema(merged_schema_file, output_file, double_optional_fields)
+        generate_dataclasses_from_schema(merged_schema_file, output_file)
+
+        # Post-process: remove all "from __future__ import annotations" lines
+        # (we include it in file_header.py, so datamodel-code-generator's version is redundant)
+        print("Post-processing: removing redundant future imports...")
+        with open(output_file, 'r') as f:
+            lines = f.readlines()
+
+        filtered_lines = [
+            line for line in lines
+            if line.strip() != "from __future__ import annotations"
+        ]
+
+        with open(output_file, 'w') as f:
+            f.writelines(filtered_lines)
+
+        print("✓ Removed duplicate future imports")
 
     finally:
         # Clean up temp files

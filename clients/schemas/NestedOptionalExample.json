@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NestedOptionalExample",
+  "description": "Example with nested structures",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "metadata": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NestedMetadata"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "x-double-optional": true,
+      "x-omit-none": false
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "$defs": {
+    "NestedMetadata": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ]
+    }
+  }
+}

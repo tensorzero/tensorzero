@@ -23,8 +23,6 @@ class {{ class_name }}:
     pass
 {%- endif %}
 {%- for field in fields -%}
-    # Field exstras: {{field.extras}}
-
     {%- if field.field %}
     {{ field.name }}: {{ field.type_hint }} = {{ field.field }}
     {%- else %}

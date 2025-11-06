@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TransformExample",
+  "description": "Example showing a transform function approach",
+  "type": "object",
+  "properties": {
+    "regular_field": {
+      "type": "string"
+    },
+    "double_optional_field": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "regular_field"
+  ],
+  "x-transform-applied": true,
+  "x-has-double-optional": true
+}
