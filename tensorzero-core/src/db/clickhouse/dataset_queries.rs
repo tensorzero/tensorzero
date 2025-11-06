@@ -73,9 +73,17 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         query_params_owned.insert("dataset_name".to_string(), dataset_name.clone());
 
         // Build the INSERT query with conditional logic based on inference type
-        let type_specific_field = match params.inference_type {
-            DatapointKind::Chat => "subquery.tool_params",
-            DatapointKind::Json => "subquery.output_schema",
+        let type_specific_fields = match params.inference_type {
+            DatapointKind::Chat => {
+                r"subquery.tool_params,
+    subquery.dynamic_tools,
+    subquery.dynamic_provider_tools,
+    subquery.parallel_tool_calls,
+    subquery.tool_choice,
+    subquery.allowed_tools,
+            "
+            }
+            DatapointKind::Json => "subquery.output_schema,",
         };
 
         let wrapped_query = format!(
@@ -88,7 +96,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 subquery.episode_id as episode_id,
                 subquery.input as input,
                 subquery.output as output,
-                {type_specific_field},
+                {type_specific_fields}
                 subquery.tags as tags,
                 subquery.auxiliary as auxiliary,
                 false as is_deleted,
@@ -317,8 +325,16 @@ impl DatasetQueries for ClickHouseConnectionInfo {
 
         let table = function_type.table_name();
 
-        let type_specific_field = match function_type {
-            DatapointKind::Chat => "tool_params",
+        let type_specific_fields = match params.function_type {
+            DatapointKind::Chat => {
+                r"tool_params,
+    dynamic_tools,
+    dynamic_provider_tools,
+    parallel_tool_calls,
+    tool_choice,
+    allowed_tools,
+            "
+            }
             DatapointKind::Json => "output_schema",
         };
 
@@ -333,7 +349,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 episode_id,
                 input,
                 output,
-                {type_specific_field},
+                {type_specific_fields}
                 tags,
                 auxiliary,
                 is_deleted,
@@ -350,7 +366,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 episode_id,
                 input,
                 output,
-                {type_specific_field},
+                {type_specific_fields}
                 tags,
                 auxiliary,
                 is_deleted,
@@ -932,9 +948,17 @@ fn build_select_inferences_matching_dataset_subquery(
     };
 
     // Start building the base query.
-    let type_specific_field = match params.inference_type {
-        DatapointKind::Chat => "tool_params",
-        DatapointKind::Json => "output_schema",
+    let type_specific_fields = match params.inference_type {
+        DatapointKind::Chat => {
+            r"tool_params,
+dynamic_tools,
+dynamic_provider_tools,
+parallel_tool_calls,
+tool_choice,
+allowed_tools,
+        "
+        }
+        DatapointKind::Json => "output_schema,",
     };
     let mut query = format!(
         "SELECT
@@ -945,7 +969,7 @@ fn build_select_inferences_matching_dataset_subquery(
             episode_id,
             input,
             {output_field},
-            {type_specific_field},
+            {type_specific_fields}
             tags,
             NULL as staled_at,
             id as source_inference_id,
@@ -1107,6 +1131,11 @@ mod tests {
                 input,
                 output,
                 tool_params,
+                dynamic_tools,
+                dynamic_provider_tools,
+                parallel_tool_calls,
+                tool_choice,
+                allowed_tools,
                 tags,
                 NULL as staled_at,
                 id as source_inference_id,
@@ -1644,6 +1673,11 @@ mod tests {
                     subquery.input as input,
                     subquery.output as output,
                     subquery.tool_params,
+                    subquery.dynamic_tools,
+                    subquery.dynamic_provider_tools,
+                    subquery.parallel_tool_calls,
+                    subquery.tool_choice,
+                    subquery.allowed_tools,
                     subquery.tags as tags,
                     subquery.auxiliary as auxiliary,
                     false as is_deleted,
