@@ -103,7 +103,8 @@ pub struct Base64File {
     pub source_url: Option<Url>,
     #[ts(type = "string")]
     pub mime_type: MediaType,
-    // Private field with validation enforced via constructor
+    // This field contains *unprefixed* base64-encoded data.
+    // It's private and validated by the constructor.
     data: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
