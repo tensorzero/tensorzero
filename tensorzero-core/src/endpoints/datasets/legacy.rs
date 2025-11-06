@@ -5,9 +5,11 @@ use chrono::Utc;
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
+use tensorzero_derive::export_schema;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -1105,13 +1107,15 @@ pub struct InsertDatapointResponse {
 
 /// Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "Datapoint"))]
-#[derive(ts_rs::TS)]
 #[ts(export)]
+#[export_schema]
 pub enum Datapoint {
+    #[schemars(title = "DatapointChat")]
     Chat(ChatInferenceDatapoint),
+    #[schemars(title = "DatapointJson")]
     Json(JsonInferenceDatapoint),
 }
 
@@ -1408,10 +1412,10 @@ pub struct JsonDatapointInsert {
 
 /// Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[derive(ts_rs::TS)]
 #[ts(export)]
+#[export_schema]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1551,9 +1555,9 @@ impl From<StoredChatInferenceDatapoint> for ChatInferenceDatapointInsert {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[derive(ts_rs::TS)]
+#[export_schema]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,

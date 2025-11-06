@@ -146,6 +146,7 @@ http-body = "1.0.1"
 tensorzero-auth = { path = "../internal/tensorzero-auth" }
 git2 = { workspace = true }
 tempfile = { version = "3.21.0" }
+schemars = { workspace = true, features = ["uuid1"] }
 
 [dev-dependencies]
 tempfile = "3.21.0"
@@ -154,6 +155,7 @@ tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 evaluations = { path = "../evaluations" }
 paste = "1.0.15"
 base64 = "0.22.1"
+tensorzero-derive = { path = "../internal/tensorzero-derive" }
 aws-credential-types = { version = "1.2.2", features = [
     "hardcoded-credentials",
 ] }
