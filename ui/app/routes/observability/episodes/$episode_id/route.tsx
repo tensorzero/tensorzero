@@ -191,7 +191,15 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  const { handleInferenceHover, getInferenceData, isLoading } = useInferenceHover(
+  const { 
+    handleInferenceHover, 
+    handleOpenSheet,
+    handleCloseSheet,
+    getInferenceData, 
+    isLoading,
+    getError,
+    openSheetInferenceId,
+  } = useInferenceHover(
     `/observability/episodes/${episode_id}`
   );
 
@@ -308,8 +316,12 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           <EpisodeInferenceTable 
             inferences={inferences} 
             onInferenceHover={handleInferenceHover}
+            onOpenSheet={handleOpenSheet}
+            onCloseSheet={handleCloseSheet}
             getInferenceData={getInferenceData}
             isInferenceLoading={isLoading}
+            getError={getError}
+            openSheetInferenceId={openSheetInferenceId}
           />
           <PageButtons
             onPreviousPage={handlePreviousInferencePage}

@@ -13,15 +13,22 @@ interface InferenceState {
   error: string | null;
 }
 
-export function useInferenceHover(episodeRoute: string) {
-  const [hoveredInferenceId, setHoveredInferenceId] = useState<string | null>(null);
+export function useInferenceHover(episodeRoute: string): {
+  handleInferenceHover: (inferenceId: string) => void;
+  handleOpenSheet: (inferenceId: string) => void;
+  handleCloseSheet: () => void;
+  getInferenceData: (inferenceId: string) => ParsedInferenceRow | null;
+  isLoading: (inferenceId: string) => boolean;
+  getError: (inferenceId: string) => string | null;
+  openSheetInferenceId: string | null;
+} {
+  const [fetchedInferenceId, setFetchedInferenceId] = useState<string | null>(null);
+  const [openSheetInferenceId, setOpenSheetInferenceId] = useState<string | null>(null);
   const [inferenceCache, setInferenceCache] = useState<Record<string, InferenceState>>({});
   const fetcher = useFetcher<ActionData>();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleInferenceHover = (inferenceId: string) => {
-    setHoveredInferenceId(inferenceId);
-    
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
@@ -37,6 +44,8 @@ export function useInferenceHover(episodeRoute: string) {
         [inferenceId]: { data: null, loading: true, error: null }
       }));
       
+      setFetchedInferenceId(inferenceId);
+      
       const formData = new FormData();
       formData.append("_action", "fetchInference");
       formData.append("inferenceId", inferenceId);
@@ -48,18 +57,46 @@ export function useInferenceHover(episodeRoute: string) {
     }, 100);
   };
 
-  useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data && hoveredInferenceId) {
+  const handleOpenSheet = (inferenceId: string) => {
+    setOpenSheetInferenceId(inferenceId);
+    
+    // Fetch immediately if not in cache
+    const currentState = inferenceCache[inferenceId];
+    if (!currentState?.data && !currentState?.loading) {
       setInferenceCache(prev => ({
         ...prev,
-        [hoveredInferenceId]: {
+        [inferenceId]: { data: null, loading: true, error: null }
+      }));
+      
+      setFetchedInferenceId(inferenceId);
+      
+      const formData = new FormData();
+      formData.append("_action", "fetchInference");
+      formData.append("inferenceId", inferenceId);
+      
+      fetcher.submit(formData, { 
+        method: "POST",
+        action: episodeRoute
+      });
+    }
+  };
+
+  const handleCloseSheet = () => {
+    setOpenSheetInferenceId(null);
+  };
+
+  useEffect(() => {
+    if (fetcher.state === "idle" && fetcher.data && fetchedInferenceId) {
+      setInferenceCache(prev => ({
+        ...prev,
+        [fetchedInferenceId]: {
           data: fetcher.data?.inference || null,
           loading: false,
           error: fetcher.data?.error || null
         }
       }));
     }
-  }, [fetcher.state, fetcher.data, hoveredInferenceId]);
+  }, [fetcher.state, fetcher.data, fetchedInferenceId]);
 
   useEffect(() => {
     return () => {
@@ -71,8 +108,11 @@ export function useInferenceHover(episodeRoute: string) {
 
   return {
     handleInferenceHover,
+    handleOpenSheet,
+    handleCloseSheet,
     getInferenceData: (inferenceId: string) => inferenceCache[inferenceId]?.data || null,
     isLoading: (inferenceId: string) => inferenceCache[inferenceId]?.loading || false,
     getError: (inferenceId: string) => inferenceCache[inferenceId]?.error || null,
+    openSheetInferenceId,
   };
 }
