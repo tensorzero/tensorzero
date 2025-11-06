@@ -738,6 +738,7 @@ mod tests {
                 stats::EvaluatorStats {
                     mean: 0.4,
                     stderr: 0.1,
+                    count: 10,
                 },
             );
             stats.insert(
@@ -745,6 +746,7 @@ mod tests {
                 stats::EvaluatorStats {
                     mean: 0.3,
                     stderr: 0.1,
+                    count: 10,
                 },
             );
             stats.insert(
@@ -752,6 +754,7 @@ mod tests {
                 stats::EvaluatorStats {
                     mean: 0.1,
                     stderr: 0.05,
+                    count: 10,
                 },
             );
             stats

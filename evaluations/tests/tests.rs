@@ -1029,8 +1029,8 @@ async fn run_llm_judge_evaluation_chat_pretty() {
     assert!(output_str.contains("Run ID:"));
     assert!(output_str.contains("Number of datapoints:"));
     // Check for the expected evaluation results
-    assert!(output_str.contains("topic_starts_with_f: 0.30 ± 0.14"));
-    assert!(output_str.contains("exact_match: 0.00 ± 0.00"));
+    assert!(output_str.contains("topic_starts_with_f: 0.30 ± 0.14 (n=10)"));
+    assert!(output_str.contains("exact_match: 0.00 ± 0.00 (n=0)"));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1072,7 +1072,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
     assert!(output_str.contains("Run ID:"));
     assert!(output_str.contains("Number of datapoints:"));
     // Check for the expected evaluation results
-    assert!(output_str.contains("count_sports: 0.50 ± 0.20"));
+    assert!(output_str.contains("count_sports: 0.50 ± 0.20 (n=6)"));
     // We don't assert the exact value here because it's not deterministic
     assert!(output_str.contains("exact_match: "));
     let err = err.to_string();
@@ -1178,7 +1178,9 @@ async fn test_parse_args() {
 
 #[tokio::test]
 async fn test_run_evaluation_binary() {
-    let bin_path = env!("CARGO_BIN_EXE_evaluations");
+    // Compatibility with 'cargo nextest archive': https://nexte.st/docs/ci-features/archiving/#making-tests-relocatable
+    let bin_path = std::env::var("NEXTEST_BIN_EXE_evaluations")
+        .unwrap_or_else(|_| env!("CARGO_BIN_EXE_evaluations").to_string());
     println!("Running evaluations binary at {bin_path}");
     let output = std::process::Command::new(bin_path)
         .output()

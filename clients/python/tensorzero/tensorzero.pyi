@@ -34,6 +34,7 @@ from tensorzero import (
 )
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
+    EvaluatorStatsDict,
     InferenceFilter,
     JsonInferenceOutput,
     OrderBy,
@@ -81,12 +82,13 @@ class EvaluationJobHandler:
         """
         ...
 
-    def summary_stats(self) -> dict[str, dict[str, float]]:
+    def summary_stats(self) -> dict[str, EvaluatorStatsDict]:
         """
         Get summary statistics from all consumed results.
 
         Uses cached results collected during iteration.
-        Returns dict mapping evaluator names to {"mean": float, "stderr": float}.
+        Returns dict mapping evaluator names to
+        {"mean": float, "stderr": float, "count": int}.
         """
         ...
 
@@ -124,12 +126,13 @@ class AsyncEvaluationJobHandler:
         """
         ...
 
-    async def summary_stats(self) -> dict[str, dict[str, float]]:
+    async def summary_stats(self) -> dict[str, EvaluatorStatsDict]:
         """
         Get summary statistics from all consumed results.
 
         Uses cached results collected during iteration.
-        Returns dict mapping evaluator names to {"mean": float, "stderr": float}.
+        Returns dict mapping evaluator names to
+        {"mean": float, "stderr": float, "count": int}.
         """
         ...
 
