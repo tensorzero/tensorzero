@@ -617,6 +617,11 @@ jobs:
         run: |
           TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.replicated.yml logs -t
 
+      - name: Print ClickHouse error logs (non-replicated)
+        if: always() && matrix.replicated == false
+        run: |
+          docker exec clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+
       - name: Print ClickHouse error logs (replicated)
         if: always() && matrix.replicated == true
         run: |
