@@ -45,8 +45,12 @@ We use `ts-rs` and `n-api` for TypeScript-Rust interoperability.
 
 We use `utoipa` to generate OpenAPI schemas from Rust types, then use `datamodel-code-generator` to generate Python dataclasses.
 
-- To generate OpenAPI schemas from Rust types, run `cargo openapi-build` (generates `openapi/datasets_v1.json`)
-- To generate Python dataclasses from OpenAPI schemas, run `clients/python/build-openapi-bindings.sh` (generates `clients/python/tensorzero/types_generated.py`)
+- To generate Python types, run `clients/python/build-openapi-bindings.sh` which:
+  1. Generates OpenAPI schemas from Rust types using `cargo test` (creates `openapi/datasets_v1.json`)
+  2. Adds `x-double-option` extensions to mark fields with `Option<Option<T>>`
+  3. Generates Python dataclasses using `datamodel-code-generator` with custom templates
+  4. Formats the output with `black`
+- The custom template (`clients/python/templates/dataclass.jinja2`) checks for `x-double-option` and generates UNSET sentinel types
 - Note: Some types with recursive structures (DatapointFilter, InferenceFilter, Datapoint) are excluded from the OpenAPI generation due to stack overflow issues during schema generation
 
 ## UNSET Sentinel for Option<Option<T>>
@@ -56,7 +60,12 @@ The generated Python types include an `UNSET` sentinel value to distinguish betw
 - `None`: Field is explicitly set to null
 - `value`: Field is set to the provided value
 
-Fields with UNSET support are automatically identified during generation based on the `#[serde(deserialize_with = "deserialize_double_option")]` attribute. See `clients/python/UNSET_USAGE.md` for usage examples.
+Fields with UNSET support are marked with `x-double-option: true` in the OpenAPI schema. To add a new field:
+1. Use `Option<Option<T>>` in Rust with `#[serde(deserialize_with = "deserialize_double_option")]`
+2. Add the field to `DOUBLE_OPTION_FIELDS` in `clients/python/add_double_option_extensions.py`
+3. Run `clients/python/build-openapi-bindings.sh`
+
+See `clients/python/UNSET_USAGE.md` for usage examples.
 
 # CI/CD
 

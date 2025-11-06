@@ -23,7 +23,7 @@ python3 "$SCRIPT_DIR/add_double_option_extensions.py" "$PROJECT_ROOT/tensorzero-
 echo "Generating Python dataclasses from OpenAPI schema..."
 cd "$SCRIPT_DIR"
 
-# Run datamodel-code-generator with Python dataclasses
+# Run datamodel-code-generator with Python dataclasses and custom template
 uvx --from="datamodel-code-generator[http]" datamodel-codegen \
   --input "$PROJECT_ROOT/tensorzero-core/openapi/datasets_v1.json" \
   --input-file-type openapi \
@@ -37,13 +37,12 @@ uvx --from="datamodel-code-generator[http]" datamodel-codegen \
   --use-title-as-name \
   --use-annotated \
   --collapse-root-models \
-  --use-one-literal-as-default
+  --use-one-literal-as-default \
+  --field-extra-keys-without-x-prefix x-double-option \
+  --custom-template-dir "$SCRIPT_DIR/templates" \
+  --custom-file-header-path "$SCRIPT_DIR/file_header.py"
 
-# Step 4: Post-process to add UNSET sentinel for Option<Option<T>> fields
-echo "Post-processing types to handle null vs omitted..."
-python3 "$SCRIPT_DIR/post_process_types.py" "$PROJECT_ROOT/tensorzero-core/openapi/datasets_v1.json" tensorzero/types_generated.py
-
-# Step 5: Format the generated file
+# Step 4: Format the generated file
 echo "Formatting generated Python file..."
 uvx black tensorzero/types_generated.py
 
