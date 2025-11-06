@@ -1,6 +1,6 @@
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:24.12-alpine
+    image: clickhouse:24.12-alpine
     ports:
       - "8123:8123"
     volumes:

@@ -3,7 +3,7 @@ include:
 
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
+    image: clickhouse:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
     environment:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
