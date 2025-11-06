@@ -103,8 +103,8 @@ pub struct Base64File {
     pub source_url: Option<Url>,
     #[ts(type = "string")]
     pub mime_type: MediaType,
-    // TODO: should we add a wrapper type to enforce base64?
-    pub data: String,
+    // Private field with validation enforced via constructor
+    data: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub detail: Option<Detail>,
@@ -139,12 +139,13 @@ impl<'de> Deserialize<'de> for Base64File {
         let helper: Base64FileHelper =
             serde_json::from_value(value).map_err(serde::de::Error::custom)?;
 
-        Ok(Base64File {
-            source_url: helper.source_url,
-            mime_type: helper.mime_type,
-            data: helper.data,
-            detail: helper.detail,
-        })
+        Base64File::new(
+            helper.source_url,
+            helper.mime_type,
+            helper.data,
+            helper.detail,
+        )
+        .map_err(serde::de::Error::custom)
     }
 }
 
@@ -208,8 +209,30 @@ impl std::fmt::Display for Base64File {
 }
 
 impl Base64File {
-    pub fn data(&self) -> Result<&String, Error> {
-        Ok(&self.data)
+    /// Create a new Base64File with validation
+    pub fn new(
+        source_url: Option<Url>,
+        mime_type: MediaType,
+        data: String,
+        detail: Option<Detail>,
+    ) -> Result<Self, Error> {
+        // Validate that data doesn't contain the data: prefix
+        if data.starts_with("data:") {
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "The `data` field for a `Base64File` must not contain `data:` prefix. Data should be pure base64-encoded content only.".to_string(),
+            }));
+        }
+
+        Ok(Self {
+            source_url,
+            mime_type,
+            data,
+            detail,
+        })
+    }
+
+    pub fn data(&self) -> &str {
+        &self.data
     }
 }
 #[cfg(feature = "pyo3")]
@@ -454,12 +477,9 @@ impl<'de> Deserialize<'de> for File {
                 mime_type,
                 data,
                 detail,
-            }) => Ok(File::Base64(Base64File {
-                mime_type,
-                data,
-                source_url: None,
-                detail,
-            })),
+            }) => Ok(File::Base64(
+                Base64File::new(None, mime_type, data, detail).map_err(serde::de::Error::custom)?,
+            )),
             FileTaggedOrUntagged::Tagged(TaggedFile::ObjectStoragePointer {
                 source_url,
                 mime_type,
@@ -487,12 +507,9 @@ impl<'de> Deserialize<'de> for File {
                 mime_type,
                 data,
                 detail,
-            }) => Ok(File::Base64(Base64File {
-                mime_type,
-                data,
-                source_url: None,
-                detail,
-            })),
+            }) => Ok(File::Base64(
+                Base64File::new(None, mime_type, data, detail).map_err(serde::de::Error::custom)?,
+            )),
             FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::ObjectStoragePointer {
                 source_url,
                 mime_type,
@@ -747,52 +764,10 @@ pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, E
     })
 }
 
-/// Tries to convert a filename to a mime type, based on the file extension.
-/// This picks an arbitrary mime type if there are multiple mime types for the extension.
-///
-/// This is used by the openai-compatible endpoint to determine the mime type for
-/// a file input (the OpenAI chat-completions endpoint doesn't provide a mime type for
-/// file inputs)
-pub fn filename_to_mime_type(filename: &str) -> Result<MediaType, Error> {
-    let ext = filename.split('.').next_back().ok_or_else(|| {
-        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-            message: "File name must contain a file extension".to_string(),
-        })
-    })?;
-
-    Ok(match ext {
-        "jpeg" | "jpg" => mime::IMAGE_JPEG,
-        "png" => mime::IMAGE_PNG,
-        "gif" => mime::IMAGE_GIF,
-        "pdf" => mime::APPLICATION_PDF,
-        "webp" => "image/webp".parse::<MediaType>().map_err(|_| {
-            Error::new(ErrorDetails::InternalError {
-                message: "Unknown mime-type `image/webp`. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
-            })
-        })?,
-        _ => {
-            let mime_type = mime_guess::from_ext(ext).first().ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: format!("Unknown file extension `{ext}`"),
-                })
-            })?;
-            tracing::warn!("Guessed mime-type `{mime_type}` for file with extension `{ext}` - this may not be correct");
-            // Reparse to handle different `mime` crate versions
-            mime_type.to_string().parse::<MediaType>().map_err(|_| {
-                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: format!("Unknown mime-type `{mime_type}`"),
-                })
-            })?
-        }
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use crate::inference::types::{
-        file::{
-            filename_to_mime_type, sanitize_raw_request, ObjectStorageFile, ObjectStoragePointer,
-        },
+        file::{sanitize_raw_request, ObjectStorageFile, ObjectStoragePointer},
         resolved_input::LazyFile,
         storage::{StorageKind, StoragePath},
         ContentBlock, RequestMessage, Role,
@@ -910,34 +885,6 @@ mod tests {
             "First <TENSORZERO_FILE_0> then <TENSORZERO_FILE_1> then <TENSORZERO_FILE_3>"
                 .to_string()
         );
-    }
-
-    #[test]
-    fn test_filename_to_mime_type() {
-        let logs_contain = crate::utils::testing::capture_logs();
-        assert_eq!(filename_to_mime_type("test.png").unwrap(), mime::IMAGE_PNG);
-        assert_eq!(filename_to_mime_type("test.jpg").unwrap(), mime::IMAGE_JPEG);
-        assert_eq!(
-            filename_to_mime_type("test.jpeg").unwrap(),
-            mime::IMAGE_JPEG
-        );
-        assert_eq!(filename_to_mime_type("test.gif").unwrap(), mime::IMAGE_GIF);
-        assert_eq!(filename_to_mime_type("test.webp").unwrap(), "image/webp");
-        assert_eq!(
-            filename_to_mime_type("test.pdf").unwrap(),
-            mime::APPLICATION_PDF
-        );
-        assert!(!logs_contain("Guessed"));
-    }
-
-    #[test]
-    fn test_guessed_mime_type_warning() {
-        let logs_contain = crate::utils::testing::capture_logs();
-        assert_eq!(
-            filename_to_mime_type("my_file.txt").unwrap(),
-            mime::TEXT_PLAIN
-        );
-        assert!(logs_contain("Guessed"));
     }
 
     #[test]
@@ -1162,17 +1109,81 @@ mod tests {
         #[test]
         fn test_roundtrip_serialization() {
             // Test that serialize -> deserialize maintains data integrity
-            let original = File::Base64(Base64File {
-                source_url: None,
-                mime_type: mime::IMAGE_JPEG,
-                data: "base64data".to_string(),
-                detail: None,
-            });
+            let original = File::Base64(
+                Base64File::new(None, mime::IMAGE_JPEG, "base64data".to_string(), None)
+                    .expect("test data should be valid"),
+            );
 
             let serialized = serde_json::to_string(&original).unwrap();
             let deserialized: File = serde_json::from_str(&serialized).unwrap();
 
             assert_eq!(original, deserialized);
+        }
+
+        #[test]
+        fn test_base64file_rejects_data_prefix() {
+            // Test that Base64File::new rejects data with data: prefix
+            let result = Base64File::new(
+                None,
+                mime::IMAGE_PNG,
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA".to_string(),
+                None,
+            );
+
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.to_string().contains("`data:` prefix"));
+        }
+
+        #[test]
+        fn test_base64file_accepts_pure_base64() {
+            // Test that Base64File::new accepts pure base64 data
+            let result = Base64File::new(
+                None,
+                mime::IMAGE_PNG,
+                "iVBORw0KGgoAAAANSUhEUgAAAAUA".to_string(),
+                None,
+            );
+
+            assert!(result.is_ok());
+            let base64_file = result.unwrap();
+            assert_eq!(base64_file.data(), "iVBORw0KGgoAAAANSUhEUgAAAAUA");
+        }
+
+        #[test]
+        fn test_deserialize_rejects_data_prefix() {
+            // Test that deserialization validates and rejects data: prefix
+            let json = serde_json::json!({
+                "file_type": "base64",
+                "source_url": null,
+                "mime_type": "image/png",
+                "data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA",
+                "detail": null
+            });
+
+            let result: Result<File, _> = serde_json::from_value(json);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_deserialize_accepts_pure_base64() {
+            // Test that deserialization accepts pure base64 data
+            let json = serde_json::json!({
+                "file_type": "base64",
+                "source_url": null,
+                "mime_type": "image/png",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAUA",
+                "detail": null
+            });
+
+            let result: Result<File, _> = serde_json::from_value(json);
+            assert!(result.is_ok());
+
+            if let File::Base64(base64_file) = result.unwrap() {
+                assert_eq!(base64_file.data(), "iVBORw0KGgoAAAANSUhEUgAAAAUA");
+            } else {
+                panic!("Expected File::Base64");
+            }
         }
     }
 }
