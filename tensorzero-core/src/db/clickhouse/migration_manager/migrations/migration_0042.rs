@@ -3,12 +3,12 @@ use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
-pub struct Migration0041<'a> {
+pub struct Migration0042<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
 
 #[async_trait]
-impl Migration for Migration0041<'_> {
+impl Migration for Migration0042<'_> {
     async fn can_apply(&self) -> Result<(), Error> {
         Ok(())
     }
@@ -27,7 +27,7 @@ impl Migration for Migration0041<'_> {
             return Ok(true);
         }
         Err(Error::new(ErrorDetails::ClickHouseMigration {
-            id: "0041".to_string(),
+            id: "0042".to_string(),
             message: format!(
                 "Unexpected response when checking for tensorzero_uint_to_uuid function: {}",
                 result.response.trim()
@@ -53,7 +53,9 @@ impl Migration for Migration0041<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        "DROP FUNCTION IF EXISTS tensorzero_uint_to_uuid;".to_string()
+        // Note - we deliberately don't include any rollback instructions.
+        // User-defined functions are global, so dropping them would interfere with concurrent migration runs.
+        "".to_string()
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {

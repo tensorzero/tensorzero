@@ -48,7 +48,7 @@ use migrations::migration_0037::Migration0037;
 use migrations::migration_0038::Migration0038;
 use migrations::migration_0039::Migration0039;
 use migrations::migration_0040::Migration0040;
-use migrations::migration_0041::Migration0041;
+use migrations::migration_0042::Migration0042;
 use serde::{Deserialize, Serialize};
 
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
@@ -117,7 +117,7 @@ pub fn make_all_migrations<'a>(
         Box::new(Migration0038 { clickhouse }),
         Box::new(Migration0039 { clickhouse }),
         Box::new(Migration0040 { clickhouse }),
-        Box::new(Migration0041 { clickhouse }),
+        Box::new(Migration0042 { clickhouse }),
     ];
     assert_eq!(
         migrations.len(),
