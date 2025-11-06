@@ -18,7 +18,7 @@ jobs:
         run: |
           echo "Event name: ${{ github.event_name }}"
           echo "Event details:"
-          echo "${{ toJson(github.event) }}"
+          echo "${{ github.event }}"
   cancel-on-failure:
     name: Cancel General Checks on Failure
     runs-on: ubuntu-latest
