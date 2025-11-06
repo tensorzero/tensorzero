@@ -10,7 +10,7 @@ use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
 use crate::tool::DynamicToolParams;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 /// Request to update one or more datapoints in a dataset.
@@ -19,7 +19,7 @@ pub struct UpdateDatapointsRequest {
     pub datapoints: Vec<UpdateDatapointRequest>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
@@ -31,7 +31,7 @@ pub enum UpdateDatapointRequest {
     Json(UpdateJsonDatapointRequest),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 /// An update request for a chat datapoint.
@@ -75,7 +75,7 @@ pub struct UpdateChatDatapointRequest {
 /// - If the field has a value, it will be set to the provided value.
 ///
 /// In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct UpdateJsonDatapointRequest {
@@ -110,7 +110,7 @@ pub struct UpdateJsonDatapointRequest {
 /// A request to update the output of a JSON datapoint.
 /// We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
 /// for users to run evals against them.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct JsonDatapointOutputUpdate {
@@ -119,7 +119,7 @@ pub struct JsonDatapointOutputUpdate {
 }
 
 /// A request to update the metadata of a datapoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct DatapointMetadataUpdate {
@@ -129,7 +129,7 @@ pub struct DatapointMetadataUpdate {
 }
 
 /// A response to a request to update one or more datapoints in a dataset.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct UpdateDatapointsResponse {
@@ -140,7 +140,7 @@ pub struct UpdateDatapointsResponse {
 
 /// Request to update metadata for one or more datapoints in a dataset.
 /// Used by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct UpdateDatapointsMetadataRequest {
@@ -149,7 +149,7 @@ pub struct UpdateDatapointsMetadataRequest {
 }
 
 /// A request to update the metadata of a single datapoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct UpdateDatapointMetadataRequest {
@@ -162,7 +162,7 @@ pub struct UpdateDatapointMetadataRequest {
 
 /// Request to list datapoints from a dataset with pagination and filters.
 /// Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct ListDatapointsRequest {
@@ -190,7 +190,7 @@ pub struct ListDatapointsRequest {
 
 /// Request to get specific datapoints by their IDs.
 /// Used by the `POST /v1/datasets/get_datapoints` endpoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct GetDatapointsRequest {
@@ -199,7 +199,7 @@ pub struct GetDatapointsRequest {
 }
 
 /// Response containing the requested datapoints.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct GetDatapointsResponse {
@@ -211,7 +211,7 @@ pub struct GetDatapointsResponse {
 /// - `None`: Do not include any output in the datapoint.
 /// - `Inference`: Include the original inference output in the datapoint.
 /// - `Demonstration`: Include the latest demonstration feedback as output in the datapoint.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
@@ -225,7 +225,7 @@ pub enum CreateDatapointsFromInferenceOutputSource {
 }
 
 /// Request to create datapoints from inferences.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct CreateDatapointsFromInferenceRequest {
@@ -240,7 +240,7 @@ pub struct CreateDatapointsFromInferenceRequest {
 
 /// Parameters for creating datapoints from inferences.
 /// Can specify either a list of inference IDs or a query to find inferences.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -267,7 +267,7 @@ pub enum CreateDatapointsFromInferenceRequestParams {
 }
 
 /// Response from creating datapoints.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct CreateDatapointsResponse {
@@ -277,7 +277,7 @@ pub struct CreateDatapointsResponse {
 
 /// Request to create datapoints manually.
 /// Used by the `POST /v1/datasets/{dataset_id}/datapoints` endpoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct CreateDatapointsRequest {
@@ -286,7 +286,7 @@ pub struct CreateDatapointsRequest {
 }
 
 /// A tagged request to create a single datapoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
@@ -298,7 +298,7 @@ pub enum CreateDatapointRequest {
 }
 
 /// A request to create a chat datapoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct CreateChatDatapointRequest {
@@ -331,7 +331,7 @@ pub struct CreateChatDatapointRequest {
 }
 
 /// A request to create a JSON datapoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct CreateJsonDatapointRequest {
@@ -365,7 +365,7 @@ pub struct CreateJsonDatapointRequest {
 }
 
 /// Request to delete datapoints from a dataset.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct DeleteDatapointsRequest {
@@ -374,10 +374,62 @@ pub struct DeleteDatapointsRequest {
 }
 
 /// Response containing the number of deleted datapoints.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct DeleteDatapointsResponse {
     /// The number of deleted datapoints.
     pub num_deleted_datapoints: u64,
+}
+
+#[cfg(test)]
+mod openapi_generation_tests {
+    use super::*;
+    use std::fs;
+    use utoipa::OpenApi;
+
+    #[derive(OpenApi)]
+    #[openapi(
+        components(schemas(
+            UpdateDatapointsRequest,
+            UpdateDatapointRequest,
+            UpdateChatDatapointRequest,
+            UpdateJsonDatapointRequest,
+            JsonDatapointOutputUpdate,
+            DatapointMetadataUpdate,
+            UpdateDatapointsResponse,
+            UpdateDatapointsMetadataRequest,
+            UpdateDatapointMetadataRequest,
+            // NOTE: The following types are excluded due to recursive type issues that cause stack overflow:
+            // - ListDatapointsRequest (contains DatapointFilter)
+            // - GetDatapointsResponse (contains Datapoint)
+            // - CreateDatapointsFromInferenceRequest/Params (contains InferenceFilter)
+            GetDatapointsRequest,
+            CreateDatapointsFromInferenceOutputSource,
+            CreateDatapointsResponse,
+            CreateDatapointsRequest,
+            CreateDatapointRequest,
+            CreateChatDatapointRequest,
+            CreateJsonDatapointRequest,
+            DeleteDatapointsRequest,
+            DeleteDatapointsResponse,
+        ))
+    )]
+    struct DatasetsV1Api;
+
+    #[test]
+    fn export_openapi_schema() {
+        let openapi = DatasetsV1Api::openapi();
+        let json = serde_json::to_string_pretty(&openapi).expect("Failed to serialize OpenAPI spec");
+
+        // Create output directory if it doesn't exist
+        let output_dir = "openapi";
+        fs::create_dir_all(output_dir).expect("Failed to create openapi directory");
+
+        // Write the OpenAPI schema to a file
+        let output_path = format!("{}/datasets_v1.json", output_dir);
+        fs::write(&output_path, json).expect("Failed to write OpenAPI schema");
+
+        println!("OpenAPI schema exported to: {}", output_path);
+    }
 }

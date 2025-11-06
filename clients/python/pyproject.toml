@@ -62,6 +62,7 @@ dev = [
     "clickhouse-connect",
     "pandas",
     "requests",
+    "datamodel-code-generator[http]",
 ]
 
 [tool.maturin]

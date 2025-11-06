@@ -93,20 +93,23 @@ pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), E
 }
 
 /// A file already encoded as base64
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, utoipa::ToSchema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[ts(export)]
 pub struct Base64File {
     // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
     #[ts(optional)]
+    #[schema(value_type = Option<String>)]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     pub mime_type: MediaType,
     // TODO: should we add a wrapper type to enforce base64?
     pub data: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
+    #[schema(value_type = Option<String>)]
     pub detail: Option<Detail>,
 }
 
@@ -241,38 +244,45 @@ pub fn serialize_with_file_data<T: Serialize>(value: &T) -> Result<Value, Error>
 }
 
 /// A file that can be located at a URL
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct UrlFile {
+    #[schema(value_type = String)]
     pub url: Url,
     #[ts(type = "string | null")]
+    #[schema(value_type = Option<String>)]
     pub mime_type: Option<MediaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
+    #[schema(value_type = Option<String>)]
     pub detail: Option<Detail>,
 }
 
 /// A file stored in an object storage backend, without data.
 /// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct ObjectStoragePointer {
     #[serde(alias = "url")] // DEPRECATED (SEE IMPORTANT NOTE BELOW)
     #[ts(optional)]
+    #[schema(value_type = Option<String>)]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
+    #[schema(value_type = String)]
     pub mime_type: MediaType,
+    #[schema(value_type = Object)]
     pub storage_path: StoragePath,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
+    #[schema(value_type = Option<String>)]
     pub detail: Option<Detail>,
 }
 
 /// A file stored in an object storage backend, with data.
 /// This struct can NOT be stored in the database.
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct ObjectStorageFile {
     #[serde(flatten)]
@@ -284,7 +294,7 @@ pub struct ObjectStorageFile {
 
 /// A file that we failed to read from object storage.
 /// This struct can NOT be stored in the database.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct ObjectStorageError {
     #[serde(flatten)]
@@ -349,7 +359,7 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 }
 
 /// A file for an inference or a datapoint.
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, utoipa::ToSchema)]
 #[serde(tag = "file_type", rename_all = "snake_case")]
 #[ts(export)]
 // NOTE(shuyangli, 2025-10-21): we're manually implementing Serialize and Deserialize for a while until we're confident

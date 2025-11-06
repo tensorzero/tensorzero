@@ -72,3 +72,13 @@ tsbuild = [
     "-p",
     "tensorzero-auth",
 ] # Export Typescript bindings for TensorZero
+
+openapi-build = [
+    "test",
+    "--lib",
+    "-p",
+    "tensorzero-core",
+    "export_openapi_schema",
+    "--",
+    "--nocapture",
+] # Generate OpenAPI schema from datasets v1 types

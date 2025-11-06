@@ -6,7 +6,7 @@ use crate::db::inferences::InferenceOutputSource;
 use crate::stored_inference::StoredInference;
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, utoipa::ToSchema)]
 #[cfg_attr(test, ts(export))]
 pub struct FloatMetricFilter {
     pub metric_name: String,
@@ -15,7 +15,7 @@ pub struct FloatMetricFilter {
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, utoipa::ToSchema)]
 #[cfg_attr(test, ts(export))]
 pub struct BooleanMetricFilter {
     pub metric_name: String,
@@ -23,7 +23,7 @@ pub struct BooleanMetricFilter {
 }
 
 /// Filter by tag key-value pair.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct TagFilter {
@@ -33,7 +33,7 @@ pub struct TagFilter {
 }
 
 /// Filter by timestamp.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct TimeFilter {
@@ -44,7 +44,7 @@ pub struct TimeFilter {
 
 /// Comparison operators for float metrics.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, utoipa::ToSchema)]
 #[cfg_attr(test, ts(export))]
 pub enum FloatComparisonOperator {
     #[serde(rename = "<")]
@@ -63,7 +63,7 @@ pub enum FloatComparisonOperator {
 
 /// Comparison operators for timestamps.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, utoipa::ToSchema)]
 #[cfg_attr(test, ts(export))]
 pub enum TimeComparisonOperator {
     #[serde(rename = "<")]
@@ -82,7 +82,7 @@ pub enum TimeComparisonOperator {
 
 /// Comparison operators for tag filters.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, utoipa::ToSchema)]
 #[cfg_attr(test, ts(export))]
 pub enum TagComparisonOperator {
     #[serde(rename = "=")]
@@ -92,7 +92,7 @@ pub enum TagComparisonOperator {
 }
 
 /// The ordering direction.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum OrderDirection {
@@ -104,7 +104,7 @@ pub enum OrderDirection {
 
 /// The property to order by.
 /// This is flattened in the public API inside the `OrderBy` struct.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "by", rename_all = "snake_case")]
@@ -117,7 +117,7 @@ pub enum OrderByTerm {
 }
 
 /// Order by clauses for querying inferences.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, utoipa::ToSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct OrderBy {
@@ -131,7 +131,7 @@ pub struct OrderBy {
 
 /// Filters for querying inferences.
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, utoipa::ToSchema)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InferenceFilter {

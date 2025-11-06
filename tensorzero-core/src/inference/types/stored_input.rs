@@ -29,7 +29,7 @@ use pyo3::prelude::*;
 /// (which can be used to re-fetch the file and produce a `ResolvedInput`).
 ///
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -76,7 +76,7 @@ impl StoredInput {
     }
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, PartialEq, utoipa::ToSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -207,7 +207,7 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, utoipa::ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -268,7 +268,7 @@ impl StoredInputMessageContent {
 
 /// A newtype wrapper around `ObjectStoragePointer` that handles legacy deserialization formats.
 /// See the deserializer implementation below for details on the legacy formats it supports.
-#[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS, utoipa::ToSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[repr(transparent)]

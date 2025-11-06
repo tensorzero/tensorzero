@@ -1,0 +1,1469 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "tensorzero-core",
+    "description": "",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    },
+    "version": "2025.11.1"
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "Arguments": {
+        "type": "object",
+        "description": "A newtype wrapper around Map<String, Value> for template and system arguments",
+        "additionalProperties": {},
+        "propertyNames": {
+          "type": "string"
+        }
+      },
+      "Base64File": {
+        "type": "object",
+        "description": "A file already encoded as base64",
+        "required": [
+          "mime_type",
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ContentBlockChatOutput": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Text"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "text"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/InferenceResponseToolCall"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "tool_call"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Thought"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "thought"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "data",
+              "type"
+            ],
+            "properties": {
+              "data": {},
+              "model_provider_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "unknown"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Defines the types of content block that can come from a `chat` function"
+      },
+      "CreateChatDatapointRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DynamicToolParams",
+            "description": "Dynamic tool parameters for the datapoint. Optional.\nThis is flattened to mirror inference requests."
+          },
+          {
+            "type": "object",
+            "required": [
+              "function_name",
+              "input"
+            ],
+            "properties": {
+              "episode_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid",
+                "description": "Episode ID that the datapoint belongs to. Optional."
+              },
+              "function_name": {
+                "type": "string",
+                "description": "The function name for this datapoint. Required."
+              },
+              "input": {
+                "$ref": "#/components/schemas/Input",
+                "description": "Input to the function. Required."
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Human-readable name for the datapoint. Optional."
+              },
+              "output": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "#/components/schemas/ContentBlockChatOutput"
+                },
+                "description": "Chat datapoint output. Optional."
+              },
+              "tags": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "description": "Tags associated with this datapoint. Optional.",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "propertyNames": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ],
+        "description": "A request to create a chat datapoint."
+      },
+      "CreateDatapointRequest": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CreateChatDatapointRequest",
+                "description": "Request to create a chat datapoint."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "chat"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Request to create a chat datapoint."
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CreateJsonDatapointRequest",
+                "description": "Request to create a JSON datapoint."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "json"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Request to create a JSON datapoint."
+          }
+        ],
+        "description": "A tagged request to create a single datapoint."
+      },
+      "CreateDatapointsFromInferenceOutputSource": {
+        "type": "string",
+        "description": "Specifies the source of the output for the datapoint when creating datapoints from inferences.\n- `None`: Do not include any output in the datapoint.\n- `Inference`: Include the original inference output in the datapoint.\n- `Demonstration`: Include the latest demonstration feedback as output in the datapoint.",
+        "enum": [
+          "none",
+          "inference",
+          "demonstration"
+        ]
+      },
+      "CreateDatapointsRequest": {
+        "type": "object",
+        "description": "Request to create datapoints manually.\nUsed by the `POST /v1/datasets/{dataset_id}/datapoints` endpoint.",
+        "required": [
+          "datapoints"
+        ],
+        "properties": {
+          "datapoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateDatapointRequest"
+            },
+            "description": "The datapoints to create."
+          }
+        }
+      },
+      "CreateDatapointsResponse": {
+        "type": "object",
+        "description": "Response from creating datapoints.",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The IDs of the newly-generated datapoints."
+          }
+        }
+      },
+      "CreateJsonDatapointRequest": {
+        "type": "object",
+        "description": "A request to create a JSON datapoint.",
+        "required": [
+          "function_name",
+          "input"
+        ],
+        "properties": {
+          "episode_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Episode ID that the datapoint belongs to. Optional."
+          },
+          "function_name": {
+            "type": "string",
+            "description": "The function name for this datapoint. Required."
+          },
+          "input": {
+            "$ref": "#/components/schemas/Input",
+            "description": "Input to the function. Required."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Human-readable name for the datapoint. Optional."
+          },
+          "output": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonDatapointOutputUpdate",
+                "description": "JSON datapoint output. Optional.\nIf provided, it will be validated against the output_schema. Invalid raw outputs will be stored as-is (not parsed), because we allow\ninvalid outputs in datapoints by design."
+              }
+            ]
+          },
+          "output_schema": {
+            "description": "The output schema of the JSON datapoint. Optional.\nIf not provided, the function's output schema will be used. If provided, it will be validated."
+          },
+          "tags": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Tags associated with this datapoint. Optional.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "DatapointMetadataUpdate": {
+        "type": "object",
+        "description": "A request to update the metadata of a datapoint.",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value."
+          }
+        }
+      },
+      "DeleteDatapointsRequest": {
+        "type": "object",
+        "description": "Request to delete datapoints from a dataset.",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The IDs of the datapoints to delete."
+          }
+        }
+      },
+      "DeleteDatapointsResponse": {
+        "type": "object",
+        "description": "Response containing the number of deleted datapoints.",
+        "required": [
+          "num_deleted_datapoints"
+        ],
+        "properties": {
+          "num_deleted_datapoints": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The number of deleted datapoints.",
+            "minimum": 0
+          }
+        }
+      },
+      "DynamicToolParams": {
+        "type": "object",
+        "description": "Wire/API representation of dynamic tool parameters for inference requests.\n\nThis type is the **wire format** for tool configurations used in API requests and responses.\nIt distinguishes between static tools (configured in the function) and dynamic tools\n(provided at runtime), allowing clients to reference pre-configured tools by name or\nprovide new tools on-the-fly.\n\n# Purpose\n- Accept tool parameters in inference API requests (e.g., `/inference/{function_name}`)\n- Expose tool configurations in API responses for stored inferences\n- Support Python and TypeScript client bindings\n- Allow runtime customization of tool behavior\n\n# Fields\n- `allowed_tools`: Names of static tools from function config to use (subset selection)\n- `additional_tools`: New tools defined at runtime (not in static config)\n- `tool_choice`: Override the function's default tool choice strategy\n- `parallel_tool_calls`: Override whether parallel tool calls are enabled\n- `provider_tools`: Provider-specific tool configurations (not persisted to database)\n\n# Key Differences from ToolCallConfigDatabaseInsert\n- **Separate lists**: Maintains distinction between static (`allowed_tools`) and dynamic (`additional_tools`) tools\n- **By reference**: Static tools referenced by name, not duplicated\n- **Has provider_tools**: Can specify provider-specific tool configurations\n- **Has bindings**: Exposed to Python/TypeScript via `pyo3` and `ts_rs`\n\n# Conversion to Storage Format\nConverting from `DynamicToolParams` to `ToolCallConfigDatabaseInsert` is a **lossy** operation:\n1. Static tools (from `allowed_tools` names) are resolved from function config\n2. Dynamic tools (from `additional_tools`) are included as-is\n3. Both lists are merged into a single `tools_available` list\n4. The distinction between static and dynamic tools is lost\n5. `provider_tools` are dropped (not stored)\n\nUse `FunctionConfig::dynamic_tool_params_to_database_insert()` for this conversion.\n\n# Conversion from Storage Format\nConverting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` attempts to reconstruct the original:\n1. Tools that match function config tool names → `allowed_tools`\n2. Tools that don't match function config → `additional_tools`\n3. `provider_tools` is set to `None` (cannot be recovered)\n\nUse `FunctionConfig::database_insert_to_dynamic_tool_params()` for this conversion.\n\n# Example\n```rust,ignore\n// API request with dynamic tool params\nlet params = DynamicToolParams {\n    allowed_tools: Some(vec![\"calculator\".to_string()]),  // Use only the calculator tool from config\n    additional_tools: Some(vec![Tool {  runtime tool  }]),  // Add a new tool\n    tool_choice: Some(ToolChoice::Required),\n    parallel_tool_calls: Some(true),\n    provider_tools: None,\n};\n\n// Convert to storage format (merge tools, lose distinction)\nlet db_insert = function_config\n    .dynamic_tool_params_to_database_insert(params, &static_tools)?\n    .unwrap_or_default();\n\n// db_insert.tools_available now contains both the calculator tool (from config)\n// and the runtime tool (from additional_tools), merged together\n```\n\nSee also: [`ToolCallConfigDatabaseInsert`] for the storage/database format",
+        "properties": {
+          "additional_tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Tool"
+            },
+            "description": "Tools that the user provided at inference time (not in function config), in addition to the function-configured\ntools, that are also allowed."
+          },
+          "allowed_tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "A subset of static tools configured for the function that the inference is allowed to use. Optional.\nIf not provided, all static tools are allowed."
+          },
+          "parallel_tool_calls": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether to use parallel tool calls in the inference. Optional.\nIf provided during inference, it will override the function-configured parallel tool calls."
+          },
+          "provider_tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ProviderTool"
+            },
+            "description": "Provider-specific tool configurations (not persisted to database)"
+          },
+          "tool_choice": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ToolChoice",
+                "description": "User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.\nOptional."
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "File": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UrlFile"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "file_type"
+                ],
+                "properties": {
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "url"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Base64File"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "file_type"
+                ],
+                "properties": {
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "base64"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObjectStoragePointer"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "file_type"
+                ],
+                "properties": {
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "object_storage_pointer"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObjectStorageFile"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "file_type"
+                ],
+                "properties": {
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "object_storage"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ObjectStorageError"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "file_type"
+                ],
+                "properties": {
+                  "file_type": {
+                    "type": "string",
+                    "enum": [
+                      "object_storage_error"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "description": "A file for an inference or a datapoint."
+      },
+      "GetDatapointsRequest": {
+        "type": "object",
+        "description": "Request to get specific datapoints by their IDs.\nUsed by the `POST /v1/datasets/get_datapoints` endpoint.",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The IDs of the datapoints to retrieve. Required."
+          }
+        }
+      },
+      "InferenceResponseToolCall": {
+        "type": "object",
+        "description": "An InferenceResponseToolCall is a request by a model to call a Tool\nin the form that we return to the client / ClickHouse",
+        "required": [
+          "id",
+          "raw_name",
+          "raw_arguments"
+        ],
+        "properties": {
+          "arguments": {
+            "description": "The arguments of the tool to call, validated against tool configs. If not present, it means the tool call arguments were invalid."
+          },
+          "id": {
+            "type": "string",
+            "description": "A Tool Call ID to match up with tool call responses. See #4058."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The name of the tool to call, validated against tool configs. If not present, it means the tool call was invalid."
+          },
+          "raw_arguments": {
+            "type": "string",
+            "description": "The raw arguments JSON string of the tool to call, as generated by the model."
+          },
+          "raw_name": {
+            "type": "string",
+            "description": "The name of the tool to call, as generated by the model."
+          }
+        }
+      },
+      "Input": {
+        "type": "object",
+        "description": "A request is made that contains an Input",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InputMessage"
+            }
+          },
+          "system": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/System"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "InputMessage": {
+        "type": "object",
+        "description": "InputMessage and Role are our representation of the input sent by the client\nprior to any processing into LLM representations below.\n`InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InputMessageContent"
+            }
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        }
+      },
+      "InputMessageContent": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Text"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "text"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Template"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "template"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ToolCallWrapper"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "tool_call"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ToolResult"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "tool_result"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RawText"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "raw_text"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Thought"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "thought"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/File"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "file"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Unknown",
+                "description": "An unknown content block type, used to allow passing provider-specific\ncontent blocks (e.g. Anthropic's `redacted_thinking`) in and out\nof TensorZero.\nThe `data` field holds the original content block from the provider,\nwithout any validation or transformation by TensorZero."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "unknown"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "An unknown content block type, used to allow passing provider-specific\ncontent blocks (e.g. Anthropic's `redacted_thinking`) in and out\nof TensorZero.\nThe `data` field holds the original content block from the provider,\nwithout any validation or transformation by TensorZero."
+          }
+        ]
+      },
+      "JsonDatapointOutputUpdate": {
+        "type": "object",
+        "description": "A request to update the output of a JSON datapoint.\nWe intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable\nfor users to run evals against them.",
+        "required": [
+          "raw"
+        ],
+        "properties": {
+          "raw": {
+            "type": "string",
+            "description": "The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string."
+          }
+        }
+      },
+      "ObjectStorageError": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ObjectStoragePointer"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "A file that we failed to read from object storage.\nThis struct can NOT be stored in the database."
+      },
+      "ObjectStorageFile": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ObjectStoragePointer"
+          },
+          {
+            "type": "object",
+            "required": [
+              "data"
+            ],
+            "properties": {
+              "data": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "A file stored in an object storage backend, with data.\nThis struct can NOT be stored in the database.\nNote: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`."
+      },
+      "ObjectStoragePointer": {
+        "type": "object",
+        "description": "A file stored in an object storage backend, without data.\nThis struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).\nNote: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.",
+        "required": [
+          "mime_type",
+          "storage_path"
+        ],
+        "properties": {
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "storage_path": {
+            "type": "object"
+          }
+        }
+      },
+      "ProviderTool": {
+        "type": "object",
+        "required": [
+          "tool"
+        ],
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/ProviderToolScope"
+          },
+          "tool": {}
+        }
+      },
+      "ProviderToolScope": {
+        "oneOf": [
+          {
+            "type": "null",
+            "default": null
+          },
+          {
+            "type": "object",
+            "required": [
+              "model_name",
+              "model_provider_name"
+            ],
+            "properties": {
+              "model_name": {
+                "type": "string"
+              },
+              "model_provider_name": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "RawText": {
+        "type": "object",
+        "description": "Struct that represents raw text content that should be passed directly to the model\nwithout any template processing or validation",
+        "required": [
+          "value"
+        ],
+        "properties": {
+          "value": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Role": {
+        "type": "string",
+        "enum": [
+          "user",
+          "assistant"
+        ]
+      },
+      "System": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "$ref": "#/components/schemas/Arguments"
+          }
+        ]
+      },
+      "Template": {
+        "type": "object",
+        "required": [
+          "name",
+          "arguments"
+        ],
+        "properties": {
+          "arguments": {
+            "$ref": "#/components/schemas/Arguments"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Text": {
+        "type": "object",
+        "description": "InputMessages are validated against the input schema of the Function\nand then templated and transformed into RequestMessages for a particular Variant.\nThey might contain tool calls or tool results along with text.\nThe abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.\nContentBlocks are collected into RequestMessages.\nThese RequestMessages are collected into a ModelInferenceRequest,\nwhich should contain all information needed by a ModelProvider to perform the\ninference that is called for.",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Thought": {
+        "type": "object",
+        "description": "Struct that represents a model's reasoning",
+        "properties": {
+          "_internal_provider_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When set, this 'Thought' block will only be used for providers\nmatching this type (e.g. `anthropic`). Other providers will emit\na warning and discard the block."
+          },
+          "signature": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An optional signature - currently, this is only used with Anthropic,\nand is ignored by other providers."
+          },
+          "summary": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ThoughtSummaryBlock"
+            }
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ThoughtSummaryBlock": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "text",
+              "type"
+            ],
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "summary_text"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "Tool": {
+        "type": "object",
+        "description": "A Tool object describes how a tool can be dynamically configured by the user.",
+        "required": [
+          "description",
+          "parameters",
+          "name"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "parameters": {},
+          "strict": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ToolCall": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "arguments"
+        ],
+        "properties": {
+          "arguments": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ToolCallWrapper": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ToolCall"
+          },
+          {
+            "$ref": "#/components/schemas/InferenceResponseToolCall"
+          }
+        ],
+        "description": "`ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`)."
+      },
+      "ToolChoice": {
+        "oneOf": [
+          {
+            "type": "string",
+            "enum": [
+              "none"
+            ]
+          },
+          {
+            "type": "string",
+            "enum": [
+              "auto"
+            ]
+          },
+          {
+            "type": "string",
+            "enum": [
+              "required"
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "specific"
+            ],
+            "properties": {
+              "specific": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "Most inference providers allow the user to force a tool to be used\nand even specify which tool to be used.\n\nThis enum is used to denote this tool choice."
+      },
+      "ToolResult": {
+        "type": "object",
+        "description": "A ToolResult is the outcome of a ToolCall, which we may want to present back to the model",
+        "required": [
+          "name",
+          "result",
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Unknown": {
+        "type": "object",
+        "description": "Struct that represents an unknown provider-specific content block.\nWe pass this along as-is without any validation or transformation.",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "description": "The underlying content block to be passed to the model provider."
+          },
+          "model_provider_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A fully-qualified name specifying when this content block should\nbe included in the model provider input."
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateChatDatapointRequest": {
+        "type": "object",
+        "description": "An update request for a chat datapoint.\nFor any fields that are optional in ChatInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:\n- If the field is omitted, it will be left unchanged.\n- If the field is specified as `null`, it will be set to `null`.\n- If the field has a value, it will be set to the provided value.\n\nIn Rust this is modeled as an `Option<Option<T>>`, where `None` means \"unchanged\" and `Some(None)` means \"set to `null`\" and `Some(Some(T))` means \"set to the provided value\".",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The ID of the datapoint to update. Required."
+          },
+          "input": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Input",
+                "description": "Datapoint input. If omitted, it will be left unchanged."
+              }
+            ]
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DatapointMetadataUpdate",
+                "description": "Metadata fields. If omitted, it will be left unchanged."
+              }
+            ]
+          },
+          "output": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ContentBlockChatOutput"
+            },
+            "description": "Chat datapoint output. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,\nit will overwrite the existing output."
+          },
+          "tags": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,\nit will be overwrite the existing tags.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "tool_params": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DynamicToolParams",
+                "description": "Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value."
+              }
+            ]
+          }
+        }
+      },
+      "UpdateDatapointMetadataRequest": {
+        "type": "object",
+        "description": "A request to update the metadata of a single datapoint.",
+        "required": [
+          "id",
+          "metadata"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The ID of the datapoint to update. Required."
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/DatapointMetadataUpdate",
+            "description": "Metadata fields to update."
+          }
+        }
+      },
+      "UpdateDatapointRequest": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UpdateChatDatapointRequest",
+                "description": "Request to update a chat datapoint."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "chat"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Request to update a chat datapoint."
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UpdateJsonDatapointRequest",
+                "description": "Request to update a JSON datapoint."
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "json"
+                    ]
+                  }
+                }
+              }
+            ],
+            "description": "Request to update a JSON datapoint."
+          }
+        ],
+        "description": "A tagged request to update a single datapoint in a dataset."
+      },
+      "UpdateDatapointsMetadataRequest": {
+        "type": "object",
+        "description": "Request to update metadata for one or more datapoints in a dataset.\nUsed by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.",
+        "required": [
+          "datapoints"
+        ],
+        "properties": {
+          "datapoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UpdateDatapointMetadataRequest"
+            },
+            "description": "The datapoints to update metadata for."
+          }
+        }
+      },
+      "UpdateDatapointsRequest": {
+        "type": "object",
+        "description": "Request to update one or more datapoints in a dataset.",
+        "required": [
+          "datapoints"
+        ],
+        "properties": {
+          "datapoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UpdateDatapointRequest"
+            },
+            "description": "The datapoints to update."
+          }
+        }
+      },
+      "UpdateDatapointsResponse": {
+        "type": "object",
+        "description": "A response to a request to update one or more datapoints in a dataset.",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The IDs of the datapoints that were updated.\nThese are newly generated IDs for UpdateDatapoint requests, and they are the same IDs for UpdateDatapointMetadata requests."
+          }
+        }
+      },
+      "UpdateJsonDatapointRequest": {
+        "type": "object",
+        "description": "An update request for a JSON datapoint.\nFor any fields that are optional in JsonInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:\n- If the field is omitted, it will be left unchanged.\n- If the field is specified as `null`, it will be set to `null`.\n- If the field has a value, it will be set to the provided value.\n\nIn Rust this is modeled as an `Option<Option<T>>`, where `None` means \"unchanged\" and `Some(None)` means \"set to `null`\" and `Some(Some(T))` means \"set to the provided value\".",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The ID of the datapoint to update. Required."
+          },
+          "input": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Input",
+                "description": "Datapoint input. If omitted, it will be left unchanged."
+              }
+            ]
+          },
+          "metadata": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DatapointMetadataUpdate",
+                "description": "Metadata fields. If omitted, it will be left unchanged."
+              }
+            ]
+          },
+          "output": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonDatapointOutputUpdate",
+                "description": "JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.\nThis will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will\nalso be stored, because we allow invalid outputs in datapoints by design."
+              }
+            ]
+          },
+          "output_schema": {
+            "description": "The output schema of the JSON datapoint. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.\nIf not provided, the function's output schema will be used."
+          },
+          "tags": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,\nit will be overwrite the existing tags.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UrlFile": {
+        "type": "object",
+        "description": "A file that can be located at a URL",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mime_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
