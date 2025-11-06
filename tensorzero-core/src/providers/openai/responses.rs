@@ -1002,7 +1002,9 @@ pub fn stream_openai_responses(
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let mut current_tool_id: Option<String> = None;
     let mut current_tool_name: Option<String> = None;
     let model_name = model_name.to_string();
@@ -1018,7 +1020,7 @@ pub fn stream_openai_responses(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(provider_type.clone(), e).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e).await);
                         }
                     }
                 }
@@ -1061,6 +1063,7 @@ pub fn stream_openai_responses(
                             discard_unknown_chunks,
                             &model_name,
                             &provider_name,
+                            &raw_request,
                         );
 
                         match stream_message {
@@ -1098,6 +1101,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
+    raw_request: &str,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match event {
         // Text delta - the main content streaming event
@@ -1146,7 +1150,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                             message: "Got function_call_arguments.delta without current tool id"
                                 .to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
-                            raw_request: None,
+                            raw_request: Some(raw_request.to_string()),
                             raw_response: Some(raw_message.clone()),
                         })
                     })?,
@@ -1266,7 +1270,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: error_msg.to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
+                raw_request: Some(raw_request.to_string()),
                 raw_response: Some(raw_message),
             }))
         }
@@ -1297,7 +1301,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: format!("Model refused to respond: {delta}"),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
+                raw_request: Some(raw_request.to_string()),
                 raw_response: Some(raw_message),
             }))
         }
@@ -1307,7 +1311,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: error.to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
+                raw_request: Some(raw_request.to_string()),
                 raw_response: Some(raw_message),
             }))
         }
@@ -1596,6 +1600,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1631,6 +1636,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1677,6 +1683,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1718,6 +1725,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1756,6 +1764,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1801,6 +1810,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1834,6 +1844,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1864,6 +1875,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1892,6 +1904,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1930,6 +1943,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         );
 
         assert!(result.is_err());
@@ -1962,6 +1976,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -2007,6 +2022,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -2048,6 +2064,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         );
 
         assert!(result.is_err());
@@ -2074,6 +2091,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         );
 
         assert!(result.is_err());
@@ -2100,6 +2118,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         );
 
         assert!(result.is_err());
@@ -2139,6 +2158,7 @@ mod tests {
                 false,
                 "test_model",
                 "test_provider",
+                "",
             )
             .unwrap();
 
@@ -2166,6 +2186,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -2205,6 +2226,7 @@ mod tests {
             true,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap();
 
