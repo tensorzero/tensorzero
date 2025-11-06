@@ -157,15 +157,18 @@ impl<'de> Deserialize<'de> for Base64File {
 }
 
 /// Like `Base64File`, but without the data field.
-#[derive(ts_rs::TS, Clone, Debug, Serialize, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, PartialEq, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64FileMetadata {
     // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
     #[ts(optional)]
+    #[schemars(with = "Option<String>")]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
+    #[schemars(with = "String")]
     pub mime_type: MediaType,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -299,6 +302,7 @@ pub struct ObjectStoragePointer {
     #[ts(type = "string")]
     #[schemars(with = "String")]
     pub mime_type: MediaType,
+    #[schemars(with = "String")]
     pub storage_path: StoragePath,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -335,7 +339,8 @@ pub struct ObjectStorageError {
 /// from a base64 input that needs to be written to object storage.
 /// The `storage_path` inside is content-addressed (computed from data) and represents
 /// where the file WILL be written, not where it currently exists.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(test, export_schema)]
 pub struct PendingObjectStoreFile(pub ObjectStorageFile);
 
 impl std::ops::Deref for PendingObjectStoreFile {
@@ -396,10 +401,15 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 // deserialization accepts both tagged and untagged formats for backwards compatibility.
 // TODO(#4107): Remove this once we're confident that clients are sending us the tagged version.
 pub enum File {
-    Url(UrlFile),                               // a file URL
-    Base64(Base64File),                         // a base64-encoded file
+    #[schemars(title = "FileUrlFile")]
+    Url(UrlFile), // a file URL
+    #[schemars(title = "FileBase64File")]
+    Base64(Base64File), // a base64-encoded file
+    #[schemars(title = "FileObjectStoragePointer")]
     ObjectStoragePointer(ObjectStoragePointer), // a pointer to an object storage file (metadata only)
-    ObjectStorage(ObjectStorageFile),           // a file from object storage (metadata + data)
+    #[schemars(title = "FileObjectStorage")]
+    ObjectStorage(ObjectStorageFile), // a file from object storage (metadata + data)
+    #[schemars(title = "FileObjectStorageError")]
     ObjectStorageError(ObjectStorageError), // a file we couldn't fetch from object storage (metadata + error)
 }
 

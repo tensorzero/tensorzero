@@ -49,6 +49,19 @@ Detail = Literal['low', 'high', 'auto']
 
 
 @dataclass(kw_only=True)
+class ContentBlockChatOutputText:
+    text: str
+    type: Literal['text']
+
+
+@dataclass(kw_only=True)
+class ContentBlockChatOutputUnknown:
+    data: Any
+    type: Literal['unknown']
+    model_provider_name: str | None = None
+
+
+@dataclass(kw_only=True)
 class InferenceResponseToolCall:
     id: str
     """
@@ -99,6 +112,17 @@ class Thought:
 
 
 @dataclass(kw_only=True)
+class Usage:
+    input_tokens: int
+    output_tokens: int
+
+
+FinishReason = Literal[
+    'stop', 'stop_sequence', 'length', 'tool_call', 'content_filter', 'unknown'
+]
+
+
+@dataclass(kw_only=True)
 class Tool:
     description: str
     parameters: Any
@@ -107,20 +131,20 @@ class Tool:
 
 
 @dataclass(kw_only=True)
-class ToolChoice1:
+class ToolChoiceSpecific:
     specific: str
 
 
-ToolChoice = Literal['none', 'auto', 'required'] | ToolChoice1
+ToolChoice = Literal['none', 'auto', 'required'] | ToolChoiceSpecific
 
 
 @dataclass(kw_only=True)
-class ProviderToolScope1:
+class ProviderToolScopeModelProvider:
     model_name: str
     model_provider_name: str
 
 
-ProviderToolScope = ProviderToolScope1 | None
+ProviderToolScope = ProviderToolScopeModelProvider | None
 
 
 @dataclass(kw_only=True)
@@ -139,31 +163,42 @@ class Base64File:
 
 
 @dataclass(kw_only=True)
-class StorageKindS3Compatible:
-    type: Literal['s3_compatible']
-    bucket_name: str | None = None
-    region: str | None = None
-    endpoint: str | None = None
-    allow_http: bool | None = None
-    prefix: str | None = ''
-    """
-    An extra prefix to prepend to the object key.
-    This is only enabled in e2e tests, to prevent clashes between concurrent test runs.
-    """
+class ObjectStoragePointer:
+    mime_type: str
+    storage_path: str
+    source_url: str | None = None
+    detail: Detail | None = None
 
 
 @dataclass(kw_only=True)
-class StorageKindFilesystem:
-    path: str
-    type: Literal['filesystem']
+class ObjectStorageFile:
+    mime_type: str
+    storage_path: str
+    data: str
+    source_url: str | None = None
+    detail: Detail | None = None
 
 
 @dataclass(kw_only=True)
-class StorageKindDisabled:
-    type: Literal['disabled']
+class ObjectStorageError:
+    mime_type: str
+    storage_path: str
+    source_url: str | None = None
+    detail: Detail | None = None
+    error: str | None = None
 
 
-StorageKind = StorageKindS3Compatible | StorageKindFilesystem | StorageKindDisabled
+@dataclass(kw_only=True)
+class JsonInferenceOutput:
+    raw: str | None = None
+    """
+    This is never omitted from the response even if it's None. A `null` value indicates no output from the model.
+    It's rare and unexpected from the model, but it's possible.
+    """
+    parsed: Any | None = None
+    """
+    This is never omitted from the response even if it's None.
+    """
 
 
 @dataclass(kw_only=True)
@@ -231,44 +266,65 @@ ToolCallWrapper = ToolCall | InferenceResponseToolCall
 
 
 @dataclass(kw_only=True)
-class File1(UrlFile):
+class FileUrlFile(UrlFile):
     file_type: Literal['url']
 
 
 @dataclass(kw_only=True)
-class File2(Base64File):
+class FileBase64File(Base64File):
     file_type: Literal['base64']
 
 
 @dataclass(kw_only=True)
-class ContentBlockChatOutput1:
-    text: str
-    type: Literal['text']
+class FileObjectStoragePointer(ObjectStoragePointer):
+    file_type: Literal['object_storage_pointer']
 
 
 @dataclass(kw_only=True)
-class ContentBlockChatOutput2(InferenceResponseToolCall):
-    type: Literal['tool_call']
+class FileObjectStorage(ObjectStorageFile):
+    file_type: Literal['object_storage']
 
 
 @dataclass(kw_only=True)
-class ContentBlockChatOutput3(Thought):
-    type: Literal['thought']
+class FileObjectStorageError(ObjectStorageError):
+    file_type: Literal['object_storage_error']
 
 
-@dataclass(kw_only=True)
-class ContentBlockChatOutput4:
-    data: Any
-    type: Literal['unknown']
-    model_provider_name: str | None = None
-
-
-ContentBlockChatOutput = (
-    ContentBlockChatOutput1
-    | ContentBlockChatOutput2
-    | ContentBlockChatOutput3
-    | ContentBlockChatOutput4
+File = (
+    FileUrlFile
+    | FileBase64File
+    | FileObjectStoragePointer
+    | FileObjectStorage
+    | FileObjectStorageError
 )
+
+
+@dataclass(kw_only=True)
+class StorageKindS3Compatible:
+    type: Literal['s3_compatible']
+    bucket_name: str | None = None
+    region: str | None = None
+    endpoint: str | None = None
+    allow_http: bool | None = None
+    prefix: str | None = ''
+    """
+    An extra prefix to prepend to the object key.
+    This is only enabled in e2e tests, to prevent clashes between concurrent test runs.
+    """
+
+
+@dataclass(kw_only=True)
+class StorageKindFilesystem:
+    path: str
+    type: Literal['filesystem']
+
+
+@dataclass(kw_only=True)
+class StorageKindDisabled:
+    type: Literal['disabled']
+
+
+StorageKind = StorageKindS3Compatible | StorageKindFilesystem | StorageKindDisabled
 
 
 @dataclass(kw_only=True)
@@ -288,8 +344,33 @@ class JsonDatapointOutputUpdate:
 
 
 @dataclass(kw_only=True)
+class Base64FileMetadata:
+    mime_type: str
+    source_url: str | None = None
+    detail: Detail | None = None
+
+
+@dataclass(kw_only=True)
+class FileUrl:
+    url: str
+    mime_type: str | None = None
+    detail: Detail | None = None
+
+
+@dataclass(kw_only=True)
+class PendingObjectStoreFile(ObjectStorageFile):
+    pass
+
+
+@dataclass(kw_only=True)
 class RawText:
     value: str
+
+
+@dataclass(kw_only=True)
+class StoragePath:
+    kind: StorageKind
+    path: str
 
 
 @dataclass(kw_only=True)
@@ -301,6 +382,13 @@ class Template:
 @dataclass(kw_only=True)
 class Text:
     text: str
+
+
+@dataclass(kw_only=True)
+class ToolCallChunk:
+    id: str
+    raw_arguments: str
+    raw_name: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -333,41 +421,49 @@ class UpdateDatapointsResponse:
 
 
 @dataclass(kw_only=True)
+class ContentBlockChatOutputToolCall(InferenceResponseToolCall):
+    type: Literal['tool_call']
+
+
+@dataclass(kw_only=True)
+class ContentBlockChatOutputThought(Thought):
+    type: Literal['thought']
+
+
+ContentBlockChatOutput = (
+    ContentBlockChatOutputText
+    | ContentBlockChatOutputToolCall
+    | ContentBlockChatOutputThought
+    | ContentBlockChatOutputUnknown
+)
+
+
+@dataclass(kw_only=True)
 class ProviderTool:
     tool: Any
     scope: ProviderToolScope | None = None
 
 
 @dataclass(kw_only=True)
-class StoragePath:
-    kind: StorageKind
-    path: str
+class ChatInferenceResponse:
+    inference_id: str
+    episode_id: str
+    variant_name: str
+    content: list[ContentBlockChatOutput]
+    usage: Usage
+    original_response: str | None = None
+    finish_reason: FinishReason | None = None
 
 
 @dataclass(kw_only=True)
-class ObjectStoragePointer:
-    mime_type: str
-    storage_path: StoragePath
-    source_url: str | None = None
-    detail: Detail | None = None
-
-
-@dataclass(kw_only=True)
-class ObjectStorageFile:
-    mime_type: str
-    storage_path: StoragePath
-    data: str
-    source_url: str | None = None
-    detail: Detail | None = None
-
-
-@dataclass(kw_only=True)
-class ObjectStorageError:
-    mime_type: str
-    storage_path: StoragePath
-    source_url: str | None = None
-    detail: Detail | None = None
-    error: str | None = None
+class JsonInferenceResponse:
+    inference_id: str
+    episode_id: str
+    variant_name: str
+    output: JsonInferenceOutput
+    usage: Usage
+    original_response: str | None = None
+    finish_reason: FinishReason | None = None
 
 
 System = str | Arguments
@@ -379,21 +475,20 @@ class InputMessageContentToolCall:
 
 
 @dataclass(kw_only=True)
-class File3(ObjectStoragePointer):
-    file_type: Literal['object_storage_pointer']
+class InputMessageContentFile:
+    type: Literal['file']
 
 
-@dataclass(kw_only=True)
-class File4(ObjectStorageFile):
-    file_type: Literal['object_storage']
-
-
-@dataclass(kw_only=True)
-class File5(ObjectStorageError):
-    file_type: Literal['object_storage_error']
-
-
-File = File1 | File2 | File3 | File4 | File5
+InputMessageContent = (
+    InputMessageContentText
+    | InputMessageContentTemplate
+    | InputMessageContentToolCall
+    | InputMessageContentToolResult
+    | InputMessageContentRawText
+    | InputMessageContentThought
+    | InputMessageContentFile
+    | InputMessageContentUnknown
+)
 
 
 @dataclass(kw_only=True)
@@ -424,21 +519,7 @@ class DynamicToolParams:
     """
 
 
-@dataclass(kw_only=True)
-class InputMessageContentFile:
-    type: Literal['file']
-
-
-InputMessageContent = (
-    InputMessageContentText
-    | InputMessageContentTemplate
-    | InputMessageContentToolCall
-    | InputMessageContentToolResult
-    | InputMessageContentRawText
-    | InputMessageContentThought
-    | InputMessageContentFile
-    | InputMessageContentUnknown
-)
+InferenceResponse = ChatInferenceResponse | JsonInferenceResponse
 
 
 @dataclass(kw_only=True)

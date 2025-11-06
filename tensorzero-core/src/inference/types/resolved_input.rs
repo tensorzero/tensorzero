@@ -6,6 +6,7 @@ use futures::future::Shared;
 use futures::FutureExt;
 use mime::MediaType;
 use object_store::{PutMode, PutOptions};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -29,6 +30,9 @@ use crate::inference::types::pyo3_helpers::{
 };
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+
+#[cfg(test)]
+use tensorzero_derive::export_schema;
 
 #[derive(Clone, Debug)]
 pub struct LazyResolvedInput {
@@ -88,9 +92,12 @@ impl LazyFile {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[cfg_attr(test, export_schema)]
 pub struct FileUrl {
+    #[schemars(with = "String")]
     pub url: Url,
+    #[schemars(with = "Option<String>")]
     pub mime_type: Option<MediaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<Detail>,

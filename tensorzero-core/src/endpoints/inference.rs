@@ -7,6 +7,7 @@ use futures::stream::Stream;
 use futures::FutureExt;
 use futures_core::FusedStream;
 use metrics::counter;
+use schemars::JsonSchema;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -27,6 +28,8 @@ use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedV
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
+use crate::endpoints::validate_tags;
+use crate::endpoints::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
 use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::experimentation::ExperimentationConfig;
@@ -56,8 +59,8 @@ use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
-use crate::endpoints::validate_tags;
-use crate::endpoints::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
+#[cfg(test)]
+use tensorzero_derive::export_schema;
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Default, Deserialize)]
@@ -1054,7 +1057,8 @@ async fn write_inference(
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[cfg_attr(test, export_schema)]
 #[ts(export)]
 #[serde(untagged, rename_all = "snake_case")]
 pub enum InferenceResponse {
@@ -1062,7 +1066,8 @@ pub enum InferenceResponse {
     Json(JsonInferenceResponse),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[cfg_attr(test, export_schema)]
 #[ts(export)]
 pub struct ChatInferenceResponse {
     pub inference_id: Uuid,
@@ -1076,7 +1081,8 @@ pub struct ChatInferenceResponse {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[cfg_attr(test, export_schema)]
 #[ts(export)]
 pub struct JsonInferenceResponse {
     pub inference_id: Uuid,

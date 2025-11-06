@@ -10,13 +10,12 @@ import httpx
 import uuid_utils
 from typing_extensions import NotRequired, TypedDict
 
-from tensorzero.generated_types import UnsetType
-
-
-@dataclass
-class Usage:
-    input_tokens: int
-    output_tokens: int
+from tensorzero.generated_types import (
+    UnsetType,
+    Detail,
+    Usage,
+    Tool,
+)
 
 
 # For type checking purposes only
@@ -89,9 +88,6 @@ class FileBase64(ContentBlock):
     data: Optional[str]
     mime_type: str
     type: str = "file"
-
-
-Detail = Literal["low", "high", "auto"]
 
 
 @dataclass
@@ -529,14 +525,6 @@ class JsonDatapointInsert:
     output_schema: Optional[Any] = None
     tags: Optional[Dict[str, str]] = None
     name: Optional[str] = None
-
-
-@dataclass
-class Tool:
-    description: str
-    parameters: Any
-    name: str
-    strict: bool
 
 
 @dataclass

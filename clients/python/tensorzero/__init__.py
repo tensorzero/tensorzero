@@ -39,6 +39,14 @@ from .tensorzero import (
 from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
+from .generated_types import (
+    Arguments,
+    Base64FileMetadata,
+    ContentBlockChatOutputText,
+    ContentBlockChatOutputThought,
+    ContentBlockChatOutputToolCall,
+    ContentBlockChatOutputUnknown,
+)
 from .types import (
     AndFilter,
     BaseTensorZeroError,
@@ -126,7 +134,9 @@ ChatInferenceOutput = t.List[ContentBlock]
 
 __all__ = [
     "AndFilter",
+    "Arguments",
     "AsyncTensorZeroGateway",
+    "Base64FileMetadata",
     "BaseTensorZeroError",
     "BaseTensorZeroGateway",
     "BooleanMetricFilter",
@@ -135,6 +145,10 @@ __all__ = [
     "ChatInferenceResponse",
     "Config",
     "ContentBlock",
+    "ContentBlockChatOutputText",
+    "ContentBlockChatOutputThought",
+    "ContentBlockChatOutputToolCall",
+    "ContentBlockChatOutputUnknown",
     "Datapoint",
     "DiclOptimizationConfig",  # DEPRECATED
     "DICLOptimizationConfig",

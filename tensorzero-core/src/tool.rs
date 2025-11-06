@@ -1,14 +1,14 @@
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize, Serializer};
+use serde_json::Value;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
+use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize, Serializer};
-use serde_json::Value;
-use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -97,6 +97,7 @@ impl Tool {
 pub enum ProviderToolScope {
     #[default]
     Unscoped,
+    #[schemars(title = "ProviderToolScopeModelProvider")]
     ModelProvider {
         model_name: String,
         model_provider_name: String,
@@ -117,6 +118,7 @@ impl ProviderToolScope {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ProviderTool {
     #[serde(default)]
@@ -840,10 +842,12 @@ pub enum ToolChoice {
     Auto,
     Required,
     // Forces the LLM to call a specific tool. The String is the name of the tool.
+    #[schemars(title = "ToolChoiceSpecific")]
     Specific(String),
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(test, export_schema)]
 pub struct ToolCallChunk {
     pub id: String,
     #[serde(serialize_with = "serialize_option_string_as_empty")]

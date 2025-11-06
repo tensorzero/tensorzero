@@ -1061,9 +1061,13 @@ pub enum ContentBlockOutput {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[export_schema]
 pub enum ContentBlockChatOutput {
+    #[schemars(title = "ContentBlockChatOutputText")]
     Text(Text),
+    #[schemars(title = "ContentBlockChatOutputToolCall")]
     ToolCall(InferenceResponseToolCall),
+    #[schemars(title = "ContentBlockChatOutputThought")]
     Thought(Thought),
+    #[schemars(title = "ContentBlockChatOutputUnknown")]
     Unknown {
         data: Value,
         model_provider_name: Option<String>,
@@ -1301,7 +1305,7 @@ impl ModelInput {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum FinishReason {
@@ -1344,7 +1348,7 @@ impl ProviderInferenceResponse {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 pub struct Usage {
     pub input_tokens: u32,
@@ -1482,7 +1486,7 @@ pub struct JsonInferenceResult {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceOutput {
