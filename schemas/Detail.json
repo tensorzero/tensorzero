@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Detail",
+  "description": "Detail level for input images (affects fidelity and token cost)",
+  "type": "string",
+  "enum": [
+    "low",
+    "high",
+    "auto"
+  ]
+}

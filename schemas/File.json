@@ -1,0 +1,249 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "File",
+  "description": "A file for an inference or a datapoint.",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "file_type": {
+          "type": "string",
+          "const": "url"
+        }
+      },
+      "$ref": "#/$defs/UrlFile",
+      "required": [
+        "file_type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "file_type": {
+          "type": "string",
+          "const": "base64"
+        }
+      },
+      "$ref": "#/$defs/Base64File",
+      "required": [
+        "file_type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "file_type": {
+          "type": "string",
+          "const": "object_storage_pointer"
+        }
+      },
+      "$ref": "#/$defs/ObjectStoragePointer",
+      "required": [
+        "file_type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "file_type": {
+          "type": "string",
+          "const": "object_storage"
+        }
+      },
+      "$ref": "#/$defs/ObjectStorageFile",
+      "required": [
+        "file_type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "file_type": {
+          "type": "string",
+          "const": "object_storage_error"
+        }
+      },
+      "$ref": "#/$defs/ObjectStorageError",
+      "required": [
+        "file_type"
+      ]
+    }
+  ],
+  "$defs": {
+    "Detail": {
+      "description": "Detail level for input images (affects fidelity and token cost)",
+      "type": "string",
+      "enum": [
+        "low",
+        "high",
+        "auto"
+      ]
+    },
+    "UrlFile": {
+      "description": "A file that can be located at a URL",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "mime_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "Base64File": {
+      "description": "A file already encoded as base64",
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "mime_type",
+        "data"
+      ]
+    },
+    "ObjectStoragePointer": {
+      "description": "A file stored in an object storage backend, without data.\nThis struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).\nNote: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.",
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "storage_path": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "mime_type",
+        "storage_path"
+      ]
+    },
+    "ObjectStorageFile": {
+      "description": "A file stored in an object storage backend, with data.\nThis struct can NOT be stored in the database.\nNote: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.",
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "storage_path": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mime_type",
+        "storage_path",
+        "data"
+      ]
+    },
+    "ObjectStorageError": {
+      "description": "A file that we failed to read from object storage.\nThis struct can NOT be stored in the database.",
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "storage_path": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "mime_type",
+        "storage_path"
+      ]
+    }
+  }
+}

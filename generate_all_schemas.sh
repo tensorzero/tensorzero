@@ -2,7 +2,7 @@
 # Generate all schemas: Rust JSON schemas and Python dataclasses
 #
 # This script:
-# 1. Generates JSON schemas from Rust types using schemars
+# 1. Runs tests to generate JSON schemas from Rust types (using #[export_schema])
 # 2. Generates Python dataclasses from the JSON schemas
 #
 # Run from the repository root:
@@ -11,15 +11,15 @@
 set -e  # Exit on error
 
 echo "========================================================================"
-echo "TensorZero Schema Generation"
+echo "TensorZero Schema Generation (ts-rs style)"
 echo "========================================================================"
 echo ""
 
-# Step 1: Generate JSON schemas from Rust types
-echo "Step 1: Generating JSON schemas from Rust types..."
+# Step 1: Run tests to generate JSON schemas
+echo "Step 1: Running tests to generate JSON schemas from Rust types..."
 echo "------------------------------------------------------------------------"
 cd tensorzero-core
-cargo run --example generate_schemas
+cargo test export_schema
 cd ..
 echo ""
 
@@ -38,4 +38,9 @@ echo ""
 echo "Generated files:"
 echo "  - JSON schemas: schemas/*.json (14 files)"
 echo "  - Python types: clients/python/tensorzero/generated_types.py"
+echo ""
+echo "To add a new type to schema generation:"
+echo "  1. Add #[derive(JsonSchema)] to your Rust type"
+echo "  2. Add #[cfg_attr(test, tensorzero_schema_generation::export_schema)]"
+echo "  3. Run this script again!"
 echo ""

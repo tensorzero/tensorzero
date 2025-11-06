@@ -46,6 +46,7 @@ pub struct LazyResolvedInputMessage {
 // This gets serialized as part of a `ModelInferenceRequest` when we compute a cache key.
 // TODO: decide on the precise caching behavior that we want for file URLs and object storage paths.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub enum LazyFile {
     // Client sent a file URL → must fetch & store
     Url {
@@ -91,6 +92,7 @@ impl LazyFile {
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct FileUrl {
     #[schemars(with = "String")]
     pub url: Url,

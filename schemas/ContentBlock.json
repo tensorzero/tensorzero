@@ -1,0 +1,359 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ContentBlock",
+  "description": "Core representation of the types of content that could go into a model provider\nThe `PartialEq` impl will panic if we try to compare a `LazyFile`, so we make it\ntest-only to prevent production code from panicking.\nThis *does not* implement `Deserialize`, since we need object store information\nto produce a `LazyFile::Url`",
+  "oneOf": [
+    {
+      "description": "InputMessages are validated against the input schema of the Function\nand then templated and transformed into RequestMessages for a particular Variant.\nThey might contain tool calls or tool results along with text.\nThe abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.\nContentBlocks are collected into RequestMessages.\nThese RequestMessages are collected into a ModelInferenceRequest,\nwhich should contain all information needed by a ModelProvider to perform the\ninference that is called for.",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "text"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "text"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "tool_call"
+        }
+      },
+      "$ref": "#/$defs/ToolCall",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "A ToolResult is the outcome of a ToolCall, which we may want to present back to the model",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "tool_result"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "name",
+        "result",
+        "id"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "file"
+        }
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Url": {
+              "type": "object",
+              "properties": {
+                "file_url": {
+                  "$ref": "#/$defs/FileUrl"
+                }
+              },
+              "required": [
+                "file_url"
+              ]
+            }
+          },
+          "required": [
+            "Url"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Base64": {
+              "$ref": "#/$defs/PendingObjectStoreFile"
+            }
+          },
+          "required": [
+            "Base64"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ObjectStoragePointer": {
+              "type": "object",
+              "properties": {
+                "metadata": {
+                  "$ref": "#/$defs/Base64FileMetadata"
+                },
+                "storage_path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "metadata",
+                "storage_path"
+              ]
+            }
+          },
+          "required": [
+            "ObjectStoragePointer"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ObjectStorage": {
+              "$ref": "#/$defs/ObjectStorageFile"
+            }
+          },
+          "required": [
+            "ObjectStorage"
+          ]
+        }
+      ],
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "thought"
+        }
+      },
+      "$ref": "#/$defs/Thought",
+      "required": [
+        "type"
+      ]
+    },
+    {
+      "description": "Represents an unknown provider-specific content block.\nWe pass this along as-is without any validation or transformation.",
+      "type": "object",
+      "properties": {
+        "data": {
+          "description": "The underlying content block to be passed to the model provider."
+        },
+        "model_provider_name": {
+          "description": "A fully-qualified name specifying when this content block should\nbe included in the model provider input.\nE.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`\n\nIf set to `Some`, this is compared against the output of `fully_qualified_name` before invoking\na model provider, and stripped from the input if it doesn't match.\nIf set to `None, then this is passed to all model providers.\nIndividual model provider implementation never need to check this field themselves -\nthey only need to produce it with the proper `fully_qualified_name` set.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type": {
+          "type": "string",
+          "const": "unknown"
+        }
+      },
+      "required": [
+        "type",
+        "data"
+      ]
+    }
+  ],
+  "$defs": {
+    "ToolCall": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "arguments": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "arguments"
+      ]
+    },
+    "FileUrl": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "mime_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "Detail": {
+      "description": "Detail level for input images (affects fidelity and token cost)",
+      "type": "string",
+      "enum": [
+        "low",
+        "high",
+        "auto"
+      ]
+    },
+    "PendingObjectStoreFile": {
+      "description": "A newtype wrapper around `ObjectStorageFile` that represents file data\nfrom a base64 input that needs to be written to object storage.\nThe `storage_path` inside is content-addressed (computed from data) and represents\nwhere the file WILL be written, not where it currently exists.",
+      "$ref": "#/$defs/ObjectStorageFile"
+    },
+    "ObjectStorageFile": {
+      "description": "A file stored in an object storage backend, with data.\nThis struct can NOT be stored in the database.\nNote: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.",
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "storage_path": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mime_type",
+        "storage_path",
+        "data"
+      ]
+    },
+    "Base64FileMetadata": {
+      "description": "Like `Base64File`, but without the data field.",
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "mime_type"
+      ]
+    },
+    "ThoughtSummaryBlock": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "summary_text"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ]
+        }
+      ]
+    },
+    "Thought": {
+      "description": "Struct that represents a model's reasoning",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signature": {
+          "description": "An optional signature - currently, this is only used with Anthropic,\nand is ignored by other providers.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThoughtSummaryBlock"
+          }
+        },
+        "_internal_provider_type": {
+          "description": "When set, this 'Thought' block will only be used for providers\nmatching this type (e.g. `anthropic`). Other providers will emit\na warning and discard the block.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

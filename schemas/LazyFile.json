@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LazyFile",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "Url": {
+          "type": "object",
+          "properties": {
+            "file_url": {
+              "$ref": "#/$defs/FileUrl"
+            }
+          },
+          "required": [
+            "file_url"
+          ]
+        }
+      },
+      "required": [
+        "Url"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "Base64": {
+          "$ref": "#/$defs/PendingObjectStoreFile"
+        }
+      },
+      "required": [
+        "Base64"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ObjectStoragePointer": {
+          "type": "object",
+          "properties": {
+            "metadata": {
+              "$ref": "#/$defs/Base64FileMetadata"
+            },
+            "storage_path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "metadata",
+            "storage_path"
+          ]
+        }
+      },
+      "required": [
+        "ObjectStoragePointer"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "ObjectStorage": {
+          "$ref": "#/$defs/ObjectStorageFile"
+        }
+      },
+      "required": [
+        "ObjectStorage"
+      ],
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "FileUrl": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "mime_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "url"
+      ]
+    },
+    "Detail": {
+      "description": "Detail level for input images (affects fidelity and token cost)",
+      "type": "string",
+      "enum": [
+        "low",
+        "high",
+        "auto"
+      ]
+    },
+    "PendingObjectStoreFile": {
+      "description": "A newtype wrapper around `ObjectStorageFile` that represents file data\nfrom a base64 input that needs to be written to object storage.\nThe `storage_path` inside is content-addressed (computed from data) and represents\nwhere the file WILL be written, not where it currently exists.",
+      "$ref": "#/$defs/ObjectStorageFile"
+    },
+    "ObjectStorageFile": {
+      "description": "A file stored in an object storage backend, with data.\nThis struct can NOT be stored in the database.\nNote: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.",
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "storage_path": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mime_type",
+        "storage_path",
+        "data"
+      ]
+    },
+    "Base64FileMetadata": {
+      "description": "Like `Base64File`, but without the data field.",
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "mime_type"
+      ]
+    }
+  }
+}

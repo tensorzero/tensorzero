@@ -44,6 +44,7 @@ use crate::{
 /// A Tool object describes how a tool can be dynamically configured by the user.
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct Tool {
@@ -90,6 +91,7 @@ impl Tool {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[serde(untagged)]
 pub enum ProviderToolScope {
     #[default]
@@ -114,6 +116,7 @@ impl ProviderToolScope {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ProviderTool {
     #[serde(default)]
@@ -542,6 +545,7 @@ impl ToolCallConfigDatabaseInsert {
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
 #[ts(optional_fields)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct DynamicToolParams {
     /// A subset of static tools configured for the function that the inference is allowed to use. Optional.
@@ -633,6 +637,7 @@ where
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ToolCall {
     pub id: String,
@@ -671,6 +676,7 @@ impl ToolCall {
 /// `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[serde(untagged)]
 pub enum ToolCallWrapper {
     ToolCall(ToolCall), // the format we store in the database
@@ -697,6 +703,7 @@ impl TryFrom<ToolCallWrapper> for ToolCall {
 /// in the form that we return to the client / ClickHouse
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct InferenceResponseToolCall {
     /// A Tool Call ID to match up with tool call responses. See #4058.
@@ -785,6 +792,7 @@ impl ToolCallConfig {
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[serde(deny_unknown_fields)]
 pub struct ToolResult {
     pub name: String,
@@ -825,6 +833,7 @@ impl ToolResult {
 /// This enum is used to denote this tool choice.
 #[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum ToolChoice {
@@ -837,6 +846,7 @@ pub enum ToolChoice {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct ToolCallChunk {
     pub id: String,
     #[serde(serialize_with = "serialize_option_string_as_empty")]

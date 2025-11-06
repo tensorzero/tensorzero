@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PendingObjectStoreFile",
+  "description": "A newtype wrapper around `ObjectStorageFile` that represents file data\nfrom a base64 input that needs to be written to object storage.\nThe `storage_path` inside is content-addressed (computed from data) and represents\nwhere the file WILL be written, not where it currently exists.",
+  "$ref": "#/$defs/ObjectStorageFile",
+  "$defs": {
+    "ObjectStorageFile": {
+      "description": "A file stored in an object storage backend, with data.\nThis struct can NOT be stored in the database.\nNote: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.",
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "storage_path": {
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Detail"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mime_type",
+        "storage_path",
+        "data"
+      ]
+    },
+    "Detail": {
+      "description": "Detail level for input images (affects fidelity and token cost)",
+      "type": "string",
+      "enum": [
+        "low",
+        "high",
+        "auto"
+      ]
+    }
+  }
+}

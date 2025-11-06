@@ -143,6 +143,7 @@ pub use streams::{
 #[serde(deny_unknown_fields)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(test, ts(optional))]
@@ -588,6 +589,7 @@ impl LazyResolvedInputMessageContent {
 #[derive(Clone, Debug, Serialize, PartialEq, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct InputMessage {
     pub role: Role,
     pub content: Vec<InputMessageContent>,
@@ -596,11 +598,13 @@ pub struct InputMessage {
 /// A newtype wrapper around Map<String, Value> for template and system arguments
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[serde(transparent)]
 pub struct Arguments(pub Map<String, Value>);
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[serde(deny_unknown_fields)]
 pub struct Template {
     pub name: String,
@@ -610,6 +614,7 @@ pub struct Template {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[serde(untagged)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub enum System {
     Text(String),
     Template(Arguments),
@@ -619,6 +624,7 @@ pub enum System {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub enum InputMessageContent {
     Text(Text),
     Template(Template),
@@ -688,6 +694,7 @@ impl<'de> Deserialize<'de> for TextKind {
 /// inference that is called for.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
 pub struct Text {
@@ -719,6 +726,7 @@ impl Text {
 /// without any template processing or validation
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
 pub struct RawText {
@@ -749,6 +757,7 @@ impl RawText {
 /// We pass this along as-is without any validation or transformation.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(deny_unknown_fields)]
 pub struct Unknown {
@@ -776,6 +785,7 @@ impl Unknown {
 
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ThoughtSummaryBlock {
@@ -785,6 +795,7 @@ pub enum ThoughtSummaryBlock {
 /// Struct that represents a model's reasoning
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
     #[ts(optional)]
@@ -834,6 +845,7 @@ impl RateLimitedInputContent for Thought {
 /// to produce a `LazyFile::Url`
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     Text(Text),
@@ -1040,6 +1052,7 @@ pub enum ContentBlockOutput {
 /// Defines the types of content block that can come from a `chat` function
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockChatOutput {
     Text(Text),

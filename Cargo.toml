@@ -11,7 +11,8 @@ members = [
     "provider-proxy",
     "evaluations",
     "internal/tensorzero-derive",
-     "internal/tensorzero-auth",
+    "internal/tensorzero-auth",
+    "internal/tensorzero-schema-generation",
     "examples/integrations/cursor/feedback",
 ]
 resolver = "2"

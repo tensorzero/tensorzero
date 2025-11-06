@@ -77,6 +77,7 @@ pub enum FileEncoding {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub enum Detail {
     Low,
     High,
@@ -97,6 +98,7 @@ pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), E
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct Base64File {
     // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
@@ -154,6 +156,7 @@ impl<'de> Deserialize<'de> for Base64File {
 /// Like `Base64File`, but without the data field.
 #[derive(ts_rs::TS, Clone, Debug, Serialize, PartialEq, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64FileMetadata {
     // The original url we used to download the file
@@ -248,6 +251,7 @@ pub fn serialize_with_file_data<T: Serialize>(value: &T) -> Result<Value, Error>
 /// A file that can be located at a URL
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct UrlFile {
     #[schemars(with = "String")]
     pub url: Url,
@@ -264,6 +268,7 @@ pub struct UrlFile {
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct ObjectStoragePointer {
     #[serde(alias = "url")] // DEPRECATED (SEE IMPORTANT NOTE BELOW)
     #[ts(optional)]
@@ -284,6 +289,7 @@ pub struct ObjectStoragePointer {
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct ObjectStorageFile {
     #[serde(flatten)]
     pub file: ObjectStoragePointer,
@@ -296,6 +302,7 @@ pub struct ObjectStorageFile {
 /// This struct can NOT be stored in the database.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct ObjectStorageError {
     #[serde(flatten)]
     pub file: ObjectStoragePointer,
@@ -308,6 +315,7 @@ pub struct ObjectStorageError {
 /// The `storage_path` inside is content-addressed (computed from data) and represents
 /// where the file WILL be written, not where it currently exists.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct PendingObjectStoreFile(pub ObjectStorageFile);
 
 impl std::ops::Deref for PendingObjectStoreFile {
@@ -362,6 +370,7 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(tag = "file_type", rename_all = "snake_case")]
 #[ts(export)]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 // NOTE(shuyangli, 2025-10-21): we're manually implementing Serialize and Deserialize for a while until we're confident
 // that clients are sending us the correct tagged versions. Serialization always produces tagged format, but
 // deserialization accepts both tagged and untagged formats for backwards compatibility.

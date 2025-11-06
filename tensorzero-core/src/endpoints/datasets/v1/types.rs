@@ -17,6 +17,7 @@ use crate::tool::DynamicToolParams;
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct UpdateDatapointsRequest {
     /// The datapoints to update.
     pub datapoints: Vec<UpdateDatapointRequest>,
@@ -27,6 +28,7 @@ pub struct UpdateDatapointsRequest {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub enum UpdateDatapointRequest {
     /// Request to update a chat datapoint.
     Chat(UpdateChatDatapointRequest),
@@ -44,6 +46,7 @@ pub enum UpdateDatapointRequest {
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct UpdateChatDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -81,6 +84,7 @@ pub struct UpdateChatDatapointRequest {
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct UpdateJsonDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -116,6 +120,7 @@ pub struct UpdateJsonDatapointRequest {
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct JsonDatapointOutputUpdate {
     /// The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
     pub raw: String,
@@ -125,6 +130,7 @@ pub struct JsonDatapointOutputUpdate {
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
@@ -135,6 +141,7 @@ pub struct DatapointMetadataUpdate {
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[cfg_attr(test, tensorzero_schema_generation::export_schema)]
 pub struct UpdateDatapointsResponse {
     /// The IDs of the datapoints that were updated.
     /// These are newly generated IDs for UpdateDatapoint requests, and they are the same IDs for UpdateDatapointMetadata requests.

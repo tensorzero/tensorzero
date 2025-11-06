@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tool",
+  "description": "A Tool object describes how a tool can be dynamically configured by the user.",
+  "type": "object",
+  "properties": {
+    "description": {
+      "type": "string"
+    },
+    "parameters": true,
+    "name": {
+      "type": "string"
+    },
+    "strict": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "description",
+    "parameters",
+    "name"
+  ]
+}

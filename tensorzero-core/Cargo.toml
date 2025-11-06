@@ -154,6 +154,7 @@ rand_distr = "0.5.1"
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 paste = "1.0.15"
 base64 = "0.22.1"
+tensorzero-schema-generation = { path = "../internal/tensorzero-schema-generation" }
 aws-credential-types = { version = "1.2.2", features = [
     "hardcoded-credentials",
 ] }

@@ -1,0 +1,14 @@
+[package]
+name = "tensorzero-schema-generation"
+version = "2025.11.1"
+edition = "2021"
+license = "Apache-2.0"
+description = "Proc macro for automatic JSON schema generation"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }

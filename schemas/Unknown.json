@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Unknown",
+  "description": "Struct that represents an unknown provider-specific content block.\nWe pass this along as-is without any validation or transformation.",
+  "type": "object",
+  "properties": {
+    "data": {
+      "description": "The underlying content block to be passed to the model provider."
+    },
+    "model_provider_name": {
+      "description": "A fully-qualified name specifying when this content block should\nbe included in the model provider input.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "data"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Template",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "arguments": {
+      "$ref": "#/$defs/Arguments"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "arguments"
+  ],
+  "$defs": {
+    "Arguments": {
+      "description": "A newtype wrapper around Map<String, Value> for template and system arguments",
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

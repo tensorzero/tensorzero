@@ -6166,6 +6166,7 @@ dependencies = [
  "tensorzero",
  "tensorzero-auth",
  "tensorzero-derive",
+ "tensorzero-schema-generation",
  "thiserror 2.0.17",
  "tokio",
  "tokio-stream",
@@ -6237,6 +6238,15 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "tensorzero-schema-generation"
+version = "2025.11.1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.108",
 ]
 
 [[package]]
