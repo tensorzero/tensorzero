@@ -49,6 +49,15 @@ We use `utoipa` to generate OpenAPI schemas from Rust types, then use `datamodel
 - To generate Python dataclasses from OpenAPI schemas, run `clients/python/build-openapi-bindings.sh` (generates `clients/python/tensorzero/types_generated.py`)
 - Note: Some types with recursive structures (DatapointFilter, InferenceFilter, Datapoint) are excluded from the OpenAPI generation due to stack overflow issues during schema generation
 
+## UNSET Sentinel for Option<Option<T>>
+
+The generated Python types include an `UNSET` sentinel value to distinguish between omitted fields and null values, corresponding to Rust's `Option<Option<T>>`:
+- `UNSET`: Field is omitted (don't change existing value)
+- `None`: Field is explicitly set to null
+- `value`: Field is set to the provided value
+
+Fields with UNSET support are automatically identified during generation based on the `#[serde(deserialize_with = "deserialize_double_option")]` attribute. See `clients/python/UNSET_USAGE.md` for usage examples.
+
 # CI/CD
 
 - Most GitHub Actions workflows run on Unix only, but some also run on Windows and macOS. For workflows that run on multiple operating systems, ensure any bash scripts are compatible with all three platforms. You can check which OS a workflow uses by looking at the `runs-on` field. Setting `shell: bash` in the job definition is often sufficient.
