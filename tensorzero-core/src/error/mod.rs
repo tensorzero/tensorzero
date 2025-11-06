@@ -124,7 +124,9 @@ impl Error {
         Error(Arc::new(details))
     }
 
-    pub fn new_without_logging(details: ErrorDetails) -> Self {
+    // If you need to construct an error without logging it, use `DelayedError` instead.
+    // This method should only be called within `DelayedError` itself.
+    fn new_without_logging(details: ErrorDetails) -> Self {
         Error(Arc::new(details))
     }
 
