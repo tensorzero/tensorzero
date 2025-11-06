@@ -27,6 +27,7 @@ pub mod serde_util; // utilities for working with serde
 pub mod stored_inference; // types and methods for working with stored inferences
 mod testing;
 pub mod tool; // types and methods for working with TensorZero tools
+pub mod schema_poc; // proof-of-concept for custom schemars annotations
 pub mod utils;
 pub mod variant; // types and methods for working with TensorZero variants
 
