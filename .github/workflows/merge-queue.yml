@@ -152,6 +152,8 @@ jobs:
     strategy:
       matrix:
         batch_writes: [true, false]
+      # Don't fail-fast for manual/cron runs, so that we get the full picture of what broke
+      fail-fast: ${{ github.event_name == 'merge_group' }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
