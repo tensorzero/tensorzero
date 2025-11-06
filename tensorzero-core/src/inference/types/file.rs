@@ -73,7 +73,7 @@ pub enum FileEncoding {
 }
 
 /// Detail level for input images (affects fidelity and token cost)
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Detail {
@@ -109,7 +109,6 @@ pub struct Base64File {
     pub data: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    #[schema(value_type = Option<String>)]
     pub detail: Option<Detail>,
 }
 

@@ -27,7 +27,13 @@ uvx --from="datamodel-code-generator[http]" datamodel-codegen \
   --use-standard-collections \
   --use-union-operator \
   --field-constraints \
-  --target-python-version 3.9
+  --target-python-version 3.9 \
+  --use-schema-description \
+  --enum-field-as-literal one \
+  --use-title-as-name \
+  --use-annotated \
+  --collapse-root-models \
+  --use-one-literal-as-default
 
 # Step 3: Format the generated file
 echo "Formatting generated Python file..."
