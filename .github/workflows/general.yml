@@ -762,9 +762,7 @@ jobs:
 
   build-gateway-e2e-container:
     uses: ./.github/workflows/build-gateway-e2e-container.yml
-    # Skip running this on PR ci for forks, since it needs secrets.
-    # TensorZero organization members can use `/check-fork` to manually run all checks for a PR from a fork.
-    if: ${{!(github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]'))}}
+    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
       # Permission to checkout the repository
       contents: read
@@ -772,7 +770,7 @@ jobs:
       id-token: write
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml
@@ -817,7 +815,8 @@ jobs:
       S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   run-merge-queue-checks:
-    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    needs: [build-gateway-e2e-container]
+    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
       # Permission to checkout the repository
       contents: read

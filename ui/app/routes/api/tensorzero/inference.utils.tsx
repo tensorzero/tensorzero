@@ -18,7 +18,7 @@ import type {
   StaticToolConfig,
   Tool,
   ToolChoice,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import type {
   InputMessageContent as TensorZeroContent,
   ImageContent as TensorZeroImage,
@@ -42,7 +42,7 @@ import type {
   StoredInputMessageContent as TensorZeroStoredInputMessageContent,
   ContentBlockChatOutput,
   JsonInferenceOutput,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import type {
   Input,
   InputMessage,

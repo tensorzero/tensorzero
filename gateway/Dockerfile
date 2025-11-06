@@ -24,7 +24,7 @@ RUN cargo chef cook --profile ${PROFILE} -p gateway ${CARGO_BUILD_FLAGS}
 COPY . /tensorzero
 
 RUN cargo build --profile ${PROFILE} -p gateway ${CARGO_BUILD_FLAGS}
-RUN cp -r /tensorzero/target/${PROFILE} /release
+RUN if [ "${PROFILE}" = "dev" ]; then cp -r /tensorzero/target/debug /release; else cp -r /tensorzero/target/${PROFILE} /release; fi
 
 # ========== base ==========
 

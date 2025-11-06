@@ -200,7 +200,9 @@ async fn e2e_test_comment_feedback_validation_disabled() {
         value: json!("foo bar"),
         ..Default::default()
     };
-    let val = feedback(handle.app_state.clone(), params).await.unwrap();
+    let val = feedback(handle.app_state.clone(), params, None)
+        .await
+        .unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse
@@ -1232,7 +1234,9 @@ async fn e2e_test_float_feedback_validation_disabled() {
         value: json!(3.1),
         ..Default::default()
     };
-    let val = feedback(handle.app_state.clone(), params).await.unwrap();
+    let val = feedback(handle.app_state.clone(), params, None)
+        .await
+        .unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse
@@ -1469,7 +1473,9 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         value: json!(true),
         ..Default::default()
     };
-    let val = feedback(handle.app_state.clone(), params).await.unwrap();
+    let val = feedback(handle.app_state.clone(), params, None)
+        .await
+        .unwrap();
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Check that this was correctly written to ClickHouse

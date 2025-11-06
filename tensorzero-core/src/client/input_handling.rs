@@ -55,11 +55,13 @@ fn resolved_input_message_content_to_client_input_message_content(
         ResolvedInputMessageContent::File(resolved) => {
             let ObjectStorageFile { file, data } = *resolved;
             let mime_type = file.mime_type;
+            let detail = file.detail;
 
             ClientInputMessageContent::File(File::Base64(Base64File {
                 source_url: None,
                 mime_type,
                 data,
+                detail,
             }))
         }
         ResolvedInputMessageContent::Unknown(unknown) => {
@@ -129,6 +131,7 @@ mod tests {
                 source_url: Some(Url::parse("http://notaurl.com").unwrap()),
                 mime_type: mime::IMAGE_JPEG,
                 storage_path: storage_path.clone(),
+                detail: None,
             },
             data: image_data.to_string(),
         }));

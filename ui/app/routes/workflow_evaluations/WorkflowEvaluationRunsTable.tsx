@@ -8,13 +8,12 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import { formatDate } from "~/utils/date";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import type { WorkflowEvaluationRunWithEpisodeCount } from "~/utils/clickhouse/workflow_evaluations";
 import {
   toWorkflowEvaluationRunUrl,
   toWorkflowEvaluationProjectUrl,
 } from "~/utils/urls";
-import { TableItemShortUuid } from "~/components/ui/TableItems";
 
 export default function WorkflowEvaluationRunsTable({
   workflowEvaluationRuns,
@@ -50,12 +49,10 @@ export default function WorkflowEvaluationRunsTable({
                   </Link>
                 </TableCell>
                 <TableCell className="max-w-[200px]">
-                  <Link
-                    to={toWorkflowEvaluationRunUrl(run.id)}
-                    className="block no-underline"
-                  >
-                    <TableItemShortUuid id={run.id} />
-                  </Link>
+                  <TableItemShortUuid
+                    id={run.id}
+                    link={toWorkflowEvaluationRunUrl(run.id)}
+                  />
                 </TableCell>
                 <TableCell>
                   {run.project_name ? (
@@ -72,7 +69,9 @@ export default function WorkflowEvaluationRunsTable({
                   )}
                 </TableCell>
                 <TableCell>{run.num_episodes}</TableCell>
-                <TableCell>{formatDate(new Date(run.timestamp))}</TableCell>
+                <TableCell>
+                  <TableItemTime timestamp={run.timestamp} />
+                </TableCell>
               </TableRow>
             ))
           )}

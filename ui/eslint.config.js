@@ -73,6 +73,18 @@ export default [
           message:
             "Direct access to config.functions[functionName] is not allowed. Use the useFunctionConfig(functionName) hook instead.",
         },
+        {
+          selector:
+            "ImportDeclaration[source.value='tensorzero-node'][importKind='type']",
+          message:
+            "Do not import types directly from 'tensorzero-node'. Use 'import type { ... } from \"~/types/tensorzero\"' instead to avoid bundling the native client in browser code.",
+        },
+        {
+          selector:
+            "ImportDeclaration[source.value='tensorzero-node'] ImportSpecifier[importKind='type']",
+          message:
+            "Do not import types directly from 'tensorzero-node'. Use 'import type { ... } from \"~/types/tensorzero\"' instead to avoid bundling the native client in browser code.",
+        },
       ],
     },
   },

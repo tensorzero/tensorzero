@@ -77,11 +77,13 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
                   label={`${inference.output_tokens} tok`}
                   tooltip="Output Tokens"
                 />
-                <Chip
-                  icon={<Timer className="text-fg-tertiary" />}
-                  label={`${inference.response_time_ms} ms`}
-                  tooltip="Response Time"
-                />
+                {inference.response_time_ms !== null && (
+                  <Chip
+                    icon={<Timer className="text-fg-tertiary" />}
+                    label={`${inference.response_time_ms} ms`}
+                    tooltip="Response Time"
+                  />
+                )}
                 {inference.cached && (
                   <Chip
                     icon={<Cached className="text-fg-tertiary" />}

@@ -3,6 +3,11 @@ import { getEnv } from "./env.server";
 
 let _postgresClient: PostgresClient | undefined;
 
+export function isPostgresAvailable(): boolean {
+  const env = getEnv();
+  return env.TENSORZERO_POSTGRES_URL !== null;
+}
+
 export async function getPostgresClient(): Promise<PostgresClient> {
   if (_postgresClient) {
     return _postgresClient;

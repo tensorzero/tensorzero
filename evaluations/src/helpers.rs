@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use serde_json::Value;
-use tensorzero::{CacheParamsOptions, DynamicToolParams, InferenceResponse};
+use tensorzero_core::cache::CacheParamsOptions;
+use tensorzero_core::client::{DynamicToolParams, InferenceResponse};
 use tensorzero_core::db::clickhouse::escape_string_for_clickhouse_literal;
 use tensorzero_core::serde_util::deserialize_json_string;
 use tensorzero_core::{
@@ -138,7 +139,7 @@ mod tests {
     use std::collections::{HashMap, HashSet};
 
     use serde_json::json;
-    use tensorzero::Tool;
+    use tensorzero_core::client::Tool;
     use tensorzero_core::{
         config::SchemaData, experimentation::ExperimentationConfig, function::FunctionConfigChat,
         tool::ToolChoice,

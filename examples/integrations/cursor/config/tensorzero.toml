@@ -18,7 +18,7 @@ model = "anthropic::claude-3-7-sonnet-20250219"
 [functions.cursorzero.variants."gemini-2.5-pro"]
 weight = 1
 type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-2.5-pro-preview-05-06"
+model = "google_ai_studio_gemini::gemini-2.5-pro"
 
 [functions.cursorzero.variants."o4-mini"]
 weight = 1

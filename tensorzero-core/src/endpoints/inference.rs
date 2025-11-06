@@ -33,7 +33,9 @@ use crate::experimentation::ExperimentationConfig;
 use crate::function::FunctionConfig;
 use crate::function::FunctionConfigChat;
 use crate::http::TensorzeroHttpClient;
-use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
+use crate::inference::types::chat_completion_inference_params::{
+    ChatCompletionInferenceParamsV2, ServiceTier,
+};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::resolved_input::LazyResolvedInput;
@@ -283,6 +285,12 @@ pub async fn inference(
     // Record the episode id if we didn't already have one
     if params.episode_id.is_none() {
         tracing::Span::current().record("episode_id", episode_id.to_string());
+    }
+    if let Some(api_key_ext) = &api_key_ext {
+        params.tags.insert(
+            "tensorzero::api_key_public_id".to_string(),
+            api_key_ext.0.api_key.get_public_id().into(),
+        );
     }
 
     let (function, function_name) = find_function(&params, &config)?;
@@ -1347,6 +1355,9 @@ pub struct ChatCompletionInferenceParams {
     pub reasoning_effort: Option<String>,
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<ServiceTier>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget_tokens: Option<i32>,
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1389,12 +1400,16 @@ impl ChatCompletionInferenceParams {
         }
         let ChatCompletionInferenceParamsV2 {
             reasoning_effort,
+            service_tier,
             thinking_budget_tokens,
             verbosity,
         } = inference_params_v2;
 
         if self.reasoning_effort.is_none() {
             self.reasoning_effort = reasoning_effort;
+        }
+        if self.service_tier.is_none() {
+            self.service_tier = service_tier;
         }
         if self.thinking_budget_tokens.is_none() {
             self.thinking_budget_tokens = thinking_budget_tokens;
@@ -1732,6 +1747,7 @@ mod tests {
             InputMessageContent::File(File::Url(UrlFile {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: Some(mime::IMAGE_PNG),
+                detail: None,
             }))
         );
     }
@@ -1764,6 +1780,7 @@ mod tests {
                 source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 data: "fake_base64_data".to_string(),
+                detail: None,
             }))
         );
     }
@@ -1774,6 +1791,7 @@ mod tests {
         let file_url = File::Url(UrlFile {
             url: "https://example.com/file.txt".parse().unwrap(),
             mime_type: Some(mime::IMAGE_PNG),
+            detail: None,
         });
         let serialized = serde_json::to_value(&file_url).unwrap();
         assert_eq!(serialized["file_type"], "url");
@@ -1784,6 +1802,7 @@ mod tests {
             source_url: None,
             mime_type: mime::IMAGE_PNG,
             data: "fake_base64_data".to_string(),
+            detail: None,
         });
         let serialized = serde_json::to_value(&file_base64).unwrap();
         assert_eq!(serialized["file_type"], "base64");
@@ -1817,6 +1836,7 @@ mod tests {
             InputMessageContent::File(File::Url(UrlFile {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: None,
+                detail: None,
             }))
         );
     }
@@ -1849,6 +1869,7 @@ mod tests {
                 source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 data: "fake_base64_data".to_string(),
+                detail: None,
             }))
         );
     }
@@ -1901,6 +1922,7 @@ mod tests {
                     },
                     path: Path::from("test-path"),
                 },
+                detail: None,
             }))
         );
     }
@@ -1912,6 +1934,7 @@ mod tests {
             source_url: None,
             mime_type: mime::IMAGE_JPEG,
             data: "base64data".to_string(),
+            detail: None,
         });
 
         let serialized = serde_json::to_string(&original).unwrap();

@@ -8,7 +8,7 @@ import type {
   GetDatapointParams,
   Datapoint,
   AdjacentDatapointIds,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import type {
   ParsedDatasetRow,
   ParsedChatInferenceDatapointRow,
