@@ -92,6 +92,16 @@ pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), E
     Ok(())
 }
 
+pub fn require_audio(mime_type: &MediaType, provider_type: &str) -> Result<(), Error> {
+    if mime_type.type_() != mime::AUDIO {
+        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
+            content_block_type: format!("file: {mime_type}"),
+            provider_type: provider_type.to_string(),
+        }));
+    }
+    Ok(())
+}
+
 /// A file already encoded as base64
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass)]
@@ -919,6 +929,18 @@ mod tests {
         let inferred = infer::get(webp_bytes).expect("Should detect WebP");
         assert_eq!(inferred.mime_type(), "image/webp");
         assert_eq!(inferred.extension(), "webp");
+
+        // Test WAV detection (magic bytes: RIFF....WAVE)
+        let wav_bytes = b"RIFF\x00\x00\x00\x00WAVEfmt ";
+        let inferred = infer::get(wav_bytes).expect("Should detect WAV");
+        assert_eq!(inferred.mime_type(), "audio/x-wav");
+        assert_eq!(inferred.extension(), "wav");
+
+        // Test MP3 detection (magic bytes: FF FB or ID3)
+        let mp3_bytes = [0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00];
+        let inferred = infer::get(&mp3_bytes).expect("Should detect MP3");
+        assert_eq!(inferred.mime_type(), "audio/mpeg");
+        assert_eq!(inferred.extension(), "mp3");
 
         // Test that unknown bytes return None
         let unknown_bytes = [0x00, 0x01, 0x02, 0x03];
