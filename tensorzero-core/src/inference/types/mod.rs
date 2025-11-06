@@ -576,7 +576,7 @@ impl LazyResolvedInputMessageContent {
                 }
             },
             // All other cases delegate to the "resolve" case, which is mostly just a type conversion.
-            other => other.resolve().await?.into_stored_input_message_content()?,
+            other => other.resolve().await?.into_stored_input_message_content(),
         })
     }
 }
