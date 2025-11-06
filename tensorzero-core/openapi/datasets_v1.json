@@ -32,9 +32,13 @@
             "type": "string"
           },
           "detail": {
-            "type": [
-              "string",
-              "null"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Detail"
+              }
             ]
           },
           "mime_type": {
@@ -399,6 +403,15 @@
             "minimum": 0
           }
         }
+      },
+      "Detail": {
+        "type": "string",
+        "description": "Detail level for input images (affects fidelity and token cost)",
+        "enum": [
+          "low",
+          "high",
+          "auto"
+        ]
       },
       "DynamicToolParams": {
         "type": "object",

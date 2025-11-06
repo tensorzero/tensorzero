@@ -18,15 +18,14 @@ cargo test --lib -p tensorzero-core export_openapi_schema -- --nocapture
 echo "Generating Python dataclasses from OpenAPI schema..."
 cd "$SCRIPT_DIR"
 
-# Run datamodel-code-generator with pydantic models
+# Run datamodel-code-generator with Python dataclasses
 uvx --from="datamodel-code-generator[http]" datamodel-codegen \
   --input "$PROJECT_ROOT/tensorzero-core/openapi/datasets_v1.json" \
   --input-file-type openapi \
   --output tensorzero/types_generated.py \
-  --output-model-type pydantic_v2.BaseModel \
+  --output-model-type dataclasses.dataclass \
   --use-standard-collections \
   --use-union-operator \
-  --field-constraints \
   --target-python-version 3.9 \
   --use-schema-description \
   --enum-field-as-literal one \
