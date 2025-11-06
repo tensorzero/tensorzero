@@ -713,7 +713,7 @@ struct GCPVertexGeminiRequestMinimal {
 #[serde(rename_all = "camelCase")]
 struct GCPVertexBatchResponseLine {
     request: Box<RawValue>,
-    response: GCPVertexGeminiResponse,
+    response: Box<RawValue>,
 }
 fn make_provider_batch_inference_output(
     line: GCPVertexBatchResponseLine,
@@ -726,9 +726,10 @@ fn make_provider_batch_inference_output(
             message: format!("Error deserializing batch request: {e}"),
         })
     })?;
-    let raw_response = serde_json::to_string(&line.response).map_err(|e| {
+    let raw_response = line.response.to_string();
+    let response = GCPVertexGeminiResponse::deserialize(&*line.response).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
-            message: format!("Error serializing batch response: {e}"),
+            message: format!("Error deserializing batch response: {e}"),
         })
     })?;
     let inference_id = request.labels.get(INFERENCE_ID_LABEL).ok_or_else(|| {
@@ -737,8 +738,7 @@ fn make_provider_batch_inference_output(
         })
     })?;
 
-    let usage = line
-        .response
+    let usage = response
         .usage_metadata
         .clone()
         .ok_or_else(|| {
@@ -752,7 +752,7 @@ fn make_provider_batch_inference_output(
         .into();
 
     let (output, finish_reason) = get_response_content(
-        line.response,
+        response,
         &raw_request,
         &raw_response,
         model_name,
