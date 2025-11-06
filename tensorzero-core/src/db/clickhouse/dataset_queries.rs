@@ -335,7 +335,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
     allowed_tools,
             "
             }
-            DatapointKind::Json => "output_schema",
+            DatapointKind::Json => "output_schema,",
         };
 
         let query = format!(
@@ -345,7 +345,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 dataset_name,
                 function_name,
                 id,
-                name,
                 episode_id,
                 input,
                 output,
@@ -353,16 +352,16 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 tags,
                 auxiliary,
                 is_deleted,
+                updated_at,
+                staled_at,
                 source_inference_id,
                 is_custom,
-                staled_at,
-                updated_at
+                name
             )
             SELECT
                 dataset_name,
                 function_name,
                 id,
-                name,
                 episode_id,
                 input,
                 output,
@@ -370,10 +369,11 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 tags,
                 auxiliary,
                 is_deleted,
+                now64() as updated_at,
+                now64() as staled_at,
                 source_inference_id,
                 is_custom,
-                now64() as staled_at,
-                now64() as updated_at
+                name
             FROM {{table:Identifier}} FINAL
             WHERE dataset_name = {{dataset_name:String}} AND id = {{datapoint_id:String}}
             "
@@ -875,7 +875,6 @@ impl ClickHouseConnectionInfo {
         (
             dataset_name,
             function_name,
-            name,
             id,
             episode_id,
             input,
@@ -884,15 +883,15 @@ impl ClickHouseConnectionInfo {
             tags,
             auxiliary,
             is_deleted,
-            is_custom,
-            source_inference_id,
             updated_at,
-            staled_at
+            staled_at,
+            source_inference_id,
+            is_custom,
+            name
         )
         SELECT
             new_data.dataset_name,
             new_data.function_name,
-            new_data.name,
             new_data.id,
             new_data.episode_id,
             new_data.input,
@@ -901,16 +900,17 @@ impl ClickHouseConnectionInfo {
             new_data.tags,
             new_data.auxiliary,
             new_data.is_deleted,
-            new_data.is_custom,
-            new_data.source_inference_id,
             now64() as updated_at,
-            new_data.staled_at
+            new_data.staled_at,
+            new_data.source_inference_id,
+            new_data.is_custom,
+            new_data.name
         FROM new_data
         ";
 
         let external_data = ExternalDataInfo {
             external_data_name: "new_data".to_string(),
-            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)".to_string(),
+            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), name Nullable(String)".to_string(),
             format: "JSONEachRow".to_string(),
             data: serialized_datapoints.join("\n"),
         };
@@ -2596,7 +2596,6 @@ mod tests {
                     (
                         dataset_name,
                         function_name,
-                        name,
                         id,
                         episode_id,
                         input,
@@ -2605,10 +2604,11 @@ mod tests {
                         tags,
                         auxiliary,
                         is_deleted,
-                        is_custom,
-                        source_inference_id,
                         updated_at,
-                        staled_at
+                        staled_at,
+                        source_inference_id,
+                        is_custom,
+                        name
                     )",
                 );
                 assert_query_contains(
@@ -2616,7 +2616,6 @@ mod tests {
                     "SELECT
                         new_data.dataset_name,
                         new_data.function_name,
-                        new_data.name,
                         new_data.id,
                         new_data.episode_id,
                         new_data.input,
@@ -2625,10 +2624,11 @@ mod tests {
                         new_data.tags,
                         new_data.auxiliary,
                         new_data.is_deleted,
-                        new_data.is_custom,
-                        new_data.source_inference_id,
                         now64() as updated_at,
-                        new_data.staled_at
+                        new_data.staled_at,
+                        new_data.source_inference_id,
+                        new_data.is_custom,
+                        new_data.name
                     FROM new_data",
                 );
 
@@ -2637,7 +2637,7 @@ mod tests {
                 assert_eq!(external_data.format, "JSONEachRow");
                 assert!(external_data
                     .structure
-                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)"));
+                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), name Nullable(String)"));
 
                 // Parse the data - should contain 2 datapoints separated by newlines
                 let lines: Vec<&str> = external_data.data.lines().collect();

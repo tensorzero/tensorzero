@@ -839,10 +839,10 @@ pub async fn delete_datapoint(
     // The INSERT INTO SELECT FROM will just not write anything if the datapoint doesn't exist.
     let json_delete_query = r"
     INSERT INTO JsonInferenceDatapoint
-    (dataset_name, function_name, name, id, episode_id, input, output, output_schema,
-     tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
-    SELECT dataset_name, function_name, name, id, episode_id, input, output, output_schema,
-           tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
+    (dataset_name, function_name, id, episode_id, input, output, output_schema,
+     tags, auxiliary, is_deleted, updated_at, staled_at, source_inference_id, is_custom, name)
+    SELECT dataset_name, function_name, id, episode_id, input, output, output_schema,
+           tags, auxiliary, is_deleted, now64(), now64(), source_inference_id, is_custom, name
     FROM JsonInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
 ";

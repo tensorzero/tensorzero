@@ -542,7 +542,6 @@ pub async fn stale_datapoint_clickhouse(
             dataset_name,
             function_name,
             id,
-            name,
             episode_id,
             input,
             output,
@@ -550,15 +549,16 @@ pub async fn stale_datapoint_clickhouse(
             tags,
             auxiliary,
             is_deleted,
-            source_inference_id,
+            updated_at,
             staled_at,
-            updated_at
+            source_inference_id,
+            is_custom,
+            name
         )
         SELECT
             dataset_name,
             function_name,
             id,
-            name,
             episode_id,
             input,
             output,
@@ -566,9 +566,11 @@ pub async fn stale_datapoint_clickhouse(
             tags,
             auxiliary,
             is_deleted,
-            source_inference_id,
+            now64() as updated_at,
             now64() as staled_at,
-            now64() as updated_at
+            source_inference_id,
+            is_custom,
+            name
         FROM JsonInferenceDatapoint FINAL
         WHERE id = '{datapoint_id}'"
     );
