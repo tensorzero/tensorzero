@@ -5,8 +5,10 @@ use std::{
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
+use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -41,9 +43,10 @@ use crate::{
  */
 
 /// A Tool object describes how a tool can be dynamically configured by the user.
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
+#[export_schema]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct Tool {
     pub description: String,
@@ -88,8 +91,9 @@ impl Tool {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(untagged)]
+#[export_schema]
 pub enum ProviderToolScope {
     #[default]
     Unscoped,
@@ -111,7 +115,7 @@ impl ProviderToolScope {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ProviderTool {
@@ -536,11 +540,11 @@ impl ToolCallConfigDatabaseInsert {
 /// ```
 ///
 /// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
 #[ts(optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[export_schema]
 pub struct DynamicToolParams {
     /// A subset of static tools configured for the function that the inference is allowed to use. Optional.
     /// If not provided, all static tools are allowed.
@@ -629,9 +633,10 @@ where
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[export_schema]
 pub struct ToolCall {
     pub id: String,
     pub name: String,
@@ -667,9 +672,10 @@ impl ToolCall {
 }
 
 /// `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(untagged)]
+#[export_schema]
 pub enum ToolCallWrapper {
     ToolCall(ToolCall), // the format we store in the database
     InferenceResponseToolCall(InferenceResponseToolCall), // the format we send on an inference response
@@ -693,9 +699,10 @@ impl TryFrom<ToolCallWrapper> for ToolCall {
 
 /// An InferenceResponseToolCall is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[export_schema]
 pub struct InferenceResponseToolCall {
     /// A Tool Call ID to match up with tool call responses. See #4058.
     pub id: String,
@@ -781,9 +788,10 @@ impl ToolCallConfig {
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
+#[export_schema]
 pub struct ToolResult {
     pub name: String,
     pub result: String,
@@ -821,10 +829,11 @@ impl ToolResult {
 /// and even specify which tool to be used.
 ///
 /// This enum is used to denote this tool choice.
-#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
+#[export_schema]
 pub enum ToolChoice {
     None,
     #[default]

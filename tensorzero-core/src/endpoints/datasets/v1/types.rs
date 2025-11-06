@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 pub use crate::db::clickhouse::query_builder::{
@@ -13,21 +15,25 @@ use crate::serde_util::deserialize_double_option;
 use crate::tool::DynamicToolParams;
 
 /// Request to update one or more datapoints in a dataset.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
+#[export_schema]
 pub struct UpdateDatapointsRequest {
     /// The datapoints to update.
     pub datapoints: Vec<UpdateDatapointRequest>,
 }
 
 /// A tagged request to update a single datapoint in a dataset.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
+#[export_schema]
 pub enum UpdateDatapointRequest {
     /// Request to update a chat datapoint.
+    #[schemars(title = "UpdateChatDatapointRequest")]
     Chat(UpdateChatDatapointRequest),
     /// Request to update a JSON datapoint.
+    #[schemars(title = "UpdateJsonDatapointRequest")]
     Json(UpdateJsonDatapointRequest),
 }
 
@@ -38,8 +44,10 @@ pub enum UpdateDatapointRequest {
 /// - If the field has a value, it will be set to the provided value.
 ///
 /// In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
-#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export, optional_fields)]
+#[export_schema]
+#[schemars(title = "UpdateChatDatapointRequestInternal")]
 pub struct UpdateChatDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -55,6 +63,7 @@ pub struct UpdateChatDatapointRequest {
 
     /// Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
     pub tool_params: Option<Option<DynamicToolParams>>,
 
     /// Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
@@ -74,8 +83,10 @@ pub struct UpdateChatDatapointRequest {
 /// - If the field has a value, it will be set to the provided value.
 ///
 /// In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
-#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export, optional_fields)]
+#[export_schema]
+#[schemars(title = "UpdateJsonDatapointRequestInternal")]
 pub struct UpdateJsonDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -88,6 +99,7 @@ pub struct UpdateJsonDatapointRequest {
     /// This will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will
     /// also be stored, because we allow invalid outputs in datapoints by design.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
     pub output: Option<Option<JsonDatapointOutputUpdate>>,
 
     /// The output schema of the JSON datapoint. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
@@ -108,25 +120,29 @@ pub struct UpdateJsonDatapointRequest {
 /// A request to update the output of a JSON datapoint.
 /// We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
 /// for users to run evals against them.
-#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export)]
+#[export_schema]
 pub struct JsonDatapointOutputUpdate {
     /// The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
     pub raw: String,
 }
 
 /// A request to update the metadata of a datapoint.
-#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export, optional_fields)]
+#[export_schema]
 pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
     pub name: Option<Option<String>>,
 }
 
 /// A response to a request to update one or more datapoints in a dataset.
-#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export)]
+#[export_schema]
 pub struct UpdateDatapointsResponse {
     /// The IDs of the datapoints that were updated.
     /// These are newly generated IDs for UpdateDatapoint requests, and they are the same IDs for UpdateDatapointMetadata requests.

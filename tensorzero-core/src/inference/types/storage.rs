@@ -1,20 +1,26 @@
 use object_store::path::Path;
+use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::error::{Error, ErrorDetails};
 
 use super::{file::mime_type_to_ext, Base64File};
+
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+
+use tensorzero_derive::export_schema;
 
 /// Configuration for the object storage backend
 /// Currently, we only support S3-compatible object storage and local filesystem storage
 /// We test against Amazon S3, GCS, Cloudflare R2, and Minio
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
+#[export_schema]
 #[ts(export)]
 pub enum StorageKind {
+    #[schemars(title = "StorageKindS3Compatible")]
     S3Compatible {
         // TODO(shuyangli): mark all of these as ts(optional)
         bucket_name: Option<String>,
@@ -28,11 +34,11 @@ pub enum StorageKind {
         #[serde(default)]
         prefix: String,
     },
-    Filesystem {
-        path: String,
-    },
+    #[schemars(title = "StorageKindFilesystem")]
+    Filesystem { path: String },
     // This must be set explicitly in `tensorzero.toml` to allow image requests to succeed
     // By default, requests will fail (we'll have a `None` for the outer `ObjectStoreData`)
+    #[schemars(title = "StorageKindDisabled")]
     Disabled,
 }
 
@@ -82,8 +88,9 @@ impl StorageKind {
 /// This is part of the public API for `File`s. In particular, this is useful for roundtripping
 /// unresolved inputs from stored inferences or datapoints, without requiring clients to fetch
 /// file data first.
-#[derive(ts_rs::TS, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(ts_rs::TS, Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct StoragePath {
     pub kind: StorageKind,
@@ -92,6 +99,7 @@ pub struct StoragePath {
         deserialize_with = "deserialize_storage_path"
     )]
     #[ts(type = "string")]
+    #[schemars(with = "String")]
     pub path: object_store::path::Path,
 }
 
