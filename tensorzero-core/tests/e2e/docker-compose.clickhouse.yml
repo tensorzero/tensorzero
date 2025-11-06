@@ -1,6 +1,6 @@
 services:
   clickhouse:
-    image: clickhouse:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
+    image: clickhouse:${TENSORZERO_CLICKHOUSE_VERSION:-24.12}
     environment:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -8,7 +8,7 @@ services:
     volumes:
       # If the directory doesn't exist locally (i.e. we haven't defined a version-specific config),
       # an empty dir will get mounted in the container
-      - ./clickhouse-configs/${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}/users.xml:/etc/clickhouse-server/users.d/users.xml
+      - ./clickhouse-configs/${TENSORZERO_CLICKHOUSE_VERSION:-24.12}/users.xml:/etc/clickhouse-server/users.d/users.xml
       - clickhouse-data:/var/lib/clickhouse
       # For S3 fixtures using file
       - ../../../ui/fixtures/s3-fixtures:/var/lib/clickhouse/user_files
