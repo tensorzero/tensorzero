@@ -1,6 +1,6 @@
 import warnings
 from abc import ABC
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, dataclass, fields, is_dataclass
 from enum import Enum
 from json import JSONEncoder
 from typing import Any, Dict, List, Literal, Optional, Protocol, Union, cast
@@ -9,6 +9,8 @@ from uuid import UUID
 import httpx
 import uuid_utils
 from typing_extensions import NotRequired, TypedDict
+
+from tensorzero.generated_types import UNSET, _UnsetType
 
 
 @dataclass
@@ -554,18 +556,51 @@ class ToolParams:
     parallel_tool_calls: Optional[bool] = None
 
 
-# Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`
-# Used by the Rust native module
 class TensorZeroTypeEncoder(JSONEncoder):
+    """
+    Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`
+    Used by the Rust native module
+    """
     def default(self, o: Any) -> Any:
         if isinstance(o, UUID) or isinstance(o, uuid_utils.UUID):
             return str(o)
         elif hasattr(o, "to_dict"):
             return o.to_dict()
         elif is_dataclass(o) and not isinstance(o, type):
-            return asdict(o)
+            # Convert dataclass to dict, but filter out UNSET fields
+            result = {}
+            for field in fields(o):
+                value = getattr(o, field.name)
+                # Skip UNSET fields entirely (they won't be in the JSON)
+                if not isinstance(value, _UnsetType):
+                    # Recursively handle nested dataclasses/lists/dicts
+                    result[field.name] = self._convert_value(value)
+            return result
         else:
             super().default(o)
+
+    def _convert_value(self, value: Any) -> Any:
+        """Recursively convert values, filtering out UNSET."""
+        if isinstance(value, _UnsetType):
+            # This shouldn't happen at top level, but handle it just in case
+            return None
+        elif is_dataclass(value) and not isinstance(value, type):
+            # Recursively convert nested dataclasses
+            result = {}
+            for field in fields(value):
+                field_value = getattr(value, field.name)
+                if not isinstance(field_value, _UnsetType):
+                    result[field.name] = self._convert_value(field_value)
+            return result
+        elif isinstance(value, (list, tuple)):
+            # Handle lists/tuples
+            return [self._convert_value(item) for item in value]
+        elif isinstance(value, dict):
+            # Handle dicts
+            return {k: self._convert_value(v) for k, v in value.items()}
+        else:
+            # Return as-is for primitive types
+            return value
 
 
 ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]
