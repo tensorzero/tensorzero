@@ -845,6 +845,7 @@
             "string",
             "null"
           ],
+          "x-double-optional": true,
           "default": null
         }
       }

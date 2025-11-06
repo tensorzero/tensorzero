@@ -134,6 +134,7 @@ pub struct JsonDatapointOutputUpdate {
 pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-optional" = true))]
     pub name: Option<Option<String>>,
 }
 

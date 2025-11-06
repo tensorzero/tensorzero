@@ -88,7 +88,7 @@ def find_schema_files(schema_dir: Path) -> List[Path]:
     return schema_files
 
 
-def merge_schemas(schema_files: List[Path], output_file: Path) -> None:
+def merge_schemas(schema_files: List[Path], output_file: Path) -> Dict[str, List[str]]:
     """
     Merge all JSON schemas into a single schema file with shared $defs.
 
@@ -97,12 +97,16 @@ def merge_schemas(schema_files: List[Path], output_file: Path) -> None:
     Args:
         schema_files: List of paths to JSON schema files
         output_file: Path to write the merged schema
+
+    Returns:
+        Dict mapping type names to lists of field names that are double-optional
     """
     print(f"Merging {len(schema_files)} schemas...")
 
     # Collect all schemas and their definitions
     all_defs = {}
     root_schemas = {}
+    double_optional_fields = {}  # Track fields with x-double-optional annotation
 
     for schema_file in schema_files:
         with open(schema_file, 'r') as f:
@@ -123,6 +127,14 @@ def merge_schemas(schema_files: List[Path], output_file: Path) -> None:
         root_schema = {k: v for k, v in schema.items() if k != "$defs"}
         root_schemas[schema_name] = root_schema
 
+        # Track fields with x-double-optional annotation
+        if "properties" in schema:
+            for field_name, field_schema in schema["properties"].items():
+                if isinstance(field_schema, dict) and field_schema.get("x-double-optional"):
+                    if schema_name not in double_optional_fields:
+                        double_optional_fields[schema_name] = []
+                    double_optional_fields[schema_name].append(field_name)
+
     # Create merged schema with all definitions in $defs
     # and all root schemas in a oneOf with discriminator
     merged = {
@@ -140,37 +152,107 @@ def merge_schemas(schema_files: List[Path], output_file: Path) -> None:
         json.dump(merged, f, indent=2)
 
     print(f"✓ Merged schema written to {output_file}")
+    if double_optional_fields:
+        print(f"✓ Found {len(double_optional_fields)} types with double-optional fields")
+
+    return double_optional_fields
 
 
-def generate_dataclasses_from_schema(schema_file: Path, output_file: Path) -> None:
+def post_process_double_optional_fields(
+    generated_code: str,
+    double_optional_fields: Dict[str, List[str]]
+) -> str:
+    """
+    Post-process generated Python code to replace `= None` with `= UNSET` for double-optional fields.
+
+    Args:
+        generated_code: The generated Python code
+        double_optional_fields: Dict mapping type names to lists of double-optional field names
+
+    Returns:
+        Modified Python code with UNSET defaults for double-optional fields
+    """
+    import re
+
+    lines = generated_code.split('\n')
+    result_lines = []
+    current_class = None
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Track current class
+        class_match = re.match(r'^class (\w+):', line)
+        if class_match:
+            current_class = class_match.group(1)
+
+        # Check if this line is a field assignment with = None
+        if current_class and current_class in double_optional_fields:
+            # Match field assignments like: field_name: type | None = None
+            field_match = re.match(r'^    (\w+): (.+) = None$', line)
+            if field_match:
+                field_name = field_match.group(1)
+                type_hint = field_match.group(2)
+
+                # Check if this field is marked as double-optional
+                if field_name in double_optional_fields[current_class]:
+                    # Replace = None with = UNSET and add _UnsetType to type hint
+                    line = f'    {field_name}: {type_hint} | _UnsetType = UNSET'
+
+        result_lines.append(line)
+        i += 1
+
+    return '\n'.join(result_lines)
+
+
+def generate_dataclasses_from_schema(
+    schema_file: Path,
+    output_file: Path,
+    double_optional_fields: Dict[str, List[str]]
+) -> None:
     """
     Generate Python dataclasses from a merged JSON schema file.
 
     Args:
         schema_file: Path to the merged JSON schema file
         output_file: Path to write the generated Python code
+        double_optional_fields: Dict mapping type names to lists of double-optional field names
     """
     print(f"Generating dataclasses...")
 
+    # Determine paths for custom templates
+    script_dir = Path(__file__).parent
+
     try:
         # Use datamodel-code-generator to generate dataclasses
+        cmd = [
+            sys.executable,
+            "-m",
+            "datamodel_code_generator",
+            "--input", str(schema_file),
+            "--input-file-type", "jsonschema",
+            "--output", str(output_file),
+            "--output-model-type", "dataclasses.dataclass",
+            "--use-standard-collections",
+            "--use-union-operator",
+            "--target-python-version", "3.10",
+            "--use-schema-description",
+            # "--enum-field-as-literal", "one",
+            # "--use-title-as-name",
+            "--disable-timestamp",
+            "--use-annotated",
+            "--field-constraints",
+            "--collapse-root-models",
+            "--use-one-literal-as-default",
+            "--field-extra-keys", "x-double-optional",
+            "--custom-template-dir", str(script_dir / "templates"),
+            "--custom-file-header-path", str(script_dir / "file_header.py"),
+            "--use-field-description",
+        ]
+
         result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "datamodel_code_generator",
-                "--input", str(schema_file),
-                "--input-file-type", "jsonschema",
-                "--output", str(output_file),
-                "--output-model-type", "dataclasses.dataclass",
-                "--use-standard-collections",
-                "--use-union-operator",
-                "--target-python-version", "3.9",
-                "--disable-timestamp",
-                "--use-annotated",
-                "--field-constraints",
-                "--use-field-description",
-            ],
+            cmd,
             capture_output=True,
             text=True,
             check=True
@@ -180,28 +262,6 @@ def generate_dataclasses_from_schema(schema_file: Path, output_file: Path) -> No
             print(result.stdout)
         if result.stderr:
             print(result.stderr, file=sys.stderr)
-
-        # Add custom header
-        with open(output_file, 'r') as f:
-            generated_code = f.read()
-
-        header = '''"""
-Auto-generated Python dataclasses from JSON schemas.
-
-This file is generated from JSON schemas in the tensorzero-core crate.
-Do not edit this file manually - it will be overwritten.
-
-Generated from schemas in: tensorzero-core/schemas/
-
-To regenerate, run:
-    python generate_schema_types.py
-"""
-
-'''
-
-        with open(output_file, 'w') as f:
-            f.write(header)
-            f.write(generated_code)
 
         print(f"✓ Generated {output_file}")
 
@@ -241,12 +301,12 @@ def main() -> None:
         # Create temp directory
         temp_dir.mkdir(exist_ok=True)
 
-        # Merge all schemas into one
+        # Merge all schemas into one and track double-optional fields
         merged_schema_file = temp_dir / "merged_schema.json"
-        merge_schemas(schema_files, merged_schema_file)
+        double_optional_fields = merge_schemas(schema_files, merged_schema_file)
 
         # Generate dataclasses from merged schema
-        generate_dataclasses_from_schema(merged_schema_file, output_file)
+        generate_dataclasses_from_schema(merged_schema_file, output_file, double_optional_fields)
 
     finally:
         # Clean up temp files
