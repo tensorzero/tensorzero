@@ -272,6 +272,7 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_BATCH_WRITES=${{ matrix.batch_writes }}" >> $GITHUB_ENV
           echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
           echo "TENSORZERO_POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+          echo "TENSORZERO_SKIP_LARGE_FIXTURES=1" >> $GITHUB_ENV
 
       - name: Configure batch writes in tensorzero.toml
         if: matrix.batch_writes == true
