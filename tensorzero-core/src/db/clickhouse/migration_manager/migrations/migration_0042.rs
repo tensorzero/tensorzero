@@ -55,7 +55,7 @@ impl Migration for Migration0042<'_> {
     fn rollback_instructions(&self) -> String {
         // Note - we deliberately don't include any rollback instructions.
         // User-defined functions are global, so dropping them would interfere with concurrent migration runs.
-        "".to_string()
+        String::new()
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
