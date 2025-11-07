@@ -1249,7 +1249,7 @@ describe("OpenAI Compatibility", () => {
           {
             type: "file",
             file: {
-              file_data: deepseekPaperPdf,
+              file_data: `data:application/pdf;base64,${deepseekPaperPdf}`,
               filename: "test.pdf",
             },
           },

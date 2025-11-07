@@ -1221,7 +1221,7 @@ async fn test_embedding_request() {
             &request,
             &model_name,
             &InferenceClients {
-                http_client: TensorzeroHttpClient::new().unwrap(),
+                http_client: TensorzeroHttpClient::new_testing().unwrap(),
                 clickhouse_connection_info: clickhouse.clone(),
                 postgres_connection_info: PostgresConnectionInfo::Disabled,
                 credentials: Arc::new(api_keys.clone()),
@@ -1310,7 +1310,7 @@ async fn test_embedding_request() {
             &request,
             &model_name,
             &InferenceClients {
-                http_client: TensorzeroHttpClient::new().unwrap(),
+                http_client: TensorzeroHttpClient::new_testing().unwrap(),
                 clickhouse_connection_info: clickhouse.clone(),
                 postgres_connection_info: PostgresConnectionInfo::Disabled,
                 credentials: Arc::new(api_keys.clone()),
@@ -1357,7 +1357,7 @@ async fn test_embedding_sanity_check() {
             )
             .await
             .unwrap();
-    let client = TensorzeroHttpClient::new().unwrap();
+    let client = TensorzeroHttpClient::new_testing().unwrap();
     let embedding_request_a = EmbeddingRequest {
         input: "Joe Biden is the president of the United States"
             .to_string()

@@ -16,4 +16,5 @@ export type GatewayConfig = {
   disable_pseudonymous_usage_analytics: boolean;
   fetch_and_encode_input_files_before_inference: boolean;
   auth: AuthConfig;
+  global_outbound_http_timeout: [number, number];
 };

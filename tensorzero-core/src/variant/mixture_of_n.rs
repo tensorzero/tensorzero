@@ -8,7 +8,7 @@ use futures::StreamExt;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio::time::{timeout, Duration};
+use tokio::time::timeout;
 
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
@@ -228,6 +228,7 @@ impl Variant for MixtureOfNConfig {
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &chrono::Duration,
     ) -> Result<(), Error> {
         // Validate each candidate variant
         for candidate in &self.candidates {
@@ -244,6 +245,7 @@ impl Variant for MixtureOfNConfig {
                 templates,
                 function_name,
                 candidate,
+                global_outbound_http_timeout,
             ))
             .await
             .map_err(|e| {
@@ -263,6 +265,7 @@ impl Variant for MixtureOfNConfig {
                 templates,
                 function_name,
                 variant_name,
+                global_outbound_http_timeout,
             )
             .await?;
         Ok(())
@@ -408,7 +411,7 @@ fn make_stream_from_non_stream(
                 content: content_blocks,
                 created: chat.created,
                 usage,
-                latency: Duration::from_secs(0),
+                latency: tokio::time::Duration::from_secs(0),
                 raw_response: chat.original_response.unwrap_or_default(),
                 finish_reason: chat.finish_reason,
             }))
@@ -418,7 +421,7 @@ fn make_stream_from_non_stream(
             thought: None,
             created: json.created,
             usage,
-            latency: Duration::from_secs(0),
+            latency: tokio::time::Duration::from_secs(0),
             raw_response: json.original_response.unwrap_or_default(),
             finish_reason: json.finish_reason,
         })),
@@ -490,7 +493,7 @@ impl MixtureOfNConfig {
             inference_futures.push((
                 candidate_name.clone(),
                 timeout(
-                    Duration::from_secs_f64(self.timeout_s),
+                    tokio::time::Duration::from_secs_f64(self.timeout_s),
                     unbounded_recursion_wrapper(async move {
                         candidate_variant
                             .infer(
@@ -1145,7 +1148,7 @@ mod tests {
                 output_tokens: 100,
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(500),
+                response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
@@ -1178,7 +1181,7 @@ mod tests {
                 output_tokens: 25,
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(550),
+                response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
@@ -1230,7 +1233,7 @@ mod tests {
                 output_tokens: 20,
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(500),
+                response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
@@ -1265,7 +1268,7 @@ mod tests {
                 output_tokens: 25,
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(550),
+                response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
@@ -1344,7 +1347,7 @@ mod tests {
                 output_tokens: 20,
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(500),
+                response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
@@ -1377,7 +1380,7 @@ mod tests {
                 output_tokens: 25,
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(550),
+                response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider1".into(),
             model_name: "ExampleModel1".into(),
@@ -1421,9 +1424,10 @@ mod tests {
                 },
             )]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            chrono::Duration::seconds(120),
         )
         .expect("Failed to create model table");
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {
@@ -1543,6 +1547,7 @@ mod tests {
             ModelTable::new(
                 map,
                 ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .expect("Failed to create model table")
         };
@@ -1623,6 +1628,7 @@ mod tests {
             ModelTable::new(
                 map,
                 ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .expect("Failed to create model table")
         };
@@ -1793,7 +1799,7 @@ mod tests {
                     input_tokens: 10,
                     output_tokens: 20,
                 }),
-                latency: Duration::from_secs(0),
+                latency: std::time::Duration::from_secs(0),
                 raw_response: "My raw response".to_string(),
                 finish_reason: Some(FinishReason::Length),
             })),]

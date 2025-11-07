@@ -9,6 +9,7 @@ use crate::variant::{
     BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
     DiclConfigPyClass, MixtureOfNConfigPyClass, VariantConfig,
 };
+use chrono::Duration;
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::{PyKeyError, PyValueError};
 #[cfg(feature = "pyo3")]
@@ -584,6 +585,7 @@ impl FunctionConfig {
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,
+        global_outbound_http_timeout: &Duration,
     ) -> Result<(), Error> {
         // Validate each variant
         for (variant_name, variant) in self.variants() {
@@ -603,6 +605,7 @@ impl FunctionConfig {
                     templates,
                     function_name,
                     variant_name,
+                    global_outbound_http_timeout,
                 )
                 .await?;
         }

@@ -1,6 +1,7 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use uuid::{Timestamp, Uuid};
 
+use crate::error::DelayedError;
 use crate::{
     error::{Error, ErrorDetails},
     inference::types::current_timestamp,
@@ -45,18 +46,18 @@ pub fn validate_tensorzero_uuid(uuid: Uuid, kind: &str) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn uuid_elapsed(uuid: &Uuid) -> Result<Duration, Error> {
+pub fn uuid_elapsed(uuid: &Uuid) -> Result<Duration, DelayedError> {
     let version = uuid.get_version_num();
     if version != 7 {
-        return Err(ErrorDetails::InvalidUuid {
+        return Err(DelayedError::new(ErrorDetails::InvalidUuid {
             raw_uuid: uuid.to_string(),
-        }
-        .into());
+        }));
     }
 
     let uuid_timestamp = uuid.get_timestamp().ok_or_else(|| {
-        // Since this can be OK (e.g. for dynamic evaluation runs), we don't log here.
-        Error::new_without_logging(ErrorDetails::InvalidUuid {
+        // This should never happen, since we already checked that the version was 7.
+        // Dynamic evaluations should have a timestamp that exists but is far in the future.
+        DelayedError::new(ErrorDetails::InvalidUuid {
             raw_uuid: uuid.to_string(),
         })
     })?;
@@ -76,10 +77,9 @@ pub fn uuid_elapsed(uuid: &Uuid) -> Result<Duration, Error> {
         Err(e) => {
             let future_duration = e.duration();
             if future_duration > Duration::from_secs(1) {
-                return Err(ErrorDetails::UuidInFuture {
+                return Err(DelayedError::new(ErrorDetails::UuidInFuture {
                     raw_uuid: uuid.to_string(),
-                }
-                .into());
+                }));
             }
             Duration::from_secs(0)
         }
