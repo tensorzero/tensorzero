@@ -14,7 +14,7 @@ use tensorzero_core::{
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     optimization::{OptimizationJobInfo, OptimizerOutput},
     providers::openai::{
-        optimization::OpenAIGrader, OpenAIMessagesConfig, OpenAIRequestToolCall, PROVIDER_TYPE,
+        grader::OpenAIGrader, OpenAIMessagesConfig, OpenAIRequestToolCall, PROVIDER_TYPE,
     },
     stored_inference::LazyRenderedSample,
     tool::ToolCall,

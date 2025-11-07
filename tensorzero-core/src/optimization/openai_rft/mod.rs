@@ -9,16 +9,59 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
+    endpoints::openai_compatible::JsonSchemaInfo,
     error::Error,
     model::CredentialLocationWithFallback,
-    providers::openai::{
-        optimization::{OpenAIGrader, OpenAIRFTResponseFormat},
-        OpenAICredentials,
-    },
+    providers::openai::{grader::OpenAIGrader, OpenAICredentials},
 };
 
 #[cfg(feature = "pyo3")]
 use crate::model::CredentialLocation;
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "RFTJsonSchemaInfoOption"))]
+#[serde(untagged)]
+pub enum RFTJsonSchemaInfoOption {
+    JsonSchema(JsonSchemaInfo),
+}
+
+impl std::fmt::Display for RFTJsonSchemaInfoOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+/// Response format configuration for OpenAI Reinforcement Fine-Tuning (RFT).
+///
+/// When a response format is specified, the model being fine-tuned will produce
+/// structured outputs that conform to the provided JSON schema during RFT sampling.
+/// These structured outputs will be populated in the `output_json` field of the
+/// Sample namespace.
+///
+/// If no response format is specified but the model is instructed (e.g., via prompts)
+/// to produce structured outputs, those outputs will be returned as raw JSON strings
+/// in the `output_text` field of the Sample namespace instead.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTResponseFormat"))]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum OpenAIRFTResponseFormat {
+    JsonSchema {
+        json_schema: RFTJsonSchemaInfoOption,
+    },
+}
+
+impl std::fmt::Display for OpenAIRFTResponseFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]

@@ -69,7 +69,7 @@ use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
 use crate::inference::TensorZeroEventError;
 use crate::inference::WrappedProvider;
 
-pub mod optimization;
+pub mod grader;
 mod responses;
 
 lazy_static! {
