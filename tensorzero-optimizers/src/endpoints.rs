@@ -1,3 +1,7 @@
+//! HTTP endpoints for optimizer operations
+//!
+//! These endpoints handle launching and polling optimization jobs.
+
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
@@ -6,11 +10,10 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-
 use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 
-use crate::{
+use tensorzero_core::{
     config::Config,
     db::{
         clickhouse::{
@@ -23,18 +26,15 @@ use crate::{
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
-    optimization::{
-        JobHandle, OptimizationJobHandle, OptimizationJobInfo, Optimizer,
-        UninitializedOptimizerInfo,
-    },
+    optimization::{OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo},
     serde_util::deserialize_option_u64,
     stored_inference::RenderedSample,
     utils::gateway::{AppState, AppStateData, StructuredJson},
 };
 
-#[cfg_attr(test, derive(ts_rs::TS))]
+use crate::{JobHandle, Optimizer};
+
 #[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
 pub struct LaunchOptimizationWorkflowParams {
     pub function_name: String,
     pub template_variant_name: String,
@@ -135,9 +135,7 @@ pub async fn launch_optimization_workflow(
         .await
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Deserialize)]
-#[cfg_attr(test, ts(export))]
 pub struct LaunchOptimizationParams {
     pub train_samples: Vec<RenderedSample>,
     pub val_samples: Option<Vec<RenderedSample>>,

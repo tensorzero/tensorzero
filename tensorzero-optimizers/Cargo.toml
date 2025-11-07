@@ -1,0 +1,53 @@
+[package]
+name = "tensorzero-optimizers"
+version.workspace = true
+rust-version.workspace = true
+edition = "2021"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+e2e_tests = []
+
+[dependencies]
+tensorzero-core = { path = "../tensorzero-core" }
+
+# Core async and serialization
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-util = "0.7.12"
+
+# HTTP and web framework (needed for handlers)
+axum = { workspace = true }
+http = { workspace = true }
+
+# Error handling
+thiserror = "2.0.16"
+
+# Utilities
+futures = { workspace = true }
+itertools = "0.14.0"
+rand = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+secrecy = { workspace = true }
+
+# HTTP client
+reqwest = { workspace = true }
+
+# Object storage (for file uploads)
+object_store = { workspace = true }
+mime = { workspace = true }
+mime_guess = "2.0.5"
+
+# Tracing and logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
+ts-rs = { workspace = true }

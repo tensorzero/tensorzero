@@ -30,13 +30,12 @@ use tensorzero_core::{
         Text,
     },
     model_table::ProviderTypeDefaultCredentials,
-    optimization::{
-        JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
-    },
+    optimization::{OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerInfo},
     stored_inference::StoredOutput,
     tool::{DynamicToolParams, InferenceResponseToolCall, Tool, ToolCall, ToolChoice, ToolResult},
     variant::JsonMode,
 };
+use tensorzero_optimizers::{JobHandle, Optimizer};
 
 pub mod dicl;
 pub mod fireworks_sft;

@@ -151,6 +151,7 @@ tempfile = { version = "3.21.0" }
 tempfile = "3.21.0"
 rand_distr = "0.5.1"
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
+tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 paste = "1.0.15"
 base64 = "0.22.1"
 aws-credential-types = { version = "1.2.2", features = [

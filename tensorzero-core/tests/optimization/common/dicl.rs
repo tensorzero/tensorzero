@@ -26,11 +26,12 @@ use tensorzero_core::{
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
-        dicl::UninitializedDiclOptimizationConfig, JobHandle, OptimizationJobInfo, Optimizer,
-        OptimizerOutput, UninitializedOptimizerConfig, UninitializedOptimizerInfo,
+        dicl::UninitializedDiclOptimizationConfig, OptimizationJobInfo, OptimizerOutput,
+        UninitializedOptimizerConfig, UninitializedOptimizerInfo,
     },
     stored_inference::StoredOutput,
 };
+use tensorzero_optimizers::{JobHandle, Optimizer};
 
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 const SYSTEM_SCHEMA: &str = r#"{

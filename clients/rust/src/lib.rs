@@ -4,7 +4,6 @@ use tensorzero_core::client::DisplayOrDebug;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
-use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inferences::render_samples;
 use tensorzero_core::endpoints::validate_tags;
 use tensorzero_core::endpoints::workflow_evaluation_run::{
@@ -12,6 +11,9 @@ use tensorzero_core::endpoints::workflow_evaluation_run::{
 };
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::stored_inference::StoredSample;
+use tensorzero_optimizers::endpoints::{
+    launch_optimization, launch_optimization_workflow, poll_optimization,
+};
 use uuid::Uuid;
 
 // Re-export the core client from tensorzero-core
@@ -60,9 +62,6 @@ pub use tensorzero_core::endpoints::inference::{
     InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
 };
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
-pub use tensorzero_core::endpoints::optimization::{
-    LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
-};
 pub use tensorzero_core::endpoints::variant_probabilities::{
     GetVariantSamplingProbabilitiesParams, GetVariantSamplingProbabilitiesResponse,
 };
@@ -81,6 +80,9 @@ pub use tensorzero_core::stored_inference::{
 };
 pub use tensorzero_core::tool::{DynamicToolParams, Tool, ToolCallWrapper};
 pub use tensorzero_core::utils::gateway::setup_clickhouse_without_config;
+pub use tensorzero_optimizers::endpoints::{
+    LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
+};
 
 // Export quantile array from migration_0037
 pub use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0037::QUANTILES;
@@ -726,7 +728,7 @@ impl ClientExt for Client {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::optimization::poll_optimization(
+                    poll_optimization(
                         &gateway.handle.app_state.http_client,
                         job_handle,
                         &gateway.handle.app_state.config.models.default_credentials,

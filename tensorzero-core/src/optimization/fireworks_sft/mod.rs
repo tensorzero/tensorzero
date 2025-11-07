@@ -1,18 +1,3 @@
-//! Fireworks SFT implementation. The overall flow is:
-//! 1. `FireworksSFTConfig.launch` creates and uploads training/validation datasets to Fireworks
-//! 2. We kick off a SFT job in Fireworks, and produce a `FireworksSFTJobHandle` with the job ID
-//! 3. `FireworksSFTJobHandle.poll` performs the following checks (without maintaining any additional state):
-//!    - If the job is still running, we return a `Pending` status
-//!    - If the job has failed, we return a `Failed` status
-//!    - If the job has completed, we look for an existing 'default' deployment for the model.
-//!      If it exists, we return its status - otherwise, we start a new serverless deployment.
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::fmt::Display;
-use std::time::Duration;
-
-use futures::future::try_join_all;
-use futures::try_join;
 use http::StatusCode;
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyValueError;
@@ -22,32 +7,22 @@ use reqwest::multipart::{Form, Part};
 use secrecy::ExposeSecret;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
+use std::fmt::Display;
 use url::Url;
 use uuid::Uuid;
 
-use crate::config::{Config, TimeoutsConfig};
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::http::TensorzeroHttpClient;
-use crate::model::UninitializedModelConfig;
-use crate::model::UninitializedModelProvider;
-use crate::model::UninitializedProviderConfig;
 use crate::model_table::FireworksKind;
 use crate::model_table::ProviderKind;
 use crate::model_table::ProviderTypeDefaultCredentials;
-use crate::optimization::JobHandle;
-use crate::optimization::OptimizationJobInfo;
-use crate::optimization::Optimizer;
-use crate::optimization::OptimizerOutput;
 use crate::providers::fireworks::prepare_fireworks_messages;
 use crate::providers::fireworks::FIREWORKS_API_BASE;
 use crate::providers::helpers::UrlParseErrExt;
 use crate::providers::openai::tensorzero_to_openai_assistant_message;
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::stored_inference::LazyRenderedSample;
-use crate::stored_inference::RenderedSample;
 use crate::{
-    db::clickhouse::ClickHouseConnectionInfo,
-    endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::ContentBlock,
     model::CredentialLocationWithFallback,
@@ -57,29 +32,7 @@ use crate::{
     },
 };
 use std::io::Write;
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct FireworksFineTuningRequest {
-    pub base_model: String,
-    pub dataset: String,
-    pub evaluation_dataset: Option<String>,
-    pub early_stop: Option<bool>,
-    pub epochs: Option<usize>,
-    pub learning_rate: Option<f64>,
-    pub max_context_length: Option<usize>,
-    pub lora_rank: Option<usize>,
-    pub batch_size: Option<usize>,
-    pub display_name: Option<String>,
-    pub output_model: Option<String>,
-    pub warm_start_from: Option<String>,
-    pub is_turbo: Option<bool>,
-    pub eval_auto_carveout: Option<bool>,
-    pub nodes: Option<usize>,
-    pub mtp_enabled: Option<bool>,
-    pub mtp_num_draft_tokens: Option<usize>,
-    pub mtp_freeze_base_model: Option<bool>,
-}
+use std::time::Duration;
 
 #[derive(Debug, Serialize)]
 pub struct FireworksSupervisedRow<'a> {
@@ -356,7 +309,7 @@ pub struct FireworksDatasetResponse {
 impl FireworksSFTConfig {
     /// Polls the status of an existing dataset.
     /// Returns `true` if the dataset is in the `READY` state.
-    async fn poll_dataset_read(
+    pub async fn poll_dataset_read(
         &self,
         client: &TensorzeroHttpClient,
         api_key: &SecretString,
@@ -415,11 +368,11 @@ impl FireworksSFTConfig {
 
     /// Produces a new dataset with a randomly-generated id, with the provided 'items' uploaded to it.
     /// Returns the Fireworks path to the dataset (e.g. `account/{account_id}/datasets/{dataset_id}`)
-    async fn create_and_upload_dataset(
+    pub async fn create_and_upload_dataset<'a>(
         &self,
         client: &TensorzeroHttpClient,
         api_key: &SecretString,
-        items: &[FireworksSupervisedRow<'_>],
+        items: &[FireworksSupervisedRow<'a>],
     ) -> Result<String, Error> {
         let dataset_id = format!("t0-{}", Uuid::now_v7());
         let dataset_path = format!("accounts/{}/datasets/{}", self.account_id, dataset_id);
@@ -535,162 +488,6 @@ impl FireworksSFTConfig {
     }
 }
 
-impl Optimizer for FireworksSFTConfig {
-    type Handle = FireworksSFTJobHandle;
-
-    async fn launch(
-        &self,
-        client: &TensorzeroHttpClient,
-        train_examples: Vec<RenderedSample>,
-        val_examples: Option<Vec<RenderedSample>>,
-        credentials: &InferenceCredentials,
-        _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: &Config,
-    ) -> Result<Self::Handle, Error> {
-        let train_examples = train_examples
-            .into_iter()
-            .map(RenderedSample::into_lazy_rendered_sample)
-            .collect::<Vec<_>>();
-        let val_examples = val_examples.map(|examples| {
-            examples
-                .into_iter()
-                .map(RenderedSample::into_lazy_rendered_sample)
-                .collect::<Vec<_>>()
-        });
-        let train_rows: Vec<FireworksSupervisedRow<'_>> = try_join_all(
-            train_examples
-                .iter()
-                .map(FireworksSupervisedRow::from_rendered_sample),
-        )
-        .await?;
-
-        let val_rows = if let Some(examples) = val_examples.as_ref() {
-            Some(
-                try_join_all(
-                    examples
-                        .iter()
-                        .map(FireworksSupervisedRow::from_rendered_sample),
-                )
-                .await?,
-            )
-        } else {
-            None
-        };
-
-        let api_key = self
-            .credentials
-            .get_api_key(credentials)
-            .map_err(|e| e.log())?;
-
-        // Run these concurrently
-
-        let train_fut = self.create_and_upload_dataset(client, api_key, &train_rows);
-
-        let (train_file_id, val_file_id) = if let Some(val_rows) = val_rows.as_ref() {
-            let val_fut = self.create_and_upload_dataset(client, api_key, val_rows);
-
-            // Run both futures concurrently
-            let (train_id, val_id) = try_join!(train_fut, val_fut)?;
-            (train_id, Some(val_id))
-        } else {
-            // Just run the training file upload
-            let train_file_id = train_fut.await?;
-            (train_file_id, None)
-        };
-
-        let body = FireworksFineTuningRequest {
-            base_model: self.model.clone(),
-            early_stop: self.early_stop,
-            epochs: self.epochs,
-            learning_rate: self.learning_rate,
-            max_context_length: self.max_context_length,
-            lora_rank: self.lora_rank,
-            batch_size: self.batch_size,
-            dataset: train_file_id,
-            evaluation_dataset: val_file_id,
-            display_name: self.display_name.clone(),
-            output_model: self.output_model.clone(),
-            warm_start_from: self.warm_start_from.clone(),
-            is_turbo: self.is_turbo,
-            eval_auto_carveout: self.eval_auto_carveout,
-            nodes: self.nodes,
-            mtp_enabled: self.mtp_enabled,
-            mtp_num_draft_tokens: self.mtp_num_draft_tokens,
-            mtp_freeze_base_model: self.mtp_freeze_base_model,
-        };
-
-        let request = client
-            .post(
-                self.api_base
-                    .join(&format!(
-                        "v1/accounts/{}/supervisedFineTuningJobs",
-                        self.account_id
-                    ))
-                    .convert_parse_error()?,
-            )
-            .bearer_auth(api_key.expose_secret())
-            .json(&body);
-        let res = request.json(&body).send().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
-                message: format!(
-                    "Error sending request to Fireworks: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
-                raw_response: None,
-            })
-        })?;
-
-        let raw_response = res.text().await.map_err(|e| {
-            Error::new(ErrorDetails::InferenceClient {
-                status_code: e.status(),
-                message: format!(
-                    "Error sending request to Fireworks: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
-                raw_response: None,
-            })
-        })?;
-        let job: FireworksFineTuningJobResponse =
-            serde_json::from_str(&raw_response).map_err(|e| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!(
-                        "Error parsing JSON response: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                    raw_request: Some(serde_json::to_string(&body).unwrap_or_default()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
-
-        // Fireworks job names look like 'accounts/{account_id}/supervisedFineTuningJobs/{job_id}'
-        // Extract the job id to construct a dashboard URL
-        let job_id = job.name.split("/").last().ok_or_else(|| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: format!("No job ID in job path: {}", job.name),
-                raw_request: None,
-                raw_response: None,
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?;
-
-        Ok(FireworksSFTJobHandle {
-            api_base: self.api_base.clone(),
-            account_id: self.account_id.clone(),
-            job_url: format!("https://app.fireworks.ai/dashboard/fine-tuning/supervised/{job_id}")
-                .parse()
-                .convert_parse_error()?,
-            job_path: job.name,
-            credential_location: self.credential_location.clone(),
-        })
-    }
-}
-
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(test, ts(export))]
@@ -713,8 +510,7 @@ impl std::fmt::Display for FireworksSFTJobHandle {
 
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[expect(clippy::enum_variant_names)]
-enum FireworksFineTuningJobState {
+pub enum FireworksFineTuningJobState {
     JobStateUnspecified,
     JobStateCreating,
     JobStateRunning,
@@ -732,7 +528,6 @@ enum FireworksFineTuningJobState {
     JobStatePending,
 }
 
-// Get the 'SCREAMING_SNAKE_CASE' name for the enum value
 impl Display for FireworksFineTuningJobState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.serialize(f)
@@ -742,29 +537,29 @@ impl Display for FireworksFineTuningJobState {
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FireworksFineTuningJobResponse {
-    state: FireworksFineTuningJobState,
-    status: Option<FireworksFineTuningJobStatus>,
-    output_model: Option<String>,
-    name: String,
+    pub state: FireworksFineTuningJobState,
+    pub status: Option<FireworksFineTuningJobStatus>,
+    pub output_model: Option<String>,
+    pub name: String,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FireworksFineTuningJobStatus {
-    message: String,
+    pub message: String,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FireworksDeployedModelResponse {
-    state: FireworksDeploymentState,
-    status: Option<FireworksDeploymentStatus>,
+    pub state: FireworksDeploymentState,
+    pub status: Option<FireworksDeploymentStatus>,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FireworksDeploymentStatus {
-    message: String,
+    pub message: String,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -785,20 +580,20 @@ impl Display for FireworksDeploymentState {
 
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct FireworksModelResponse {
-    deployed_model_refs: Vec<FireworksDeployedModelRef>,
+pub struct FireworksModelResponse {
+    pub deployed_model_refs: Vec<FireworksDeployedModelRef>,
 }
 
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct FireworksDeployedModelRef {
-    name: String,
-    default: bool,
-    state: FireworksDeploymentState,
+pub struct FireworksDeployedModelRef {
+    pub name: String,
+    pub default: bool,
+    pub state: FireworksDeploymentState,
 }
 
 impl FireworksSFTJobHandle {
-    async fn get_model(
+    pub async fn get_model(
         &self,
         client: &TensorzeroHttpClient,
         api_key: &SecretString,
@@ -848,7 +643,7 @@ impl FireworksSFTJobHandle {
         Ok(Some(model))
     }
 
-    async fn deploy_or_poll_model(
+    pub async fn deploy_or_poll_model(
         &self,
         client: &TensorzeroHttpClient,
         api_key: &SecretString,
@@ -916,7 +711,8 @@ impl FireworksSFTJobHandle {
             })?;
         Ok(response.state)
     }
-    async fn poll_job(
+
+    pub async fn poll_job(
         &self,
         client: &TensorzeroHttpClient,
         api_key: &SecretString,
@@ -966,114 +762,4 @@ impl FireworksSFTJobHandle {
             })?;
         Ok(job)
     }
-}
-
-impl JobHandle for FireworksSFTJobHandle {
-    async fn poll(
-        &self,
-        client: &TensorzeroHttpClient,
-        credentials: &InferenceCredentials,
-        default_credentials: &ProviderTypeDefaultCredentials,
-    ) -> Result<OptimizationJobInfo, Error> {
-        let fireworks_credentials: FireworksCredentials = crate::model_table::FireworksKind
-            .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
-            .await?;
-        let api_key = fireworks_credentials
-            .get_api_key(credentials)
-            .map_err(|e| e.log())?;
-        let job_status = self.poll_job(client, api_key).await?;
-        if let FireworksFineTuningJobState::JobStateCompleted = job_status.state {
-            // Once the job has completed, start polling the model deployment.
-            let model_path = job_status.output_model.ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "No model path in Fireworks JobStateCompleted response".to_string(),
-                    raw_request: None,
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
-            // TODO - start using this as the TensorZero model name
-            // once the UI has been refactored to allow separate model names and provider model names
-            let _model_id = model_path.split("/").last().ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: format!("No model ID in model path: {model_path}"),
-                    raw_request: None,
-                    raw_response: None,
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?;
-            let deployment_state = self
-                .deploy_or_poll_model(client, api_key, &model_path)
-                .await?;
-            match deployment_state {
-                FireworksDeploymentState::StateUnspecified
-                | FireworksDeploymentState::Deploying
-                | FireworksDeploymentState::Undeploying
-                | FireworksDeploymentState::Updating => Ok(OptimizationJobInfo::Pending {
-                    message: deployment_state.to_string(),
-                    estimated_finish: None,
-                    trained_tokens: None,
-                    error: None,
-                }),
-                FireworksDeploymentState::Deployed => {
-                    let model_provider = UninitializedModelProvider {
-                        config: UninitializedProviderConfig::Fireworks {
-                            model_name: model_path.clone(),
-                            parse_think_blocks: true,
-                            api_key_location: None,
-                        },
-                        extra_headers: None,
-                        extra_body: None,
-                        timeouts: TimeoutsConfig::default(),
-                        discard_unknown_chunks: false,
-                    };
-                    Ok(OptimizationJobInfo::Completed {
-                        output: OptimizerOutput::Model(UninitializedModelConfig {
-                            routing: vec![model_path.clone().into()],
-                            providers: HashMap::from([(model_path.into(), model_provider)]),
-                            timeouts: TimeoutsConfig::default(),
-                        }),
-                    })
-                }
-            }
-        } else {
-            convert_to_optimizer_status(job_status)
-        }
-    }
-}
-
-pub fn convert_to_optimizer_status(
-    job: FireworksFineTuningJobResponse,
-) -> Result<OptimizationJobInfo, Error> {
-    Ok(match job.state {
-        FireworksFineTuningJobState::JobStateCreating
-        | FireworksFineTuningJobState::JobStatePending
-        | FireworksFineTuningJobState::JobStateRunning
-        | FireworksFineTuningJobState::JobStateWritingResults
-        | FireworksFineTuningJobState::JobStateValidating
-        | FireworksFineTuningJobState::JobStateRollout
-        | FireworksFineTuningJobState::JobStateEvaluation
-        | FireworksFineTuningJobState::JobStateUnspecified
-        | FireworksFineTuningJobState::JobStatePolicyUpdate => OptimizationJobInfo::Pending {
-            message: job.state.to_string(),
-            estimated_finish: None,
-            trained_tokens: None,
-            error: None,
-        },
-        FireworksFineTuningJobState::JobStateFailed
-        | FireworksFineTuningJobState::JobStateFailedCleaningUp
-        | FireworksFineTuningJobState::JobStateCancelled
-        | FireworksFineTuningJobState::JobStateDeleting
-        | FireworksFineTuningJobState::JobStateDeletingCleaningUp => OptimizationJobInfo::Failed {
-            message: job.state.to_string(),
-            error: job.status.map(|s| s.message.into()),
-        },
-        FireworksFineTuningJobState::JobStateCompleted => {
-            return Err(Error::new(ErrorDetails::InternalError {
-                message: format!(
-                    "JobStateCompleted should have been handled in poll. {IMPOSSIBLE_ERROR_MESSAGE}"
-                ),
-            }))
-        }
-    })
 }
