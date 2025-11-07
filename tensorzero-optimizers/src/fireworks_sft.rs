@@ -157,7 +157,7 @@ impl Optimizer for FireworksSFTConfig {
             )
             .bearer_auth(api_key.expose_secret())
             .json(&body);
-        let res = request.json(&body).send().await.map_err(|e| {
+        let res = request.send().await.map_err(|e| {
             Error::new(ErrorDetails::InferenceClient {
                 status_code: e.status(),
                 message: format!(

@@ -11,44 +11,24 @@ use axum::{
     Json,
 };
 use rand::seq::SliceRandom;
-use serde::{Deserialize, Serialize};
 
+use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
+use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::{
     config::Config,
     db::{
-        clickhouse::{
-            query_builder::{InferenceFilter, OrderBy},
-            ClickHouseConnectionInfo,
-        },
-        inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams},
+        clickhouse::ClickHouseConnectionInfo,
+        inferences::{InferenceQueries, ListInferencesParams},
     },
     endpoints::{inference::InferenceCredentials, stored_inferences::render_samples},
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
-    optimization::{OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo},
-    serde_util::deserialize_option_u64,
-    stored_inference::RenderedSample,
+    optimization::{OptimizationJobHandle, OptimizationJobInfo},
     utils::gateway::{AppState, AppStateData, StructuredJson},
 };
 
 use crate::{JobHandle, Optimizer};
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct LaunchOptimizationWorkflowParams {
-    pub function_name: String,
-    pub template_variant_name: String,
-    pub query_variant_name: Option<String>,
-    pub filters: Option<InferenceFilter>,
-    pub output_source: InferenceOutputSource,
-    pub order_by: Option<Vec<OrderBy>>,
-    #[serde(deserialize_with = "deserialize_option_u64")]
-    pub limit: Option<u64>,
-    #[serde(deserialize_with = "deserialize_option_u64")]
-    pub offset: Option<u64>,
-    pub val_fraction: Option<f64>,
-    pub optimizer_config: UninitializedOptimizerInfo,
-}
 
 pub async fn launch_optimization_workflow_handler(
     State(AppStateData {
@@ -133,15 +113,6 @@ pub async fn launch_optimization_workflow(
             &config,
         )
         .await
-}
-
-#[derive(Debug, Deserialize)]
-pub struct LaunchOptimizationParams {
-    pub train_samples: Vec<RenderedSample>,
-    pub val_samples: Option<Vec<RenderedSample>>,
-    pub optimization_config: UninitializedOptimizerInfo,
-    // TODO: add a way to do {"type": "tensorzero", "name": "foo"} to grab an optimizer configured in
-    // tensorzero.toml
 }
 
 /// Launch an optimization job.
