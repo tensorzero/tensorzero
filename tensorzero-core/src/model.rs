@@ -1981,7 +1981,6 @@ impl ModelProvider {
 }
 
 #[derive(Debug, PartialEq, Clone, ts_rs::TS)]
-#[ts(export)]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
     Env(String),
@@ -1998,7 +1997,6 @@ pub enum CredentialLocation {
 
 /// Credential location with optional fallback support
 #[derive(Debug, PartialEq, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
 #[serde(untagged)]
 pub enum CredentialLocationWithFallback {
     /// Single credential location (backward compatible)

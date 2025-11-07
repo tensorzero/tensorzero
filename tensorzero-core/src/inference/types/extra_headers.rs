@@ -17,7 +17,6 @@ pub struct ExtraHeader {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum ExtraHeaderKind {
     Value(String),
@@ -32,7 +31,6 @@ pub enum ExtraHeaderKind {
 /// The 'InferenceExtraHeaders' options provided directly in an inference request
 /// These have not yet been filtered by variant name
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraHeaders {
     pub extra_headers: Vec<InferenceExtraHeader>,
@@ -58,7 +56,6 @@ impl UnfilteredInferenceExtraHeaders {
 
 /// The result of filtering `InferenceExtraHeader` by variant name.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
 #[serde(transparent)]
 pub struct FilteredInferenceExtraHeaders {
     pub data: Vec<InferenceExtraHeader>,
@@ -66,7 +63,6 @@ pub struct FilteredInferenceExtraHeaders {
 
 /// Holds the config-level and inference-level extra headers options
 #[derive(Clone, Debug, Default, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
 pub struct FullExtraHeadersConfig {
     pub variant_extra_headers: Option<ExtraHeadersConfig>,
     pub inference_extra_headers: FilteredInferenceExtraHeaders,

@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
 #[serde(transparent)]
 pub struct ExtraBodyConfig {
     pub data: Vec<ExtraBodyReplacement>,
