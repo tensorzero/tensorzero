@@ -89,8 +89,6 @@ export * from "./EvaluatorConfig";
 export * from "./ExactMatchConfig";
 export * from "./ExperimentationConfig";
 export * from "./ExportConfig";
-export * from "./ExtraHeader";
-export * from "./ExtraHeadersConfig";
 export * from "./FeedbackBounds";
 export * from "./FeedbackBoundsByType";
 export * from "./FeedbackByVariant";
