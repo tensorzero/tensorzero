@@ -286,7 +286,7 @@ impl InferenceProvider for MistralProvider {
             builder,
         )
         .await?;
-        let stream = stream_mistral(event_source, start_time).peekable();
+        let stream = stream_mistral(event_source, start_time, &raw_request).peekable();
         Ok((stream, raw_request))
     }
 
@@ -344,13 +344,15 @@ fn handle_mistral_error(
 pub fn stream_mistral(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     Box::pin(async_stream::stream! {
         while let Some(ev) = event_source.next().await {
             let mut last_tool_name = None;
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -365,7 +367,7 @@ pub fn stream_mistral(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: None,
                             }.into());
                         let latency = start_time.elapsed();

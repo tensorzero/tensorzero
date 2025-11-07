@@ -208,8 +208,9 @@ impl WrappedProvider for TGIProvider {
             Box<dyn Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static>,
         >,
         start_time: Instant,
+        raw_request: &str,
     ) -> ProviderInferenceResponseStreamInner {
-        stream_tgi(event_source, start_time)
+        stream_tgi(event_source, start_time, raw_request)
     }
 }
 
@@ -341,6 +342,7 @@ impl InferenceProvider for TGIProvider {
         let stream = stream_tgi(
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
+            &raw_request,
         )
         .peekable();
         Ok((stream, raw_request))
@@ -374,7 +376,9 @@ impl InferenceProvider for TGIProvider {
 fn stream_tgi(
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
         while let Some(ev) = event_source.next().await {
@@ -385,7 +389,7 @@ fn stream_tgi(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                            yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
                         }
                     }
                 }
@@ -400,7 +404,7 @@ fn stream_tgi(
                                 message: format!(
                                     "Error parsing chunk. Error: {e}",
                                 ),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),
                             }));

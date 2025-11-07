@@ -294,7 +294,7 @@ impl InferenceProvider for DeepSeekProvider {
         )
         .await?;
 
-        let stream = stream_deepseek(event_source, start_time).peekable();
+        let stream = stream_deepseek(event_source, start_time, &raw_request).peekable();
         Ok((stream, raw_request))
     }
 
@@ -474,13 +474,15 @@ impl<'a> DeepSeekRequest<'a> {
 fn stream_deepseek(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let mut tool_call_ids = Vec::new();
     Box::pin(async_stream::stream! {
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -493,7 +495,7 @@ fn stream_deepseek(
                                 message: format!(
                                     "Error parsing chunk. Error: {e}",
                                 ),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                                 provider_type: PROVIDER_TYPE.to_string(),
                             }));

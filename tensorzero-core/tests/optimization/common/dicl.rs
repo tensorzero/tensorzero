@@ -92,7 +92,7 @@ pub async fn test_dicl_optimization_chat() {
         .load(&ProviderTypeDefaultCredentials::default())
         .await
         .unwrap();
-    let client = TensorzeroHttpClient::new().unwrap();
+    let client = TensorzeroHttpClient::new_testing().unwrap();
     let test_examples = get_pinocchio_examples(false);
     let val_examples = None; // No validation examples needed for this test
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
@@ -373,7 +373,7 @@ pub async fn test_dicl_optimization_json() {
         .await
         .unwrap();
 
-    let client = TensorzeroHttpClient::new().unwrap();
+    let client = TensorzeroHttpClient::new_testing().unwrap();
     let test_examples = get_pinocchio_examples(true);
     let val_examples = None; // No validation examples needed for this test
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();

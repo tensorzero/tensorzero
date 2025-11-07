@@ -1,3 +1,4 @@
+use chrono::Duration;
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -598,6 +599,7 @@ impl Variant for ChatCompletionConfig {
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        _global_outbound_http_timeout: &Duration,
     ) -> Result<(), Error> {
         // Validate that weight is non-negative
         if self.weight.is_some_and(|w| w < 0.0) {
@@ -1209,7 +1211,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_infer_chat_completion() {
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
@@ -1420,6 +1422,7 @@ mod tests {
         let models = ModelTable::new(
             HashMap::from([("invalid_model".into(), text_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1489,6 +1492,7 @@ mod tests {
         let models = ModelTable::new(
             models,
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1497,6 +1501,7 @@ mod tests {
                 EmbeddingModelTable::new(
                     HashMap::new(),
                     ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                    crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
                 )
                 .unwrap(),
             ),
@@ -1594,6 +1599,7 @@ mod tests {
         let models = ModelTable::new(
             HashMap::from([("good".into(), text_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1676,6 +1682,7 @@ mod tests {
         let models = ModelTable::new(
             HashMap::from([("tool".into(), tool_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1853,6 +1860,7 @@ mod tests {
         let models = ModelTable::new(
             HashMap::from([("json".into(), json_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -2213,7 +2221,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_infer_chat_completion_stream() {
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
@@ -2349,6 +2357,7 @@ mod tests {
             ModelTable::new(
                 HashMap::from([("error".into(), error_model_config)]),
                 ProviderTypeDefaultCredentials::new(provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .unwrap(),
         );
@@ -2356,6 +2365,7 @@ mod tests {
             EmbeddingModelTable::new(
                 HashMap::new(),
                 ProviderTypeDefaultCredentials::new(provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .unwrap(),
         );
@@ -2437,6 +2447,7 @@ mod tests {
             ModelTable::new(
                 HashMap::from([("good".into(), text_model_config)]),
                 ProviderTypeDefaultCredentials::new(provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .unwrap(),
         );

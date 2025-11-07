@@ -233,7 +233,7 @@ mod tests {
     #[tokio::test]
     async fn test_chat_datapoint_conversion_all_fields() {
         let config = get_e2e_config().await;
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let fetch_context = FetchContext {
             client: &http_client,
             object_store_info: &None,
@@ -289,7 +289,7 @@ mod tests {
     #[tokio::test]
     async fn test_chat_datapoint_invalid_function() {
         let config = get_e2e_config().await;
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let fetch_context = FetchContext {
             client: &http_client,
             object_store_info: &None,
@@ -315,7 +315,7 @@ mod tests {
     #[tokio::test]
     async fn test_chat_datapoint_wrong_function_type() {
         let config = get_e2e_config().await;
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let fetch_context = FetchContext {
             client: &http_client,
             object_store_info: &None,
@@ -346,7 +346,7 @@ mod tests {
     #[tokio::test]
     async fn test_chat_datapoint_stores_only_raw_tool_output_for_unknown_tools() {
         let config = get_e2e_config().await;
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let fetch_context = FetchContext {
             client: &http_client,
             object_store_info: &None,
@@ -403,7 +403,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_datapoint_invalid_output_against_schema() {
         let config = get_e2e_config().await;
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let fetch_context = FetchContext {
             client: &http_client,
             object_store_info: &None,
@@ -453,7 +453,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_datapoint_nonconformant_json_raw_value() {
         let config = get_e2e_config().await;
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let fetch_context = FetchContext {
             client: &http_client,
             object_store_info: &None,
@@ -500,7 +500,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_datapoint_invalid_function() {
         let config = get_e2e_config().await;
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let fetch_context = FetchContext {
             client: &http_client,
             object_store_info: &None,
@@ -526,7 +526,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_datapoint_into_database_insert_basic() {
         let config = get_e2e_config().await;
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let fetch_context = FetchContext {
             client: &http_client,
             object_store_info: &None,
@@ -577,7 +577,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_datapoint_wrong_function_type() {
         let config = get_e2e_config().await;
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let fetch_context = FetchContext {
             client: &http_client,
             object_store_info: &None,
