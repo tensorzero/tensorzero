@@ -318,6 +318,29 @@ pub struct ToolCallConfigConstructorArgs<'a> {
     pub dynamic_provider_tools: Vec<ProviderTool>,
 }
 
+impl<'a> ToolCallConfigConstructorArgs<'a> {
+    /// Returns a ToolCallConfigConstructorArgs with dynamic tool param fields set to defaults.
+    /// Use this with struct update syntax to avoid specifying all dynamic fields at callsites.
+    pub fn with_dynamic_tool_params(
+        function_tools: &'a [String],
+        function_tool_choice: &'a ToolChoice,
+        function_parallel_tool_calls: Option<bool>,
+        static_tools: &'a HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Self {
+        Self {
+            function_tools,
+            function_tool_choice,
+            function_parallel_tool_calls,
+            static_tools,
+            dynamic_allowed_tools: None,
+            dynamic_additional_tools: None,
+            dynamic_tool_choice: None,
+            dynamic_parallel_tool_calls: None,
+            dynamic_provider_tools: Vec::new(),
+        }
+    }
+}
+
 impl ToolCallConfig {
     pub fn new(args: ToolCallConfigConstructorArgs<'_>) -> Result<Option<Self>, Error> {
         let ToolCallConfigConstructorArgs {
@@ -968,15 +991,17 @@ impl ToolCallConfigDatabaseInsert {
     ) -> Result<Option<ToolCallConfig>, Error> {
         match function_config {
             FunctionConfig::Chat(params) => ToolCallConfig::new(ToolCallConfigConstructorArgs {
-                function_tools: &params.tools,
-                function_tool_choice: &params.tool_choice,
-                function_parallel_tool_calls: params.parallel_tool_calls,
-                static_tools,
                 dynamic_allowed_tools: self.allowed_tools.into_dynamic_allowed_tools(),
                 dynamic_additional_tools: Some(self.dynamic_tools),
                 dynamic_parallel_tool_calls: self.parallel_tool_calls,
                 dynamic_provider_tools: self.dynamic_provider_tools,
                 dynamic_tool_choice: Some(self.tool_choice),
+                ..ToolCallConfigConstructorArgs::with_dynamic_tool_params(
+                    &params.tools,
+                    &params.tool_choice,
+                    params.parallel_tool_calls,
+                    static_tools,
+                )
             }),
             FunctionConfig::Json(_) => Ok(None),
         }
@@ -1760,21 +1785,6 @@ mod tests {
             ToolChoice::Specific("get_temperature".to_string());
     }
 
-    // Helper to create ClientSideFunctionTool quickly
-    fn make_client_side_tool(
-        name: &str,
-        description: &str,
-        parameters: Value,
-        strict: bool,
-    ) -> ClientSideFunctionTool {
-        ClientSideFunctionTool {
-            name: name.to_string(),
-            description: description.to_string(),
-            parameters,
-            strict,
-        }
-    }
-
     // Helper to construct ToolCallConfigConstructorArgs with defaults
     fn make_tool_call_config_args<'a>(
         function_tools: &'a [String],
@@ -1897,12 +1907,12 @@ mod tests {
         // This should remove all configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![make_client_side_tool(
-                "establish_campground",
-                "Establish a campground",
-                json!({}),
-                false,
-            )]),
+            additional_tools: Some(vec![ClientSideFunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({}),
+                strict: false,
+            }]),
             ..Default::default()
         };
         let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
@@ -1923,12 +1933,12 @@ mod tests {
         // This should remove the other configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![make_client_side_tool(
-                "establish_campground",
-                "Establish a campground",
-                json!({}),
-                false,
-            )]),
+            additional_tools: Some(vec![ClientSideFunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({}),
+                strict: false,
+            }]),
             parallel_tool_calls: Some(false),
             ..Default::default()
         };
@@ -1953,12 +1963,12 @@ mod tests {
         // This should remove all configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![make_client_side_tool(
-                "establish_campground",
-                "Establish a campground",
-                json!({}),
-                false,
-            )]),
+            additional_tools: Some(vec![ClientSideFunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({}),
+                strict: false,
+            }]),
             tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
@@ -2063,12 +2073,12 @@ mod tests {
             Some(true),
             &TOOLS,
             DynamicToolParams {
-                additional_tools: Some(vec![make_client_side_tool(
-                    "establish_campground",
-                    "Establish a campground",
-                    json!({"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}),
-                    false,
-                )]),
+                additional_tools: Some(vec![ClientSideFunctionTool {
+                    name: "establish_campground".to_string(),
+                    description: "Establish a campground".to_string(),
+                    parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}),
+                    strict: false,
+                }]),
                 ..Default::default()
             },
         ))
@@ -2202,18 +2212,18 @@ mod tests {
     async fn test_duplicate_tool_names_error() {
         // Test case where dynamic tool params add a tool with the same name as a static tool
         let dynamic_tool_params = DynamicToolParams {
-            additional_tools: Some(vec![make_client_side_tool(
-                "get_temperature", // Same name as static tool
-                "Another temperature tool",
-                json!({
+            additional_tools: Some(vec![ClientSideFunctionTool {
+                name: "get_temperature".to_string(), // Same name as static tool
+                description: "Another temperature tool".to_string(),
+                parameters: json!({
                     "type": "object",
                     "properties": {
                         "city": {"type": "string"}
                     },
                     "required": ["city"]
                 }),
-                false,
-            )]),
+                strict: false,
+            }]),
             ..Default::default()
         };
 
@@ -2300,12 +2310,12 @@ mod tests {
                 "get_temperature".to_string(),
                 "establish_campground".to_string(),
             ]),
-            additional_tools: Some(vec![make_client_side_tool(
-                "establish_campground",
-                "Establish a campground",
-                json!({"type": "object", "properties": {"location": {"type": "string"}}}),
-                false,
-            )]),
+            additional_tools: Some(vec![ClientSideFunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
+                strict: false,
+            }]),
             ..Default::default()
         };
 
@@ -2341,12 +2351,12 @@ mod tests {
                 "get_temperature".to_string(),
                 "nonexistent_tool".to_string(),
             ]),
-            additional_tools: Some(vec![make_client_side_tool(
-                "establish_campground",
-                "Establish a campground",
-                json!({"type": "object"}),
-                false,
-            )]),
+            additional_tools: Some(vec![ClientSideFunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({"type": "object"}),
+                strict: false,
+            }]),
             ..Default::default()
         };
 
@@ -2374,12 +2384,12 @@ mod tests {
         // Test that dynamic tools are still auto-added even when not in allowed_tools (with warning)
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![make_client_side_tool(
-                "establish_campground",
-                "Establish a campground",
-                json!({"type": "object", "properties": {"location": {"type": "string"}}}),
-                false,
-            )]),
+            additional_tools: Some(vec![ClientSideFunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
+                strict: false,
+            }]),
             ..Default::default()
         };
 
