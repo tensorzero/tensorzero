@@ -54,7 +54,7 @@ export type CreateChatDatapointRequest = {
    */
   parallel_tool_calls?: boolean;
   /**
-   * Provider-specific tool configurations (not persisted to database)
+   * Provider-specific tool configurations
    */
-  provider_tools?: Array<ProviderTool>;
+  provider_tools: Array<ProviderTool>;
 };

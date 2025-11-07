@@ -4,5 +4,7 @@ import type { ToolCall } from "./ToolCall";
 
 /**
  * `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
+ * Typically tool calls come from previous inferences and are therefore outputs of TensorZero (`InferenceResponseToolCall`)
+ * but they may also be constructed client side or through the OpenAI endpoint `ToolCall` so we support both via this wrapper.
  */
 export type ToolCallWrapper = ToolCall | InferenceResponseToolCall;
