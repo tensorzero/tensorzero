@@ -253,6 +253,7 @@ impl AllowedTools {
         match self.choice {
             AllowedToolsChoice::FunctionDefault => None,
             AllowedToolsChoice::DynamicAllowedTools => Some(self.tools),
+            AllowedToolsChoice::AllAllowedTools => Some(self.tools),
         }
     }
 }
@@ -266,8 +267,12 @@ pub enum AllowedToolsChoice {
     #[default]
     FunctionDefault,
     // If `allowed_tools` was explicitly passed we use that list only and then automatically add dynamically set tools
+    // This is deprecated but we keep it around as it may still be in the database.
+    // We have never allowed users to specify AllowedToolsChoice so this is more about the semantics of the data than anything else.
+    #[deprecated]
     DynamicAllowedTools,
-    // We may add a third behavior if we deprecate the current default.
+    // Currently, we match OpenAI in that if allowed tools is set we only allow the tools that are in it.
+    AllAllowedTools,
 }
 
 /// Contains all information required to tell an LLM what tools it can call
@@ -315,7 +320,7 @@ impl ToolCallConfig {
         let mut allowed_tools = match dynamic_allowed_tools {
             Some(allowed_tools) => AllowedTools {
                 tools: allowed_tools,
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                choice: AllowedToolsChoice::AllAllowedTools,
             },
             None => AllowedTools {
                 tools: function_tools.to_vec(),
