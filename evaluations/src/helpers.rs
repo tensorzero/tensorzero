@@ -151,7 +151,7 @@ mod tests {
                     parameters: json!({}),
                     strict: true,
                 }]),
-                provider_tools: Some(vec![]), // Empty vec, not None
+                provider_tools: vec![],
             }
         );
 
@@ -186,7 +186,7 @@ mod tests {
                 parallel_tool_calls: None,
                 allowed_tools: Some(vec!["tool_1".to_string()]),
                 additional_tools: None, // Empty dynamic_tools becomes None
-                provider_tools: Some(vec![]),
+                provider_tools: vec![],
             }
         );
     }

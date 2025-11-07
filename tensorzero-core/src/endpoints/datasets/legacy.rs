@@ -396,7 +396,7 @@ pub async fn update_datapoint_handler(
                     additional_tools: Some(legacy.tools_available.clone()), // All legacy tools as dynamic
                     tool_choice: Some(legacy.tool_choice.clone()),
                     parallel_tool_calls: legacy.parallel_tool_calls,
-                    provider_tools: Some(vec![]),
+                    provider_tools: vec![],
                 };
 
                 // Use existing pipeline to convert to ToolCallConfigDatabaseInsert

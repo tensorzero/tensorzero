@@ -1076,7 +1076,7 @@ mod tests {
             additional_tools: Some(tools),
             tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: Some(true),
-            provider_tools: None,
+            provider_tools: vec![],
         };
         sample
     }
@@ -1100,7 +1100,7 @@ mod tests {
             additional_tools: None,
             tool_choice: Some(ToolChoice::None),
             parallel_tool_calls: Some(false),
-            provider_tools: None,
+            provider_tools: vec![],
         };
 
         sample
@@ -1125,7 +1125,7 @@ mod tests {
             additional_tools: None,
             tool_choice: Some(ToolChoice::None),
             parallel_tool_calls: Some(false),
-            provider_tools: None,
+            provider_tools: vec![],
         };
 
         sample

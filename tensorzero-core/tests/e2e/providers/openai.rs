@@ -2782,7 +2782,7 @@ model = "test-model"
                 additional_tools: None,
                 tool_choice: None,
                 parallel_tool_calls: None,
-                provider_tools: Some(vec![
+                provider_tools: vec![
                     ProviderTool {
                         scope: ProviderToolScope::Unscoped,
                         tool: json!({"type": "web_search"}),
@@ -2795,7 +2795,7 @@ model = "test-model"
                         },
                         tool: json!({"type": "garbage"}),
                     },
-                ]),
+                ],
             },
             ..Default::default()
         })
@@ -2922,10 +2922,10 @@ model = "test-model"
                 additional_tools: None,
                 tool_choice: None,
                 parallel_tool_calls: None,
-                provider_tools: Some(vec![ProviderTool {
+                provider_tools: vec![ProviderTool {
                     scope: ProviderToolScope::Unscoped,
                     tool: json!({"type": "web_search"}),
-                }]),
+                }],
             },
             ..Default::default()
         })

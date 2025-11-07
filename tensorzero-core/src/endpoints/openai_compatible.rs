@@ -597,7 +597,7 @@ pub struct OpenAICompatibleParams {
     #[serde(rename = "tensorzero::internal_dynamic_variant_config")]
     tensorzero_internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
     #[serde(default, rename = "tensorzero::provider_tools")]
-    tensorzero_provider_tools: Option<Vec<ProviderTool>>,
+    tensorzero_provider_tools: Vec<ProviderTool>,
     #[serde(default, rename = "tensorzero::params")]
     tensorzero_params: Option<InferenceParams>,
     #[serde(flatten)]
@@ -1515,7 +1515,7 @@ mod tests {
             stream_options: None,
             stop: None,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2214,7 +2214,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2254,7 +2254,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2300,7 +2300,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2346,7 +2346,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();

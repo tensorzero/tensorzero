@@ -1161,7 +1161,7 @@ mod tests {
                 additional_tools: None,
                 tool_choice: Some(ToolChoice::None),
                 parallel_tool_calls: Some(false),
-                provider_tools: None,
+                provider_tools: vec![],
             };
 
             let update = UpdateChatDatapointRequest {
@@ -1389,7 +1389,7 @@ mod tests {
                 additional_tools: None,
                 tool_choice: Some(ToolChoice::None),
                 parallel_tool_calls: Some(false),
-                provider_tools: None,
+                provider_tools: vec![],
             };
 
             let update = UpdateChatDatapointRequest {

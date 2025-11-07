@@ -300,7 +300,7 @@ pub enum AllowedToolsChoice {
 pub struct ToolCallConfig {
     pub(crate) static_tools_available: Vec<ToolConfig>,
     pub(crate) dynamic_tools_available: Vec<ToolConfig>,
-    pub provider_tools: Option<Vec<ProviderTool>>,
+    pub provider_tools: Vec<ProviderTool>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     pub allowed_tools: AllowedTools,
@@ -315,7 +315,7 @@ pub struct ToolCallConfigConstructorArgs<'a> {
     pub dynamic_additional_tools: Option<Vec<Tool>>,
     pub dynamic_tool_choice: Option<ToolChoice>,
     pub dynamic_parallel_tool_calls: Option<bool>,
-    pub dynamic_provider_tools: Option<Vec<ProviderTool>>,
+    pub dynamic_provider_tools: Vec<ProviderTool>,
 }
 
 impl ToolCallConfig {
@@ -434,7 +434,7 @@ impl ToolCallConfig {
 
         let tool_call_config_option = if static_tools_available.is_empty()
             && dynamic_tools_available.is_empty()
-            && dynamic_provider_tools.is_none()
+            && dynamic_provider_tools.is_empty()
         {
             None
         } else {
@@ -488,10 +488,7 @@ impl ToolCallConfig {
         model_name: &str,
         model_provider_name: &str,
     ) -> Vec<&ProviderTool> {
-        let Some(provider_tools) = self.provider_tools.as_ref() else {
-            return vec![];
-        };
-        provider_tools
+        self.provider_tools
             .iter()
             .filter(|t| t.scope.matches(model_name, model_provider_name))
             .collect()
@@ -955,7 +952,7 @@ impl ToolCallConfigDatabaseInsert {
                 dynamic_allowed_tools: self.allowed_tools.into_dynamic_allowed_tools(),
                 dynamic_additional_tools: Some(self.dynamic_tools),
                 dynamic_parallel_tool_calls: self.parallel_tool_calls,
-                dynamic_provider_tools: Some(self.dynamic_provider_tools),
+                dynamic_provider_tools: self.dynamic_provider_tools,
                 dynamic_tool_choice: Some(self.tool_choice),
             }),
             FunctionConfig::Json(_) => Ok(None),
@@ -1107,8 +1104,9 @@ pub struct DynamicToolParams {
     /// If provided during inference, it will override the function-configured parallel tool calls.
     pub parallel_tool_calls: Option<bool>,
 
-    /// Provider-specific tool configurations (not persisted to database)
-    pub provider_tools: Option<Vec<ProviderTool>>,
+    /// Provider-specific tool configurations
+    #[serde(default)]
+    pub provider_tools: Vec<ProviderTool>,
 }
 
 impl std::fmt::Display for DynamicToolParams {
@@ -1141,7 +1139,7 @@ impl DynamicToolParams {
     }
 
     #[getter]
-    pub fn provider_tools(&self) -> Option<Vec<ProviderTool>> {
+    pub fn provider_tools(&self) -> Vec<ProviderTool> {
         self.provider_tools.clone()
     }
 
@@ -1328,7 +1326,7 @@ impl ToolCallConfig {
             dynamic_tools_available: vec![],
             tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         }
     }
@@ -1507,7 +1505,7 @@ impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
                 .into_iter()
                 .map(Tool::from)
                 .collect(),
-            dynamic_provider_tools: provider_tools.unwrap_or_default(),
+            dynamic_provider_tools: provider_tools,
             allowed_tools,
             tool_choice,
             parallel_tool_calls,
@@ -1536,7 +1534,7 @@ pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
         dynamic_tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
-        provider_tools: None,
+        provider_tools: vec![],
         allowed_tools: AllowedTools::default(),
     }
 }
@@ -1556,7 +1554,7 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
                     additional_tools: None,
                     tool_choice: None,
                     parallel_tool_calls: None,
-                    provider_tools: None,
+                    provider_tools: vec![],
                 };
                 num_inferences
             ]);
@@ -1653,7 +1651,7 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
                 additional_tools: additional_tools_iter.next().unwrap_or(None),
                 tool_choice: tool_choice_iter.next().unwrap_or(None),
                 parallel_tool_calls: parallel_tool_calls_iter.next().unwrap_or(None),
-                provider_tools: provider_tools_iter.next().unwrap_or(None),
+                provider_tools: provider_tools_iter.next().flatten().unwrap_or(vec![]),
             });
         }
         Ok(all_dynamic_tool_params)
@@ -1676,7 +1674,7 @@ pub fn create_implicit_tool_call_config_with_allowed_tools(
         dynamic_tools_available: vec![],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
-        provider_tools: None,
+        provider_tools: vec![],
         allowed_tools,
     }
 }
@@ -2236,7 +2234,7 @@ mod tests {
         ];
 
         let config = ToolCallConfig {
-            provider_tools: Some(provider_tools),
+            provider_tools,
             ..Default::default()
         };
 

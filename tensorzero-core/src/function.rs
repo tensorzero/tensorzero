@@ -448,7 +448,7 @@ impl FunctionConfig {
             additional_tools,
             tool_choice: Some(tool_choice),
             parallel_tool_calls,
-            provider_tools: Some(dynamic_provider_tools),
+            provider_tools: dynamic_provider_tools,
         }
     }
 
@@ -2624,7 +2624,7 @@ mod tests {
                 None,
             );
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-            assert_eq!(result.provider_tools, Some(vec![]));
+            assert_eq!(result.provider_tools, vec![]);
         }
 
         #[test]

@@ -526,7 +526,7 @@ impl BaseTensorZeroGateway {
                 parallel_tool_calls,
                 additional_tools,
                 tool_choice,
-                provider_tools,
+                provider_tools: provider_tools.unwrap_or_default(),
             },
             input,
             credentials: credentials.unwrap_or_default(),

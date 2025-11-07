@@ -217,10 +217,11 @@ impl StoredInference {
                     .as_ref()
                     .map(|x| deserialize_from_pyobj(py, x))
                     .transpose()?;
-                let provider_tools: Option<Vec<ProviderTool>> = provider_tools
+                let provider_tools: Vec<ProviderTool> = provider_tools
                     .as_ref()
                     .map(|x| deserialize_from_pyobj(py, x))
-                    .transpose()?;
+                    .transpose()?
+                    .unwrap_or_default();
 
                 let tool_params = DynamicToolParams {
                     allowed_tools,
