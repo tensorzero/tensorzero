@@ -16,6 +16,7 @@ pub struct ExtraHeader {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum ExtraHeaderKind {
     Value(String),
     // We only allow `"delete": true` to be set - deserializing `"delete": false` will error
