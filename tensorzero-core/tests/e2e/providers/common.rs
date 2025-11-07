@@ -774,7 +774,7 @@ routing = ["gcp_vertex_anthropic"]
 [models.claude-sonnet-4-5-gcp-vertex.providers.gcp_vertex_anthropic]
 type = "gcp_vertex_anthropic"
 model_id = "claude-sonnet-4-5@20250929"
-location = "us-central1"
+location = "us-east5"
 project_id = "tensorzero-public"
 
 [models."responses-gpt-4o-mini-2024-07-18"]
