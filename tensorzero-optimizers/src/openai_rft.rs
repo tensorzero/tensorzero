@@ -18,17 +18,19 @@ use tensorzero_core::{
         OptimizationJobInfo,
     },
     providers::openai::{
-        optimization::{
-            convert_to_optimizer_status, OpenAIFineTuningJob, OpenAIFineTuningMethod,
-            OpenAIFineTuningRequest, OpenAIReinforcementRow, Reinforcement,
-            ReinforcementHyperparameters,
-        },
         upload_openai_file, OpenAICredentials, OPENAI_DEFAULT_BASE_URL, PROVIDER_TYPE,
     },
     stored_inference::RenderedSample,
 };
 
-use crate::{JobHandle, Optimizer};
+use crate::{
+    openai::{
+        convert_to_optimizer_status, OpenAIFineTuningJob, OpenAIFineTuningMethod,
+        OpenAIFineTuningRequest, OpenAIReinforcementRow, Reinforcement,
+        ReinforcementHyperparameters,
+    },
+    JobHandle, Optimizer,
+};
 
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 
