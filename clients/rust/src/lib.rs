@@ -685,13 +685,11 @@ impl ClientExt for Client {
                     .map_err(err_to_http)?;
 
                     if response.datapoints.is_empty() {
-                        return Err(TensorZeroError::Other {
-                            source: Error::new(ErrorDetails::DatapointNotFound {
-                                dataset_name,
-                                datapoint_id,
-                            })
-                            .into(),
-                        });
+                        // We explicitly construct an HTTP error here because python client expects it.
+                        return Err(err_to_http(Error::new(ErrorDetails::DatapointNotFound {
+                            dataset_name,
+                            datapoint_id,
+                        })));
                     }
                     Ok(response.datapoints.swap_remove(0))
                 })
