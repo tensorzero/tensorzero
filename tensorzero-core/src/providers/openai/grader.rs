@@ -3,9 +3,8 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAIGrader {
@@ -96,9 +95,8 @@ impl<'py> IntoPyObject<'py> for Box<OpenAIGrader> {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIStringCheckOp"))]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAIStringCheckOp {
@@ -115,9 +113,8 @@ impl std::fmt::Display for OpenAIStringCheckOp {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISimilarityMetric"))]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAISimilarityMetric {
@@ -140,9 +137,8 @@ impl std::fmt::Display for OpenAISimilarityMetric {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum OpenAIRFTRole {
@@ -167,9 +163,8 @@ impl OpenAIRFTRole {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIModelGraderInputMessage"))]
 pub struct OpenAIModelGraderInput {
     pub role: OpenAIRFTRole,

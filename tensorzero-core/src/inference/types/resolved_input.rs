@@ -130,14 +130,14 @@ pub enum LazyResolvedInputMessageContent {
 #[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
 #[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ResolvedInput {
     #[cfg_attr(
         any(feature = "pyo3", test),
         serde(skip_serializing_if = "Option::is_none")
     )]
-    #[cfg_attr(test, ts(optional))]
+    #[ts(optional)]
     pub system: Option<System>,
 
     #[cfg_attr(any(feature = "pyo3", test), serde(default))]
@@ -295,8 +295,8 @@ impl ResolvedInput {
 #[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
 #[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ResolvedInputMessage {
     pub role: Role,
     pub content: Vec<ResolvedInputMessageContent>,
@@ -366,8 +366,8 @@ impl ResolvedInputMessage {
     any(feature = "pyo3", test),
     serde(tag = "type", rename_all = "snake_case")
 )]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum ResolvedInputMessageContent {
     Text(Text),
     Template(Template),
@@ -458,9 +458,8 @@ impl RateLimitedInputContent for LazyFile {
 }
 
 /// Like `RequestMessage`, but holds fully-resolved files instead of `LazyFile`s
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ResolvedRequestMessage {
     pub role: Role,

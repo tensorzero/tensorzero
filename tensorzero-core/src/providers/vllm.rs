@@ -37,9 +37,8 @@ use crate::providers::openai::{check_api_base_suffix, OpenAIMessagesConfig};
 const PROVIDER_NAME: &str = "vLLM";
 pub const PROVIDER_TYPE: &str = "vllm";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct VLLMProvider {
     model_name: String,
     api_base: Url,

@@ -32,37 +32,28 @@ use tensorzero_core::{
 
 use crate::{JobHandle, Optimizer};
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
+#[ts(export)]
 pub struct LaunchOptimizationWorkflowParams {
     pub function_name: String,
     pub template_variant_name: String,
     pub query_variant_name: Option<String>,
-    #[cfg_attr(test, ts(type = "any"))]
     pub filters: Option<InferenceFilter>,
-    #[cfg_attr(test, ts(type = "any"))]
     pub output_source: InferenceOutputSource,
-    #[cfg_attr(test, ts(type = "any"))]
     pub order_by: Option<Vec<OrderBy>>,
     #[serde(deserialize_with = "deserialize_option_u64")]
     pub limit: Option<u64>,
     #[serde(deserialize_with = "deserialize_option_u64")]
     pub offset: Option<u64>,
     pub val_fraction: Option<f64>,
-    #[cfg_attr(test, ts(type = "any"))]
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Debug, Deserialize)]
+#[ts(export)]
 pub struct LaunchOptimizationParams {
-    #[cfg_attr(test, ts(type = "any"))]
     pub train_samples: Vec<RenderedSample>,
-    #[cfg_attr(test, ts(type = "any"))]
     pub val_samples: Option<Vec<RenderedSample>>,
-    #[cfg_attr(test, ts(type = "any"))]
     pub optimization_config: UninitializedOptimizerInfo,
     // TODO: add a way to do {"type": "tensorzero", "name": "foo"} to grab an optimizer configured in
     // tensorzero.toml

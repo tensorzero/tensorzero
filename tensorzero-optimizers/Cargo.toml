@@ -48,6 +48,8 @@ mime_guess = "2.0.5"
 # Tracing and logging
 tracing = { workspace = true }
 
+# ts-rs
+ts-rs = { workspace = true }
+
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
-ts-rs = { workspace = true }

@@ -18,9 +18,8 @@ use crate::{
 #[cfg(feature = "pyo3")]
 use crate::model::CredentialLocation;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "RFTJsonSchemaInfoOption"))]
 #[serde(untagged)]
 pub enum RFTJsonSchemaInfoOption {
@@ -44,9 +43,8 @@ impl std::fmt::Display for RFTJsonSchemaInfoOption {
 /// If no response format is specified but the model is instructed (e.g., via prompts)
 /// to produce structured outputs, those outputs will be returned as raw JSON strings
 /// in the `output_text` field of the Sample namespace instead.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTResponseFormat"))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -63,9 +61,8 @@ impl std::fmt::Display for OpenAIRFTResponseFormat {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct OpenAIRFTConfig {
     pub model: String,
     pub grader: OpenAIGrader,
@@ -86,9 +83,8 @@ pub struct OpenAIRFTConfig {
     pub suffix: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTConfig"))]
 pub struct UninitializedOpenAIRFTConfig {
     pub model: String,
@@ -261,9 +257,8 @@ impl UninitializedOpenAIRFTConfig {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct OpenAIRFTJobHandle {
     pub job_id: String,

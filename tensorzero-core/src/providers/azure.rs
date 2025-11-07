@@ -44,9 +44,8 @@ const PROVIDER_NAME: &str = "Azure";
 pub const PROVIDER_TYPE: &str = "azure";
 const AZURE_INFERENCE_API_VERSION: &str = "2025-04-01-preview";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct AzureProvider {
     deployment_id: String,
     #[serde(skip)]
