@@ -24,7 +24,6 @@ use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
     warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
 };
-use crate::inference::types::file::require_image;
 use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
@@ -512,6 +511,9 @@ enum GCPVertexAnthropicMessageContent<'a> {
     Image {
         source: AnthropicDocumentSource,
     },
+    Document {
+        source: AnthropicDocumentSource,
+    },
     ToolResult {
         tool_use_id: &'a str,
         content: Vec<GCPVertexAnthropicMessageContent<'a>>,
@@ -588,15 +590,19 @@ impl<'a> GCPVertexAnthropicMessageContent<'a> {
                         "The image detail parameter is not supported by GCP Vertex Anthropic. The `detail` field will be ignored."
                     );
                 }
-                require_image(&file.mime_type, PROVIDER_TYPE)?;
-                Ok(Some(FlattenUnknown::Normal(
-                    GCPVertexAnthropicMessageContent::Image {
-                        source: AnthropicDocumentSource::Base64 {
-                            media_type: file.mime_type.clone(),
-                            data: data.clone(),
-                        },
-                    },
-                )))
+                let document = AnthropicDocumentSource::Base64 {
+                    media_type: file.mime_type.clone(),
+                    data: data.clone(),
+                };
+                if file.mime_type.type_() == mime::IMAGE {
+                    Ok(Some(FlattenUnknown::Normal(
+                        GCPVertexAnthropicMessageContent::Image { source: document },
+                    )))
+                } else {
+                    Ok(Some(FlattenUnknown::Normal(
+                        GCPVertexAnthropicMessageContent::Document { source: document },
+                    )))
+                }
             }
             ContentBlock::Thought(thought) => {
                 if let Some(text) = thought.text.as_deref() {

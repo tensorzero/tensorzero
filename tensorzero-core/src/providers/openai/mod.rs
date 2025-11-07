@@ -38,7 +38,7 @@ use crate::inference::types::chat_completion_inference_params::{
     warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::file::{mime_type_to_ext, Detail};
+use crate::inference::types::file::{mime_type_to_audio_format, mime_type_to_ext, Detail};
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
@@ -1256,11 +1256,18 @@ pub struct OpenAIFile<'a> {
     filename: Option<Cow<'a, str>>,
 }
 
+#[derive(Clone, Deserialize, Debug, PartialEq, Serialize)]
+pub struct OpenAIInputAudio<'a> {
+    data: Cow<'a, str>,
+    format: Cow<'a, str>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum OpenAIContentBlock<'a> {
     Text { text: Cow<'a, str> },
     ImageUrl { image_url: OpenAIImageUrl },
     File { file: OpenAIFile<'a> },
+    InputAudio { input_audio: OpenAIInputAudio<'a> },
     Unknown { data: Cow<'a, Value> },
 }
 
@@ -1272,9 +1279,18 @@ impl Serialize for OpenAIContentBlock<'_> {
         #[derive(Serialize)]
         #[serde(tag = "type", rename_all = "snake_case")]
         enum Helper<'a> {
-            Text { text: &'a str },
-            ImageUrl { image_url: &'a OpenAIImageUrl },
-            File { file: &'a OpenAIFile<'a> },
+            Text {
+                text: &'a str,
+            },
+            ImageUrl {
+                image_url: &'a OpenAIImageUrl,
+            },
+            File {
+                file: &'a OpenAIFile<'a>,
+            },
+            InputAudio {
+                input_audio: &'a OpenAIInputAudio<'a>,
+            },
         }
         match self {
             OpenAIContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
@@ -1282,6 +1298,9 @@ impl Serialize for OpenAIContentBlock<'_> {
                 Helper::ImageUrl { image_url }.serialize(serializer)
             }
             OpenAIContentBlock::File { file } => Helper::File { file }.serialize(serializer),
+            OpenAIContentBlock::InputAudio { input_audio } => {
+                Helper::InputAudio { input_audio }.serialize(serializer)
+            }
             OpenAIContentBlock::Unknown { data } => data.serialize(serializer),
         }
     }
@@ -1381,7 +1400,9 @@ impl OpenAIRequestMessage<'_> {
             OpenAIRequestMessage::Developer(msg) => msg.content.to_lowercase().contains(value),
             OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => false,
+                OpenAIContentBlock::ImageUrl { .. }
+                | OpenAIContentBlock::File { .. }
+                | OpenAIContentBlock::InputAudio { .. } => false,
                 // Don't inspect the contents of 'unknown' blocks
                 OpenAIContentBlock::Unknown { data: _ } => false,
             }),
@@ -1389,9 +1410,9 @@ impl OpenAIRequestMessage<'_> {
                 if let Some(content) = &msg.content {
                     content.iter().any(|c| match c {
                         OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                        OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => {
-                            false
-                        }
+                        OpenAIContentBlock::ImageUrl { .. }
+                        | OpenAIContentBlock::File { .. }
+                        | OpenAIContentBlock::InputAudio { .. } => false,
                         // Don't inspect the contents of 'unknown' blocks
                         OpenAIContentBlock::Unknown { data: _ } => false,
                     })
@@ -1677,6 +1698,15 @@ pub(super) async fn prepare_file_message(
                         // `Base64File` (with missing file data)
                         url: base64_url,
                         detail: detail_to_use,
+                    },
+                })
+            } else if file.mime_type.type_() == mime::AUDIO {
+                // Audio files use the input_audio format with unprefixed base64 and format field
+                let format = mime_type_to_audio_format(&file.mime_type)?;
+                Ok(OpenAIContentBlock::InputAudio {
+                    input_audio: OpenAIInputAudio {
+                        data: Cow::Owned(data.clone()),
+                        format: Cow::Owned(format),
                     },
                 })
             } else {

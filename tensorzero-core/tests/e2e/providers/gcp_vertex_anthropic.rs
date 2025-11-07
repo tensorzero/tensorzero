@@ -40,6 +40,14 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let pdf_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "gcp-vertex-sonnet".to_string(),
+        model_name: "claude-sonnet-4-5-gcp-vertex".into(),
+        model_provider_name: "gcp_vertex_anthropic".into(),
+        credentials: HashMap::new(),
+    }];
+
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp-vertex-haiku-extra-body".to_string(),
@@ -126,7 +134,8 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers,
-        pdf_inference: vec![],
+        pdf_inference: pdf_providers,
+        input_audio: vec![],
         shorthand_inference: shorthand_providers,
         credential_fallbacks,
     }
