@@ -5484,6 +5484,7 @@ dependencies = [
  "log",
  "memchr",
  "percent-encoding",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",
@@ -5494,6 +5495,7 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "url",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
