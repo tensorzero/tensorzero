@@ -45,6 +45,18 @@ use strum::AsRefStr;
  * If we are doing an implicit tool call for JSON schema enforcement, we can use the compiled schema from the output signature.
  */
 
+/// `Tool` is the generic form for all tools that TensorZero itself manages.
+/// Today, this is only ClientSideFunctionTools (the original kind), but soon we'll
+/// implement OpenAI's custom tools standard, MCP, and potentially more.
+/// We store this type (serialized) in the Array(String) in the `dynamic_tools` column
+/// in the ChatInference, ChatInferenceDatapoint, and BatchModelInference tables.
+/// Most likely, this will eventually become the wire type too with a custom deserializer
+/// so that folks can specify ClientSideFunctionTools without tags but then can
+/// add tags and specify other kinds of tool.
+///
+/// Notably, provider tools (like OpenAI websearch) are not part of this enum
+/// as there's not really anything we can do besides experiment with them.
+/// They are a separate type `ProviderTool`.
 #[derive(ts_rs::TS, AsRefStr, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
@@ -79,7 +91,11 @@ impl Tool {
     }
 }
 
-/// A Tool object describes how a tool can be dynamically configured by the user.
+/// `ClientSideFunctionTool` is a particular kind of tool that relies
+/// on the client to execute a function on their side (a ToolCall content block)
+/// and return the result on the next turn (a ToolCallResult).
+/// Notably, we assume there is a JSON schema `parameters` that specifies the
+/// set of arguments that the tool will accept.
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
@@ -88,6 +104,11 @@ pub struct ClientSideFunctionTool {
     pub description: String,
     pub parameters: Value,
     pub name: String,
+    /// `strict` here specifies that TensorZero should attempt to use any facilities
+    /// available from the model provider to force the model to generate an accurate tool call,
+    /// notably OpenAI's strict tool call mode (https://platform.openai.com/docs/guides/function-calling#strict-mode).
+    /// This imposes additional restrictions on the JSON schema that may vary across providers
+    /// so we allow it to be configurable.
     #[serde(default)]
     pub strict: bool,
 }
@@ -1196,6 +1217,8 @@ impl ToolCall {
 }
 
 /// `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
+/// Typically tool calls come from previous inferences and are therefore outputs of TensorZero (`InferenceResponseToolCall`)
+/// but they may also be constructed client side or through the OpenAI endpoint `ToolCall` so we support both via this wrapper.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(untagged)]
@@ -1222,6 +1245,9 @@ impl TryFrom<ToolCallWrapper> for ToolCall {
 
 /// An InferenceResponseToolCall is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
+/// This includes some synactic sugar (parsing / validation of the tool arguments)
+/// in the `arguments` field and the name in the `name` field.
+/// We support looping this back through the TensorZero inference API via the ToolCallWrapper
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
