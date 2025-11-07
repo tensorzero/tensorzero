@@ -51,7 +51,7 @@ This will:
 
 ### Viewing Results
 
-- **Real-time monitoring**: Open http://localhost:4000 to view the TensorZero UI
+- **Real-time monitoring**: Open http://localhost:4000/observability/functions/extract_entities to view the TensorZero UI
 
 ---
 
