@@ -1,34 +1,39 @@
 //! Together Supervised Fine-Tuning (SFT) optimizer implementation
 
 use async_trait::async_trait;
-use std::collections::HashMap;
-use std::fmt::Display;
+use std::{borrow::Cow, collections::HashMap, fmt::Display, io::Write};
 
 use futures::future::try_join_all;
-use secrecy::ExposeSecret;
+use reqwest::multipart::{Form, Part};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use tokio::try_join;
+use url::Url;
 
 use tensorzero_core::{
     config::{Config, TimeoutsConfig},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::TensorzeroHttpClient,
+    inference::types::ContentBlock,
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
     model_table::{ProviderKind, ProviderTypeDefaultCredentials, TogetherKind},
     optimization::{
         together_sft::{
             TogetherBatchSize, TogetherLRScheduler, TogetherSFTConfig, TogetherSFTJobHandle,
-            TogetherSupervisedRow, TogetherTrainingMethod, TogetherTrainingType,
+            TogetherTrainingMethod, TogetherTrainingType,
         },
         OptimizationJobInfo, OptimizerOutput,
     },
     providers::{
         helpers::UrlParseErrExt,
+        openai::tensorzero_to_openai_assistant_message,
+        openai::{OpenAIMessagesConfig, OpenAIRequestMessage, OpenAITool},
+        together::prepare_together_messages,
         together::{TogetherCredentials, PROVIDER_TYPE},
     },
-    stored_inference::RenderedSample,
+    stored_inference::{LazyRenderedSample, RenderedSample},
 };
 
 use crate::{JobHandle, Optimizer};
@@ -162,10 +167,11 @@ impl Optimizer for TogetherSFTConfig {
             .credentials
             .get_api_key(credentials)
             .map_err(|e| e.log())?;
-        let train_file_fut = self.upload_file(client, &api_key, &train_rows, "fine-tune");
+        let train_file_fut =
+            upload_file(client, &api_key, &self.api_base, &train_rows, "fine-tune");
         let (train_file_id, val_file_id) = if let Some(val_rows) = val_rows.as_ref() {
             // Upload the files in parallel
-            let val_fut = self.upload_file(client, &api_key, val_rows, "eval");
+            let val_fut = upload_file(client, &api_key, &self.api_base, val_rows, "eval");
             let (train_file_id, val_file_id) = try_join!(train_file_fut, val_fut)?;
             (train_file_id, Some(val_file_id))
         } else {
@@ -331,4 +337,118 @@ impl JobHandle for TogetherSFTJobHandle {
             }
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+pub struct TogetherSupervisedRow<'a> {
+    messages: Vec<OpenAIRequestMessage<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tools: Vec<OpenAITool<'a>>,
+}
+
+impl<'a> TogetherSupervisedRow<'a> {
+    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
+        if inference
+            .tool_params
+            .parallel_tool_calls
+            .unwrap_or_default()
+        {
+            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+                message: "Parallel tool calls are not supported for Together".to_string(),
+            }));
+        }
+        let tools = inference
+            .tool_params
+            .additional_tools
+            .as_ref()
+            .map(|tools| tools.iter().map(Into::into).collect())
+            .unwrap_or_default();
+        let mut messages = prepare_together_messages(
+            inference.system_input.as_deref(),
+            &inference.messages,
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
+        )
+        .await?;
+
+        let Some(output) = &inference.output else {
+            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+                message: "No output in inference".to_string(),
+            }));
+        };
+        if output.is_empty() {
+            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+                message: "No output in inference".to_string(),
+            }));
+        }
+        let output_content_blocks: Vec<ContentBlock> =
+            output.iter().map(|c| c.clone().into()).collect::<Vec<_>>();
+        let final_assistant_message = tensorzero_to_openai_assistant_message(
+            Cow::Owned(output_content_blocks),
+            OpenAIMessagesConfig {
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+                // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
+                fetch_and_encode_input_files_before_inference: true,
+            },
+        )
+        .await?;
+        messages.push(final_assistant_message);
+        Ok(Self { messages, tools })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct TogetherFileResponse {
+    id: String,
+}
+
+async fn upload_file(
+    client: &TensorzeroHttpClient,
+    api_key: &SecretString,
+    api_base: &Url,
+    items: &[TogetherSupervisedRow<'_>],
+    purpose: &'static str,
+) -> Result<String, Error> {
+    let mut jsonl_data = Vec::new();
+    for item in items {
+        serde_json::to_writer(&mut jsonl_data, item).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
+            })
+        })?;
+        jsonl_data.write_all(b"\n").map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
+            })
+        })?;
+    }
+    let form = Form::new()
+        .part(
+            "file",
+            Part::bytes(jsonl_data)
+                .file_name("dataset.jsonl")
+                .mime_str("application/jsonl")
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error setting MIME type: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?,
+        )
+        .text("purpose", purpose)
+        .text("file_name", "dataset.jsonl");
+    let res: TogetherFileResponse = client
+        .post(api_base.join("files/upload").convert_parse_error()?)
+        .bearer_auth(api_key.expose_secret())
+        .multipart(form)
+        .send_and_parse_json(PROVIDER_TYPE)
+        .await?;
+    Ok(res.id)
 }

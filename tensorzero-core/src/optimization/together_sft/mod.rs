@@ -1,30 +1,15 @@
-use crate::http::TensorzeroHttpClient;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
 use crate::model_table::{ProviderKind, ProviderTypeDefaultCredentials, TogetherKind};
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions::PyValueError, prelude::*};
-use reqwest::multipart::{Form, Part};
-use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, io::Write};
 use url::Url;
 
 use crate::{
-    error::{DisplayOrDebugGateway, Error, ErrorDetails},
-    inference::types::ContentBlock,
+    error::Error,
     model::CredentialLocationWithFallback,
-    providers::{
-        helpers::UrlParseErrExt,
-        openai::{
-            tensorzero_to_openai_assistant_message, OpenAIMessagesConfig, OpenAIRequestMessage,
-            OpenAITool,
-        },
-        together::{
-            prepare_together_messages, TogetherCredentials, PROVIDER_TYPE, TOGETHER_API_BASE,
-        },
-    },
-    stored_inference::LazyRenderedSample,
+    providers::together::{TogetherCredentials, TOGETHER_API_BASE},
 };
 
 // Default functions for hyperparameters
@@ -188,69 +173,6 @@ impl std::fmt::Display for UninitializedTogetherSFTConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub struct TogetherSupervisedRow<'a> {
-    messages: Vec<OpenAIRequestMessage<'a>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    tools: Vec<OpenAITool<'a>>,
-}
-
-impl<'a> TogetherSupervisedRow<'a> {
-    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
-        if inference
-            .tool_params
-            .parallel_tool_calls
-            .unwrap_or_default()
-        {
-            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
-                message: "Parallel tool calls are not supported for Together".to_string(),
-            }));
-        }
-        let tools = inference
-            .tool_params
-            .additional_tools
-            .as_ref()
-            .map(|tools| tools.iter().map(Into::into).collect())
-            .unwrap_or_default();
-        let mut messages = prepare_together_messages(
-            inference.system_input.as_deref(),
-            &inference.messages,
-            OpenAIMessagesConfig {
-                json_mode: None,
-                provider_type: PROVIDER_TYPE,
-                // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
-                fetch_and_encode_input_files_before_inference: true,
-            },
-        )
-        .await?;
-
-        let Some(output) = &inference.output else {
-            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
-                message: "No output in inference".to_string(),
-            }));
-        };
-        if output.is_empty() {
-            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
-                message: "No output in inference".to_string(),
-            }));
-        }
-        let output_content_blocks: Vec<ContentBlock> =
-            output.iter().map(|c| c.clone().into()).collect::<Vec<_>>();
-        let final_assistant_message = tensorzero_to_openai_assistant_message(
-            Cow::Owned(output_content_blocks),
-            OpenAIMessagesConfig {
-                json_mode: None,
-                provider_type: PROVIDER_TYPE,
-                // For now, this isn't configurable in SFT (we should never need to resolve a file URL here)
-                fetch_and_encode_input_files_before_inference: true,
-            },
-        )
-        .await?;
-        messages.push(final_assistant_message);
-        Ok(Self { messages, tools })
     }
 }
 
@@ -481,60 +403,6 @@ impl UninitializedTogetherSFTConfig {
             hf_api_token: self.hf_api_token,
             hf_output_repo_name: self.hf_output_repo_name,
         })
-    }
-}
-
-impl TogetherSFTConfig {
-    /// Uploads the given rows as a Together file, returning the file ID
-    pub async fn upload_file(
-        &self,
-        client: &TensorzeroHttpClient,
-        api_key: &SecretString,
-        items: &[TogetherSupervisedRow<'_>],
-        purpose: &'static str,
-    ) -> Result<String, Error> {
-        #[derive(Debug, Deserialize)]
-        struct TogetherFileResponse {
-            id: String,
-        }
-
-        let mut jsonl_data = Vec::new();
-        for item in items {
-            serde_json::to_writer(&mut jsonl_data, item).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
-                })
-            })?;
-            jsonl_data.write_all(b"\n").map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!("Error writing to JSONL: {}", DisplayOrDebugGateway::new(e)),
-                })
-            })?;
-        }
-        let form = Form::new()
-            .part(
-                "file",
-                Part::bytes(jsonl_data)
-                    .file_name("dataset.jsonl")
-                    .mime_str("application/jsonl")
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!(
-                                "Error setting MIME type: {}",
-                                DisplayOrDebugGateway::new(e)
-                            ),
-                        })
-                    })?,
-            )
-            .text("purpose", purpose)
-            .text("file_name", "dataset.jsonl");
-        let res: TogetherFileResponse = client
-            .post(self.api_base.join("files/upload").convert_parse_error()?)
-            .bearer_auth(api_key.expose_secret())
-            .multipart(form)
-            .send_and_parse_json(PROVIDER_TYPE)
-            .await?;
-        Ok(res.id)
     }
 }
 
