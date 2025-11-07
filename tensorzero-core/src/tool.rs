@@ -537,6 +537,29 @@ pub struct ToolCallConfigDatabaseInsert {
 ///
 /// This deserializer is strict: if any tool-related fields are present, they must be valid and complete.
 /// It supports flatten by only consuming tool-related fields and leaving others for the parent struct.
+///
+/// ## Why a custom deserializer?
+///
+/// This cannot be simplified using an untagged enum or standard serde derives because:
+///
+/// 1. **Flatten support requires selective field consumption**: When used with `#[serde(flatten)]`,
+///    this deserializer must distinguish between tool-related fields (which it consumes) and
+///    other fields (which it skips). An untagged enum would attempt to consume all fields or fail,
+///    breaking the flatten behavior.
+///
+/// 2. **Overlapping field sets**: The `tool_params` field appears in both format variants:
+///    - Full format: includes `tool_params` alongside other fields (optional, for legacy compatibility)
+///    - Legacy format: contains only `tool_params`
+///    This overlap makes it impossible for an untagged enum to reliably distinguish between variants.
+///
+/// 3. **Complex parsing requirements**: The deserializer performs custom transformations that can't
+///    be expressed with derive macros:
+///    - Parsing JSON strings into nested types (e.g., `Vec<String>` → `Vec<Tool>`)
+///    - Handling multiple representations of the same field (e.g., `tool_choice` as plain string or JSON object)
+///    - Backward compatibility fallbacks for different serialization formats
+///
+/// 4. **The None case**: Returning `None` when no tool fields are present is essential for optional
+///    tool configurations. An untagged enum would fail to deserialize rather than gracefully returning None.
 pub fn deserialize_optional_tool_info<'de, D>(
     deserializer: D,
 ) -> Result<Option<ToolCallConfigDatabaseInsert>, D::Error>
@@ -1005,6 +1028,9 @@ impl ToolCallConfigDatabaseInsert {
     }
 }
 
+/// This is a legacy struct. We use it for deserializing historical data and
+/// continuing to write the same format only.
+/// This should not be used in new code.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct LegacyToolCallConfigDatabaseInsert {
     /// All tools available for this inference (merged static + dynamic tools)
