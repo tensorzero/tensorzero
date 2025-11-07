@@ -1372,7 +1372,7 @@ async fn check_object_fetch_via_embedded(
 async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_data: &[u8]) {
     // Try using the running HTTP gateway (which is *not* configured with an object store)
     // to fetch the `StoragePath`
-    let client = TensorzeroHttpClient::new().unwrap();
+    let client = TensorzeroHttpClient::new_testing().unwrap();
     let res = client
         .get(get_gateway_endpoint(&format!(
             "/internal/object_storage?storage_path={}",
@@ -1721,12 +1721,15 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the PDF".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Base64(Base64File {
-                                source_url: None,
-                                mime_type: mime::APPLICATION_PDF,
-                                data: pdf_data.clone(),
-                                detail: None,
-                            })),
+                            ClientInputMessageContent::File(File::Base64(
+                                Base64File::new(
+                                    None,
+                                    mime::APPLICATION_PDF,
+                                    pdf_data.clone(),
+                                    None,
+                                )
+                                .expect("test data should be valid"),
+                            )),
                         ],
                     }],
                 },
@@ -1783,12 +1786,15 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                     ClientInputMessageContent::Text(TextKind::Text {
                         text: "Describe the contents of the image".to_string(),
                     }),
-                    ClientInputMessageContent::File(File::Base64(Base64File {
-                        source_url: None,
-                        mime_type: mime::IMAGE_PNG,
-                        data: image_data.clone(),
-                        detail: Some(Detail::Low),
-                    })),
+                    ClientInputMessageContent::File(File::Base64(
+                        Base64File::new(
+                            None,
+                            mime::IMAGE_PNG,
+                            image_data.clone(),
+                            Some(Detail::Low),
+                        )
+                        .expect("test data should be valid"),
+                    )),
                 ],
             }],
         },
@@ -1844,13 +1850,10 @@ pub async fn test_base64_image_inference_with_provider_and_store(
 
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
-    params.input.messages[0].content[1] =
-        ClientInputMessageContent::File(File::Base64(Base64File {
-            source_url: None,
-            mime_type: mime::IMAGE_PNG,
-            data: updated_base64,
-            detail: None,
-        }));
+    params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64(
+        Base64File::new(None, mime::IMAGE_PNG, updated_base64, None)
+            .expect("test data should be valid"),
+    ));
 
     let response = client.inference(params.clone()).await.unwrap();
 

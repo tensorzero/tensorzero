@@ -32,7 +32,11 @@ pub struct JsonlBatchFileInfo {
     pub file_id: String,
 }
 
-pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource::Error) -> Error {
+pub async fn convert_stream_error(
+    raw_request: String,
+    provider_type: String,
+    e: reqwest_eventsource::Error,
+) -> Error {
     let message = e.to_string();
     // If we get an invalid status code, content type, or generic transport error,
     // then we assume that we're never going to be able to read more chunks from the stream,
@@ -45,7 +49,7 @@ pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource:
             ErrorDetails::FatalStreamError {
                 message,
                 provider_type,
-                raw_request: None,
+                raw_request: Some(raw_request),
                 raw_response: resp.text().await.ok(),
             }
             .into()
@@ -53,13 +57,13 @@ pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource:
         reqwest_eventsource::Error::Transport(_) => ErrorDetails::FatalStreamError {
             message,
             provider_type,
-            raw_request: None,
+            raw_request: Some(raw_request),
             raw_response: None,
         }
         .into(),
         _ => ErrorDetails::InferenceServer {
             message,
-            raw_request: None,
+            raw_request: Some(raw_request),
             raw_response: None,
             provider_type,
         }

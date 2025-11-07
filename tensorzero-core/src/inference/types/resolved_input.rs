@@ -161,7 +161,7 @@ pub async fn write_file(
 
     // The store might be explicitly disabled
     if let Some(store) = object_store.object_store.as_ref() {
-        let data = raw.data()?;
+        let data = raw.data();
         let bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
             Error::new(ErrorDetails::ObjectStoreWrite {
                 message: format!("Failed to decode file as base64: {e:?}"),
@@ -229,11 +229,19 @@ impl ResolvedInput {
             for message in self.messages {
                 for content_block in message.content {
                     if let ResolvedInputMessageContent::File(resolved) = content_block {
-                        let raw = Base64File {
-                            source_url: resolved.file.source_url.clone(),
-                            mime_type: resolved.file.mime_type.clone(),
-                            data: resolved.data.clone(),
-                            detail: resolved.file.detail.clone(),
+                        let raw = match Base64File::new(
+                            resolved.file.source_url.clone(),
+                            resolved.file.mime_type.clone(),
+                            resolved.data.clone(),
+                            resolved.file.detail.clone(),
+                        ) {
+                            Ok(file) => file,
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to create Base64File from ObjectStorageFile: {e:?}"
+                                );
+                                continue;
+                            }
                         };
                         let storage_path = resolved.file.storage_path.clone();
 

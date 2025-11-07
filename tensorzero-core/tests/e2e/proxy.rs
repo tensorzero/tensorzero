@@ -3,7 +3,7 @@ use tensorzero_core::http::TensorzeroHttpClient;
 /// Tests that the HTTP proxy is used if the TENSORZERO_E2E_PROXY environment variable is set.
 #[tokio::test]
 async fn test_setup_http_client() {
-    let http_client = TensorzeroHttpClient::new().unwrap();
+    let http_client = TensorzeroHttpClient::new_testing().unwrap();
     let response = http_client
         .get("https://www.tensorzero.com")
         .send()
@@ -25,7 +25,7 @@ async fn test_setup_http_client() {
 #[tokio::test]
 async fn test_setup_http_client_no_proxy() {
     std::env::remove_var("TENSORZERO_E2E_PROXY");
-    let http_client = TensorzeroHttpClient::new().unwrap();
+    let http_client = TensorzeroHttpClient::new_testing().unwrap();
     let response = http_client
         .get("https://www.tensorzero.com")
         .send()

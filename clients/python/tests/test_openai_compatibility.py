@@ -1467,7 +1467,7 @@ async def test_async_multi_block_file_base64(async_openai_client):
                 },
                 {
                     "type": "file",
-                    "file": {"file_data": deepseek_paper_pdf, "filename": "test.pdf"},
+                    "file": {"file_data": f"data:application/pdf;base64,{deepseek_paper_pdf}", "filename": "test.pdf"},
                 },
             ],
         },

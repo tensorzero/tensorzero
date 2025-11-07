@@ -2,7 +2,7 @@
 #![expect(clippy::unwrap_used, clippy::missing_panics_doc)]
 use serde_json::json;
 use tensorzero::{
-    input_handling::resolved_input_to_client_input, Base64File, ClientBuilder, ClientBuilderMode,
+    input_handling::resolved_input_to_client_input, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, ClientInput, ClientInputMessageContent, File, System,
 };
 use tensorzero_core::inference::types::Arguments;
@@ -73,19 +73,18 @@ async fn test_conversion() {
     let input = json!({"messages":[{"role":"user","content":[{"type":"text","value":"What kind of animal is in this image?"},{"type":"image","image":{"url":"https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png","mime_type":"image/png"},"storage_path":{"kind":{"type":"s3_compatible","bucket_name":"tensorzero-e2e-test-images","region":"us-east-1","endpoint":null,"allow_http":null,"prefix":""},"path":"observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"}}]}]});
     let stored_input: StoredInput = serde_json::from_value(input).unwrap();
     let resolved_input = stored_input.reresolve(&client).await.unwrap();
-    let client_input = resolved_input_to_client_input(resolved_input);
+    let client_input = resolved_input_to_client_input(resolved_input).unwrap();
     assert!(client_input.messages.len() == 1);
     assert!(client_input.messages[0].content.len() == 2);
     assert!(matches!(
         client_input.messages[0].content[0],
         ClientInputMessageContent::Text(_)
     ));
-    let ClientInputMessageContent::File(File::Base64(Base64File {
-        mime_type, data, ..
-    })) = &client_input.messages[0].content[1]
+    let ClientInputMessageContent::File(File::Base64(base64_file)) =
+        &client_input.messages[0].content[1]
     else {
         panic!("Expected file");
     };
-    assert_eq!(mime_type, &mime::IMAGE_PNG);
-    assert!(!data.is_empty());
+    assert_eq!(&base64_file.mime_type, &mime::IMAGE_PNG);
+    assert!(!base64_file.data().is_empty());
 }

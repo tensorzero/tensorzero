@@ -257,7 +257,7 @@ impl InferenceProvider for AWSSagemakerProvider {
         );
         let stream = self
             .hosted_provider
-            .stream_events(Box::pin(event_stream), start_time.into())
+            .stream_events(Box::pin(event_stream), start_time.into(), &raw_request)
             .peekable();
         Ok((stream, raw_request))
     }

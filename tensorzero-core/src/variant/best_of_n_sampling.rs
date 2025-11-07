@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tokio::time::{timeout, Duration};
+use tokio::time::timeout;
 
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
@@ -233,6 +233,7 @@ impl Variant for BestOfNSamplingConfig {
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &chrono::Duration,
     ) -> Result<(), Error> {
         // Validate each candidate variant
         for candidate in &self.candidates {
@@ -248,6 +249,7 @@ impl Variant for BestOfNSamplingConfig {
                 templates,
                 function_name,
                 candidate,
+                global_outbound_http_timeout,
             ))
             .await
             .map_err(|e| {
@@ -267,6 +269,7 @@ impl Variant for BestOfNSamplingConfig {
                 templates,
                 function_name,
                 variant_name,
+                global_outbound_http_timeout,
             )
             .await?;
         Ok(())
@@ -352,7 +355,7 @@ impl BestOfNSamplingConfig {
             inference_futures.push((
                 candidate_name.clone(),
                 timeout(
-                    Duration::from_secs_f64(self.timeout_s),
+                    tokio::time::Duration::from_secs_f64(self.timeout_s),
                     unbounded_recursion_wrapper(async move {
                         candidate_variant
                             .infer(
@@ -1071,7 +1074,7 @@ mod tests {
                 output_tokens: 100,
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(500),
+                response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
@@ -1107,7 +1110,7 @@ mod tests {
                 output_tokens: 25,
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(550),
+                response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
@@ -1162,7 +1165,7 @@ mod tests {
                 output_tokens: 100,
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(500),
+                response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
@@ -1200,7 +1203,7 @@ mod tests {
                 output_tokens: 25,
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(550),
+                response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider2".into(),
             model_name: "ExampleModel2".into(),
@@ -1273,7 +1276,7 @@ mod tests {
                 output_tokens: 100,
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(500),
+                response_time: std::time::Duration::from_millis(500),
             },
             model_provider_name: "ExampleProvider".into(),
             model_name: "ExampleModel".into(),
@@ -1309,7 +1312,7 @@ mod tests {
                 output_tokens: 25,
             },
             latency: Latency::NonStreaming {
-                response_time: Duration::from_millis(550),
+                response_time: std::time::Duration::from_millis(550),
             },
             model_provider_name: "ExampleProvider1".into(),
             model_name: "ExampleModel1".into(),
@@ -1353,9 +1356,10 @@ mod tests {
                 },
             )]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            chrono::Duration::seconds(120),
         )
         .expect("Failed to create model table");
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {
@@ -1470,6 +1474,7 @@ mod tests {
             ModelTable::new(
                 map,
                 ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .expect("Failed to create model table")
         };
@@ -1544,6 +1549,7 @@ mod tests {
             ModelTable::new(
                 map,
                 ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
             )
             .expect("Failed to create model table")
         };
@@ -1636,6 +1642,7 @@ mod tests {
         let big_models = ModelTable::new(
             big_models,
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .expect("Failed to create model table");
 
