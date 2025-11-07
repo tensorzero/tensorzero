@@ -10,7 +10,7 @@ import httpx
 import uuid_utils
 from typing_extensions import NotRequired, TypedDict
 
-from tensorzero.generated_types import UNSET, _UnsetType
+from tensorzero.generated_types import UnsetType
 
 
 @dataclass
@@ -572,7 +572,7 @@ class TensorZeroTypeEncoder(JSONEncoder):
             for field in fields(o):
                 value = getattr(o, field.name)
                 # Skip UNSET fields entirely (they won't be in the JSON)
-                if not isinstance(value, _UnsetType):
+                if not isinstance(value, UnsetType):
                     # Recursively handle nested dataclasses/lists/dicts
                     result[field.name] = self._convert_value(value)
             return result
@@ -581,7 +581,7 @@ class TensorZeroTypeEncoder(JSONEncoder):
 
     def _convert_value(self, value: Any) -> Any:
         """Recursively convert values, filtering out UNSET."""
-        if isinstance(value, _UnsetType):
+        if isinstance(value, UnsetType):
             # This shouldn't happen at top level, but handle it just in case
             return None
         elif is_dataclass(value) and not isinstance(value, type):
@@ -589,7 +589,7 @@ class TensorZeroTypeEncoder(JSONEncoder):
             result = {}
             for field in fields(value):
                 field_value = getattr(value, field.name)
-                if not isinstance(field_value, _UnsetType):
+                if not isinstance(field_value, UnsetType):
                     result[field.name] = self._convert_value(field_value)
             return result
         elif isinstance(value, (list, tuple)):

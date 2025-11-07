@@ -10,6 +10,7 @@ Run this script from the clients/python directory:
 """
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -43,10 +44,16 @@ def transform_ref_properties_to_allof(schema: Dict[str, Any]) -> Dict[str, Any]:
             {"$ref": "#/$defs/Inner"}
           ]
         }
+
+    Args:
+        schema: A JSON schema dictionary (will be modified in place)
+
+    Returns:
+        The transformed schema dictionary
     """
     if not isinstance(schema, dict):
         raise ValueError(f"Schema is not a dictionary: {schema}")
-    
+
     # If this object has both properties and $ref at the same level, transform it
     if "properties" in schema and "$ref" in schema:
         ref_value = schema.pop("$ref")
@@ -86,12 +93,12 @@ def transform_ref_properties_to_allof(schema: Dict[str, Any]) -> Dict[str, Any]:
 def find_schema_files(schema_dir: Path) -> List[Path]:
     """Find all JSON schema files in the schema directory."""
     if not schema_dir.exists():
-        print(f"Error: Schema directory not found: {schema_dir}", file=sys.stderr)
-        sys.exit(1)
+        print(f"Schema directory not found: {schema_dir}", file=sys.stderr)
+        return []
 
     schema_files = sorted(schema_dir.glob("*.json"))
     if not schema_files:
-        print(f"Warning: No JSON schema files found in {schema_dir}", file=sys.stderr)
+        print(f"No JSON schema files found in {schema_dir}", file=sys.stderr)
 
     return schema_files
 
@@ -153,76 +160,81 @@ def merge_schemas(schema_files: List[Path], output_file: Path) -> None:
     print(f"✓ Merged schema written to {output_file}")
 
 
-def extract_exported_names_from_schema(merged_schema_file: Path) -> List[str]:
+def extract_names_from_schema_recursive(schema: Dict[str, Any], exported_names: set) -> None:
     """
-    Extract all type names from the merged JSON schema file.
+    Recursively extract all type names from a schema definition.
 
-    Returns a sorted list of names that should be exported.
+    This processes:
+    - title fields (become class names)
+    - oneOf variants (discriminated unions with inline schemas)
+    - allOf compositions (inheritance)
+    - nested schemas
+
+    Note: We skip titles in oneOf/anyOf variants that are just $ref pointers,
+    since those don't create new types - they just reference existing ones.
+
+    Args:
+        schema: A JSON schema definition dictionary
+        exported_names: Set to accumulate exported type names into
     """
+    if not isinstance(schema, dict):
+        return
 
-    def extract_names_from_schema_recursive(schema: Dict[str, Any], exported_names: set[str]) -> None:
-        """
-        Recursively extract all type names from a schema definition.
+    # Extract title if present, but only if this isn't just a $ref wrapper
+    # (titles on $ref-only schemas are just documentation)
+    if "title" in schema and "$ref" not in schema:
+        exported_names.add(schema["title"])
 
-        This processes:
-        - title fields (become class names)
-        - oneOf variants (discriminated unions with inline schemas)
-        - allOf compositions (inheritance)
-        - nested schemas
+    # Recursively process oneOf (discriminated unions)
+    # Only extract names from inline schemas, not from $ref pointers
+    if "oneOf" in schema:
+        for variant in schema["oneOf"]:
+            # Skip variants that are just $ref pointers - they don't create new types
+            if isinstance(variant, dict) and "$ref" not in variant:
+                extract_names_from_schema_recursive(variant, exported_names)
 
-        Note: We skip titles in oneOf/anyOf variants that are just $ref pointers,
-        since those don't create new types - they just reference existing ones.
-        """
-        if not isinstance(schema, dict):
-            return
+    # Recursively process allOf (composition/inheritance)
+    # For allOf, we do want to process $ref items to find inline properties
+    if "allOf" in schema:
+        for item in schema["allOf"]:
+            # Only recurse into inline schemas, not $ref pointers
+            if isinstance(item, dict) and "$ref" not in item:
+                extract_names_from_schema_recursive(item, exported_names)
 
-        # Extract title if present, but only if this isn't just a $ref wrapper
-        # (titles on $ref-only schemas are just documentation)
-        if "title" in schema and "$ref" not in schema:
-            exported_names.add(schema["title"])
+    # Recursively process anyOf
+    if "anyOf" in schema:
+        for item in schema["anyOf"]:
+            # Skip variants that are just $ref pointers
+            if isinstance(item, dict) and "$ref" not in item:
+                extract_names_from_schema_recursive(item, exported_names)
 
-        # Recursively process oneOf (discriminated unions)
-        # Only extract names from inline schemas, not from $ref pointers
-        if "oneOf" in schema:
-            for variant in schema["oneOf"]:
-                # Skip variants that are just $ref pointers - they don't create new types
-                if isinstance(variant, dict) and "$ref" not in variant:
-                    extract_names_from_schema_recursive(variant, exported_names)
+    # Recursively process properties
+    if "properties" in schema:
+        for prop_schema in schema["properties"].values():
+            extract_names_from_schema_recursive(prop_schema, exported_names)
 
-        # Recursively process allOf (composition/inheritance)
-        # For allOf, we do want to process $ref items to find inline properties
-        if "allOf" in schema:
-            for item in schema["allOf"]:
-                # Only recurse into inline schemas, not $ref pointers
-                if isinstance(item, dict) and "$ref" not in item:
-                    extract_names_from_schema_recursive(item, exported_names)
+    # Recursively process items (for arrays)
+    if "items" in schema:
+        extract_names_from_schema_recursive(schema["items"], exported_names)
 
-        # Recursively process anyOf
-        if "anyOf" in schema:
-            for item in schema["anyOf"]:
-                # Skip variants that are just $ref pointers
-                if isinstance(item, dict) and "$ref" not in item:
-                    extract_names_from_schema_recursive(item, exported_names)
 
-        # Recursively process properties
-        if "properties" in schema:
-            for prop_schema in schema["properties"].values():
-                extract_names_from_schema_recursive(prop_schema, exported_names)
+def extract_exported_names_from_schema(merged_schema: Dict[str, Any]) -> List[str]:
+    """
+    Extract all type names from the merged JSON schema.
 
-        # Recursively process items (for arrays)
-        if "items" in schema:
-            extract_names_from_schema_recursive(schema["items"], exported_names)
+    Args:
+        merged_schema: A merged JSON schema dictionary with $defs
 
-    with open(merged_schema_file, 'r') as f:
-        schema = json.load(f)
-
-    exported_names = set[str]()
+    Returns:
+        A sorted list of names that should be exported
+    """
+    exported_names: set = set()
 
     # Extract all definitions from $defs
-    if "$defs" not in schema:
+    if "$defs" not in merged_schema:
         return []
 
-    for def_name, def_schema in schema["$defs"].items():
+    for def_name, def_schema in merged_schema["$defs"].items():
         # Always add the definition name itself (this becomes a class or type alias)
         exported_names.add(def_name)
 
@@ -269,7 +281,7 @@ __all__ = [
     print("To use these exports, copy the imports and __all__ entries from generated_exports.py")
     print("into your __init__.py file.")
 
-def generate_dataclasses_from_schema(schema_file: Path, output_file: Path) -> None:
+def generate_dataclasses_from_schema(schema_file: Path, templates_dir: Path, output_file: Path) -> None:
     """
     Generate Python dataclasses from a JSON schema file using datamodel-code-generator.
 
@@ -283,10 +295,6 @@ def generate_dataclasses_from_schema(schema_file: Path, output_file: Path) -> No
     # Read and preprocess the schema
     with open(schema_file, 'r') as f:
         schema = json.load(f)
-
-    # Get the path to our custom templates directory
-    script_dir = Path(__file__).parent
-    templates_dir = script_dir / "templates"
 
     try:
         # Use datamodel-code-generator to generate dataclasses
@@ -355,6 +363,8 @@ def main() -> None:
     output_file = output_dir / "generated_types.py"
     output_init_file = output_dir / "__init__.py"
     temp_dir = script_dir / ".temp_schemas"
+    templates_dir = script_dir / "templates"
+    custom_header_file = templates_dir / "generated_types_header.py"
 
     print("=" * 70)
     print("Generating Python dataclasses from JSON schemas")
@@ -368,6 +378,13 @@ def main() -> None:
     print(f"Found {len(schema_files)} schema files")
     print()
 
+    # If there are no schema files, just output the header file
+    if len(schema_files) == 0:
+        print("No schema files found, generating header file only...")
+        # Copy custom_header_file to output_init_file
+        shutil.copy(custom_header_file, output_init_file)
+        return
+
     # Create temp directory for individual generated files
     temp_dir.mkdir(exist_ok=True)
 
@@ -377,12 +394,14 @@ def main() -> None:
         merge_schemas(schema_files, merged_schema_file)
 
         # Generate dataclasses from merged schema
-        generate_dataclasses_from_schema(merged_schema_file, output_file)
+        generate_dataclasses_from_schema(merged_schema_file, templates_dir, output_file)
 
         # Generate exports for __init__.py (before deleting temp files)
         print()
         print("Generating exports for __init__.py...")
-        exported_names = extract_exported_names_from_schema(merged_schema_file)
+        with open(merged_schema_file, 'r') as f:
+            merged_schema = json.load(f)
+        exported_names = extract_exported_names_from_schema(merged_schema)
         generate_init_exports(exported_names, output_init_file)
 
     finally:
@@ -400,7 +419,6 @@ def main() -> None:
     print()
     print("Cleaning up schemas directory...")
     try:
-        import shutil
         if schema_dir.exists():
             shutil.rmtree(schema_dir)
             print(f"✓ Deleted {schema_dir}")

@@ -39,22 +39,6 @@ from .tensorzero import (
 from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
-from .generated_types import (
-    Arguments as GeneratedArguments,
-    ContentBlockChatOutput as GeneratedContentBlockChatOutput,
-    DatapointMetadataUpdate,
-    DynamicToolParams,
-    Input as GeneratedInput,
-    JsonDatapointOutputUpdate,
-    System as GeneratedSystem,
-    ToolCallChunk as GeneratedToolCallChunk,
-    ToolChoice as GeneratedToolChoice,
-    UpdateChatDatapointRequest,
-    UpdateDatapointRequest,
-    UpdateDatapointsRequest,
-    UpdateDatapointsResponse,
-    UpdateJsonDatapointRequest,
-)
 from .types import (
     AndFilter,
     BaseTensorZeroError,
@@ -152,20 +136,6 @@ __all__ = [
     "Config",
     "ContentBlock",
     "Datapoint",
-    "DatapointMetadataUpdate",
-    "DynamicToolParams",
-    "GeneratedArguments",
-    "GeneratedContentBlockChatOutput",
-    "GeneratedInput",
-    "GeneratedSystem",
-    "GeneratedToolCallChunk",
-    "GeneratedToolChoice",
-    "JsonDatapointOutputUpdate",
-    "UpdateChatDatapointRequest",
-    "UpdateDatapointRequest",
-    "UpdateDatapointsRequest",
-    "UpdateDatapointsResponse",
-    "UpdateJsonDatapointRequest",
     "DiclOptimizationConfig",  # DEPRECATED
     "DICLOptimizationConfig",
     "DynamicEvaluationRunEpisodeResponse",  # DEPRECATED
