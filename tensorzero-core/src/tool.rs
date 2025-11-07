@@ -339,6 +339,30 @@ impl<'a> ToolCallConfigConstructorArgs<'a> {
             dynamic_provider_tools: Vec::new(),
         }
     }
+
+    // Helper to construct ToolCallConfigConstructorArgs with defaults
+    #[cfg(test)]
+    pub fn new_for_test(
+        function_tools: &'a [String],
+        function_tool_choice: &'a ToolChoice,
+        function_parallel_tool_calls: Option<bool>,
+        static_tools: &'a HashMap<String, Arc<StaticToolConfig>>,
+        dynamic_tool_params: DynamicToolParams,
+    ) -> ToolCallConfigConstructorArgs<'a> {
+        ToolCallConfigConstructorArgs {
+            function_tools,
+            function_tool_choice,
+            function_parallel_tool_calls,
+            static_tools,
+            dynamic_allowed_tools: dynamic_tool_params.allowed_tools,
+            dynamic_additional_tools: dynamic_tool_params
+                .additional_tools
+                .map(|tools| tools.into_iter().map(Tool::ClientSideFunction).collect()),
+            dynamic_tool_choice: dynamic_tool_params.tool_choice,
+            dynamic_parallel_tool_calls: dynamic_tool_params.parallel_tool_calls,
+            dynamic_provider_tools: dynamic_tool_params.provider_tools,
+        }
+    }
 }
 
 impl ToolCallConfig {
@@ -1785,34 +1809,11 @@ mod tests {
             ToolChoice::Specific("get_temperature".to_string());
     }
 
-    // Helper to construct ToolCallConfigConstructorArgs with defaults
-    fn make_tool_call_config_args<'a>(
-        function_tools: &'a [String],
-        function_tool_choice: &'a ToolChoice,
-        function_parallel_tool_calls: Option<bool>,
-        static_tools: &'a HashMap<String, Arc<StaticToolConfig>>,
-        dynamic_tool_params: DynamicToolParams,
-    ) -> ToolCallConfigConstructorArgs<'a> {
-        ToolCallConfigConstructorArgs {
-            function_tools,
-            function_tool_choice,
-            function_parallel_tool_calls,
-            static_tools,
-            dynamic_allowed_tools: dynamic_tool_params.allowed_tools,
-            dynamic_additional_tools: dynamic_tool_params
-                .additional_tools
-                .map(|tools| tools.into_iter().map(Tool::ClientSideFunction).collect()),
-            dynamic_tool_choice: dynamic_tool_params.tool_choice,
-            dynamic_parallel_tool_calls: dynamic_tool_params.parallel_tool_calls,
-            dynamic_provider_tools: dynamic_tool_params.provider_tools,
-        }
-    }
-
     #[tokio::test]
     async fn test_tool_call_config_new() {
         // Empty tools in function, no dynamic tools, tools are configured in the config
         // This should return no tools because the function does not specify any tools
-        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
@@ -1824,7 +1825,7 @@ mod tests {
 
         // All tools available, no dynamic tools, tools are configured in the config
         // This should return all tools because the function specifies all tools
-        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
@@ -1845,7 +1846,7 @@ mod tests {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
             ..Default::default()
         };
-        let err = ToolCallConfig::new(make_tool_call_config_args(
+        let err = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
@@ -1866,7 +1867,7 @@ mod tests {
             tool_choice: Some(ToolChoice::Specific("get_temperature".to_string())),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
@@ -1887,7 +1888,7 @@ mod tests {
             tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
-        let err = ToolCallConfig::new(make_tool_call_config_args(
+        let err = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
@@ -1915,7 +1916,7 @@ mod tests {
             }]),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
@@ -1942,7 +1943,7 @@ mod tests {
             parallel_tool_calls: Some(false),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
@@ -1972,7 +1973,7 @@ mod tests {
             tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
@@ -1999,7 +2000,7 @@ mod tests {
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
             id: "123".to_string(),
         };
-        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
@@ -2067,7 +2068,7 @@ mod tests {
         );
 
         // Make sure validation works with dynamic tools
-        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
@@ -2227,7 +2228,7 @@ mod tests {
             ..Default::default()
         };
 
-        let err = ToolCallConfig::new(make_tool_call_config_args(
+        let err = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
@@ -2319,7 +2320,7 @@ mod tests {
             ..Default::default()
         };
 
-        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
@@ -2360,7 +2361,7 @@ mod tests {
             ..Default::default()
         };
 
-        let err = ToolCallConfig::new(make_tool_call_config_args(
+        let err = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
@@ -2393,7 +2394,7 @@ mod tests {
             ..Default::default()
         };
 
-        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),

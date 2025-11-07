@@ -355,6 +355,7 @@ export function prepareInferenceActionRequest(
       },
     },
     variant_name: null,
+    provider_tools: [],
     dryrun: null,
     internal: true,
     tags: {

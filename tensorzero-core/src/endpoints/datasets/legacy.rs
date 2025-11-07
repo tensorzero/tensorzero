@@ -1759,7 +1759,6 @@ pub struct UpdateChatInferenceDatapointRequest {
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_json_value")]
     pub output: Option<serde_json::Value>,
-    // #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     pub tool_params: Option<LegacyToolCallConfigDatabaseInsert>,
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
