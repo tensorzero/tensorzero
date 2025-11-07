@@ -4,7 +4,7 @@ from ner import Row, compute_exact_match, compute_jaccard_similarity, load_datas
 from tensorzero import AsyncTensorZeroGateway, JsonInferenceResponse
 from tqdm.asyncio import tqdm
 
-NUM_SAMPLES = 500
+NUM_SAMPLES = 2000
 MAX_CONCURRENCY = 50  # lower this value if you get rate limited
 
 
