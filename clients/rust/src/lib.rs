@@ -62,9 +62,6 @@ pub use tensorzero_core::endpoints::inference::{
     InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
 };
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
-pub use tensorzero_core::endpoints::optimization::{
-    LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
-};
 pub use tensorzero_core::endpoints::variant_probabilities::{
     GetVariantSamplingProbabilitiesParams, GetVariantSamplingProbabilitiesResponse,
 };
@@ -86,6 +83,11 @@ pub use tensorzero_core::utils::gateway::setup_clickhouse_without_config;
 
 // Export quantile array from migration_0037
 pub use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0037::QUANTILES;
+
+// Re-export optimization types from tensorzero-optimizers
+pub use tensorzero_optimizers::endpoints::{
+    LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
+};
 
 // Keep git module for Git-related extension traits
 mod git;

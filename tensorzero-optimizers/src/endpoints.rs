@@ -2,6 +2,7 @@
 //!
 //! These endpoints handle launching and polling optimization jobs.
 
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
@@ -12,23 +13,60 @@ use axum::{
 };
 use rand::seq::SliceRandom;
 
-use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
-use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::{
     config::Config,
     db::{
+        clickhouse::query_builder::{InferenceFilter, OrderBy},
         clickhouse::ClickHouseConnectionInfo,
-        inferences::{InferenceQueries, ListInferencesParams},
+        inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams},
     },
     endpoints::{inference::InferenceCredentials, stored_inferences::render_samples},
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
-    optimization::{OptimizationJobHandle, OptimizationJobInfo},
+    optimization::{OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo},
+    serde_util::deserialize_option_u64,
+    stored_inference::RenderedSample,
     utils::gateway::{AppState, AppStateData, StructuredJson},
 };
 
 use crate::{JobHandle, Optimizer};
+
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, ts(export))]
+pub struct LaunchOptimizationWorkflowParams {
+    pub function_name: String,
+    pub template_variant_name: String,
+    pub query_variant_name: Option<String>,
+    #[cfg_attr(test, ts(type = "any"))]
+    pub filters: Option<InferenceFilter>,
+    #[cfg_attr(test, ts(type = "any"))]
+    pub output_source: InferenceOutputSource,
+    #[cfg_attr(test, ts(type = "any"))]
+    pub order_by: Option<Vec<OrderBy>>,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub limit: Option<u64>,
+    #[serde(deserialize_with = "deserialize_option_u64")]
+    pub offset: Option<u64>,
+    pub val_fraction: Option<f64>,
+    #[cfg_attr(test, ts(type = "any"))]
+    pub optimizer_config: UninitializedOptimizerInfo,
+}
+
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, ts(export))]
+pub struct LaunchOptimizationParams {
+    #[cfg_attr(test, ts(type = "any"))]
+    pub train_samples: Vec<RenderedSample>,
+    #[cfg_attr(test, ts(type = "any"))]
+    pub val_samples: Option<Vec<RenderedSample>>,
+    #[cfg_attr(test, ts(type = "any"))]
+    pub optimization_config: UninitializedOptimizerInfo,
+    // TODO: add a way to do {"type": "tensorzero", "name": "foo"} to grab an optimizer configured in
+    // tensorzero.toml
+}
 
 pub async fn launch_optimization_workflow_handler(
     State(AppStateData {

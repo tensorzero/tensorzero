@@ -6191,6 +6191,7 @@ dependencies = [
  "tensorzero",
  "tensorzero-auth",
  "tensorzero-core",
+ "tensorzero-optimizers",
  "ts-rs",
  "url",
  "uuid",
