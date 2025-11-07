@@ -273,6 +273,11 @@ fn generate_single_table_query_for_type(
         select_clauses.push("i.parallel_tool_calls as parallel_tool_calls".to_string());
     } else {
         select_clauses.push("'' as tool_params".to_string());
+        select_clauses.push("[] as dynamic_tools".to_string());
+        select_clauses.push("[] as dynamic_provider_tools".to_string());
+        select_clauses.push("NULL as allowed_tools".to_string());
+        select_clauses.push("NULL as tool_choice".to_string());
+        select_clauses.push("NULL as parallel_tool_calls".to_string());
     }
 
     select_clauses.push("i.variant_name as variant_name".to_string());
