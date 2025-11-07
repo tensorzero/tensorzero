@@ -60,11 +60,10 @@ pub struct SimpleStoredSampleInfo {
 
 /// Wire variant of StoredInference for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "StoredInference"))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 pub enum StoredInference {
     Chat(StoredChatInference),
     Json(StoredJsonInference),
@@ -513,10 +512,9 @@ impl StoredInferenceDatabase {
 }
 
 /// Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 pub struct StoredChatInference {
     pub function_name: String,
     pub variant_name: String,
@@ -594,10 +592,9 @@ impl std::fmt::Display for StoredChatInferenceDatabase {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 pub struct StoredJsonInference {
     pub function_name: String,
     pub variant_name: String,
@@ -703,8 +700,8 @@ fn json_output_to_content_block_chat_output(
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(untagged)]
 pub enum StoredOutput {
     Chat(Vec<ContentBlockChatOutput>),
@@ -716,9 +713,9 @@ pub enum StoredOutput {
 /// and by resolving all network resources (e.g. images).
 /// This is a wire type - it uses DynamicToolParams and has Python/TypeScript bindings.
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
+#[ts(export)]
 pub struct RenderedSample {
     pub function_name: String,
     pub input: ModelInput,

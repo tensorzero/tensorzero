@@ -56,9 +56,8 @@ use super::helpers::{convert_stream_error, peek_first_chunk};
 const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
 pub const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GCPVertexAnthropicProvider {
     model_id: String,
     request_url: String,

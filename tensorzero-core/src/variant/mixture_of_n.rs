@@ -44,9 +44,8 @@ use super::{
     InferModelRequestArgs, InferenceConfig, ModelUsedInfo, Variant,
 };
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct MixtureOfNConfig {
     weight: Option<f64>,
     timeout_s: f64,
@@ -92,9 +91,8 @@ fn default_timeout() -> f64 {
     300.0
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FuserConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,

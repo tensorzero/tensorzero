@@ -23,9 +23,8 @@ use crate::variant::chat_completion::{ChatCompletionConfig, UninitializedChatCom
 
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ChainOfThoughtConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,

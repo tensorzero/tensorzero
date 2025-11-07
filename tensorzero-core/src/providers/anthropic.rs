@@ -57,9 +57,8 @@ const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const PROVIDER_NAME: &str = "Anthropic";
 pub const PROVIDER_TYPE: &str = "anthropic";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct AnthropicProvider {
     model_name: String,
     api_base: Option<Url>,
