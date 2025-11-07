@@ -456,6 +456,11 @@ mod tests {
             i.output_schema as output_schema,
             i.tags as tags,
             '' as tool_params,
+            [] as dynamic_tools,
+            [] as dynamic_provider_tools,
+            NULL as allowed_tools,
+            NULL as tool_choice,
+            NULL as parallel_tool_calls,
             i.variant_name as variant_name,
             i.output as output
         FROM
