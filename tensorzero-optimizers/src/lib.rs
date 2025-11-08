@@ -23,6 +23,7 @@ pub mod dicl;
 pub mod endpoints;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
+pub mod gepa;
 pub mod openai;
 pub mod openai_rft;
 pub mod openai_sft;
@@ -66,6 +67,11 @@ impl JobHandle for OptimizationJobHandle {
                     .await
             }
             OptimizationJobHandle::TogetherSFT(job_handle) => {
+                job_handle
+                    .poll(client, credentials, default_credentials)
+                    .await
+            }
+            OptimizationJobHandle::Gepa(job_handle) => {
                 job_handle
                     .poll(client, credentials, default_credentials)
                     .await
@@ -179,6 +185,17 @@ impl Optimizer for OptimizerInfo {
                 )
                 .await
                 .map(OptimizationJobHandle::TogetherSFT),
+            OptimizerConfig::Gepa(optimizer_config) => optimizer_config
+                .launch(
+                    client,
+                    train_examples,
+                    val_examples,
+                    credentials,
+                    clickhouse_connection_info,
+                    config,
+                )
+                .await
+                .map(OptimizationJobHandle::Gepa),
         }
     }
 }

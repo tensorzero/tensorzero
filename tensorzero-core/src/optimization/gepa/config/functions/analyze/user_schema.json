@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["function_name", "model", "system_template", "input", "output"],
+  "additionalProperties": false,
+  "properties": {
+    "function_name": {
+      "type": "string",
+      "description": "The name of the function you are improving"
+    },
+    "model": {
+      "type": "string",
+      "description": "The target model for the optimized templates"
+    },
+    "system_template": {
+      "type": "string",
+      "description": "The reference system template"
+    },
+    "user_template": {
+      "type": ["string", "null"],
+      "description": "Optional reference user template"
+    },
+    "assistant_template": {
+      "type": ["string", "null"],
+      "description": "Optional reference assistant template"
+    },
+    "output_schema": {
+      "type": ["object", "null"],
+      "description": "Optional reference JSON schema for the function output (if function type is json)"
+    },
+    "system_schema": {
+      "type": ["object", "null"],
+      "description": "Optional JSON schema specifying any arguments for the reference system template"
+    },
+    "user_schema": {
+      "type": ["object", "null"],
+      "description": "Optional JSON schema specifying any arguments for the reference user template"
+    },
+    "assistant_schema": {
+      "type": ["object", "null"],
+      "description": "Optional JSON schema specifying any arguments for the reference assistant template"
+    },
+    "tools": {
+      "type": ["object", "null"],
+      "description": "Optional dictionary of tool names to tool schemas",
+      "additionalProperties": {
+        "type": "object",
+        "description": "Tool schema"
+      }
+    },
+    "input": {
+      "description": "The input messages leading up to the assistant's response"
+    },
+    "output": {
+      "description": "The assistant's response"
+    },
+    "tags": {
+      "type": ["object", "null"],
+      "description": "Tags associated with the inference"
+    }
+  }
+}

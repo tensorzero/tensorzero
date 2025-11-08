@@ -172,6 +172,9 @@ pub async fn test_dicl_optimization_chat() {
         OptimizerOutput::Model(_) => {
             panic!("Expected variant output from DICL optimizer, got model output");
         }
+        OptimizerOutput::Variants(_) => {
+            panic!("Expected variant output from DICL optimizer, got variants output");
+        }
     };
 
     // Validate that the returned config matches our input
@@ -452,6 +455,9 @@ pub async fn test_dicl_optimization_json() {
         }
         OptimizerOutput::Model(_) => {
             panic!("Expected variant output from DICL optimizer, got model output");
+        }
+        OptimizerOutput::Variants(_) => {
+            panic!("Expected variant output from DICL optimizer, got variants output");
         }
     };
 

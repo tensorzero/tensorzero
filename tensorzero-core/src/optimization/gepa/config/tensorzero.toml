@@ -1,0 +1,124 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 MODELS                                     │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[models.gemini-2p5-flash]
+routing = ["gcp_vertex_gemini"]
+
+[models.gemini-2p5-flash.providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+model_id = "gemini-2.5-flash"
+location = "us-central1"
+project_id = "alpine-realm-415615"
+
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   TOOLS                                    │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# Tools for tensorzero::optimization::gepa::analyze function
+[tools.report_error]
+description = "Report an error in the inference output. Use this when the inference output contains mistakes, incorrect reasoning, violated instructions, malformed output, or invalid assumptions."
+parameters = "tools/report_error.json"
+
+[tools.report_improvement]
+description = "Report a suboptimal aspect of the inference output that could be improved. Use this when the inference output is technically correct but could be more efficient, clearer, more complete, or higher quality."
+parameters = "tools/report_improvement.json"
+
+[tools.report_optimal]
+description = "Report high-quality aspects of the inference output that demonstrate effective approaches worth preserving. Use this to capture what worked well, even in failed episodes where other parts may have gone wrong."
+parameters = "tools/report_optimal.json"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# tensorzero::optimization::gepa::analyze: Analyzes inference outputs and provides feedback
+[functions."tensorzero::optimization::gepa::analyze"]
+type = "chat"
+user_schema = "functions/analyze/user_schema.json"
+tools = ["report_error", "report_improvement", "report_optimal"]
+tool_choice = "auto"
+
+[functions."tensorzero::optimization::gepa::analyze".variants.gpt-5-mini]
+type = "chat_completion"
+model = "openai::gpt-5-mini-2025-08-07"
+system_template = "functions/analyze/baseline/system_template.minijinja"
+user_template = "functions/analyze/baseline/user_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+
+[functions."tensorzero::optimization::gepa::analyze".variants.gemini-2p5-flash]
+type = "chat_completion"
+model = "gemini-2p5-flash"
+system_template = "functions/analyze/baseline/system_template.minijinja"
+user_template = "functions/analyze/baseline/user_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+
+[functions."tensorzero::optimization::gepa::analyze".variants.deepseek-v3p1-terminus]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/deepseek-v3p1-terminus"
+system_template = "functions/analyze/baseline/system_template.minijinja"
+user_template = "functions/analyze/baseline/user_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+
+[functions."tensorzero::optimization::gepa::analyze".variants.kimi-k2-instruct-0905]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/kimi-k2-instruct-0905"
+system_template = "functions/analyze/baseline/system_template.minijinja"
+user_template = "functions/analyze/baseline/user_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+
+# tensorzero::optimization::gepa::mutate: Generates improved templates based on analysis feedback
+[functions."tensorzero::optimization::gepa::mutate"]
+type = "json"
+output_schema = "functions/mutate/output_schema.json"
+user_schema = "functions/mutate/user_schema.json"
+
+[functions."tensorzero::optimization::gepa::mutate".variants.claude-sonnet-4p5]
+type = "chat_completion"
+model = "anthropic::claude-sonnet-4-5-20250929"
+system_template = "functions/mutate/baseline/system_template.minijinja"
+user_template = "functions/mutate/baseline/user_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+json_mode = "on"
+max_tokens = 32_000
+
+[functions."tensorzero::optimization::gepa::mutate".variants.gpt-5]
+type = "chat_completion"
+model = "openai::gpt-5"
+system_template = "functions/mutate/baseline/system_template.minijinja"
+user_template = "functions/mutate/baseline/user_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+json_mode = "on"
+
+[functions."tensorzero::optimization::gepa::mutate".variants.gpt-5-mini]
+type = "chat_completion"
+model = "openai::gpt-5-mini-2025-08-07"
+system_template = "functions/mutate/baseline/system_template.minijinja"
+user_template = "functions/mutate/baseline/user_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+json_mode = "on"
+
+[functions."tensorzero::optimization::gepa::mutate".variants.gemini-2p5-flash]
+type = "chat_completion"
+model = "gemini-2p5-flash"
+system_template = "functions/mutate/baseline/system_template.minijinja"
+user_template = "functions/mutate/baseline/user_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+json_mode = "on"
+
+[functions."tensorzero::optimization::gepa::mutate".variants.deepseek-v3p1-terminus]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/deepseek-v3p1-terminus"
+system_template = "functions/mutate/baseline/system_template.minijinja"
+user_template = "functions/mutate/baseline/user_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+json_mode = "on"
+
+[functions."tensorzero::optimization::gepa::mutate".variants.kimi-k2-instruct-0905]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/kimi-k2-instruct-0905"
+system_template = "functions/mutate/baseline/system_template.minijinja"
+user_template = "functions/mutate/baseline/user_template.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+json_mode = "on"

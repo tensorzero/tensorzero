@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "description": "Report an error in the inference output. Use this when the inference output contains mistakes, incorrect reasoning, violated instructions, malformed output, or invalid assumptions.",
+  "properties": {
+    "reasoning": {
+      "type": "string",
+      "description": "Your step-by-step analysis of why this inference output is problematic, such as 'The inference attempted to parse JSON without validating the input format, which caused it to fail when encountering malformed data.'"
+    },
+    "error_identification": {
+      "type": "string",
+      "description": "The specific mistake or problem in this inference output, such as 'Failed to validate input schema before processing' or 'Produced output in wrong format (returned array instead of object).'"
+    },
+    "root_cause_analysis": {
+      "type": "string",
+      "description": "The underlying reason why this error occurred, such as 'Misunderstood the output schema requirements' or 'Made incorrect assumption that all inputs would be pre-validated.'"
+    },
+    "correct_output": {
+      "type": "string",
+      "description": "Your literal response to the input - perform the task yourself to demonstrate what the correct output should have been. Provide the actual output in the same format expected by the task, such as the complete JSON object, full text response, or tool call that should have been made."
+    },
+    "key_insight": {
+      "type": "string",
+      "description": "The actionable takeaway to prevent similar errors, such as 'Always validate input format before processing' or 'Never assume data structure without explicit verification.'"
+    }
+  },
+  "required": ["reasoning", "error_identification", "root_cause_analysis", "correct_output", "key_insight"],
+  "additionalProperties": false
+}

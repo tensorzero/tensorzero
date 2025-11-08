@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "description": "Report a suboptimal aspect of the inference output that could be improved. Use this when the inference output is technically correct but could be more efficient, clearer, more complete, or higher quality.",
+  "properties": {
+    "reasoning": {
+      "type": "string",
+      "description": "Your analysis of why this inference output could be better, such as 'The inference produced correct output but used an inefficient approach that processed data multiple times unnecessarily.'"
+    },
+    "suboptimality_description": {
+      "type": "string",
+      "description": "What aspects are suboptimal, such as 'The reasoning was verbose and repetitive' or 'The solution works but has O(n²) complexity when O(n) is possible.'"
+    },
+    "better_output": {
+      "type": "string",
+      "description": "Your literal response to the input - perform the task yourself to demonstrate what a better output would look like. Provide the actual improved output in the same format expected by the task, showing higher quality, completeness, or clarity."
+    },
+    "key_insight": {
+      "type": "string",
+      "description": "The principle for better quality, such as 'Optimize for clarity by organizing output into clear sections' or 'Consider computational efficiency when processing large datasets.'"
+    }
+  },
+  "required": ["reasoning", "suboptimality_description", "better_output", "key_insight"],
+  "additionalProperties": false
+}

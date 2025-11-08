@@ -20,17 +20,11 @@ use std::sync::Arc;
 use crate::error::Error;
 use crate::function::FunctionConfig;
 
-#[cfg(feature = "e2e_tests")]
 use crate::config::SchemaData;
-#[cfg(feature = "e2e_tests")]
 use crate::experimentation::ExperimentationConfig;
-#[cfg(feature = "e2e_tests")]
 use crate::function::{FunctionConfigChat, FunctionConfigJson};
-#[cfg(feature = "e2e_tests")]
 use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
-#[cfg(feature = "e2e_tests")]
 use crate::tool::{create_implicit_tool_call_config, ToolChoice};
-#[cfg(feature = "e2e_tests")]
 use std::collections::HashSet;
 
 /// Returns the `tensorzero::hello_chat` function configuration.
@@ -99,6 +93,100 @@ fn get_hello_json_function() -> Arc<FunctionConfig> {
     }))
 }
 
+/// Returns the `tensorzero::optimization::gepa::analyze` function configuration.
+///
+/// This is a Chat function with tools that analyzes inference outputs and provides
+/// structured feedback for the GEPA optimization algorithm.
+///
+/// The function has three tools:
+/// - report_error: For critical failures in the inference output
+/// - report_improvement: For suboptimal but technically correct outputs
+/// - report_optimal: For high-quality aspects worth preserving
+fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
+    // Load user schema from embedded JSON file
+    let user_schema_json: serde_json::Value = serde_json::from_str(include_str!(
+        "../optimization/gepa/config/functions/analyze/user_schema.json"
+    ))?;
+    let user_schema = StaticJSONSchema::from_value(user_schema_json)?;
+
+    let mut inner = HashMap::new();
+    inner.insert(
+        "user".to_string(),
+        SchemaWithMetadata {
+            schema: user_schema,
+            legacy_definition: true,
+        },
+    );
+
+    let schemas = SchemaData { inner };
+
+    // TODO: Add tool support for built-in functions
+    // For now, GEPA analyze function uses empty tools - tools will be provided
+    // via internal_dynamic_variant_config when the actual GEPA implementation
+    // in tensorzero-optimizers is complete
+    //
+    // Tool definitions exist in:
+    // - ../optimization/gepa/config/tools/report_error.json
+    // - ../optimization/gepa/config/tools/report_improvement.json
+    // - ../optimization/gepa/config/tools/report_optimal.json
+
+    Ok(Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+        variants: HashMap::new(),
+        schemas,
+        tools: vec![],
+        tool_choice: ToolChoice::None,
+        parallel_tool_calls: None,
+        description: Some(
+            "Built-in GEPA analyze function - analyzes inference outputs and provides structured feedback for optimization".to_string(),
+        ),
+        all_explicit_templates_names: HashSet::new(),
+        experimentation: ExperimentationConfig::default(),
+    })))
+}
+
+/// Returns the `tensorzero::optimization::gepa::mutate` function configuration.
+///
+/// This is a JSON function that generates improved prompt templates based on
+/// analysis feedback from the GEPA optimization algorithm.
+fn get_gepa_mutate_function() -> Result<Arc<FunctionConfig>, Error> {
+    // Load user schema from embedded JSON file
+    let user_schema_json: serde_json::Value = serde_json::from_str(include_str!(
+        "../optimization/gepa/config/functions/mutate/user_schema.json"
+    ))?;
+    let user_schema = StaticJSONSchema::from_value(user_schema_json)?;
+
+    let mut inner = HashMap::new();
+    inner.insert(
+        "user".to_string(),
+        SchemaWithMetadata {
+            schema: user_schema,
+            legacy_definition: true,
+        },
+    );
+
+    let schemas = SchemaData { inner };
+
+    // Load output schema from embedded JSON file
+    let output_schema_json: serde_json::Value = serde_json::from_str(include_str!(
+        "../optimization/gepa/config/functions/mutate/output_schema.json"
+    ))?;
+    let output_schema = StaticJSONSchema::from_value(output_schema_json)?;
+
+    let implicit_tool_call_config = create_implicit_tool_call_config(output_schema.clone());
+
+    Ok(Arc::new(FunctionConfig::Json(FunctionConfigJson {
+        variants: HashMap::new(),
+        schemas,
+        output_schema,
+        implicit_tool_call_config,
+        description: Some(
+            "Built-in GEPA mutate function - generates improved prompt templates based on analysis feedback".to_string(),
+        ),
+        all_explicit_template_names: HashSet::new(),
+        experimentation: ExperimentationConfig::default(),
+    })))
+}
+
 /// Returns all built-in functions as a HashMap.
 ///
 /// The keys are function names (e.g., "tensorzero::hello_chat")
@@ -108,8 +196,8 @@ fn get_hello_json_function() -> Arc<FunctionConfig> {
 /// the UI e2e test in `ui/e2e_tests/homePage.spec.ts` which checks the total
 /// function count displayed on the homepage.
 pub fn get_all_built_in_functions() -> Result<HashMap<String, Arc<FunctionConfig>>, Error> {
-    #[cfg_attr(not(feature = "e2e_tests"), expect(unused_mut))]
     let mut functions = HashMap::new();
+
     #[cfg(feature = "e2e_tests")]
     {
         functions.insert(
@@ -121,6 +209,17 @@ pub fn get_all_built_in_functions() -> Result<HashMap<String, Arc<FunctionConfig
             get_hello_json_function(),
         );
     }
+
+    // GEPA built-in functions (always available, not feature-gated)
+    functions.insert(
+        "tensorzero::optimization::gepa::analyze".to_string(),
+        get_gepa_analyze_function()?,
+    );
+    functions.insert(
+        "tensorzero::optimization::gepa::mutate".to_string(),
+        get_gepa_mutate_function()?,
+    );
+
     Ok(functions)
 }
 
