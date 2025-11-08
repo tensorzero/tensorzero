@@ -39,9 +39,8 @@ use crate::tool::{
 };
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FunctionConfig {
     Chat(FunctionConfigChat),
@@ -238,9 +237,8 @@ impl VariantsConfigPyClass {
     }
 }
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub schemas: SchemaData,
@@ -266,9 +264,8 @@ pub struct FunctionConfigChat {
     pub all_explicit_templates_names: HashSet<String>,
 }
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub schemas: SchemaData,

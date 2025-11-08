@@ -1108,8 +1108,8 @@ pub struct InsertDatapointResponse {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "Datapoint"))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum Datapoint {
     Chat(ChatInferenceDatapoint),
     Json(JsonInferenceDatapoint),
@@ -1410,8 +1410,8 @@ pub struct JsonDatapointInsert {
 /// This one should be used in all public interfaces.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1553,7 +1553,7 @@ impl From<StoredChatInferenceDatapoint> for ChatInferenceDatapointInsert {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,
@@ -1778,9 +1778,8 @@ pub(crate) fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct StaleDatasetResponse {
     pub num_staled_datapoints: u64,
 }

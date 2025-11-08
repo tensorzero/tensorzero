@@ -78,9 +78,8 @@ pub enum AuthResult {
     MissingKey,
 }
 
-#[derive(sqlx::FromRow, Debug, PartialEq, Eq, Clone, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(sqlx::FromRow, Debug, PartialEq, Eq, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct KeyInfo {
     pub public_id: String,
     pub organization: String,
