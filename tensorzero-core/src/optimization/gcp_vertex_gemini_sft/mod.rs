@@ -35,9 +35,8 @@ pub fn gcp_vertex_gemini_base_url(project_id: &str, region: &str) -> Result<Url,
     ))
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GCPVertexGeminiSFTConfig {
     pub model: String,
     pub bucket_name: String,
@@ -59,9 +58,8 @@ pub struct GCPVertexGeminiSFTConfig {
     pub bucket_path_prefix: Option<String>, // e.g., "fine-tuning/data" (optional)
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "GCPVertexGeminiSFTConfig"))]
 pub struct UninitializedGCPVertexGeminiSFTConfig {
     pub model: String,
@@ -212,9 +210,8 @@ impl UninitializedGCPVertexGeminiSFTConfig {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct GCPVertexGeminiSFTJobHandle {
     pub job_url: Url,

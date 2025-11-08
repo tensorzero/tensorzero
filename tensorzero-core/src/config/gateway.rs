@@ -1,16 +1,17 @@
+use chrono::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{ExportConfig, ObservabilityConfig, TemplateFilesystemAccess},
     error::Error,
+    http::DEFAULT_HTTP_CLIENT_TIMEOUT,
     inference::types::storage::StorageKind,
 };
 
 use super::ObjectStoreInfo;
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayAuthCacheConfig {
     #[serde(default = "default_gateway_auth_cache_enabled")]
@@ -36,9 +37,8 @@ fn default_gateway_auth_cache_ttl_ms() -> u64 {
     1000
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct AuthConfig {
     pub enabled: bool,
@@ -77,6 +77,7 @@ pub struct UninitializedGatewayConfig {
     pub fetch_and_encode_input_files_before_inference: Option<bool>,
     #[serde(default)]
     pub auth: AuthConfig,
+    pub global_outbound_http_timeout_ms: Option<u64>,
 }
 
 impl UninitializedGatewayConfig {
@@ -106,13 +107,16 @@ impl UninitializedGatewayConfig {
             disable_pseudonymous_usage_analytics: self.disable_pseudonymous_usage_analytics,
             fetch_and_encode_input_files_before_inference,
             auth: self.auth,
+            global_outbound_http_timeout: self
+                .global_outbound_http_timeout_ms
+                .map(|ms| Duration::milliseconds(ms as i64))
+                .unwrap_or(DEFAULT_HTTP_CLIENT_TIMEOUT),
         })
     }
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,
@@ -129,6 +133,7 @@ pub struct GatewayConfig {
     #[serde(default = "default_fetch_and_encode_input_files_before_inference")]
     pub fetch_and_encode_input_files_before_inference: bool,
     pub auth: AuthConfig,
+    pub global_outbound_http_timeout: Duration,
 }
 
 impl Default for GatewayConfig {
@@ -146,6 +151,7 @@ impl Default for GatewayConfig {
             fetch_and_encode_input_files_before_inference:
                 default_fetch_and_encode_input_files_before_inference(),
             auth: Default::default(),
+            global_outbound_http_timeout: DEFAULT_HTTP_CLIENT_TIMEOUT,
         }
     }
 }

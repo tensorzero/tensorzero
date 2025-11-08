@@ -138,13 +138,12 @@ pub use streams::{
  */
 
 /// A request is made that contains an Input
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(test, ts(optional))]
+    #[ts(optional)]
     pub system: Option<System>,
     #[serde(default)]
     pub messages: Vec<InputMessage>,
@@ -330,12 +329,12 @@ impl InputMessageContent {
                             let path = storage_kind.file_path(&base64_file)?;
                             Ok(ObjectStorageFile {
                                 file: ObjectStoragePointer {
-                                    source_url: base64_file.source_url,
-                                    mime_type: base64_file.mime_type,
+                                    source_url: base64_file.source_url.clone(),
+                                    mime_type: base64_file.mime_type.clone(),
                                     storage_path: path,
                                     detail: detail_for_future,
                                 },
-                                data: base64_file.data,
+                                data: base64_file.data().to_string(),
                             })
                         };
                         LazyResolvedInputMessageContent::File(Box::new(LazyFile::Url {
@@ -353,25 +352,25 @@ impl InputMessageContent {
                     // 2. Wrap the data in `PendingObjectStoreFile` to signal it needs writing
                     // The data is ready to use but not yet persisted to object storage.
                     // The write will happen later in `into_stored_input_message_content`.
-                    File::Base64(Base64File {
-                        source_url,
-                        mime_type,
-                        data,
-                        detail,
-                    }) => {
+                    File::Base64(base64_file) => {
+                        let source_url = &base64_file.source_url;
+                        let mime_type = &base64_file.mime_type;
+                        let data = base64_file.data();
+                        let detail = &base64_file.detail;
+
                         let storage_kind = get_storage_kind(&context)?;
-                        let base64_file = Base64File {
-                            source_url: source_url.clone(),
-                            mime_type: mime_type.clone(),
-                            data: data.clone(),
+                        let base64_file_for_path = Base64File::new(
+                            source_url.clone(),
+                            mime_type.clone(),
+                            data.to_string(),
                             // We explicitly set detail to None when computing the storage path.
                             // This is intentional for content-addressing: the detail parameter controls
                             // how providers process the image (resolution/token cost), but shouldn't
                             // affect the file's hash or storage location. The same image file with
                             // different detail values should map to the same storage path for deduplication.
-                            detail: None,
-                        };
-                        let path = storage_kind.file_path(&base64_file)?;
+                            None,
+                        )?;
+                        let path = storage_kind.file_path(&base64_file_for_path)?;
 
                         LazyResolvedInputMessageContent::File(Box::new(LazyFile::Base64(
                             PendingObjectStoreFile(ObjectStorageFile {
@@ -381,7 +380,7 @@ impl InputMessageContent {
                                     storage_path: path,
                                     detail: detail.clone(),
                                 },
-                                data: data.clone(),
+                                data: data.to_string(),
                             }),
                         )))
                     }
@@ -541,14 +540,15 @@ impl LazyResolvedInputMessageContent {
                     file_url: _,
                 } => {
                     let resolved_file = future.await?;
+                    let base64_file = Base64File::new(
+                        resolved_file.file.source_url.clone(),
+                        resolved_file.file.mime_type.clone(),
+                        resolved_file.data.clone(),
+                        resolved_file.file.detail.clone(),
+                    )?;
                     write_file(
                         object_store_info,
-                        Base64File {
-                            source_url: resolved_file.file.source_url.clone(),
-                            mime_type: resolved_file.file.mime_type.clone(),
-                            data: resolved_file.data.clone(),
-                            detail: resolved_file.file.detail.clone(),
-                        },
+                        base64_file,
                         resolved_file.file.storage_path.clone(),
                     )
                     .await?;
@@ -560,14 +560,15 @@ impl LazyResolvedInputMessageContent {
                 // We write the base64 data to object storage.
                 // The PendingObjectStoreFile wrapper type signals this write requirement.
                 LazyFile::Base64(pending) => {
+                    let base64_file = Base64File::new(
+                        pending.0.file.source_url.clone(),
+                        pending.0.file.mime_type.clone(),
+                        pending.0.data.clone(),
+                        pending.0.file.detail.clone(),
+                    )?;
                     write_file(
                         object_store_info,
-                        Base64File {
-                            source_url: pending.0.file.source_url.clone(),
-                            mime_type: pending.0.file.mime_type.clone(),
-                            data: pending.0.data.clone(),
-                            detail: pending.0.file.detail.clone(),
-                        },
+                        base64_file,
                         pending.0.file.storage_path.clone(),
                     )
                     .await?;
@@ -584,9 +585,8 @@ impl LazyResolvedInputMessageContent {
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 /// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export, optional_fields)]
 pub struct InputMessage {
     pub role: Role,
     pub content: Vec<InputMessageContent>,
@@ -614,10 +614,9 @@ pub enum System {
     Template(Arguments),
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
+#[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum InputMessageContent {
     Text(Text),
     Template(Template),
@@ -928,9 +927,8 @@ impl RateLimitedInputContent for ContentBlock {
 
 /// The version of `ContentBlock` that is stored in ClickHouse.
 /// This is almost identical to `ContentBlock`, but without `File` data.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StoredContentBlock {
     Text(Text),
@@ -959,9 +957,8 @@ pub enum StoredContentBlock {
 
 /// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
 /// As a result, it can implement both `Serialize` and `Deserialize`
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ResolvedContentBlock {
     Text(Text),
@@ -1257,10 +1254,9 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
 }
 
 /// For use in rendering for optimization purposes
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ModelInput {
     pub system: Option<String>,
