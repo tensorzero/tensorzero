@@ -49,16 +49,6 @@ pub struct LaunchOptimizationWorkflowParams {
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
-#[derive(ts_rs::TS, Debug, Deserialize)]
-#[ts(export)]
-pub struct LaunchOptimizationParams {
-    pub train_samples: Vec<RenderedSample>,
-    pub val_samples: Option<Vec<RenderedSample>>,
-    pub optimization_config: UninitializedOptimizerInfo,
-    // TODO: add a way to do {"type": "tensorzero", "name": "foo"} to grab an optimizer configured in
-    // tensorzero.toml
-}
-
 pub async fn launch_optimization_workflow_handler(
     State(AppStateData {
         config,
@@ -142,6 +132,16 @@ pub async fn launch_optimization_workflow(
             &config,
         )
         .await
+}
+
+#[derive(ts_rs::TS, Debug, Deserialize)]
+#[ts(export)]
+pub struct LaunchOptimizationParams {
+    pub train_samples: Vec<RenderedSample>,
+    pub val_samples: Option<Vec<RenderedSample>>,
+    pub optimization_config: UninitializedOptimizerInfo,
+    // TODO: add a way to do {"type": "tensorzero", "name": "foo"} to grab an optimizer configured in
+    // tensorzero.toml
 }
 
 /// Launch an optimization job.
