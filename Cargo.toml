@@ -12,7 +12,7 @@ members = [
     "evaluations",
     "tensorzero-optimizers",
     "internal/tensorzero-derive",
-     "internal/tensorzero-auth",
+    "internal/tensorzero-auth",
     "examples/integrations/cursor/feedback",
 ]
 resolver = "2"
@@ -76,6 +76,7 @@ rlt = "0.2.1"
 metrics-exporter-prometheus = { version = "0.17.2", features = [
     "http-listener",
 ], default-features = false }
+schemars = "1.1.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
