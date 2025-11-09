@@ -91,35 +91,6 @@ impl Tool {
     }
 }
 
-/// `ClientSideFunctionTool` is a particular kind of tool that relies
-/// on the client to execute a function on their side (a ToolCall content block)
-/// and return the result on the next turn (a ToolCallResult).
-/// Notably, we assume there is a JSON schema `parameters` that specifies the
-/// set of arguments that the tool will accept.
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[ts(export)]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
-pub struct ClientSideFunctionTool {
-    pub description: String,
-    pub parameters: Value,
-    pub name: String,
-    /// `strict` here specifies that TensorZero should attempt to use any facilities
-    /// available from the model provider to force the model to generate an accurate tool call,
-    /// notably OpenAI's strict tool call mode (https://platform.openai.com/docs/guides/function-calling#strict-mode).
-    /// This imposes additional restrictions on the JSON schema that may vary across providers
-    /// so we allow it to be configurable.
-    #[serde(default)]
-    pub strict: bool,
-}
-
-impl std::fmt::Display for ClientSideFunctionTool {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
-        write!(f, "{json}")
-    }
-}
-
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Tool {
@@ -162,6 +133,63 @@ impl Tool {
         match self {
             Tool::ClientSideFunction(tool) => tool.strict,
         }
+    }
+
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+/// `ClientSideFunctionTool` is a particular kind of tool that relies
+/// on the client to execute a function on their side (a ToolCall content block)
+/// and return the result on the next turn (a ToolCallResult).
+/// Notably, we assume there is a JSON schema `parameters` that specifies the
+/// set of arguments that the tool will accept.
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[ts(export)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct ClientSideFunctionTool {
+    pub description: String,
+    pub parameters: Value,
+    pub name: String,
+    /// `strict` here specifies that TensorZero should attempt to use any facilities
+    /// available from the model provider to force the model to generate an accurate tool call,
+    /// notably OpenAI's strict tool call mode (https://platform.openai.com/docs/guides/function-calling#strict-mode).
+    /// This imposes additional restrictions on the JSON schema that may vary across providers
+    /// so we allow it to be configurable.
+    #[serde(default)]
+    pub strict: bool,
+}
+
+impl std::fmt::Display for ClientSideFunctionTool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ClientSideFunctionTool {
+    #[getter]
+    pub fn get_parameters<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        serialize_to_dict(py, self.parameters.clone()).map(|x| x.into_bound(py))
+    }
+
+    #[getter]
+    pub fn get_description(&self) -> &str {
+        &self.description
+    }
+
+    #[getter]
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    #[getter]
+    pub fn get_strict(&self) -> bool {
+        self.strict
     }
 
     pub fn __repr__(&self) -> String {
