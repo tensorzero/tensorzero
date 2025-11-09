@@ -454,21 +454,16 @@ impl ToolCallConfig {
         let mut dynamic_tools_available = vec![];
         if let Some(additional_tools) = dynamic_additional_tools {
             for tool in additional_tools {
-                // Today we automatically add dynamically configured tools to the allowed tools list but in future we may
-                // change this behavior to be more in line with OpenAI's (if allowed_tools is set do not add tools.
-                // This warning is unusable today.
                 let name = tool.name().to_string();
-                if !allowed_tools.tools.contains(&name) {
-                    tracing::info!(
-                        tool_name = %name,
-                        "Currently, the gateway automatically includes all dynamic tools in the list of allowed tools. \
-                         In a near-future release, dynamic tools will no longer be included automatically. \
-                         If you intend for your dynamic tools to be allowed, please allow them explicitly; \
-                         otherwise, disregard this warning."
-                    );
-                }
+
+                // Add the tool to dynamic_tools_available so its definition is sent to the provider
                 dynamic_tools_available.push(ToolConfig::Dynamic(tool.into_dynamic_tool_config()));
-                allowed_tools.tools.push(name);
+
+                // Only add to allowed_tools in FunctionDefault mode (when allowed_tools was not explicitly set)
+                // In AllAllowedTools mode, the user explicitly set allowed_tools, so we respect that list exactly
+                if matches!(allowed_tools.choice, AllowedToolsChoice::FunctionDefault) {
+                    allowed_tools.tools.push(name);
+                }
             }
         }
 
@@ -2412,9 +2407,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_dynamic_tool_auto_added_with_warning() {
-        let logs_contain = crate::utils::testing::capture_logs();
-        // Test that dynamic tools are still auto-added even when not in allowed_tools (with warning)
+    async fn test_dynamic_tool_not_auto_added_to_allowed_tools() {
+        // Test that dynamic tools are sent as definitions but not added to allowed_tools
+        // when allowed_tools is explicitly set (AllAllowedTools mode)
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
             additional_tools: Some(vec![ClientSideFunctionTool {
@@ -2436,7 +2431,7 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        // Both tools should be included (dynamic tool auto-added despite not being in allowed_tools)
+        // Both tool definitions should be available (sent to provider)
         assert_eq!(tool_call_config.tools_available().count(), 2);
         assert!(tool_call_config
             .tools_available()
@@ -2445,9 +2440,12 @@ mod tests {
             .tools_available()
             .any(|t| t.name() == "establish_campground"));
 
-        // Check that warning was logged
-        assert!(logs_contain(
-            "Currently, the gateway automatically includes all dynamic tools"
+        // But only get_temperature should be in allowed_tools
+        assert_eq!(tool_call_config.allowed_tools.tools.len(), 1);
+        assert_eq!(tool_call_config.allowed_tools.tools[0], "get_temperature");
+        assert!(matches!(
+            tool_call_config.allowed_tools.choice,
+            AllowedToolsChoice::AllAllowedTools
         ));
     }
 

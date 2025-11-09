@@ -423,7 +423,9 @@ impl FunctionConfig {
 
         let allowed_tools = match allowed_tools.choice {
             AllowedToolsChoice::FunctionDefault => None,
-            AllowedToolsChoice::DynamicAllowedTools => Some(allowed_tools.tools),
+            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::AllAllowedTools => {
+                Some(allowed_tools.tools)
+            }
         };
 
         let additional_tools = if dynamic_tools.is_empty() {
