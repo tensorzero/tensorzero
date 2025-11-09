@@ -19,6 +19,7 @@ import {
 } from "./inference.server";
 import { countInferencesForFunction } from "./inference.server";
 import type { TextContent } from "./common";
+import { displayModelInferenceInputMessageContentSchema } from "./common";
 import { getClickhouseClient } from "./client.server";
 import type {
   ContentBlockChatOutput,
@@ -581,6 +582,63 @@ describe("getAdjacentInferenceIds", () => {
     );
     expect(adjacentInferenceIds.next_id).toBeNull();
   });
+});
+
+test("displayModelInferenceInputMessageContentSchema accepts thought content blocks", () => {
+  // Test thought content block with all fields including summary
+  const thoughtContentWithSummary = {
+    type: "thought",
+    text: "This is a thinking step",
+    signature: "abcdef",
+    summary: [
+      { text: "Summary of the thought", type: "summary_text" },
+      { text: "Another summary point", type: "summary_text" },
+    ],
+    _internal_provider_type: "anthropic",
+  };
+
+  const result1 = displayModelInferenceInputMessageContentSchema.safeParse(
+    thoughtContentWithSummary,
+  );
+  expect(result1.success).toBe(true);
+  if (result1.success && result1.data.type === "thought") {
+    expect(result1.data.text).toBe("This is a thinking step");
+    expect(result1.data.summary).toHaveLength(2);
+    expect(result1.data.summary?.[0].text).toBe("Summary of the thought");
+  }
+
+  // Test thought content block with signature but without summary
+  const thoughtContentWithSignature = {
+    type: "thought",
+    text: "Another thinking step",
+    signature: "abcdef",
+    _internal_provider_type: "anthropic",
+  };
+
+  const result2 = displayModelInferenceInputMessageContentSchema.safeParse(
+    thoughtContentWithSignature,
+  );
+  expect(result2.success).toBe(true);
+  if (result2.success && result2.data.type === "thought") {
+    expect(result2.data.text).toBe("Another thinking step");
+    expect(result2.data.summary).toBeUndefined();
+  }
+
+  // Test thought content block with minimal fields (text is null)
+  const thoughtContentMinimal = {
+    type: "thought",
+    text: null,
+    signature: "abcdef",
+  };
+
+  const result3 = displayModelInferenceInputMessageContentSchema.safeParse(
+    thoughtContentMinimal,
+  );
+  expect(result3.success).toBe(true);
+  if (result3.success && result3.data.type === "thought") {
+    expect(result3.data.text).toBeUndefined();
+    expect(result3.data.summary).toBeUndefined();
+  }
 });
 
 describe("getAdjacentEpisodeIds", () => {

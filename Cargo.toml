@@ -11,13 +11,13 @@ members = [
     "provider-proxy",
     "evaluations",
     "internal/tensorzero-derive",
-     "internal/tensorzero-auth",
+    "internal/tensorzero-auth",
     "examples/integrations/cursor/feedback",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "2025.11.1"
+version = "2025.11.2"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 
@@ -75,6 +75,7 @@ rlt = "0.2.1"
 metrics-exporter-prometheus = { version = "0.17.2", features = [
     "http-listener",
 ], default-features = false }
+schemars = "1.1.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -24,6 +24,7 @@ use crate::db::clickhouse::GetMaybeReplicatedTableEngineNameArgs;
 use crate::db::clickhouse::HealthCheckable;
 use crate::db::clickhouse::Rows;
 use crate::db::clickhouse::TableName;
+use crate::error::DelayedError;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::Error;
 use crate::error::ErrorDetails;
@@ -213,17 +214,17 @@ impl ClickHouseClient for ProductionClickHouseClient {
         query: String,
         parameters: &HashMap<&str, &str>,
     ) -> Result<ClickHouseResponse, Error> {
-        self.run_query_synchronous_with_err_logging(query, parameters, true)
+        self.run_query_synchronous_delayed_err(query, parameters)
             .await
+            .map_err(|e| e.log())
     }
 
-    async fn run_query_synchronous_with_err_logging(
+    async fn run_query_synchronous_delayed_err(
         &self,
         query: String,
         parameters: &HashMap<&str, &str>,
-        err_logging: bool,
-    ) -> Result<ClickHouseResponse, Error> {
-        let mut database_url = Url::parse(&self.sanitized_database_url).map_err(|e| Error::new(ErrorDetails::ClickHouseQuery { message: format!("Error parsing ClickHouse URL: {e}. This should never happen. Please submit a bug report at https://github.com/tensorzero/tensorzero/issues/new") }))?;
+    ) -> Result<ClickHouseResponse, DelayedError> {
+        let mut database_url = Url::parse(&self.sanitized_database_url).map_err(|e| DelayedError::new(ErrorDetails::ClickHouseQuery { message: format!("Error parsing ClickHouse URL: {e}. This should never happen. Please submit a bug report at https://github.com/tensorzero/tensorzero/issues/new") }))?;
         // Add query parameters if provided
         for (key, value) in parameters {
             let param_key = format!("param_{key}");
@@ -244,12 +245,9 @@ impl ClickHouseClient for ProductionClickHouseClient {
             .send()
             .await
             .map_err(|e| {
-                Error::new_with_err_logging(
-                    ErrorDetails::ClickHouseQuery {
-                        message: DisplayOrDebugGateway::new(e).to_string(),
-                    },
-                    err_logging,
-                )
+                DelayedError::new(ErrorDetails::ClickHouseQuery {
+                    message: DisplayOrDebugGateway::new(e).to_string(),
+                })
             })?;
         let status = res.status();
 
@@ -258,21 +256,15 @@ impl ClickHouseClient for ProductionClickHouseClient {
             // NOTE: X-Clickhouse-Summary is a ClickHouse-specific header that contains information about the query execution.
             // It is not formally specified in the ClickHouse documentation so we only warn if it isn't working but won't error here.
             let summary_str = summary.to_str().map_err(|e| {
-                Error::new_with_err_logging(
-                    ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to parse x-clickhouse-summary header: {e}"),
-                    },
-                    err_logging,
-                )
+                DelayedError::new(ErrorDetails::ClickHouseQuery {
+                    message: format!("Failed to parse x-clickhouse-summary header: {e}"),
+                })
             })?;
 
             serde_json::from_str::<ClickHouseResponseMetadata>(summary_str).map_err(|e| {
-                Error::new_with_err_logging(
-                    ErrorDetails::ClickHouseQuery {
-                        message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
-                    },
-                    err_logging,
-                )
+                DelayedError::new(ErrorDetails::ClickHouseQuery {
+                    message: format!("Failed to deserialize x-clickhouse-summary: {e}"),
+                })
             })?
         } else {
             tracing::warn!("No x-clickhouse-summary header found in ClickHouse response");
@@ -283,12 +275,9 @@ impl ClickHouseClient for ProductionClickHouseClient {
         };
 
         let response_body = res.text().await.map_err(|e| {
-            Error::new_with_err_logging(
-                ErrorDetails::ClickHouseQuery {
-                    message: DisplayOrDebugGateway::new(e).to_string(),
-                },
-                err_logging,
-            )
+            DelayedError::new(ErrorDetails::ClickHouseQuery {
+                message: DisplayOrDebugGateway::new(e).to_string(),
+            })
         })?;
 
         match status {
@@ -296,12 +285,9 @@ impl ClickHouseClient for ProductionClickHouseClient {
                 response: response_body,
                 metadata,
             }),
-            _ => Err(Error::new_with_err_logging(
-                ErrorDetails::ClickHouseQuery {
-                    message: response_body,
-                },
-                err_logging,
-            )),
+            _ => Err(DelayedError::new(ErrorDetails::ClickHouseQuery {
+                message: response_body,
+            })),
         }
     }
 

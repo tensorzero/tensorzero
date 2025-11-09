@@ -54,9 +54,8 @@ fn default_append_to_existing_variants() -> bool {
     false
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct DiclOptimizationConfig {
     pub embedding_model: Arc<str>,
     pub variant_name: String,
@@ -73,9 +72,8 @@ pub struct DiclOptimizationConfig {
     pub credential_location: Option<CredentialLocationWithFallback>,
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "DICLOptimizationConfig"))]
 pub struct UninitializedDiclOptimizationConfig {
     pub embedding_model: String,
@@ -218,9 +216,8 @@ impl UninitializedDiclOptimizationConfig {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct DiclOptimizationJobHandle {
     pub embedding_model: String,
@@ -883,6 +880,7 @@ mod tests {
                     EmbeddingModelTable::new(
                         HashMap::from([(Arc::from(model_name), embedding_model_config)]),
                         ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                        chrono::Duration::seconds(120),
                     )
                     .unwrap(),
                 ),
@@ -899,7 +897,7 @@ mod tests {
     async fn test_process_embedding_batch_success() {
         let config = create_test_embedding_model_config();
 
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string(), "world".to_string()];
 
@@ -926,7 +924,7 @@ mod tests {
     async fn test_process_embedding_batch_with_dimensions() {
         let config = create_test_embedding_model_config();
 
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["hello".to_string()];
         let dimensions = Some(512);
@@ -952,7 +950,7 @@ mod tests {
     async fn test_process_embedding_batch_failure() {
         let config = create_test_embedding_model_with_failure_config();
 
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let credentials = InferenceCredentials::default();
         let batch_texts = vec!["test".to_string()];
 
@@ -974,7 +972,7 @@ mod tests {
     async fn test_process_embeddings_with_batching_success() {
         let config = create_test_embedding_model_config();
 
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec![
             "text1".to_string(),
@@ -1007,7 +1005,7 @@ mod tests {
     async fn test_process_embeddings_with_batching_respects_concurrency() {
         let config = create_test_embedding_model_config();
 
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let credentials = InferenceCredentials::default();
         let input_texts = vec!["1".to_string(), "2".to_string(), "3".to_string()];
 
@@ -1076,7 +1074,7 @@ mod tests {
             additional_tools: Some(tools),
             tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: Some(true),
-            provider_tools: None,
+            provider_tools: vec![],
         };
         sample
     }
@@ -1100,7 +1098,7 @@ mod tests {
             additional_tools: None,
             tool_choice: Some(ToolChoice::None),
             parallel_tool_calls: Some(false),
-            provider_tools: None,
+            provider_tools: vec![],
         };
 
         sample
@@ -1125,7 +1123,7 @@ mod tests {
             additional_tools: None,
             tool_choice: Some(ToolChoice::None),
             parallel_tool_calls: Some(false),
-            provider_tools: None,
+            provider_tools: vec![],
         };
 
         sample

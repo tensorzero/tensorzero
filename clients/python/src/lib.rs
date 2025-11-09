@@ -64,8 +64,8 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
     ClientSideFunctionTool, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, LaunchOptimizationParams, ListInferencesParams,
-    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
+    InferenceParams, InferenceStream, LaunchOptimizationParams, ListDatapointsRequest,
+    ListInferencesParams, OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
     WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
@@ -526,7 +526,7 @@ impl BaseTensorZeroGateway {
                 parallel_tool_calls,
                 additional_tools,
                 tool_choice,
-                provider_tools,
+                provider_tools: provider_tools.unwrap_or_default(),
             },
             input,
             credentials: credentials.unwrap_or_default(),
@@ -940,8 +940,10 @@ impl TensorZeroGateway {
             .iter()
             .map(|dp| deserialize_from_pyobj(this.py(), dp))
             .collect::<Result<Vec<_>, _>>()?;
-        let params = InsertDatapointParams { datapoints };
-        let fut = client.create_datapoints(dataset_name, params);
+
+        #[expect(deprecated)]
+        let fut =
+            client.create_datapoints_legacy(dataset_name, InsertDatapointParams { datapoints });
         let self_module = PyModule::import(this.py(), "uuid")?;
         let uuid = self_module.getattr("UUID")?.unbind();
         let res =
@@ -973,6 +975,7 @@ impl TensorZeroGateway {
             .map(|dp| deserialize_from_pyobj(this.py(), dp))
             .collect::<Result<Vec<_>, _>>()?;
         let params = InsertDatapointParams { datapoints };
+        #[expect(deprecated)]
         let fut = client.bulk_insert_datapoints(dataset_name, params);
         let self_module = PyModule::import(this.py(), "uuid")?;
         let uuid = self_module.getattr("UUID")?.unbind();
@@ -998,6 +1001,7 @@ impl TensorZeroGateway {
     ) -> PyResult<()> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
+        #[expect(deprecated)]
         let fut = client.delete_datapoint(dataset_name, datapoint_id);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
@@ -1015,6 +1019,7 @@ impl TensorZeroGateway {
     ) -> PyResult<Bound<'py, Datapoint>> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
+        #[expect(deprecated)]
         let fut = client.get_datapoint(dataset_name, datapoint_id);
         let wire: Datapoint =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
@@ -1034,11 +1039,18 @@ impl TensorZeroGateway {
         offset: Option<u32>,
     ) -> PyResult<Bound<'_, PyList>> {
         let client = this.as_super().client.clone();
-        let fut = client.list_datapoints(dataset_name, function_name, limit, offset);
+        let request = ListDatapointsRequest {
+            function_name,
+            limit,
+            offset,
+            ..Default::default()
+        };
+        let fut = client.list_datapoints(dataset_name, request);
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
             Ok(datapoints) => {
                 let py_datapoints = datapoints
+                    .datapoints
                     .into_iter()
                     .map(|x| x.into_pyobject(this.py()))
                     .collect::<Result<Vec<_>, _>>()?;
@@ -1774,7 +1786,8 @@ impl AsyncTensorZeroGateway {
         let self_module = PyModule::import(this.py(), "uuid")?;
         let uuid = self_module.getattr("UUID")?.unbind();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.create_datapoints(dataset_name, params).await;
+            #[expect(deprecated)]
+            let res = client.create_datapoints_legacy(dataset_name, params).await;
             Python::attach(|py| match res {
                 Ok(uuids) => Ok(PyList::new(
                     py,
@@ -1812,6 +1825,7 @@ impl AsyncTensorZeroGateway {
         let self_module = PyModule::import(this.py(), "uuid")?;
         let uuid = self_module.getattr("UUID")?.unbind();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            #[expect(deprecated)]
             let res = client.bulk_insert_datapoints(dataset_name, params).await;
             Python::attach(|py| match res {
                 Ok(uuids) => Ok(PyList::new(
@@ -1841,6 +1855,7 @@ impl AsyncTensorZeroGateway {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            #[expect(deprecated)]
             let res = client.delete_datapoint(dataset_name, datapoint_id).await;
             Python::attach(|py| match res {
                 Ok(()) => Ok(()),
@@ -1863,6 +1878,7 @@ impl AsyncTensorZeroGateway {
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            #[expect(deprecated)]
             let res = client.get_datapoint(dataset_name, datapoint_id).await;
             Python::attach(|py| match res {
                 Ok(wire) => Ok(wire.into_py_any(py)?),
@@ -1885,11 +1901,15 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client
-                .list_datapoints(dataset_name, function_name, limit, offset)
-                .await;
+            let request = ListDatapointsRequest {
+                function_name,
+                limit,
+                offset,
+                ..Default::default()
+            };
+            let res = client.list_datapoints(dataset_name, request).await;
             Python::attach(|py| match res {
-                Ok(wire_datapoints) => Ok(PyList::new(py, wire_datapoints)?.unbind()),
+                Ok(response) => Ok(PyList::new(py, response.datapoints)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })

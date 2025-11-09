@@ -9,6 +9,7 @@ use crate::variant::{
     BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
     DiclConfigPyClass, MixtureOfNConfigPyClass, VariantConfig,
 };
+use chrono::Duration;
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::{PyKeyError, PyValueError};
 #[cfg(feature = "pyo3")]
@@ -39,9 +40,8 @@ use crate::tool::{
 };
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FunctionConfig {
     Chat(FunctionConfigChat),
@@ -245,9 +245,8 @@ impl VariantsConfigPyClass {
     }
 }
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub schemas: SchemaData,
@@ -273,9 +272,8 @@ pub struct FunctionConfigChat {
     pub all_explicit_templates_names: HashSet<String>,
 }
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub schemas: SchemaData,
@@ -448,7 +446,7 @@ impl FunctionConfig {
             additional_tools,
             tool_choice: Some(tool_choice),
             parallel_tool_calls,
-            provider_tools: Some(dynamic_provider_tools),
+            provider_tools: dynamic_provider_tools,
         }
     }
 
@@ -584,6 +582,7 @@ impl FunctionConfig {
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,
+        global_outbound_http_timeout: &Duration,
     ) -> Result<(), Error> {
         // Validate each variant
         for (variant_name, variant) in self.variants() {
@@ -603,6 +602,7 @@ impl FunctionConfig {
                     templates,
                     function_name,
                     variant_name,
+                    global_outbound_http_timeout,
                 )
                 .await?;
         }
@@ -2624,7 +2624,7 @@ mod tests {
                 None,
             );
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-            assert_eq!(result.provider_tools, Some(vec![]));
+            assert_eq!(result.provider_tools, vec![]);
         }
 
         #[test]

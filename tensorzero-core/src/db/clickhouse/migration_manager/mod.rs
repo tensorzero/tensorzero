@@ -395,17 +395,16 @@ pub async fn get_all_migration_records(
 ) -> Result<Vec<MigrationRecordDatabaseInsert>, DelayedError> {
     let mut rows = Vec::new();
     for row in clickhouse
-        .run_query_synchronous_with_err_logging(
+        .run_query_synchronous_delayed_err(
             "SELECT DISTINCT ON (migration_id) * FROM TensorZeroMigration ORDER BY migration_id ASC, applied_at DESC FORMAT JSONEachRow"
                 .to_string(),
-            &HashMap::new(),
-            false,
+            &HashMap::new()
         )
         .await
         .map_err(|e| {
             DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0000".to_string(),
-                message: format!("Failed to get migration records: {e}"),
+                message: format!("Failed to get migration records: {}", e.suppress_logging_of_error_message()),
             })
         })?
         .response

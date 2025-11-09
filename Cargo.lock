@@ -1799,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.11.1"
+version = "2025.11.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1900,7 +1900,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2025.11.1"
+version = "2025.11.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2149,7 +2149,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.11.1"
+version = "2025.11.2"
 dependencies = [
  "axum",
  "clap",
@@ -4516,7 +4516,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2025.11.1"
+version = "2025.11.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5017,9 +5017,9 @@ dependencies = [
 
 [[package]]
 name = "schemars"
-version = "1.0.4"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82d20c4491bc164fa2f6c5d44565947a52ad80b9505d8e36f8d54c27c739fcd0"
+checksum = "9558e172d4e8533736ba97870c4b2cd63f84b382a3d6eb063da41b91cce17289"
 dependencies = [
  "dyn-clone",
  "ref-cast",
@@ -5208,7 +5208,7 @@ dependencies = [
  "indexmap 1.9.3",
  "indexmap 2.12.0",
  "schemars 0.9.0",
- "schemars 1.0.4",
+ "schemars 1.1.0",
  "serde_core",
  "serde_json",
  "serde_with_macros",
@@ -5484,6 +5484,7 @@ dependencies = [
  "log",
  "memchr",
  "percent-encoding",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",
@@ -5494,6 +5495,7 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "url",
+ "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -6046,7 +6048,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2025.11.1"
+version = "2025.11.2"
 dependencies = [
  "chrono",
  "futures",
@@ -6062,7 +6064,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.11.1"
+version = "2025.11.2"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -6176,7 +6178,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.11.1"
+version = "2025.11.2"
 dependencies = [
  "evaluations",
  "napi",
@@ -6195,7 +6197,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.11.1"
+version = "2025.11.2"
 dependencies = [
  "evaluations",
  "futures",

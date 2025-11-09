@@ -77,7 +77,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .await
         .unwrap();
 
-    let client = TensorzeroHttpClient::new().unwrap();
+    let client = TensorzeroHttpClient::new_testing().unwrap();
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
@@ -454,7 +454,7 @@ fn generate_tool_call_example() -> RenderedSample {
             }]),
             tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
         },
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),

@@ -57,7 +57,7 @@ pub async fn update_datapoints_handler(
 /// and inserts the updated datapoints into ClickHouse.
 ///
 /// Returns an error if there are no datapoints, or if there are duplicate datapoint IDs.
-async fn update_datapoints(
+pub async fn update_datapoints(
     app_state: &AppStateData,
     dataset_name: &str,
     request: UpdateDatapointsRequest,
@@ -418,7 +418,7 @@ pub async fn update_datapoints_metadata_handler(
 /// Business logic for updating datapoint metadata in a dataset.
 /// This function only updates metadata fields (like name) without creating new datapoint IDs.
 /// Unlike update_datapoints, this does NOT stale the old datapoint or create a new ID.
-async fn update_datapoints_metadata(
+pub async fn update_datapoints_metadata(
     clickhouse_handler: &impl DatasetQueries,
     dataset_name: &str,
     request: UpdateDatapointsMetadataRequest,
@@ -588,7 +588,7 @@ mod tests {
 
             // Create fetch context with NO actual object storage info.
             // If the code tries to access object storage, it will fail with an error.
-            let http_client = TensorzeroHttpClient::new().unwrap();
+            let http_client = TensorzeroHttpClient::new_testing().unwrap();
             let object_store_info: Option<ObjectStoreInfo> = None;
             let fetch_context = FetchContext {
                 client: &http_client,
@@ -632,12 +632,15 @@ mod tests {
             // - File::ObjectStorage: future is discarded, no async operations, just metadata passthrough
             // - File::Base64: goes through async resolve() -> write_file() -> storage write (or no-op if disabled)
 
-            let file = File::Base64(Base64File {
-                source_url: None,
-                mime_type: mime::IMAGE_PNG,
-                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
-                detail: None,
-            });
+            let file = File::Base64(
+                Base64File::new(
+                    None,
+                    mime::IMAGE_PNG,
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
+                    None,
+                )
+                .expect("test data should be valid"),
+            );
 
             let input = Input {
                 system: None,
@@ -661,7 +664,7 @@ mod tests {
 
             // Create fetch context with disabled storage
             // File::Base64 will call write_file() but it no-ops with disabled storage
-            let http_client = TensorzeroHttpClient::new().unwrap();
+            let http_client = TensorzeroHttpClient::new_testing().unwrap();
             let object_store_info = Some(ObjectStoreInfo {
                 object_store: None, // Disabled storage - write_file() returns Ok(()) without writing
                 kind: StorageKind::Disabled,
@@ -1161,7 +1164,7 @@ mod tests {
                 additional_tools: None,
                 tool_choice: Some(ToolChoice::None),
                 parallel_tool_calls: Some(false),
-                provider_tools: None,
+                provider_tools: vec![],
             };
 
             let update = UpdateChatDatapointRequest {
@@ -1389,7 +1392,7 @@ mod tests {
                 additional_tools: None,
                 tool_choice: Some(ToolChoice::None),
                 parallel_tool_calls: Some(false),
-                provider_tools: None,
+                provider_tools: vec![],
             };
 
             let update = UpdateChatDatapointRequest {

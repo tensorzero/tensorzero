@@ -177,11 +177,11 @@ async fn test_inference_full_tool_params_round_trip() {
     );
     assert_eq!(retrieved_tool_params.parallel_tool_calls, Some(false));
 
-    // IMPORTANT: provider_tools is LOSSY - should always be None after round-trip
+    // IMPORTANT: provider_tools is LOSSY - should always be empty after round-trip
     // Will fix this in a follow up with databae migrations.
     assert!(
-        retrieved_tool_params.provider_tools.is_none(),
-        "provider_tools should be None after database round-trip (lossy conversion)"
+        retrieved_tool_params.provider_tools.is_empty(),
+        "provider_tools should be empty after database round-trip (lossy conversion)"
     );
 }
 
@@ -470,13 +470,9 @@ async fn test_provider_tools_not_persisted() {
         panic!("Expected Chat inference");
     };
 
-    // VERIFY: provider_tools should be None after round-trip
+    // VERIFY: provider_tools should be present after round-trip
     println!("{:?}", stored_inference.tool_params.provider_tools);
-    let stored_provider_tools = stored_inference
-        .tool_params
-        .provider_tools
-        .as_ref()
-        .unwrap();
+    let stored_provider_tools = &stored_inference.tool_params.provider_tools;
     assert_eq!(stored_provider_tools.len(), 1);
     let first_tool = stored_provider_tools.first().unwrap();
     assert_eq!(first_tool.scope, ProviderToolScope::Unscoped);
