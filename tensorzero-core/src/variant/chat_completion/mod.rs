@@ -42,9 +42,8 @@ use super::{
 /// If we don't have a schema, then we create a single variable corresponding to the template
 /// kind (e.g. `SYSTEM_TEXT_TEMPLATE_VAR` for a system template), and set this variable the
 /// string contents of the input block.
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TemplateWithSchema {
     pub template: PathWithContents,
     pub schema: Option<StaticJSONSchema>,
@@ -57,9 +56,8 @@ pub struct TemplateWithSchema {
     pub legacy_definition: bool,
 }
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ChatCompletionConfig {
     weight: Option<f64>,
     model: Arc<str>,

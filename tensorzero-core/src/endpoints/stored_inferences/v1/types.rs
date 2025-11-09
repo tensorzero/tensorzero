@@ -5,27 +5,24 @@ use uuid::Uuid;
 use crate::db::inferences::InferenceOutputSource;
 use crate::stored_inference::StoredInference;
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FloatMetricFilter {
     pub metric_name: String,
     pub value: f64,
     pub comparison_operator: FloatComparisonOperator,
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct BooleanMetricFilter {
     pub metric_name: String,
     pub value: bool,
 }
 
 /// Filter by tag key-value pair.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TagFilter {
     pub key: String,
     pub value: String,
@@ -33,19 +30,17 @@ pub struct TagFilter {
 }
 
 /// Filter by timestamp.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TimeFilter {
-    #[cfg_attr(test, ts(type = "Date"))]
+    #[ts(type = "Date")]
     pub time: DateTime<Utc>,
     pub comparison_operator: TimeComparisonOperator,
 }
 
 /// Comparison operators for float metrics.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub enum FloatComparisonOperator {
     #[serde(rename = "<")]
     LessThan,
@@ -62,9 +57,8 @@ pub enum FloatComparisonOperator {
 }
 
 /// Comparison operators for timestamps.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub enum TimeComparisonOperator {
     #[serde(rename = "<")]
     LessThan,
@@ -81,9 +75,8 @@ pub enum TimeComparisonOperator {
 }
 
 /// Comparison operators for tag filters.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub enum TagComparisonOperator {
     #[serde(rename = "=")]
     Equal,
@@ -92,9 +85,8 @@ pub enum TagComparisonOperator {
 }
 
 /// The ordering direction.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
 pub enum OrderDirection {
     #[serde(rename = "ascending")]
     Asc,
@@ -104,9 +96,8 @@ pub enum OrderDirection {
 
 /// The property to order by.
 /// This is flattened in the public API inside the `OrderBy` struct.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "by", rename_all = "snake_case")]
 pub enum OrderByTerm {
     Timestamp,
@@ -117,9 +108,8 @@ pub enum OrderByTerm {
 }
 
 /// Order by clauses for querying inferences.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
 pub struct OrderBy {
     /// The property to order by.
     #[serde(flatten)]
@@ -130,9 +120,8 @@ pub struct OrderBy {
 }
 
 /// Filters for querying inferences.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InferenceFilter {
     /// Filter by the value of a float metric
@@ -159,9 +148,8 @@ pub enum InferenceFilter {
 
 /// Request to list inferences with pagination and filters.
 /// Used by the `POST /v1/inferences/list_inferences` endpoint.
-#[derive(Debug, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[derive(Debug, Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 pub struct ListInferencesRequest {
     /// Optional function name to filter inferences by.
     /// If provided, only inferences from this function will be returned.
@@ -198,9 +186,8 @@ pub struct ListInferencesRequest {
 
 /// Request to get specific inferences by their IDs.
 /// Used by the `POST /v1/inferences/get_inferences` endpoint.
-#[derive(Debug, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GetInferencesRequest {
     /// The IDs of the inferences to retrieve. Required.
     pub ids: Vec<Uuid>,
@@ -212,9 +199,8 @@ pub struct GetInferencesRequest {
 }
 
 /// Response containing the requested inferences.
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GetInferencesResponse {
     /// The retrieved inferences.
     pub inferences: Vec<StoredInference>,

@@ -78,9 +78,8 @@ pub fn skip_credential_validation() -> bool {
     SKIP_CREDENTIAL_VALIDATION.try_with(|()| ()).is_ok()
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 // Note - the `Default` impl only exists for convenience in tests
 // It might produce a completely broken config - if a test fails,
 // use one of the public `Config` constructors instead.
@@ -162,8 +161,8 @@ impl TimeoutsConfig {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct TemplateFilesystemAccess {
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for `{% include %}`
     /// Defaults to `false`
@@ -172,9 +171,8 @@ pub struct TemplateFilesystemAccess {
     base_path: Option<ResolvedTomlPath>,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ObjectStoreInfo {
     // This will be `None` if we have `StorageKind::Disabled`
     #[serde(skip)]
@@ -321,8 +319,8 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
@@ -343,8 +341,8 @@ fn default_max_rows() -> usize {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct BatchWritesConfig {
     pub enabled: bool,
     // An internal flag to allow us to test batch writes in embedded gateway mode.
@@ -370,8 +368,8 @@ impl Default for BatchWritesConfig {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ExportConfig {
     #[serde(default)]
     pub otlp: OtlpConfig,
@@ -379,8 +377,8 @@ pub struct ExportConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct OtlpConfig {
     #[serde(default)]
     pub traces: OtlpTracesConfig,
@@ -429,8 +427,8 @@ impl OtlpConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct OtlpTracesConfig {
     /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
     #[serde(default)]
@@ -444,7 +442,7 @@ pub struct OtlpTracesConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "lowercase")]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[cfg_attr(test, ts(export, rename_all = "lowercase"))]
 pub enum OtlpTracesFormat {
     /// Sets 'gen_ai' attributes based on the OpenTelemetry GenAI semantic conventions:
@@ -458,8 +456,8 @@ pub enum OtlpTracesFormat {
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct MetricConfig {
     pub r#type: MetricConfigType,
     pub optimize: MetricConfigOptimize,
@@ -469,8 +467,8 @@ pub struct MetricConfig {
 #[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum MetricConfigType {
     Boolean,
     Float,
@@ -497,8 +495,8 @@ pub enum MetricConfigOptimize {
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum MetricConfigLevel {
     Inference,
     Episode,
@@ -1387,9 +1385,8 @@ pub struct UninitializedFunctionConfigJson {
 
 /// Holds all of the schemas used by a chat completion function.
 /// These are used by variants to construct a `TemplateWithSchema`
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SchemaData {
     #[serde(flatten)]
     pub inner: HashMap<String, SchemaWithMetadata>,
@@ -1730,9 +1727,8 @@ impl UninitializedToolConfig {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct PathWithContents {
     #[cfg_attr(test, ts(type = "string"))]
     pub path: ResolvedTomlPath,
@@ -1748,8 +1744,8 @@ impl PathWithContents {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct PostgresConfig {
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,

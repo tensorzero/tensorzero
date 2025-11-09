@@ -28,9 +28,8 @@ const PROVIDER_NAME: &str = "AWS Sagemaker";
 const PROVIDER_TYPE: &str = "aws_sagemaker";
 
 // NB: If you add `Clone` someday, you'll need to wrap client in Arc
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct AWSSagemakerProvider {
     endpoint_name: String,
     #[serde(skip)]

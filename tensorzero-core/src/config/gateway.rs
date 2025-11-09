@@ -10,9 +10,8 @@ use crate::{
 
 use super::ObjectStoreInfo;
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct GatewayAuthCacheConfig {
     #[serde(default = "default_gateway_auth_cache_enabled")]
@@ -38,9 +37,8 @@ fn default_gateway_auth_cache_ttl_ms() -> u64 {
     1000
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct AuthConfig {
     pub enabled: bool,
@@ -117,9 +115,8 @@ impl UninitializedGatewayConfig {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GatewayConfig {
     pub bind_address: Option<std::net::SocketAddr>,
     pub observability: ObservabilityConfig,

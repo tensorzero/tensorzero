@@ -53,9 +53,8 @@ pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration
 /// that is applicable to any variant type.
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct VariantInfo {
     pub inner: VariantConfig,
     pub timeouts: TimeoutsConfig,
@@ -67,9 +66,8 @@ impl VariantInfo {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VariantConfig {
     ChatCompletion(chat_completion::ChatCompletionConfig),

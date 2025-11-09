@@ -4,6 +4,8 @@ version = "0.1.0"
 rust-version.workspace = true
 edition = "2021"
 license.workspace = true
+description = "Macros for TensorZero"
+
 
 [lib]
 proc-macro = true

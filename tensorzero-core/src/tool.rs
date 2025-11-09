@@ -209,8 +209,8 @@ impl std::fmt::Display for ProviderTool {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ToolConfig {
     Static(Arc<StaticToolConfig>),
@@ -220,8 +220,8 @@ pub enum ToolConfig {
 }
 
 /// Contains the configuration information for a specific tool
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Debug, PartialEq, Serialize)]
 pub struct StaticToolConfig {
     pub description: String,
@@ -231,8 +231,8 @@ pub struct StaticToolConfig {
 }
 
 /// Contains the configuration information for a tool defined at runtime
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct DynamicToolConfig {
     pub description: String,
@@ -243,8 +243,8 @@ pub struct DynamicToolConfig {
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImplicitToolConfig {
     pub parameters: StaticJSONSchema,
@@ -252,8 +252,8 @@ pub struct ImplicitToolConfig {
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement for a JSON schema that is dynamically passed at inference time
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DynamicImplicitToolConfig {
     pub parameters: DynamicJSONSchema,
@@ -263,7 +263,7 @@ pub struct DynamicImplicitToolConfig {
 /// Also lists how they were set (default, dynamically set)
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 pub struct AllowedTools {
     pub tools: Vec<String>,
     pub choice: AllowedToolsChoice,
@@ -279,7 +279,7 @@ impl AllowedTools {
 }
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, ts_rs::TS)]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum AllowedToolsChoice {
     // If `allowed_tools` is not explicitly passed, we set the function tools
@@ -294,9 +294,8 @@ pub enum AllowedToolsChoice {
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ToolCallConfig {
     pub(crate) static_tools_available: Vec<ToolConfig>,
     pub(crate) dynamic_tools_available: Vec<ToolConfig>,
