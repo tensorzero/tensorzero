@@ -42,7 +42,7 @@ pub async fn create_from_inferences_handler(
 /// This happens in 2 steps:
 /// 1. We query inferences table based on the request parameters (which uses list_inferences)
 /// 2. We convert the inferences into datapoint_inserts, and inserts them together in up to 2 queries (one for Chat, one for Json).
-async fn create_from_inferences(
+pub async fn create_from_inferences(
     config: &Config,
     clickhouse: &(impl InferenceQueries + DatasetQueries),
     dataset_name: String,
