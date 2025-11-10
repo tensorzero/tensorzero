@@ -1,13 +1,41 @@
 #!/usr/bin/env python3
 """
-Generate Python dataclasses from Rust JSON schemas.
+Generate Python dataclasses from JSON schemas derived from Rust types.
 
-This script:
+
+For pure value types (mostly used in APIs), we use `schemars` to generate the JSON schemas from Rust types,
+and `datamodel-code-generator` to generate the Python dataclasses from the JSON schemas.
+
+Rust Types (with annotations)
+    ↓ (cargo test export_schema)
+JSON Schemas (in clients/schemas/)
+    ↓ (python generate_schema_types.py)
+Python Dataclasses (in clients/python/tensorzero/generated_types)
+
+
+This script runs both steps of the generation pipeline:
+
 1. Runs cargo tests to generate JSON schemas from Rust types (using #[export_schema])
+    - See `tensorzero-derive` crate for more details on the macro, and https://graham.cool/schemars/ for schemars docs.
 2. Generates Python dataclasses from those JSON schemas
+    - For detailed configuration options, see https://koxudaxi.github.io/datamodel-code-generator/.
 
-Run this script from the clients/python directory:
-    python generate_schema_types.py
+It also sets up customizations to make them work well together:
+
+1.  `schemars` generates one JSON Schema file for each Rust type, bringing in all its dependencies. Naively
+    generating Python dataclasses from these JSON Schemas would cause dependencies to be repeatedly generated, so
+    we merge them into a single schema file before generating Python dataclasses.
+2.  When merging the schema files, some references are recursive
+    (e.g. `InferenceFilter`) that point to the root schema of these
+    types, so we need to rewrite the `$ref`s to point to the schema definition itself instead of the root schema (which becomes
+    `Any` after python dataclass generation).
+3.  To generate the __init__.py file so clients can simply write `from tensorzero.generated_types import X`, we
+    collect all the type names from the schema and export them.
+4.  We generate a custom header file for the generated types to include the `UNSET` sentinel value.
+
+
+
+To run this script: run `pnpm generate-python-schemas` from the root of the repository.
 """
 
 import json
@@ -32,6 +60,35 @@ def find_schema_files(schema_dir: Path) -> List[Path]:
     return schema_files
 
 
+def rewrite_refs_recursive(obj: Any, schema_name: str) -> Any:
+    """
+    Recursively rewrite $ref pointers in a schema object.
+
+    Rewrites "$ref": "#" to "$ref": "#/$defs/{schema_name}" for recursive references.
+
+    Args:
+        obj: The schema object to process (dict, list, or primitive)
+        schema_name: The name of the schema (used for rewriting root references)
+
+    Returns:
+        The schema object with rewritten references
+    """
+    if isinstance(obj, dict):
+        result = {}
+        for key, value in obj.items():  # pyright: ignore[reportUnknownVariableType]
+            if key == "$ref" and value == "#":
+                # Rewrite root reference to point to the schema definition
+                result[key] = f"#/$defs/{schema_name}"
+            else:
+                # Recursively process nested objects
+                result[key] = rewrite_refs_recursive(value, schema_name)
+        return result  # pyright: ignore[reportUnknownVariableType]
+    elif isinstance(obj, list):
+        return [rewrite_refs_recursive(item, schema_name) for item in obj]  # pyright: ignore[reportUnknownVariableType]
+    else:
+        return obj
+
+
 def preprocess_and_merge_schemas(schema_files: List[Path], output_file: Path) -> None:
     """
     Preprocess and merge all JSON schemas into a single schema file.
@@ -53,17 +110,20 @@ def preprocess_and_merge_schemas(schema_files: List[Path], output_file: Path) ->
         with open(schema_file, "r") as f:
             schema = json.load(f)
 
-        # Collect $defs
+        schema_name = schema_file.stem
+
+        # Collect $defs (with refs rewritten)
         if "$defs" in schema:
             for def_name, def_schema in schema["$defs"].items():
                 # Only add if not already present (first one wins)
                 if def_name not in all_defs:
-                    all_defs[def_name] = def_schema
+                    # Rewrite any "#" refs in the def to point to the root schema
+                    all_defs[def_name] = rewrite_refs_recursive(def_schema, schema_name)
 
         # Store the root schema (without $defs) with the file name as key
-        schema_name = schema_file.stem
+        # and rewrite any "#" refs to point to the schema definition
         root_schema: Dict[str, Any] = {k: v for k, v in schema.items() if k != "$defs"}
-        root_schemas[schema_name] = root_schema
+        root_schemas[schema_name] = rewrite_refs_recursive(root_schema, schema_name)
 
     # Create merged schema with all definitions in $defs
     # and all root schemas in a oneOf with discriminator
@@ -408,7 +468,7 @@ def main() -> None:
     print("Generated types can be imported with:")
     print("    from tensorzero.generated_types import Input, DynamicToolParams, ...")
     print()
-    print("See tensorzero/generated_exports.py for the complete list of exports.")
+    print("See tensorzero/generated_types/__init__.py for the complete list of exports.")
 
 
 if __name__ == "__main__":
