@@ -1,14 +1,15 @@
 #![cfg(feature = "e2e_tests")]
 #![expect(clippy::unwrap_used, clippy::missing_panics_doc)]
+
+use reqwest::Url;
 use serde_json::json;
 use tensorzero::{
     input_handling::resolved_input_to_client_input, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, ClientInput, ClientInputMessageContent, File, System,
 };
-use tensorzero_core::inference::types::Arguments;
+use tensorzero_core::inference::types::{Arguments, StoredInput};
 
-use reqwest::Url;
-use tensorzero_core::inference::types::StoredInput;
+mod test_datasets;
 
 lazy_static::lazy_static! {
     static ref GATEWAY_URL: String = std::env::var("TENSORZERO_GATEWAY_URL").unwrap_or_else(|_|"http://localhost:3000".to_string());

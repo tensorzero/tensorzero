@@ -41,6 +41,7 @@ use crate::inference::InferenceProvider;
 use crate::model::CredentialLocationWithFallback;
 use crate::model::{fully_qualified_name, ModelProvider};
 use crate::model_table::{GCPVertexAnthropicKind, ProviderType, ProviderTypeDefaultCredentials};
+use crate::providers::anthropic::handle_anthropic_error;
 use crate::providers::gcp_vertex_gemini::location_subdomain_prefix;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -270,17 +271,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 
             Ok(response_with_latency.try_into()?)
         } else {
-            let error_body: GCPVertexAnthropicError =
-                serde_json::from_str(&raw_response).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing JSON response: {e}: {raw_response}"),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: Some(raw_request.clone()),
-                        raw_response: Some(raw_response.clone()),
-                    })
-                })?;
-
-            handle_anthropic_error(response_status, error_body.error)
+            handle_anthropic_error(response_status, raw_request, raw_response)
         }
     }
 
@@ -924,18 +915,6 @@ fn prefill_json_message(messages: &mut Vec<GCPVertexAnthropicMessage>) {
     });
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct GCPVertexAnthropicError {
-    error: GCPVertexAnthropicErrorBody,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct GCPVertexAnthropicErrorBody {
-    r#type: Option<String>,
-    code: Option<u32>,
-    message: String,
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GCPVertexAnthropicContentBlock {
@@ -1090,34 +1069,6 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
                 finish_reason: response.stop_reason.map(AnthropicStopReason::into),
             },
         ))
-    }
-}
-
-fn handle_anthropic_error(
-    response_code: StatusCode,
-    response_body: GCPVertexAnthropicErrorBody,
-) -> Result<ProviderInferenceResponse, Error> {
-    match response_code {
-        StatusCode::UNAUTHORIZED
-        | StatusCode::BAD_REQUEST
-        | StatusCode::PAYLOAD_TOO_LARGE
-        | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::InferenceClient {
-            raw_response: Some(serde_json::to_string(&response_body).unwrap_or_default()),
-            message: response_body.message,
-            status_code: Some(response_code),
-            provider_type: PROVIDER_TYPE.to_string(),
-            raw_request: None,
-        }
-        .into()),
-        // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
-        // These are all captured in _ since they have the same error behavior
-        _ => Err(ErrorDetails::InferenceServer {
-            raw_response: Some(serde_json::to_string(&response_body).unwrap_or_default()),
-            message: response_body.message,
-            provider_type: PROVIDER_TYPE.to_string(),
-            raw_request: None,
-        }
-        .into()),
     }
 }
 
@@ -2232,94 +2183,6 @@ mod tests {
             ],
         }];
         assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
-    }
-
-    #[test]
-    fn test_handle_anthropic_error() {
-        let error_body = GCPVertexAnthropicErrorBody {
-            r#type: None,
-            code: None,
-            message: "test_message".to_string(),
-        };
-        let response_code = StatusCode::BAD_REQUEST;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
-                status_code: Some(response_code),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-            }
-        );
-        let response_code = StatusCode::UNAUTHORIZED;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
-                status_code: Some(response_code),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-            }
-        );
-        let response_code = StatusCode::TOO_MANY_REQUESTS;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
-                status_code: Some(response_code),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-            }
-        );
-        let response_code = StatusCode::NOT_FOUND;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceServer {
-                message: "test_message".to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-                provider_type: PROVIDER_TYPE.to_string()
-            }
-        );
-        let response_code = StatusCode::INTERNAL_SERVER_ERROR;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceServer {
-                message: "test_message".to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-                provider_type: PROVIDER_TYPE.to_string()
-            }
-        );
     }
 
     #[test]
