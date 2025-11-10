@@ -6087,6 +6087,7 @@ dependencies = [
  "clarabel",
  "derive_builder 0.20.2",
  "enum-map",
+ "evaluations",
  "eventsource-stream",
  "futures",
  "futures-core",
