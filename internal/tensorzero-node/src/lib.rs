@@ -188,6 +188,7 @@ pub async fn run_evaluation_streaming(
         variant_name: params.variant_name.clone(),
         evaluation_name: params.evaluation_name.clone(),
         evaluation_run_id,
+        dynamic_variant_config: None,
         inference_cache: cache_mode,
         concurrency,
     };

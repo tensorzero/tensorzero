@@ -17,7 +17,7 @@ use tensorzero_core::client::{
     InferenceResponse,
 };
 use tensorzero_core::client::{ClientInput, StoragePath};
-use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
+use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo};
 use tensorzero_core::error::Error;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::inference::types::stored_input::StoragePathResolver;
@@ -113,6 +113,11 @@ pub struct EvaluationCoreArgs {
 
     /// Name of the variant to run.
     pub variant_name: String,
+
+    /// Optional dynamic variant configuration.
+    /// If provided, this variant config will be used instead of looking up variant_name in the config.
+    /// This allows evaluating variants that aren't registered in the config (e.g., during optimization).
+    pub dynamic_variant_config: Option<UninitializedVariantInfo>,
 
     /// Number of concurrent requests to make.
     pub concurrency: usize,
@@ -218,6 +223,7 @@ pub async fn run_evaluation(
         variant_name: args.variant_name,
         evaluation_name: args.evaluation_name,
         evaluation_run_id,
+        dynamic_variant_config: None,
         inference_cache: args.inference_cache,
         concurrency: args.concurrency,
     };
@@ -402,6 +408,7 @@ pub async fn run_evaluation_core_streaming(
     for datapoint in dataset {
         let clients_clone = clients.clone();
         let variant_name = variant_name.clone();
+        let dynamic_variant_config = args.dynamic_variant_config.clone();
         let function_config = function_config.clone();
         let evaluation_config = evaluation_config.clone();
         let dataset_name = dataset_name.clone();
@@ -418,6 +425,7 @@ pub async fn run_evaluation_core_streaming(
                     clients: &clients_clone,
                     function_name: &function_name,
                     variant_name: &variant_name,
+                    dynamic_variant_config: &dynamic_variant_config,
                     evaluation_run_id: evaluation_run_id_clone,
                     dataset_name: &dataset_name,
                     datapoint: &datapoint,
@@ -543,6 +551,7 @@ struct InferDatapointParams<'a> {
     clients: &'a Clients,
     function_name: &'a str,
     variant_name: &'a str,
+    dynamic_variant_config: &'a Option<UninitializedVariantInfo>,
     evaluation_run_id: Uuid,
     dataset_name: &'a str,
     datapoint: &'a StoredDatapoint,
@@ -558,6 +567,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         clients,
         function_name,
         variant_name,
+        dynamic_variant_config,
         evaluation_run_id,
         dataset_name,
         datapoint,
@@ -633,7 +643,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         internal: true,
         extra_body: Default::default(),
         extra_headers: Default::default(),
-        internal_dynamic_variant_config: None,
+        internal_dynamic_variant_config: dynamic_variant_config.clone(),
         otlp_traces_extra_headers: HashMap::new(),
     };
     debug!("Making inference request");
