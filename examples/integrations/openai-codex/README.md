@@ -30,7 +30,7 @@ Why?
 ### Prerequisites
 
 1. Install Docker.
-2. Install Node 22+.
+2. Install Node 24.11.0.
 3. Generate credentials for the providers you want to use (e.g. `ANTHROPIC_API_KEY`).
 
 ### Setup
