@@ -5,6 +5,8 @@ use crate::http::TensorzeroHttpClient;
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::{
     config::Config,
+    db::clickhouse::ClickHouseConnectionInfo,
+    db::postgres::PostgresConnectionInfo,
     error::{Error, ErrorDetails},
     utils::gateway::{setup_clickhouse, setup_postgres, GatewayHandle},
 };
@@ -204,6 +206,22 @@ pub enum ClientBuilderMode {
         // there.
         allow_batch_writes: bool,
     },
+    /// Construct a client from already-initialized components.
+    /// Used when the gateway infrastructure is already set up (e.g., in optimizers).
+    /// This avoids re-parsing config files or re-initializing database connections.
+    FromComponents {
+        /// Pre-parsed TensorZero configuration
+        config: Arc<Config>,
+        /// Already-initialized ClickHouse connection
+        clickhouse_connection_info: ClickHouseConnectionInfo,
+        /// Already-initialized Postgres connection
+        postgres_connection_info: PostgresConnectionInfo,
+        /// Pre-configured HTTP client for model inference
+        http_client: TensorzeroHttpClient,
+        /// A timeout for all TensorZero gateway processing.
+        /// If this timeout is hit, any in-progress LLM requests may be aborted.
+        timeout: Option<Duration>,
+    },
 }
 
 /// A `ClientBuilder` is used to construct a `Client`.
@@ -365,6 +383,49 @@ impl ClientBuilder {
                                 clickhouse_connection_info,
                                 postgres_connection_info,
                                 http_client,
+                            )
+                            .await
+                            .map_err(|e| {
+                                ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
+                                    source: e.into(),
+                                })
+                            })?,
+                        },
+                        timeout: *timeout,
+                    }),
+                    verbose_errors: self.verbose_errors,
+                    #[cfg(feature = "e2e_tests")]
+                    last_body: Default::default(),
+                })
+            }
+            ClientBuilderMode::FromComponents {
+                config,
+                clickhouse_connection_info,
+                postgres_connection_info,
+                http_client,
+                timeout,
+            } => {
+                // Validation: Auth is not supported in embedded mode
+                if config.gateway.auth.enabled {
+                    return Err(ClientBuilderError::AuthNotSupportedInEmbeddedMode(
+                        TensorZeroError::Other {
+                            source: crate::error::Error::new(ErrorDetails::Config {
+                                message: "`[gateway.auth]` is not supported in embedded gateway mode. Authentication is only available when using HTTP gateway mode.".to_string(),
+                            })
+                            .into(),
+                        },
+                    ));
+                }
+
+                // Construct Client directly from provided components
+                Ok(Client {
+                    mode: Arc::new(ClientMode::EmbeddedGateway {
+                        gateway: EmbeddedGateway {
+                            handle: GatewayHandle::new_with_database_and_http_client(
+                                config.clone(),
+                                clickhouse_connection_info.clone(),
+                                postgres_connection_info.clone(),
+                                http_client.clone(),
                             )
                             .await
                             .map_err(|e| {
@@ -1015,6 +1076,56 @@ mod tests {
         .build()
         .await
         .expect_err("ClientBuilder should have failed");
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("`[gateway.auth]` is not supported in embedded gateway"),
+            "Bad error message: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_from_components_rejects_auth() {
+        // Create a config that enables auth, which is not supported in embedded mode
+        let config_str = r"
+        [gateway.auth]
+        enabled = true
+        ";
+        let tmp_config = NamedTempFile::new().unwrap();
+        std::fs::write(tmp_config.path(), config_str).unwrap();
+
+        // Load config
+        let config = Arc::new(
+            Config::load_from_path_optional_verify_credentials(
+                &ConfigFileGlob::new(tmp_config.path().to_string_lossy().to_string()).unwrap(),
+                false,
+            )
+            .await
+            .unwrap(),
+        );
+
+        // Create mock components
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let postgres_connection_info = PostgresConnectionInfo::Disabled;
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+
+        // Attempt to build client with FromComponents mode
+        let err = ClientBuilder::new(ClientBuilderMode::FromComponents {
+            config,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            http_client,
+            timeout: None,
+        })
+        .build()
+        .await
+        .expect_err("ClientBuilder should have failed");
+
+        // Verify it returns the correct error
+        assert!(
+            matches!(err, ClientBuilderError::AuthNotSupportedInEmbeddedMode(_)),
+            "Expected AuthNotSupportedInEmbeddedMode error, got: {err:?}"
+        );
+
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("`[gateway.auth]` is not supported in embedded gateway"),
