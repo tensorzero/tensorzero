@@ -20,8 +20,7 @@ export const logger = {
   error: (message: unknown, ...args: unknown[]) => {
     console.error(getErrorMessage(message), ...args);
   },
-  warn: (messageString: unknown, ...args: unknown[]) => {
-    const message = getErrorMessage(messageString);
+  warn: (message: unknown, ...args: unknown[]) => {
     console.warn(getErrorMessage(message), ...args);
   },
   debug: (message: unknown, ...args: unknown[]) => {
