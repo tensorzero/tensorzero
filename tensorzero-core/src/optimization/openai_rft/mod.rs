@@ -12,6 +12,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tokio::try_join;
 use url::Url;
 
@@ -263,7 +264,7 @@ impl Optimizer for OpenAIRFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: &Config,
+        _config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()
