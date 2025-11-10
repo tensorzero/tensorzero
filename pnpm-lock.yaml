@@ -312,10 +312,10 @@ importers:
         specifier: ^19.1.6
         version: 19.1.6(@types/react@19.1.8)
       '@vitest/browser':
-        specifier: 4.0.8
+        specifier: ^4.0.8
         version: 4.0.8(vite@7.1.11(@types/node@22.16.0)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.3))(vitest@4.0.8(@types/debug@4.1.12)(@types/node@22.16.0)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.3))
       '@vitest/coverage-v8':
-        specifier: 4.0.8
+        specifier: ^4.0.8
         version: 4.0.8(@vitest/browser@4.0.8(vite@7.1.11(@types/node@22.16.0)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.3))(vitest@4.0.8(@types/debug@4.1.12)(@types/node@22.16.0)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.3)))(vitest@4.0.8(@types/debug@4.1.12)(@types/node@22.16.0)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.20.3))
       buildkite-test-collector:
         specifier: ^1.9.1
