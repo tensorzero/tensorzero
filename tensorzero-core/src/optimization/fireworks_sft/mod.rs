@@ -9,6 +9,7 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::sync::Arc;
 use std::time::Duration;
 
 use futures::future::try_join_all;
@@ -543,7 +544,7 @@ impl Optimizer for FireworksSFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: &Config,
+        _config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()
