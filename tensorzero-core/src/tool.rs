@@ -677,17 +677,28 @@ where
                 }
             }
 
-            // If no tool fields present, return None
-            if values.is_empty() {
-                return Ok(None);
-            }
-
             // Determine format based on which fields are present
             // Since `dynamic_provider_tools` and `dynamic_tools` are going to return arrays
             // and `tool_params` will be a string regardles of format, the distinguishing factor for new data
             // is if `allowed_tools` is set (it always should be)
             let has_full_fields =
                 values.contains_key("allowed_tools") || values.contains_key("tool_choice");
+
+            // If we're NOT in full format mode, filter out empty arrays for dynamic_tools and dynamic_provider_tools
+            // This handles the case where ClickHouse returns default values (empty arrays) for these columns
+            // when they weren't explicitly set (i.e., legacy data or data without tools)
+            if !has_full_fields {
+                values.retain(|key, value| {
+                    !(value.is_array()
+                        && value.as_array().is_some_and(|arr| arr.is_empty())
+                        && (key == "dynamic_tools" || key == "dynamic_provider_tools"))
+                });
+            }
+
+            // If no tool fields present, return None
+            if values.is_empty() {
+                return Ok(None);
+            }
 
             if has_full_fields {
                 // Full format: require ALL full format fields
