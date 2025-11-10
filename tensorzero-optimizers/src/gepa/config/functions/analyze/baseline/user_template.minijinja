@@ -1,0 +1,79 @@
+<function_context>
+<function_name>{{function_name}}</function_name>
+<model_name>{{model}}</model_name>
+
+<message_templates>
+<system_template>
+{{system_template}}
+</system_template>
+{% if user_template %}
+<user_template>
+{{user_template}}
+</user_template>
+{% endif %}
+{% if assistant_template %}
+<assistant_template>
+{{assistant_template}}
+</assistant_template>
+{% endif %}
+</message_templates>
+
+{% if system_schema or user_schema or assistant_schema %}
+<message_schemas>
+{% if system_schema %}
+<system_schema>
+{{system_schema | tojson(indent=2)}}
+</system_schema>
+{% endif %}
+{% if user_schema %}
+<user_schema>
+{{user_schema | tojson(indent=2)}}
+</user_schema>
+{% endif %}
+{% if assistant_schema %}
+<assistant_schema>
+{{assistant_schema | tojson(indent=2)}}
+</assistant_schema>
+{% endif %}
+</message_schemas>
+{% endif %}
+{% if output_schema %}
+<output_schema>
+{{output_schema | tojson(indent=2)}}
+</output_schema>
+{% endif %}
+
+{% if tools %}
+<available_tools>
+{% for tool_name in tools %}
+<tool name="{{tool_name}}">
+{{tools[tool_name] | tojson(indent=2)}}
+</tool>
+{% endfor %}
+</available_tools>
+{% endif %}
+</function_context>
+
+<inference_context>
+{%- if tags %}
+<metadata>
+{{tags | tojson(indent=2)}}
+</metadata>
+{%- endif %}
+<inference_input>
+{{input | tojson(indent=2)}}
+</inference_input>
+</inference_context>
+
+<inference_output>
+{{output | tojson(indent=2)}}
+</inference_output>
+
+<task>
+Analyze the inference_output given the function_context and inference_context.
+
+Your tools are mutually exclusive - select and use only the best tool to report your findings:
+- `report_error` if the inference output contains errors that caused or contributed to failure
+- `report_improvement` if the inference output is suboptimal but not erroneous
+- `report_optimal` if the inference output demonstrates high quality
+</task>

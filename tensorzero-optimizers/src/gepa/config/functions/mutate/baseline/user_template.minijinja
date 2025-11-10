@@ -1,0 +1,85 @@
+<function_name>{{function_name}}</function_name>
+<model_name>{{model}}</model_name>
+
+<message_templates>
+<system_template>
+{{system_template}}
+</system_template>
+{% if user_template %}
+<user_template>
+{{user_template}}
+</user_template>
+{% endif %}
+{% if assistant_template %}
+<assistant_template>
+{{assistant_template}}
+</assistant_template>
+{% endif %}
+</message_templates>
+
+{% if system_schema or user_schema or assistant_schema %}
+<message_schemas>
+{% if system_schema %}
+<system_schema>
+{{system_schema | tojson(indent=2)}}
+</system_schema>
+{% endif %}
+{% if user_schema %}
+<user_schema>
+{{user_schema | tojson(indent=2)}}
+</user_schema>
+{% endif %}
+{% if assistant_schema %}
+<assistant_schema>
+{{assistant_schema | tojson(indent=2)}}
+</assistant_schema>
+{% endif %}
+</message_schemas>
+{% endif %}
+{% if output_schema %}
+<output_schema>
+{{output_schema | tojson(indent=2)}}
+</output_schema>
+{% endif %}
+
+{% if tools %}
+<available_tools>
+{% for tool_name in tools %}
+<tool name="{{tool_name}}">
+{{tools[tool_name] | tojson(indent=2)}}
+</tool>
+{% endfor %}
+</available_tools>
+{% endif %}
+
+<analyses>
+The following are examples of LLM responses with analysis/feedback:
+{% for analysis in analyses %}
+<example>
+<inference_output>
+{{analysis.inference_output | tojson(indent=2)}}
+</inference_output>
+<analysis>
+{{analysis.analysis | tojson(indent=2)}}
+</analysis>
+</example>
+{% endfor %}
+</analyses>
+
+<task>
+Read the message_templates, schemas, tools, and analyses above. Extract insights from the analyses and generate improved templates that address identified issues while preserving what works well.
+
+Return your improved templates in the following JSON format:
+
+{
+    "system_template": "<your improved system template as a string>"{% if user_template %},
+    "user_template": "<your improved user template as a string>"{% endif %}{% if assistant_template %},
+    "assistant_template": "<your improved assistant template as a string>"{% endif %}
+
+}
+
+Notes:
+- Always return an improved system_template (required)
+{% if user_template %}- Return an improved user_template (reference provided above){% endif %}
+{% if assistant_template %}- Return an improved assistant_template (reference provided above){% endif %}
+</task>

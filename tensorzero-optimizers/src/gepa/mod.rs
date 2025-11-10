@@ -1,21 +1,22 @@
-//! GEPA optimizer implementation (stub)
+//! GEPA optimizer implementation
 //!
-//! This is a placeholder module that will be replaced with the actual GEPA implementation
-//! in later commits. For now, it just provides stub trait implementations to allow compilation.
+//! This module provides the trait implementations for the GEPA optimizer.
+//! The actual GEPA algorithm logic is in the `lib` submodule.
+
+mod lib;
 
 use async_trait::async_trait;
-use std::sync::Arc;
 
 use tensorzero_core::{
-    config::Config,
+    config::{Config, UninitializedVariantConfig},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails},
+    error::Error,
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
         gepa::{GEPAConfig, GEPAJobHandle},
-        OptimizationJobInfo,
+        OptimizationJobInfo, OptimizerOutput,
     },
     stored_inference::RenderedSample,
 };
@@ -28,16 +29,27 @@ impl Optimizer for GEPAConfig {
 
     async fn launch(
         &self,
-        _client: &TensorzeroHttpClient,
-        _train_examples: Vec<RenderedSample>,
-        _val_examples: Option<Vec<RenderedSample>>,
-        _credentials: &InferenceCredentials,
-        _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: Arc<Config>,
+        client: &TensorzeroHttpClient,
+        train_examples: Vec<RenderedSample>,
+        val_examples: Option<Vec<RenderedSample>>,
+        credentials: &InferenceCredentials,
+        clickhouse_connection_info: &ClickHouseConnectionInfo,
+        config: std::sync::Arc<Config>,
     ) -> Result<Self::Handle, Error> {
-        Err(Error::new(ErrorDetails::InternalError {
-            message: "GEPA optimizer is not yet implemented (stub)".to_string(),
-        }))
+        // Run the GEPA optimization algorithm
+        let variant_configs = lib::run_gepa_optimization(
+            self,
+            client,
+            train_examples,
+            val_examples,
+            credentials,
+            clickhouse_connection_info,
+            config,
+        )
+        .await?;
+
+        // Return a job handle containing the Pareto frontier of variants
+        Ok(GEPAJobHandle { variant_configs })
     }
 }
 
@@ -49,8 +61,20 @@ impl JobHandle for GEPAJobHandle {
         _credentials: &InferenceCredentials,
         _default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        Err(Error::new(ErrorDetails::InternalError {
-            message: "GEPA job handle polling is not yet implemented (stub)".to_string(),
-        }))
+        // GEPA optimization is synchronous, so it's always complete once launched
+        // Return the Pareto frontier of variant configurations
+        Ok(OptimizationJobInfo::Completed {
+            output: OptimizerOutput::Variants(
+                self.variant_configs
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.clone(),
+                            Box::new(UninitializedVariantConfig::ChatCompletion(v.clone())),
+                        )
+                    })
+                    .collect(),
+            ),
+        })
     }
 }
