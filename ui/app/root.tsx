@@ -19,6 +19,8 @@ import { startPeriodicCleanup } from "./utils/evaluations.server";
 import { ReactQueryProvider } from "./providers/react-query";
 import { isReadOnlyMode, readOnlyMiddleware } from "./utils/read-only.server";
 import { TooltipProvider } from "~/components/ui/tooltip";
+import { GlobalToastProvider } from "~/providers/global-toast-provider";
+import { Toaster } from "~/components/ui/toaster";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -71,20 +73,23 @@ export default function App({ loaderData }: Route.ComponentProps) {
   const { config, isReadOnly } = loaderData;
   return (
     <ReactQueryProvider>
-      <ReadOnlyProvider value={isReadOnly}>
-        <ConfigProvider value={config}>
-          <SidebarProvider>
-            <TooltipProvider>
-              <div className="fixed inset-0 flex">
-                <AppSidebar />
-                <ContentLayout>
-                  <Outlet />
-                </ContentLayout>
-              </div>
-            </TooltipProvider>
-          </SidebarProvider>
-        </ConfigProvider>
-      </ReadOnlyProvider>
+      <GlobalToastProvider>
+        <ReadOnlyProvider value={isReadOnly}>
+          <ConfigProvider value={config}>
+            <SidebarProvider>
+              <TooltipProvider>
+                <div className="fixed inset-0 flex">
+                  <AppSidebar />
+                  <ContentLayout>
+                    <Outlet />
+                  </ContentLayout>
+                </div>
+              </TooltipProvider>
+            </SidebarProvider>
+          </ConfigProvider>
+        </ReadOnlyProvider>
+        <Toaster />
+      </GlobalToastProvider>
     </ReactQueryProvider>
   );
 }

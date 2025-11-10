@@ -51,13 +51,12 @@ export function AddToDatasetButton({
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
       if (fetcher.data.error) {
-        toast({
+        toast.error({
           title: "Failed to add to dataset",
           description: fetcher.data.error,
-          variant: "destructive",
         });
       } else if (fetcher.data.redirectTo) {
-        toast({
+        toast.success({
           title: "New Datapoint",
           description: "A datapoint was created successfully.",
           action: (

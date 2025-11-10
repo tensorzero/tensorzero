@@ -27,7 +27,6 @@ import {
   type EvaluationErrorDisplayInfo,
 } from "./EvaluationErrorInfo";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
-import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { logger } from "~/utils/logger";
@@ -315,9 +314,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   // Handle feedback toast
   useEffect(() => {
     if (newFeedbackId) {
-      toast({
-        title: "Feedback Added",
-      });
+      toast.success({ title: "Feedback Added" });
     }
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
@@ -336,10 +333,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     const selectedData = Array.from(selectedRows.values());
 
     if (selectedData.length === 0) {
-      toast({
-        title: "No rows selected",
-        variant: "destructive",
-      });
+      toast.error({ title: "No rows selected" });
       return;
     }
 
@@ -415,7 +409,6 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
           )}
         </SectionLayout>
       </SectionsGroup>
-      <Toaster />
     </PageLayout>
   );
 }

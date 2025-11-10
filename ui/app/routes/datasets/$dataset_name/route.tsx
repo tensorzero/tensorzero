@@ -13,7 +13,6 @@ import {
   PageLayout,
   SectionLayout,
 } from "~/components/layout/PageLayout";
-import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
 import { logger } from "~/utils/logger";
@@ -123,7 +122,7 @@ export default function DatasetDetailPage({
   // Use useEffect to show toast only after component mounts
   useEffect(() => {
     if (rowsAdded !== null) {
-      toast({
+      toast.success({
         title: "Dataset Updated",
         description: `Added ${rowsAdded} rows to the dataset. Skipped ${rowsSkipped} duplicate rows.`,
       });
@@ -174,8 +173,6 @@ export default function DatasetDetailPage({
           disableNext={offset + pageSize >= count_info.count}
         />
       </SectionLayout>
-
-      <Toaster />
     </PageLayout>
   );
 }

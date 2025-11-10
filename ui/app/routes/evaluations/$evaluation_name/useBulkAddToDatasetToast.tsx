@@ -28,22 +28,20 @@ export function useBulkAddToDatasetToast({
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
       if (fetcher.data.error) {
-        toast({
+        toast.error({
           title: "Failed to add to dataset",
           description: fetcher.data.error,
-          variant: "destructive",
         });
       } else if (fetcher.data.success) {
         const datasetName = fetcher.data.dataset;
         const hasErrors = fetcher.data.errors && fetcher.data.errors.length > 0;
         const errorCount = hasErrors ? (fetcher.data.errors?.length ?? 0) : 0;
 
-        toast({
+        toast.success({
           title: hasErrors ? "Partially Added to Dataset" : "Added to Dataset",
           description: hasErrors
             ? `${fetcher.data.count} ${fetcher.data.count === 1 ? "inference" : "inferences"} added to: ${datasetName}. ${errorCount} failed to add.`
             : `${fetcher.data.count} ${fetcher.data.count === 1 ? "inference" : "inferences"} added to: ${datasetName}`,
-          variant: hasErrors ? "default" : "default",
           action: (
             <ToastAction altText="View Dataset" asChild>
               <Link to={`/datasets/${datasetName}`}>View Dataset</Link>

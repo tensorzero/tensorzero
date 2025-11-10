@@ -56,7 +56,6 @@ import { InferenceButton } from "~/components/utils/InferenceButton";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { handleAddToDatasetAction } from "~/utils/dataset.server";
 import { renameDatapoint } from "~/routes/datasets/$dataset_name/datapoint/$id/datapointOperations.server";
-import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
@@ -275,9 +274,7 @@ export default function EvaluationDatapointPage({
   const { toast } = useToast();
   useEffect(() => {
     if (newFeedbackId) {
-      toast({
-        title: "Feedback Added",
-      });
+      toast.success({ title: "Feedback Added" });
     }
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
@@ -327,7 +324,6 @@ export default function EvaluationDatapointPage({
             datapointId={datapoint_id}
           />
         </SectionsGroup>
-        <Toaster />
       </PageLayout>
     </ColorAssignerProvider>
   );

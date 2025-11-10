@@ -20,10 +20,7 @@ export function useCopy(resetDelayMs = 2000): {
         // Reset the copy state after the specified delay
         setTimeout(() => setDidCopy(false), resetDelayMs);
       } catch {
-        toast({
-          title: "Failed to copy",
-          variant: "destructive",
-        });
+        toast.error({ title: "Failed to copy", log: true });
       }
     },
     [toast, resetDelayMs],

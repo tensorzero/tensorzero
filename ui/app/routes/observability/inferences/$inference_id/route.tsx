@@ -38,7 +38,6 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
-import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import {
   prepareInferenceActionRequest,
@@ -266,7 +265,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   useEffect(() => {
     if (newFeedbackId) {
-      toast({ title: "Feedback Added" });
+      toast.success({ title: "Feedback Added" });
     }
   }, [newFeedbackId, toast]);
 
@@ -298,10 +297,9 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         void submit({ data: JSON.stringify(request) });
       } catch (stringifyError) {
         logger.error("Failed to stringify request:", stringifyError);
-        toast({
+        toast.error({
           title: "Request Error",
           description: "Failed to prepare the request. Please try again.",
-          variant: "destructive",
         });
         // Reset state on error
         setSelectedVariant(null);
@@ -321,10 +319,9 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         }
       }
 
-      toast({
+      toast.error({
         title: "Request Preparation Error",
         description: errorMessage,
-        variant: "destructive",
       });
     }
   };
@@ -359,10 +356,9 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       submit({ data: JSON.stringify(request) });
     } catch (error) {
       logger.error("Failed to prepare inference request for refresh:", error);
-      toast({
+      toast.error({
         title: "Request Preparation Error",
         description: "Failed to refresh inference. Please try again.",
-        variant: "destructive",
       });
     }
   };
@@ -568,7 +564,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           )}
         </VariantResponseModal>
       )}
-      <Toaster />
     </PageLayout>
   );
 }
