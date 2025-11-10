@@ -27,4 +27,4 @@ evaluations = { path = "../../evaluations" }
 ts-rs = { workspace = true }
 
 [build-dependencies]
-napi-build = "2.2.4"
+napi-build = "2.3.0"
