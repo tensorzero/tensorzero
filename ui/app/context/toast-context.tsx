@@ -34,7 +34,7 @@ export interface ToastEmitResult {
 export type ToastActionProps = Toast & { log?: boolean | string };
 
 export interface Toaster {
-  default: (props: ToastActionProps) => ToastEmitResult;
+  info: (props: ToastActionProps) => ToastEmitResult;
   success: (props: Omit<ToastActionProps, "variant">) => ToastEmitResult;
   error: (props: Omit<ToastActionProps, "variant">) => ToastEmitResult;
   warn: (props: Omit<ToastActionProps, "variant">) => ToastEmitResult;

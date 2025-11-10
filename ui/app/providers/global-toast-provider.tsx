@@ -108,7 +108,7 @@ export function GlobalToastProvider({
     };
 
     return {
-      default: (props) => {
+      info: (props) => {
         const { log, ...toastProps } = props;
         logger(props);
         return emitToast(toastProps);
