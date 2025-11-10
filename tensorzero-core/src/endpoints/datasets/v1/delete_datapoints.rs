@@ -49,7 +49,7 @@ pub async fn delete_dataset_handler(
 /// This function stales all datapoints in the dataset without fetching them.
 ///
 /// Returns the number of deleted datapoints, or an error if the dataset name is invalid.
-async fn delete_dataset(
+pub async fn delete_dataset(
     clickhouse: &impl DatasetQueries,
     dataset_name: &str,
 ) -> Result<DeleteDatapointsResponse, Error> {
@@ -66,7 +66,7 @@ async fn delete_dataset(
 /// This function validates the request and stales the datapoints.
 ///
 /// Returns the number of deleted datapoints, or an error if there are no datapoints or if the dataset name is invalid.
-async fn delete_datapoints(
+pub async fn delete_datapoints(
     clickhouse: &impl DatasetQueries,
     dataset_name: &str,
     request: DeleteDatapointsRequest,

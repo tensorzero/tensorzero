@@ -102,8 +102,8 @@ steps:
     matrix:
       setup:
         clickhouse_version:
-          - "24.12-alpine"
-          - "25.7-alpine"
+          - "24.12"
+          - "25.7"
     env:
       TENSORZERO_CLICKHOUSE_VERSION: "{{matrix.clickhouse_version}}"
     depends_on:
