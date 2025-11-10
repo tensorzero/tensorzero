@@ -77,7 +77,8 @@ pub fn asymp_cs(
     }
 
     // Default value of rho, computed as sqrt( (-2 log(alpha) + log(-2 log(alpha)) + 1) / 100 )
-    let rho = rho.unwrap_or_else(|| (-2.0 * alpha.ln() + (-2.0 * alpha.ln()).ln() + 1.0) / 10.0);
+    let rho =
+        rho.unwrap_or_else(|| (-2.0 * alpha.ln() + (-2.0 * alpha.ln()).ln() + 1.0).sqrt() / 10.0);
 
     if rho <= 0.0 {
         return Err(Error::new(ErrorDetails::InvalidRequest {
