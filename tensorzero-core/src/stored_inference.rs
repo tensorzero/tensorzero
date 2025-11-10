@@ -978,7 +978,7 @@ pub async fn render_stored_sample<T: StoredSample>(
         episode_id,
         inference_id,
         input: model_input,
-        stored_input: resolved_input.into_stored_input()?,
+        stored_input: resolved_input.into_stored_input(),
         output,
         stored_output,
         dispreferred_outputs,
