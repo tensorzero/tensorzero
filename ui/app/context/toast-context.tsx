@@ -24,7 +24,7 @@ export type ToastAction =
 
 export interface ToastEmitResult {
   id: ToasterToast["id"];
-  dismiss: () => void;
+  dismiss: (args?: { immediate?: boolean }) => void;
   update: (props: ToasterToast) => void;
 }
 

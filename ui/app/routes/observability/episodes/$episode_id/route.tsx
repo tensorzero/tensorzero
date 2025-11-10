@@ -202,8 +202,10 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const { toast } = useToast();
   useEffect(() => {
     if (newFeedbackId) {
-      toast.success({ title: "Feedback Added" });
+      const { dismiss } = toast.success({ title: "Feedback Added" });
+      return () => dismiss({ immediate: true });
     }
+    return;
   }, [newFeedbackId, toast]);
   // These are swapped because the table is sorted in descending order
   const disablePreviousFeedbackPage =

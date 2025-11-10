@@ -28,16 +28,17 @@ export function useBulkAddToDatasetToast({
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data) {
       if (fetcher.data.error) {
-        toast.error({
+        const { dismiss } = toast.error({
           title: "Failed to add to dataset",
           description: fetcher.data.error,
         });
+        return () => dismiss({ immediate: true });
       } else if (fetcher.data.success) {
         const datasetName = fetcher.data.dataset;
         const hasErrors = fetcher.data.errors && fetcher.data.errors.length > 0;
         const errorCount = hasErrors ? (fetcher.data.errors?.length ?? 0) : 0;
 
-        toast.success({
+        const { dismiss } = toast.success({
           title: hasErrors ? "Partially Added to Dataset" : "Added to Dataset",
           description: hasErrors
             ? `${fetcher.data.count} ${fetcher.data.count === 1 ? "inference" : "inferences"} added to: ${datasetName}. ${errorCount} failed to add.`
@@ -50,7 +51,9 @@ export function useBulkAddToDatasetToast({
         });
         setSelectedRows(new Map());
         setSelectedDataset("");
+        return () => dismiss({ immediate: true });
       }
     }
+    return;
   }, [fetcher.state, fetcher.data, toast, setSelectedRows, setSelectedDataset]);
 }

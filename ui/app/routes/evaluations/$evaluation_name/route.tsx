@@ -314,8 +314,10 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   // Handle feedback toast
   useEffect(() => {
     if (newFeedbackId) {
-      toast.success({ title: "Feedback Added" });
+      const { dismiss } = toast.success({ title: "Feedback Added" });
+      return () => dismiss({ immediate: true });
     }
+    return;
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
   // Handle fetcher response for bulk add to dataset

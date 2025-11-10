@@ -122,11 +122,13 @@ export default function DatasetDetailPage({
   // Use useEffect to show toast only after component mounts
   useEffect(() => {
     if (rowsAdded !== null) {
-      toast.success({
+      const { dismiss } = toast.success({
         title: "Dataset Updated",
         description: `Added ${rowsAdded} rows to the dataset. Skipped ${rowsSkipped} duplicate rows.`,
       });
+      return () => dismiss({ immediate: true });
     }
+    return;
     // TODO: Fix and stop ignoring lint rule
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowsAdded, toast]);
