@@ -22,7 +22,7 @@ export function dump_optimizer_output(optimizerOutput: OptimizerOutput) {
       `Provider config not found for model ${modelName} when dumping optimizer output.`,
     );
   }
-   
+
   const { timeouts, ...restProviderConfig } = providerConfig;
   const fullyQualifiedProviderConfig = {
     models: {
