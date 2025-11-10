@@ -37,7 +37,7 @@ impl EvaluationStats {
         }
     }
 
-    pub(crate) fn push(
+    pub fn push(
         &mut self,
         evaluation_update: EvaluationUpdate,
         writer: &mut impl Write,
@@ -205,7 +205,7 @@ pub struct EvaluationError {
 
 /// Statistics computed about a particular evaluator
 /// We anticipate extending this over time
-#[derive(Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct EvaluatorStats {
     pub mean: f32,
     pub stderr: f32,
@@ -222,7 +222,7 @@ impl std::fmt::Display for EvaluatorStats {
     }
 }
 
-fn mean(data: &[f32]) -> Option<f32> {
+pub fn mean(data: &[f32]) -> Option<f32> {
     let sum = data.iter().sum::<f32>();
     let count = data.len();
 
@@ -232,7 +232,7 @@ fn mean(data: &[f32]) -> Option<f32> {
     }
 }
 
-fn std_deviation(data: &[f32]) -> Option<f32> {
+pub fn std_deviation(data: &[f32]) -> Option<f32> {
     match (mean(data), data.len()) {
         (Some(data_mean), count) if count > 0 => {
             let variance = data
