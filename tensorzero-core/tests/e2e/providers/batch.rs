@@ -1755,17 +1755,15 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
 
         // Verify new Migration 0041 columns (decomposed tool call storage format)
         // Verify dynamic_tools column (should be empty for static tools)
-        let dynamic_tools_str = result.get("dynamic_tools").unwrap().as_str().unwrap();
-        let dynamic_tools: Vec<Value> = serde_json::from_str(dynamic_tools_str).unwrap();
+        let dynamic_tools = result.get("dynamic_tools").unwrap().as_array().unwrap();
+        assert!(dynamic_tools.is_empty());
 
         // Verify dynamic_provider_tools column (should be empty)
-        let dynamic_provider_tools_str = result
+        let dynamic_provider_tools = result
             .get("dynamic_provider_tools")
             .unwrap()
-            .as_str()
+            .as_array()
             .unwrap();
-        let dynamic_provider_tools: Vec<Value> =
-            serde_json::from_str(dynamic_provider_tools_str).unwrap();
         assert!(
             dynamic_provider_tools.is_empty(),
             "dynamic_provider_tools should be empty"
