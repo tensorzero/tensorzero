@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         # TODO: Temporarily using 25.9-alpine instead of latest-alpine
-        clickhouse_version: ${{ inputs.is_merge_group && fromJSON('["24.12-alpine", "25.9-alpine"]') || fromJSON('["25.9-alpine"]') }}
+        clickhouse_version: ${{ inputs.is_merge_group && fromJSON('["24.12", "25.9"]') || fromJSON('["25.9"]') }}
 
     steps:
       - name: Set DNS
