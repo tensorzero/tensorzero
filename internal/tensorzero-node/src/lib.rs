@@ -5,7 +5,7 @@ use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 use url::Url;
 
 use evaluations::stats::{EvaluationInfo, EvaluationUpdate};
-use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs};
+use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs, EvaluationVariant};
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use serde::Serialize;
 use serde_json::Value;
@@ -185,10 +185,9 @@ pub async fn run_evaluation_streaming(
         clickhouse_client: clickhouse_client.clone(),
         config: config.clone(),
         dataset_name: params.dataset_name.clone(),
-        variant_name: params.variant_name.clone(),
+        variant: EvaluationVariant::Name(params.variant_name.clone()),
         evaluation_name: params.evaluation_name.clone(),
         evaluation_run_id,
-        dynamic_variant_config: None,
         inference_cache: cache_mode,
         concurrency,
     };

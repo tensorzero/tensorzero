@@ -10,7 +10,7 @@
 /// and defines methods on them.
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
-use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs};
+use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs, EvaluationVariant};
 use futures::StreamExt;
 use pyo3::{
     exceptions::{PyDeprecationWarning, PyStopAsyncIteration, PyStopIteration, PyValueError},
@@ -1113,6 +1113,14 @@ impl TensorZeroGateway {
                 None
             };
 
+        // Validate that both variant_name and dynamic_variant_config are not provided
+        if dynamic_variant_config.is_some() && !variant_name.is_empty() {
+            return Err(PyValueError::new_err(
+                "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
+                When using a dynamic variant, provide only 'dynamic_variant_config'.",
+            ));
+        }
+
         let core_args = EvaluationCoreArgs {
             tensorzero_client: (*client).clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
@@ -1120,8 +1128,10 @@ impl TensorZeroGateway {
             evaluation_name,
             evaluation_run_id,
             dataset_name,
-            variant_name,
-            dynamic_variant_config,
+            variant: match dynamic_variant_config {
+                Some(info) => EvaluationVariant::Info(Box::new(info)),
+                None => EvaluationVariant::Name(variant_name),
+            },
             concurrency,
             inference_cache: inference_cache_enum,
         };
@@ -1973,6 +1983,14 @@ impl AsyncTensorZeroGateway {
                 None
             };
 
+        // Validate that both variant_name and dynamic_variant_config are not provided
+        if dynamic_variant_config.is_some() && !variant_name.is_empty() {
+            return Err(PyValueError::new_err(
+                "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
+                When using a dynamic variant, provide only 'dynamic_variant_config'.",
+            ));
+        }
+
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             // Get app state data
             let app_state = client.get_app_state_data().ok_or_else(|| {
@@ -1988,8 +2006,10 @@ impl AsyncTensorZeroGateway {
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,
-                variant_name,
-                dynamic_variant_config,
+                variant: match dynamic_variant_config {
+                    Some(info) => EvaluationVariant::Info(Box::new(info)),
+                    None => EvaluationVariant::Name(variant_name),
+                },
                 concurrency,
                 inference_cache: inference_cache_enum,
             };

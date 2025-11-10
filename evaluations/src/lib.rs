@@ -90,6 +90,16 @@ pub struct Clients {
     pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
+/// Specifies which variant to use for evaluation.
+/// Either a variant name from the config, or a dynamic variant configuration.
+#[derive(Clone, Debug)]
+pub enum EvaluationVariant {
+    /// Use a variant by name from the config file
+    Name(String),
+    /// Use a dynamically provided variant configuration
+    Info(Box<UninitializedVariantInfo>),
+}
+
 /// Parameters for running an evaluation using run_evaluation_core
 /// This struct encapsulates all the necessary components for evaluation execution
 pub struct EvaluationCoreArgs {
@@ -111,13 +121,9 @@ pub struct EvaluationCoreArgs {
     /// Name of the dataset to run on.
     pub dataset_name: String,
 
-    /// Name of the variant to run.
-    pub variant_name: String,
-
-    /// Optional dynamic variant configuration.
-    /// If provided, this variant config will be used instead of looking up variant_name in the config.
-    /// This allows evaluating variants that aren't registered in the config (e.g., during optimization).
-    pub dynamic_variant_config: Option<UninitializedVariantInfo>,
+    /// Variant to use for evaluation.
+    /// Either a variant name from the config file, or a dynamic variant configuration.
+    pub variant: EvaluationVariant,
 
     /// Number of concurrent requests to make.
     pub concurrency: usize,
@@ -220,10 +226,9 @@ pub async fn run_evaluation(
         clickhouse_client: clickhouse_client.clone(),
         config,
         dataset_name: args.dataset_name,
-        variant_name: args.variant_name,
+        variant: EvaluationVariant::Name(args.variant_name),
         evaluation_name: args.evaluation_name,
         evaluation_run_id,
-        dynamic_variant_config: None,
         inference_cache: args.inference_cache,
         concurrency: args.concurrency,
     };
@@ -338,7 +343,7 @@ pub async fn run_evaluation(
 /// rather than failing the entire evaluation. Error messages include context:
 /// - Inference errors: Include the datapoint_id
 /// - Evaluation errors: Include both the inference_id and datapoint_id
-#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant = ?args.variant, concurrency = %args.concurrency))]
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
 ) -> Result<EvaluationStreamResult> {
@@ -385,7 +390,7 @@ pub async fn run_evaluation_core_streaming(
     .await?;
     info!(dataset_size = dataset.len(), "Dataset loaded successfully");
     let dataset_name = Arc::new(args.dataset_name);
-    let variant_name = Arc::new(args.variant_name);
+    let variant = Arc::new(args.variant);
     let evaluation_name = Arc::new(args.evaluation_name);
     let dataset_len = dataset.len();
     let mut task_id_to_datapoint_id = HashMap::new();
@@ -407,8 +412,7 @@ pub async fn run_evaluation_core_streaming(
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
         let clients_clone = clients.clone();
-        let variant_name = variant_name.clone();
-        let dynamic_variant_config = args.dynamic_variant_config.clone();
+        let variant = variant.clone();
         let function_config = function_config.clone();
         let evaluation_config = evaluation_config.clone();
         let dataset_name = dataset_name.clone();
@@ -418,14 +422,16 @@ pub async fn run_evaluation_core_streaming(
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let inference_cache = args.inference_cache;
+        // Skip feedback for dynamic variants (they're not production-ready)
+        // Named variants: send_feedback=true, Dynamic variants: send_feedback=false
+        let send_feedback = !matches!(variant.as_ref(), EvaluationVariant::Info(_));
         let abort_handle = join_set.spawn(async move {
             let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?)?);
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
                     clients: &clients_clone,
                     function_name: &function_name,
-                    variant_name: &variant_name,
-                    dynamic_variant_config: &dynamic_variant_config,
+                    variant: &variant,
                     evaluation_run_id: evaluation_run_id_clone,
                     dataset_name: &dataset_name,
                     datapoint: &datapoint,
@@ -448,6 +454,7 @@ pub async fn run_evaluation_core_streaming(
                     clients: clients_clone.clone(),
                     evaluation_run_id: evaluation_run_id_clone,
                     inference_cache,
+                    send_feedback,
                 })
                 .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
             debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
@@ -550,8 +557,7 @@ pub fn format_cutoff_failures(failures: &[(String, f32, f32)]) -> String {
 struct InferDatapointParams<'a> {
     clients: &'a Clients,
     function_name: &'a str,
-    variant_name: &'a str,
-    dynamic_variant_config: &'a Option<UninitializedVariantInfo>,
+    variant: &'a EvaluationVariant,
     evaluation_run_id: Uuid,
     dataset_name: &'a str,
     datapoint: &'a StoredDatapoint,
@@ -561,13 +567,12 @@ struct InferDatapointParams<'a> {
     inference_cache: CacheEnabledMode,
 }
 
-#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name, variant_name = %params.variant_name))]
+#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name))]
 async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceResponse> {
     let InferDatapointParams {
         clients,
         function_name,
-        variant_name,
-        dynamic_variant_config,
+        variant,
         evaluation_run_id,
         dataset_name,
         datapoint,
@@ -576,6 +581,17 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         input,
         inference_cache,
     } = params;
+
+    // Extract variant_name, dynamic_variant_config, and dryrun from the variant enum
+    let (variant_name, dynamic_variant_config, dryrun) = match variant {
+        EvaluationVariant::Name(name) => (Some(name.clone()), None, false),
+        EvaluationVariant::Info(info) => {
+            // When using dynamic variant config, we must set dryrun=true to bypass
+            // the safety check that prevents production use of unregistered variants.
+            // For evaluations, this is safe because we're testing candidate variants.
+            (None, Some((**info).clone()), true)
+        }
+    };
 
     debug!("Processing tool parameters");
     let dynamic_tool_params = match datapoint.tool_call_config() {
@@ -610,7 +626,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
     };
     let params = ClientInferenceParams {
         function_name: Some(function_name.to_string()),
-        variant_name: Some(variant_name.to_string()),
+        variant_name,
         input: input.clone(),
         tags: HashMap::from([
             (
@@ -634,7 +650,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         output_schema: output_schema.cloned(),
         credentials: HashMap::new(),
         cache_options: get_cache_options(inference_cache),
-        dryrun: Some(false),
+        dryrun: Some(dryrun),
         episode_id: None,
         model_name: None,
         stream: Some(false),

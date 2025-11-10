@@ -26,7 +26,7 @@ use crate::common::write_json_fixture_to_dataset;
 use common::{get_tensorzero_client, write_chat_fixture_to_dataset};
 use evaluations::{
     run_evaluation, run_evaluation_core_streaming, stats::EvaluationUpdate, Args,
-    EvaluationCoreArgs, OutputFormat,
+    EvaluationCoreArgs, EvaluationVariant, OutputFormat,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -2268,10 +2268,9 @@ async fn test_evaluation_with_no_dynamic_config() {
         clickhouse_client: clickhouse,
         config,
         dataset_name,
-        variant_name: "gpt_4o_mini".to_string(),
+        variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
         evaluation_name: "haiku_with_outputs".to_string(),
         evaluation_run_id,
-        dynamic_variant_config: None, // Test with None - standard behavior
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
     };
@@ -2356,10 +2355,9 @@ async fn test_evaluation_with_dynamic_variant() {
         clickhouse_client: clickhouse,
         config,
         dataset_name,
-        variant_name: "dynamic_test_variant".to_string(),
+        variant: EvaluationVariant::Info(Box::new(dynamic_variant)),
         evaluation_name: "haiku_with_outputs".to_string(),
         evaluation_run_id,
-        dynamic_variant_config: Some(dynamic_variant), // Test with dynamic variant
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
     };
@@ -2445,10 +2443,9 @@ async fn test_dynamic_variant_overrides_config_lookup() {
         clickhouse_client: clickhouse,
         config,
         dataset_name,
-        variant_name: "nonexistent_variant_name".to_string(), // Variant doesn't exist in config
+        variant: EvaluationVariant::Info(Box::new(dynamic_variant)),
         evaluation_name: "haiku_with_outputs".to_string(),
         evaluation_run_id,
-        dynamic_variant_config: Some(dynamic_variant),
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
     };
