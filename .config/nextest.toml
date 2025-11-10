@@ -97,6 +97,11 @@ retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max
 filter = 'test(test_clickhouse_migration_manager)'
 test-group = 'clickhouse_migration'
 
+[[profile.e2e.overrides]]
+filter = 'test(experimentation)'
+# We run with '-j 32', so prevent these relatively heavy tests from running in parallel with too many other things.
+threads-required = 16
+
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::vllm::)'
 slow-timeout = { period = "60s", terminate-after = 2 }
