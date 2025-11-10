@@ -39,6 +39,7 @@ use tensorzero_core::{
 };
 
 pub mod dicl;
+pub mod evaluations;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
 pub mod openai_rft;
