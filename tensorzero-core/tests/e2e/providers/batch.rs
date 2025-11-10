@@ -1762,7 +1762,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         } else {
             assert_eq!(dynamic_tools.len(), 1);
             let tool: Tool =
-                serde_json::from_value(dynamic_tools.first().unwrap().clone()).unwrap();
+                serde_json::from_str(dynamic_tools.first().unwrap().as_str().unwrap()).unwrap();
             let Tool::ClientSideFunction(tool) = tool;
             assert_eq!(tool.name, "self_destruct");
         }
@@ -1788,7 +1788,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
             0 | 1 => "auto",
             2 => "required",
             3 => "none",
-            4 => "specific",
+            4 => "{\"specific\":\"self_destruct\"}",
             _ => panic!("Unexpected index: {i}"),
         };
         assert_eq!(
@@ -1802,22 +1802,6 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
             parallel_tool_calls.is_none() || parallel_tool_calls.unwrap().is_null(),
             "parallel_tool_calls should be null"
         );
-
-        // For inference #4, verify dynamic tool was stored
-        if i == 4 {
-            assert_eq!(
-                dynamic_tools.len(),
-                1,
-                "Inference #4 should have 1 dynamic tool"
-            );
-            let tool = &dynamic_tools[0];
-            assert_eq!(tool["name"], "self_destruct");
-        } else {
-            assert!(
-                dynamic_tools.is_empty(),
-                "Inference #{i} should have no dynamic tools"
-            );
-        }
 
         let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
         let inference_params: Value = serde_json::from_str(inference_params).unwrap();
