@@ -233,3 +233,103 @@ async def test_async_run_evaluation_invalid_cache_mode(
             concurrency=1,
             inference_cache="invalid_mode",
         )
+
+
+# NEW TESTS FOR DYNAMIC VARIANT CONFIG
+
+
+def test_sync_run_evaluation_with_dynamic_variant(
+    evaluation_datasets: Dict[str, str],
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test sync client experimental_run_evaluation with dynamic variant."""
+    # Define dynamic variant as Python dict
+    dynamic_variant = {
+        "type": "chat_completion",
+        "model": "gpt-4o-mini",
+        "weight": 0.0,
+        "system_template": {
+            "__tensorzero_remapped_path": "system",
+            "__data": "You are a dynamic test assistant for sync evaluation testing.",
+        },
+    }
+
+    # Run evaluation with dynamic variant
+    job = embedded_sync_client.experimental_run_evaluation(
+        evaluation_name="haiku_without_outputs",
+        dataset_name=evaluation_datasets["good-haikus-no-output"],
+        variant_name="dynamic_sync_test_variant",
+        dynamic_variant_config=dynamic_variant,
+        concurrency=2,
+        inference_cache="off",
+    )
+
+    # Verify job runs successfully
+    run_info: Dict[str, Any] = job.run_info
+    assert "evaluation_run_id" in run_info
+    assert "num_datapoints" in run_info
+    assert run_info["num_datapoints"] > 0
+
+    # Consume results and verify they work
+    results: List[Dict[str, Any]] = []
+    for result in job.results():
+        results.append(result)
+        assert "type" in result
+        if result["type"] == "success":
+            assert "evaluations" in result
+
+    assert len(results) == run_info["num_datapoints"]
+
+    # Verify summary stats work
+    stats: Dict[str, EvaluatorStatsDict] = job.summary_stats()
+    assert isinstance(stats, dict)
+    assert len(stats) > 0
+
+
+@pytest.mark.asyncio
+async def test_async_run_evaluation_with_dynamic_variant(
+    evaluation_datasets: Dict[str, str],
+    embedded_async_client: AsyncTensorZeroGateway,
+):
+    """Test async client experimental_run_evaluation with dynamic variant."""
+    # Define dynamic variant as Python dict
+    dynamic_variant = {
+        "type": "chat_completion",
+        "model": "gpt-4o-mini",
+        "weight": 0.0,
+        "system_template": {
+            "__tensorzero_remapped_path": "system",
+            "__data": "You are a dynamic test assistant for async evaluation testing.",
+        },
+    }
+
+    # Run evaluation with dynamic variant
+    job = await embedded_async_client.experimental_run_evaluation(
+        evaluation_name="entity_extraction",
+        dataset_name=evaluation_datasets["extract_entities_0.8"],
+        variant_name="dynamic_async_test_variant",
+        dynamic_variant_config=dynamic_variant,
+        concurrency=2,
+        inference_cache="off",
+    )
+
+    # Verify job runs successfully
+    run_info: Dict[str, Any] = job.run_info
+    assert "evaluation_run_id" in run_info
+    assert "num_datapoints" in run_info
+    assert run_info["num_datapoints"] > 0
+
+    # Consume results and verify they work
+    results: List[Dict[str, Any]] = []
+    async for result in job.results():
+        results.append(result)
+        assert "type" in result
+        if result["type"] == "success":
+            assert "evaluations" in result
+
+    assert len(results) == run_info["num_datapoints"]
+
+    # Verify summary stats work
+    stats: Dict[str, EvaluatorStatsDict] = await job.summary_stats()
+    assert isinstance(stats, dict)
+    assert len(stats) > 0

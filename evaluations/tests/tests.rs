@@ -24,13 +24,20 @@ use url::Url;
 
 use crate::common::write_json_fixture_to_dataset;
 use common::{get_tensorzero_client, write_chat_fixture_to_dataset};
-use evaluations::{run_evaluation, stats::EvaluationUpdate, Args, OutputFormat};
+use evaluations::{
+    run_evaluation, run_evaluation_core_streaming, stats::EvaluationUpdate, Args,
+    EvaluationCoreArgs, OutputFormat,
+};
 use std::collections::HashMap;
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
 use tensorzero_core::client::{
     ClientBuilder, ClientBuilderMode, FeedbackParams, InferenceResponse, Role,
 };
+use tensorzero_core::config::{
+    path::ResolvedTomlPath, Config, UninitializedVariantConfig, UninitializedVariantInfo,
+};
+use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig;
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
@@ -2210,4 +2217,251 @@ async fn test_query_skips_staled_datapoints() {
     let staled_datapoint = dataset.iter().find(|dp| dp.id() == staled_id);
     assert!(staled_datapoint.is_none());
     assert_eq!(dataset.len(), 21);
+}
+
+// NEW TESTS FOR DYNAMIC VARIANT CONFIG START HERE
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_evaluation_with_no_dynamic_config() {
+    init_tracing_for_tests();
+    let dataset_name = format!("good-haiku-data-{}", Uuid::now_v7());
+    let clickhouse = get_clickhouse().await;
+    write_chat_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
+    )
+    .await;
+
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+
+    let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(config_path.clone()),
+        clickhouse_url: None,
+        postgres_url: None,
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap();
+
+    let config: Arc<Config> = match tensorzero_client.mode() {
+        tensorzero_core::client::ClientMode::EmbeddedGateway { gateway, .. } => {
+            gateway.handle.app_state.config.clone()
+        }
+        tensorzero_core::client::ClientMode::HTTPGateway(_) => {
+            panic!("Expected EmbeddedGateway mode")
+        }
+    };
+
+    let evaluation_run_id = Uuid::now_v7();
+
+    let core_args = EvaluationCoreArgs {
+        tensorzero_client,
+        clickhouse_client: clickhouse,
+        config,
+        dataset_name,
+        variant_name: "gpt_4o_mini".to_string(),
+        evaluation_name: "haiku_with_outputs".to_string(),
+        evaluation_run_id,
+        dynamic_variant_config: None, // Test with None - standard behavior
+        inference_cache: CacheEnabledMode::Off,
+        concurrency: 2,
+    };
+
+    let result = run_evaluation_core_streaming(core_args).await;
+    assert!(
+        result.is_ok(),
+        "Evaluation with no dynamic config should succeed"
+    );
+
+    let result = result.unwrap();
+    assert!(result.run_info.num_datapoints > 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_evaluation_with_dynamic_variant() {
+    init_tracing_for_tests();
+    let dataset_name = format!("good-haiku-data-dynamic-{}", Uuid::now_v7());
+    let clickhouse = get_clickhouse().await;
+    write_chat_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
+    )
+    .await;
+
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+
+    let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(config_path.clone()),
+        clickhouse_url: None,
+        postgres_url: None,
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap();
+
+    let config: Arc<Config> = match tensorzero_client.mode() {
+        tensorzero_core::client::ClientMode::EmbeddedGateway { gateway, .. } => {
+            gateway.handle.app_state.config.clone()
+        }
+        tensorzero_core::client::ClientMode::HTTPGateway(_) => {
+            panic!("Expected EmbeddedGateway mode")
+        }
+    };
+
+    // Create a dynamic variant with a simple configuration
+    let dynamic_variant = UninitializedVariantInfo {
+        inner: UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
+            model: "gpt-4o-mini".into(),
+            weight: None,
+            system_template: Some(ResolvedTomlPath::new_fake_path(
+                "test/system.minijinja".to_string(),
+                "You are a helpful test assistant for dynamic variant testing.".to_string(),
+            )),
+            user_template: None,
+            assistant_template: None,
+            json_mode: None,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            ..Default::default()
+        }),
+        timeouts: None,
+    };
+
+    let evaluation_run_id = Uuid::now_v7();
+
+    let core_args = EvaluationCoreArgs {
+        tensorzero_client,
+        clickhouse_client: clickhouse,
+        config,
+        dataset_name,
+        variant_name: "dynamic_test_variant".to_string(),
+        evaluation_name: "haiku_with_outputs".to_string(),
+        evaluation_run_id,
+        dynamic_variant_config: Some(dynamic_variant), // Test with dynamic variant
+        inference_cache: CacheEnabledMode::Off,
+        concurrency: 2,
+    };
+
+    let result = run_evaluation_core_streaming(core_args).await;
+    assert!(
+        result.is_ok(),
+        "Evaluation with dynamic variant should succeed"
+    );
+
+    let result = result.unwrap();
+    assert!(result.run_info.num_datapoints > 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_dynamic_variant_overrides_config_lookup() {
+    init_tracing_for_tests();
+    let dataset_name = format!("good-haiku-data-override-{}", Uuid::now_v7());
+    let clickhouse = get_clickhouse().await;
+    write_chat_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
+    )
+    .await;
+
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+
+    let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(config_path.clone()),
+        clickhouse_url: None,
+        postgres_url: None,
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap();
+
+    let config: Arc<Config> = match tensorzero_client.mode() {
+        tensorzero_core::client::ClientMode::EmbeddedGateway { gateway, .. } => {
+            gateway.handle.app_state.config.clone()
+        }
+        tensorzero_core::client::ClientMode::HTTPGateway(_) => {
+            panic!("Expected EmbeddedGateway mode")
+        }
+    };
+
+    // Create a dynamic variant with a unique system template marker
+    let unique_marker = "UNIQUE_DYNAMIC_VARIANT_TEST_MARKER_12345";
+    let dynamic_variant = UninitializedVariantInfo {
+        inner: UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
+            model: "gpt-4o-mini".into(),
+            weight: None,
+            system_template: Some(ResolvedTomlPath::new_fake_path(
+                "test/system.minijinja".to_string(),
+                format!("{unique_marker} - You are a test assistant."),
+            )),
+            user_template: None,
+            assistant_template: None,
+            json_mode: None,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            ..Default::default()
+        }),
+        timeouts: None,
+    };
+
+    let evaluation_run_id = Uuid::now_v7();
+
+    let core_args = EvaluationCoreArgs {
+        tensorzero_client,
+        clickhouse_client: clickhouse,
+        config,
+        dataset_name,
+        variant_name: "nonexistent_variant_name".to_string(), // Variant doesn't exist in config
+        evaluation_name: "haiku_with_outputs".to_string(),
+        evaluation_run_id,
+        dynamic_variant_config: Some(dynamic_variant),
+        inference_cache: CacheEnabledMode::Off,
+        concurrency: 2,
+    };
+
+    let result = run_evaluation_core_streaming(core_args).await;
+    assert!(
+        result.is_ok(),
+        "Evaluation with dynamic variant should succeed even with non-existent variant name"
+    );
+
+    let result = result.unwrap();
+    assert!(result.run_info.num_datapoints > 0);
+
+    // TODO: Verify the unique marker appears in the inference system prompt in ClickHouse
+    // This would require querying the model_inferences table to confirm the dynamic variant was actually used
 }
