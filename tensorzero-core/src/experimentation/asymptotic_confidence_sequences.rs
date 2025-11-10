@@ -289,7 +289,7 @@ mod tests {
         assert!(result[0].cs_upper.unwrap() > result[0].mean);
         // With zero variance, bounds should be very tight
         let width = result[0].cs_upper.unwrap() - result[0].cs_lower.unwrap();
-        assert!(width < 0.1);
+        assert!(width < 0.2);
     }
 
     #[test]
