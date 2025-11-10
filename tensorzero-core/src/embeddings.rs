@@ -83,7 +83,19 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
         })
     }
 
-    fn validate(&self, _key: &str) -> Result<(), Error> {
+    fn validate(
+        &self,
+        _key: &str,
+        global_outbound_http_timeout: &chrono::Duration,
+    ) -> Result<(), Error> {
+        let global_ms = global_outbound_http_timeout.num_milliseconds();
+        if let Some(timeout_ms) = self.timeout_ms {
+            if chrono::Duration::milliseconds(timeout_ms as i64) > *global_outbound_http_timeout {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!("The `timeout_ms` value `{timeout_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"),
+                }));
+            }
+        }
         // Credentials are validated during deserialization
         // We may add additional validation here in the future
         Ok(())
@@ -143,9 +155,8 @@ impl UninitializedEmbeddingModelConfig {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, EmbeddingProviderInfo>,
@@ -523,9 +534,8 @@ pub trait EmbeddingProvider {
     ) -> impl Future<Output = Result<EmbeddingProviderResponse, Error>> + Send;
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub enum EmbeddingProviderConfig {
     OpenAI(OpenAIProvider),
     Azure(AzureProvider),
@@ -533,9 +543,8 @@ pub enum EmbeddingProviderConfig {
     Dummy(DummyProvider),
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct EmbeddingProviderInfo {
     pub inner: EmbeddingProviderConfig,
     pub timeout_ms: Option<u64>,
@@ -821,7 +830,7 @@ mod tests {
                 &request,
                 "fallback",
                 &InferenceClients {
-                    http_client: TensorzeroHttpClient::new().unwrap(),
+                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
                     clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: PostgresConnectionInfo::Disabled,
                     credentials: Arc::new(InferenceCredentials::default()),

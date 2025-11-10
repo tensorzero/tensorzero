@@ -29,14 +29,13 @@ use pyo3::prelude::*;
 /// (which can be used to re-fetch the file and produce a `ResolvedInput`).
 ///
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 pub struct StoredInput {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(test, ts(optional))]
+    #[ts(optional)]
     pub system: Option<System>,
     #[serde(default)]
     pub messages: Vec<StoredInputMessage>,
@@ -76,10 +75,9 @@ impl StoredInput {
     }
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 /// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
 pub struct StoredInputMessage {
     pub role: Role,
@@ -207,10 +205,9 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 pub enum StoredInputMessageContent {
     Text(Text),
     Template(Template),
@@ -253,6 +250,7 @@ impl StoredInputMessageContent {
                             source_url: file.source_url.clone(),
                             mime_type: file.mime_type.clone(),
                             storage_path: file.storage_path.clone(),
+                            detail: file.detail.clone(),
                         },
                         data,
                     },
@@ -324,6 +322,7 @@ impl<'de> Deserialize<'de> for StoredFile {
                 source_url: legacy.file.source_url,
                 mime_type: legacy.file.mime_type,
                 storage_path: legacy.storage_path,
+                detail: None,
             }));
         }
 
@@ -655,6 +654,7 @@ mod tests {
                 kind: StorageKind::Disabled,
                 path: object_store::path::Path::parse("test/image.png").unwrap(),
             },
+            detail: None,
         });
 
         let json = serde_json::to_value(&stored_file).unwrap();
@@ -678,6 +678,7 @@ mod tests {
                 kind: StorageKind::Disabled,
                 path: object_store::path::Path::parse("test/path.png").unwrap(),
             },
+            detail: None,
         });
 
         let json = serde_json::to_value(&original).unwrap();

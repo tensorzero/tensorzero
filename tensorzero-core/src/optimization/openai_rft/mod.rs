@@ -38,9 +38,8 @@ use crate::model::CredentialLocation;
 
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct OpenAIRFTConfig {
     pub model: String,
     pub grader: OpenAIGrader,
@@ -61,9 +60,8 @@ pub struct OpenAIRFTConfig {
     pub suffix: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTConfig"))]
 pub struct UninitializedOpenAIRFTConfig {
     pub model: String,
@@ -236,9 +234,8 @@ impl UninitializedOpenAIRFTConfig {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct OpenAIRFTJobHandle {
     pub job_id: String,

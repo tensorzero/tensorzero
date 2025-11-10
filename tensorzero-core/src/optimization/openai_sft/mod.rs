@@ -32,9 +32,8 @@ use crate::{
 
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct OpenAISFTConfig {
     pub model: String,
     pub batch_size: Option<usize>,
@@ -49,9 +48,8 @@ pub struct OpenAISFTConfig {
     pub api_base: Option<Url>,
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISFTConfig"))]
 pub struct UninitializedOpenAISFTConfig {
     pub model: String,
@@ -166,9 +164,8 @@ impl UninitializedOpenAISFTConfig {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct OpenAISFTJobHandle {
     pub job_id: String,

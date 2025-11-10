@@ -1,3 +1,4 @@
+use chrono::Duration;
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -20,8 +21,8 @@ use crate::utils::retries::RetryConfig;
 
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata,
-    chat_completion_inference_params::ChatCompletionInferenceParamsV2, ContentBlock,
-    InferenceResultStream, ModelInferenceRequest, RequestMessage, Role, System, Text,
+    chat_completion_inference_params::{ChatCompletionInferenceParamsV2, ServiceTier},
+    ContentBlock, InferenceResultStream, ModelInferenceRequest, RequestMessage, Role, System, Text,
 };
 use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
 use crate::jsonschema_util::StaticJSONSchema;
@@ -41,9 +42,8 @@ use super::{
 /// If we don't have a schema, then we create a single variable corresponding to the template
 /// kind (e.g. `SYSTEM_TEXT_TEMPLATE_VAR` for a system template), and set this variable the
 /// string contents of the input block.
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TemplateWithSchema {
     pub template: PathWithContents,
     pub schema: Option<StaticJSONSchema>,
@@ -56,9 +56,8 @@ pub struct TemplateWithSchema {
     pub legacy_definition: bool,
 }
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ChatCompletionConfig {
     weight: Option<f64>,
     model: Arc<str>,
@@ -135,6 +134,10 @@ impl ChatCompletionConfig {
         self.inference_params_v2.thinking_budget_tokens
     }
 
+    pub fn service_tier(&self) -> Option<&ServiceTier> {
+        self.inference_params_v2.service_tier.as_ref()
+    }
+
     pub fn verbosity(&self) -> Option<&String> {
         self.inference_params_v2.verbosity.as_ref()
     }
@@ -204,6 +207,9 @@ pub struct UninitializedChatCompletionConfig {
     pub reasoning_effort: Option<String>,
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<ServiceTier>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget_tokens: Option<i32>,
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -240,6 +246,7 @@ impl UninitializedChatCompletionConfig {
             stop_sequences: self.stop_sequences,
             inference_params_v2: ChatCompletionInferenceParamsV2 {
                 reasoning_effort: self.reasoning_effort,
+                service_tier: self.service_tier,
                 thinking_budget_tokens: self.thinking_budget_tokens,
                 verbosity: self.verbosity,
             },
@@ -355,7 +362,7 @@ pub async fn prepare_model_input(
     )?;
     let mut templated_messages = Vec::with_capacity(messages.len());
     for message in messages {
-        let lazy_message = message.clone().into_lazy_resolved_input_message()?;
+        let lazy_message = message.clone().into_lazy_resolved_input_message();
         templated_messages
             .push(prepare_request_message(&lazy_message, templates_config, chat_templates).await?);
     }
@@ -590,6 +597,7 @@ impl Variant for ChatCompletionConfig {
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        _global_outbound_http_timeout: &Duration,
     ) -> Result<(), Error> {
         // Validate that weight is non-negative
         if self.weight.is_some_and(|w| w < 0.0) {
@@ -1201,7 +1209,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_infer_chat_completion() {
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
@@ -1412,6 +1420,7 @@ mod tests {
         let models = ModelTable::new(
             HashMap::from([("invalid_model".into(), text_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1481,6 +1490,7 @@ mod tests {
         let models = ModelTable::new(
             models,
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1489,6 +1499,7 @@ mod tests {
                 EmbeddingModelTable::new(
                     HashMap::new(),
                     ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                    crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
                 )
                 .unwrap(),
             ),
@@ -1586,6 +1597,7 @@ mod tests {
         let models = ModelTable::new(
             HashMap::from([("good".into(), text_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1668,6 +1680,7 @@ mod tests {
         let models = ModelTable::new(
             HashMap::from([("tool".into(), tool_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -1845,6 +1858,7 @@ mod tests {
         let models = ModelTable::new(
             HashMap::from([("json".into(), json_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT,
         )
         .unwrap();
         let inference_models = InferenceModels {
@@ -2205,7 +2219,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_infer_chat_completion_stream() {
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
@@ -2341,6 +2355,7 @@ mod tests {
             ModelTable::new(
                 HashMap::from([("error".into(), error_model_config)]),
                 ProviderTypeDefaultCredentials::new(provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .unwrap(),
         );
@@ -2348,6 +2363,7 @@ mod tests {
             EmbeddingModelTable::new(
                 HashMap::new(),
                 ProviderTypeDefaultCredentials::new(provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .unwrap(),
         );
@@ -2429,6 +2445,7 @@ mod tests {
             ModelTable::new(
                 HashMap::from([("good".into(), text_model_config)]),
                 ProviderTypeDefaultCredentials::new(provider_types).into(),
+                chrono::Duration::seconds(120),
             )
             .unwrap(),
         );

@@ -18,7 +18,7 @@ use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::{
@@ -44,9 +44,8 @@ const PROVIDER_NAME: &str = "Azure";
 pub const PROVIDER_TYPE: &str = "azure";
 const AZURE_INFERENCE_API_VERSION: &str = "2025-04-01-preview";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct AzureProvider {
     deployment_id: String,
     #[serde(skip)]
@@ -336,6 +335,7 @@ impl InferenceProvider for AzureProvider {
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
+            &raw_request,
         )
         .peekable();
         Ok((stream, raw_request))
@@ -616,6 +616,8 @@ struct AzureRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    service_tier: Option<ServiceTier>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     verbosity: Option<String>,
 }
 
@@ -625,12 +627,29 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
         request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    // Azure supports auto and default, but not flex and priority
+    if let Some(tier) = service_tier {
+        match tier {
+            ServiceTier::Auto | ServiceTier::Default => {
+                request.service_tier = Some(tier.clone());
+            }
+            ServiceTier::Flex | ServiceTier::Priority => {
+                warn_inference_parameter_not_supported(
+                    PROVIDER_NAME,
+                    &format!("service_tier ({tier})"),
+                    None,
+                );
+            }
+        }
     }
 
     if thinking_budget_tokens.is_some() {
@@ -678,6 +697,7 @@ impl<'a> AzureRequest<'a> {
             tools,
             tool_choice: tool_choice.map(AzureToolChoice::from),
             reasoning_effort: None,
+            service_tier: None, // handled below
             verbosity: None,
         };
 
@@ -1150,6 +1170,7 @@ mod tests {
         let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };
@@ -1167,6 +1188,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             reasoning_effort: None,
+            service_tier: None,
             verbosity: None,
         };
 

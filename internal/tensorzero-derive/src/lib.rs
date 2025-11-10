@@ -1,3 +1,5 @@
+//! TensorZero macros
+
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
@@ -218,4 +220,77 @@ pub fn tensorzero_derive(input: TokenStream) -> TokenStream {
         }
     };
     res.into()
+}
+
+/// Attribute macro that exports `schemars::JsonSchema` definitions when tests run.
+///
+/// The macro generates a `#[test]` that serializes the annotated type's schema and
+/// writes it to `clients/schemas/<TypeName>.json`, similar to how `ts-rs`'s
+/// `#[ts(export)]` produces TypeScript definitions.
+///
+/// ## Usage
+///
+/// ```ignore
+/// use schemars::JsonSchema;
+/// use tensorzero_derive::export_schema;
+///
+/// #[derive(JsonSchema)]
+/// #[export_schema]
+/// pub struct MyType {
+///     field: String,
+/// }
+/// ```
+///
+/// Running `cargo test` will create or update `clients/schemas/MyType.json`.
+#[proc_macro_attribute]
+pub fn export_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as DeriveInput);
+    let name = &input.ident;
+    let name_str = name.to_string();
+
+    // Generate a unique test name based on the type name
+    let test_name = syn::Ident::new(
+        &format!("export_schema_{}", name_str.to_lowercase()),
+        name.span(),
+    );
+
+    // Generate the test function
+    let expanded = quote! {
+        // Keep the original item
+        #input
+
+        // Generate a test that exports the schema
+        #[cfg(test)]
+        #[test]
+        fn #test_name() {
+            use schemars::schema_for;
+            use std::fs;
+            use std::path::{Path, PathBuf};
+            use std::borrow::Cow;
+
+            // Get the schema for this type
+            let schema = schema_for!(#name);
+
+            // Serialize to pretty JSON
+            let json = serde_json::to_string_pretty(&schema)
+                .expect(&format!("Failed to serialize schema for {}", #name_str));
+
+            let schema_output_dir = match std::env::var("SCHEMA_RS_EXPORT_DIR") {
+                Err(..) => Cow::Borrowed(Path::new("./schemas")),
+                Ok(dir) => Cow::Owned(PathBuf::from(dir)),
+            };
+
+            fs::create_dir_all(&schema_output_dir)
+                .expect(&format!("Failed to create schemas directory: {}", schema_output_dir.display()));
+
+            // Write the schema file
+            let file_path = schema_output_dir.join(format!("{}.json", #name_str));
+            fs::write(&file_path, json)
+                .expect(&format!("Failed to write schema for {}", #name_str));
+
+            println!("✓ Generated schema: {}", file_path.display());
+        }
+    };
+
+    TokenStream::from(expanded)
 }

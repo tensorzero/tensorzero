@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 #![deny(clippy::all)]
 use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
+use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 use url::Url;
 
 use evaluations::stats::{EvaluationInfo, EvaluationUpdate};
@@ -334,10 +335,13 @@ impl TensorZeroClient {
     pub async fn stale_dataset(&self, dataset_name: String) -> Result<String, napi::Error> {
         let result = self
             .client
-            .stale_dataset(dataset_name)
+            .delete_dataset(dataset_name)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        let result_str = serde_json::to_string(&result).map_err(|e| {
+        let shim_result = StaleDatasetResponse {
+            num_staled_datapoints: result.num_deleted_datapoints,
+        };
+        let result_str = serde_json::to_string(&shim_result).map_err(|e| {
             napi::Error::from_reason(format!("Failed to serialize stale dataset result: {e}"))
         })?;
         Ok(result_str)

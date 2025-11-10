@@ -136,15 +136,7 @@ pub struct BaseModelTable<T> {
     #[serde(skip)]
     #[ts(skip)]
     pub default_credentials: Arc<ProviderTypeDefaultCredentials>,
-}
-
-impl<T: ShorthandModelConfig> Default for BaseModelTable<T> {
-    fn default() -> Self {
-        BaseModelTable {
-            table: HashMap::new(),
-            default_credentials: Arc::new(ProviderTypeDefaultCredentials::default()),
-        }
-    }
+    global_outbound_http_timeout: chrono::Duration,
 }
 
 pub trait ShorthandModelConfig: Sized {
@@ -156,7 +148,11 @@ pub trait ShorthandModelConfig: Sized {
         model_name: &str,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self, Error>;
-    fn validate(&self, key: &str) -> Result<(), Error>;
+    fn validate(
+        &self,
+        key: &str,
+        global_outbound_http_timeout: &chrono::Duration,
+    ) -> Result<(), Error>;
 }
 
 /// This is `Cow` without the `T: Clone` bound.
@@ -196,10 +192,21 @@ fn check_shorthand<'a>(prefixes: &[&'a str], key: &'a str) -> Option<Shorthand<'
     None
 }
 
+impl<T: ShorthandModelConfig> Default for BaseModelTable<T> {
+    fn default() -> Self {
+        Self {
+            table: HashMap::new(),
+            default_credentials: Arc::new(ProviderTypeDefaultCredentials::default()),
+            global_outbound_http_timeout: chrono::Duration::seconds(120),
+        }
+    }
+}
+
 impl<T: ShorthandModelConfig> BaseModelTable<T> {
     pub fn new(
         models: HashMap<Arc<str>, T>,
         provider_type_default_credentials: Arc<ProviderTypeDefaultCredentials>,
+        global_outbound_http_timeout: chrono::Duration,
     ) -> Result<Self, String> {
         for key in models.keys() {
             if RESERVED_MODEL_PREFIXES
@@ -217,6 +224,7 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
         Ok(Self {
             table: models,
             default_credentials: provider_type_default_credentials,
+            global_outbound_http_timeout,
         })
     }
 
@@ -242,7 +250,7 @@ impl<T: ShorthandModelConfig> BaseModelTable<T> {
         // Try direct lookup (if it's blacklisted, it's not in the table)
         // If it's shorthand and already in the table, it's valid
         if let Some(model_config) = self.table.get(key) {
-            model_config.validate(key)?;
+            model_config.validate(key, &self.global_outbound_http_timeout)?;
             return Ok(());
         }
 

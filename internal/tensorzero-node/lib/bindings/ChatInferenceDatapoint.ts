@@ -25,19 +25,23 @@ export type ChatInferenceDatapoint = {
   updated_at: string;
   name?: string;
   /**
-   * Names of static tools (from function config) to use. If None, all static tools are available.
+   * A subset of static tools configured for the function that the inference is allowed to use. Optional.
+   * If not provided, all static tools are allowed.
    */
   allowed_tools?: Array<string>;
   /**
-   * Additional tools provided at runtime (not in function config)
+   * Tools that the user provided at inference time (not in function config), in addition to the function-configured
+   * tools, that are also allowed.
    */
   additional_tools?: Array<Tool>;
   /**
-   * Override the function's tool choice strategy
+   * User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+   * Optional.
    */
   tool_choice?: ToolChoice;
   /**
-   * Override whether parallel tool calls are enabled
+   * Whether to use parallel tool calls in the inference. Optional.
+   * If provided during inference, it will override the function-configured parallel tool calls.
    */
   parallel_tool_calls?: boolean;
   /**

@@ -288,11 +288,13 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
         )
         .route(
             "/datasets/{dataset_name}/datapoints",
+            #[expect(deprecated)]
             post(endpoints::datasets::create_datapoints_handler),
         )
         // TODO(#3459): Deprecated in #3721. Remove in a future release.
         .route(
             "/datasets/{dataset_name}/datapoints/bulk",
+            #[expect(deprecated)]
             post(endpoints::datasets::bulk_insert_datapoints_handler),
         )
         .route(
@@ -313,7 +315,8 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
         )
         .route(
             "/v1/datasets/{dataset_name}/datapoints",
-            patch(endpoints::datasets::v1::update_datapoints_handler)
+            post(endpoints::datasets::v1::create_datapoints_handler)
+                .patch(endpoints::datasets::v1::update_datapoints_handler)
                 .delete(endpoints::datasets::v1::delete_datapoints_handler),
         )
         .route(

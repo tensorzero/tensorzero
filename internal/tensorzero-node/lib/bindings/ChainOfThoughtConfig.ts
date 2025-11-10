@@ -2,6 +2,7 @@
 import type { ChatTemplates } from "./ChatTemplates";
 import type { JsonMode } from "./JsonMode";
 import type { RetryConfig } from "./RetryConfig";
+import type { ServiceTier } from "./ServiceTier";
 
 export type ChainOfThoughtConfig = {
   weight: number | null;
@@ -17,6 +18,7 @@ export type ChainOfThoughtConfig = {
   json_mode: JsonMode | null;
   retries: RetryConfig;
   reasoning_effort?: string;
+  service_tier?: ServiceTier;
   thinking_budget_tokens?: number;
   verbosity?: string;
 };

@@ -193,7 +193,7 @@ export const modelInferenceRowSchema = z.object({
   model_provider_name: z.string(),
   input_tokens: z.number().nullable(),
   output_tokens: z.number().nullable(),
-  response_time_ms: z.number(),
+  response_time_ms: z.number().nullable(),
   ttft_ms: z.number().nullable(),
   timestamp: z.string().datetime(),
   system: z.string().nullable(),

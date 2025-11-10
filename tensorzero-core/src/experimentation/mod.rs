@@ -15,21 +15,20 @@ pub mod asymptotic_confidence_sequences;
 mod static_weights;
 pub mod track_and_stop;
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExperimentationConfig {
-    StaticWeights(static_weights::StaticWeightsConfig),
     #[default]
     Uniform,
-    #[ts(skip)]
-    #[cfg(test)]
-    AlwaysFails(AlwaysFailsConfig),
+    StaticWeights(static_weights::StaticWeightsConfig),
     // NOTE: this diverges from the spec due to technical limitations with `serde`
     // (serde enums cannot be #[serde(flatten)])
     // we can write a custom deserializer for this if we want
     TrackAndStop(track_and_stop::TrackAndStopConfig),
+    #[ts(skip)]
+    #[cfg(test)]
+    AlwaysFails(AlwaysFailsConfig),
 }
 
 #[derive(Debug, Deserialize)]

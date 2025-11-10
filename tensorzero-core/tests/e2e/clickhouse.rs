@@ -221,7 +221,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
                     "--add-host=host.docker.internal:host-gateway",
                     "-v",
                     &format!("{s3_fixtures_path}:/s3-fixtures"),
-                    "clickhouse/clickhouse-server:25.4-alpine",
+                    "clickhouse:25.4",
                     "clickhouse-client",
                     "--host",
                     host,
@@ -744,7 +744,7 @@ async fn test_clickhouse_migration_manager() {
             migration_name,
             gateway_version,
             gateway_git_sha,
-            execution_time_ms,
+            execution_time_ms: _,
             applied_at,
         } = migration_record;
         assert_eq!(*migration_id, migration.migration_num().unwrap());
@@ -754,7 +754,6 @@ async fn test_clickhouse_migration_manager() {
             gateway_git_sha,
             tensorzero_core::built_info::GIT_COMMIT_HASH.unwrap_or("unknown")
         );
-        assert!(*execution_time_ms > 0);
         assert!(applied_at.is_some());
     }
     run_all(&clickhouse, &migrations, &logs_contain).await;

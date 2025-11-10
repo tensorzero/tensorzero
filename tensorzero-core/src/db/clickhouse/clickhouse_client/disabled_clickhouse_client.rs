@@ -9,7 +9,7 @@ use crate::db::clickhouse::{
     ClickHouseClient, ClickHouseResponse, ClickHouseResponseMetadata, ExternalDataInfo,
     GetMaybeReplicatedTableEngineNameArgs, HealthCheckable, TableName,
 };
-use crate::error::Error;
+use crate::error::{DelayedError, Error};
 
 lazy_static! {
     static ref DISABLED_DATABASE_URL: SecretString = SecretString::from("disabled");
@@ -74,12 +74,11 @@ impl ClickHouseClient for DisabledClickHouseClient {
         })
     }
 
-    async fn run_query_synchronous_with_err_logging(
+    async fn run_query_synchronous_delayed_err(
         &self,
         _query: String,
         _parameters: &HashMap<&str, &str>,
-        _err_logging: bool,
-    ) -> Result<ClickHouseResponse, Error> {
+    ) -> Result<ClickHouseResponse, DelayedError> {
         Ok(ClickHouseResponse {
             response: String::new(),
             metadata: ClickHouseResponseMetadata {

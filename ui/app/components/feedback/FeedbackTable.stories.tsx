@@ -12,6 +12,7 @@ function makeOrderedUuid(num = 0): string {
 
 const config: Config = {
   gateway: {
+    global_outbound_http_timeout: [300000, 0],
     disable_pseudonymous_usage_analytics: false,
     fetch_and_encode_input_files_before_inference: false,
     auth: {
@@ -72,8 +73,8 @@ const config: Config = {
     xai: { defaults: { api_key_location: "" } },
   },
   optimizers: {},
-  models: { table: {} },
-  embedding_models: { table: {} },
+  models: { table: {}, global_outbound_http_timeout: [300000, 0] },
+  embedding_models: { table: {}, global_outbound_http_timeout: [300000, 0] },
   functions: {},
   metrics: {
     accuracy: {

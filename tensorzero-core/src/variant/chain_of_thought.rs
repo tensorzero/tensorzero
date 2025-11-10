@@ -1,3 +1,4 @@
+use chrono::Duration;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -22,9 +23,8 @@ use crate::variant::chat_completion::{ChatCompletionConfig, UninitializedChatCom
 
 use super::{InferenceConfig, ModelUsedInfo, Variant};
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ChainOfThoughtConfig {
     #[serde(flatten)]
     pub inner: ChatCompletionConfig,
@@ -143,6 +143,7 @@ impl Variant for ChainOfThoughtConfig {
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &Duration,
     ) -> Result<(), Error> {
         if !matches!(function.as_ref(), FunctionConfig::Json(_)) {
             return Err(ErrorDetails::UnsupportedVariantForFunctionType {
@@ -161,6 +162,7 @@ impl Variant for ChainOfThoughtConfig {
                 templates,
                 function_name,
                 variant_name,
+                global_outbound_http_timeout,
             )
             .await
     }

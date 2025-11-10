@@ -77,7 +77,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .await
         .unwrap();
 
-    let client = TensorzeroHttpClient::new().unwrap();
+    let client = TensorzeroHttpClient::new_testing().unwrap();
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
@@ -492,6 +492,7 @@ fn generate_image_example() -> RenderedSample {
                                     "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                                 ).unwrap(),
                             },
+                            detail: None,
                         },
                         data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
                     })),
@@ -516,6 +517,7 @@ fn generate_image_example() -> RenderedSample {
                                     "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                                 ).unwrap(),
                             },
+                            detail: None,
                         },
                     ))),
                 ],

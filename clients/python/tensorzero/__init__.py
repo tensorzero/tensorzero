@@ -48,6 +48,7 @@ from .types import (
     ContentBlock,
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
     DynamicEvaluationRunResponse,  # DEPRECATED
+    EvaluatorStatsDict,
     ExtraBody,
     FeedbackResponse,
     FileBase64,
@@ -139,6 +140,7 @@ __all__ = [
     "DICLOptimizationConfig",
     "DynamicEvaluationRunEpisodeResponse",  # DEPRECATED
     "DynamicEvaluationRunResponse",  # DEPRECATED
+    "EvaluatorStatsDict",
     "WorkflowEvaluationRunEpisodeResponse",
     "WorkflowEvaluationRunResponse",
     "ExtraBody",

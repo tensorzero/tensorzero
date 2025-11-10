@@ -349,11 +349,13 @@ impl ClientBuilder {
                         },
                     ));
                 } else {
-                    TensorzeroHttpClient::new().map_err(|e| {
-                        ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
-                            source: e.into(),
-                        })
-                    })?
+                    TensorzeroHttpClient::new(config.gateway.global_outbound_http_timeout).map_err(
+                        |e| {
+                            ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
+                                source: e.into(),
+                            })
+                        },
+                    )?
                 };
                 Ok(Client {
                     mode: Arc::new(ClientMode::EmbeddedGateway {
@@ -395,7 +397,8 @@ impl ClientBuilder {
             // if a TLS backend cannot be initialized.
             // This explicit `expect` does not actually increase the risk of panics,
             #[expect(clippy::expect_used)]
-            TensorzeroHttpClient::new().expect("Failed to construct TensorzeroHttpClient"),
+            TensorzeroHttpClient::new(crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT)
+                .expect("Failed to construct TensorzeroHttpClient"),
         );
         Client {
             mode: Arc::new(ClientMode::EmbeddedGateway {
@@ -555,10 +558,16 @@ impl Client {
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
+                // We currently ban auth-enabled configs in embedded gateway mode,
+                // so we don't have an API key here
                 Ok(with_embedded_timeout(*timeout, async {
-                    crate::endpoints::feedback::feedback(gateway.handle.app_state.clone(), params)
-                        .await
-                        .map_err(err_to_http)
+                    crate::endpoints::feedback::feedback(
+                        gateway.handle.app_state.clone(),
+                        params,
+                        None,
+                    )
+                    .await
+                    .map_err(err_to_http)
                 })
                 .await?)
             }

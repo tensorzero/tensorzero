@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use serde_json::Value;
-use tensorzero::InferenceResponse;
+use tensorzero_core::client::InferenceResponse;
 use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tracing::{debug, instrument, warn};
 
@@ -68,7 +68,7 @@ mod tests {
 
     use super::*;
     use serde_json::json;
-    use tensorzero::Role;
+    use tensorzero_core::client::Role;
     use tensorzero_core::{
         endpoints::{
             datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint},
