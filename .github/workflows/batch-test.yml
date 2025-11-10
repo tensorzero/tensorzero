@@ -32,6 +32,10 @@ on:
   workflow_dispatch:
   workflow_call:
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   batch-tests:
     runs-on: ubuntu-latest
