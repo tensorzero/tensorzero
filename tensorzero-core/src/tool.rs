@@ -2846,4 +2846,93 @@ mod tests {
         assert_eq!(result.baz, "test");
         assert!(result.tool_info.is_some());
     }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_legacy_empty_arrays_filtered() {
+        // Test that empty dynamic_tools and dynamic_provider_tools arrays are filtered out
+        // when NOT in full format mode (i.e., legacy data without allowed_tools/tool_choice)
+        // This handles the case where ClickHouse returns default values (empty arrays) for these columns
+        // when they weren't explicitly set
+        let json = json!({
+            "baz": "legacy_value",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "tool_params": {
+                "tools_available": [
+                    {
+                        "name": "get_temperature",
+                        "description": "Get temperature",
+                        "parameters": {"type": "object"},
+                        "strict": true
+                    }
+                ],
+                "tool_choice": "auto"
+            }
+        });
+
+        // This should deserialize successfully with tool_info:
+        // 1. We're NOT in full format mode (no allowed_tools/tool_choice fields)
+        // 2. Empty arrays for dynamic_tools and dynamic_provider_tools get filtered out
+        // 3. After filtering, only tool_params remains, which is legacy format
+        // 4. tool_params with tools_available is valid in legacy format
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+        assert_eq!(result.baz, "legacy_value");
+        assert!(
+            result.tool_info.is_some(),
+            "tool_info should be Some with valid tool_params"
+        );
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_full_format_empty_arrays_kept() {
+        // Test that empty dynamic_tools and dynamic_provider_tools arrays are KEPT
+        // when in full format mode (i.e., has allowed_tools and tool_choice fields)
+        // In full format, empty arrays are valid and should not be filtered out
+        let json = json!({
+            "baz": "full_format_value",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        // This should deserialize to Some because:
+        // 1. We ARE in full format mode (has allowed_tools and tool_choice)
+        // 2. Empty arrays are valid in full format and should not be filtered
+        // 3. The presence of allowed_tools/tool_choice indicates this is valid full format data
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+        assert_eq!(result.baz, "full_format_value");
+        assert!(
+            result.tool_info.is_some(),
+            "tool_info should be Some in full format mode even with empty arrays"
+        );
+
+        let tool_info = result.tool_info.unwrap();
+        assert_eq!(tool_info.tool_choice, ToolChoice::Auto);
+        assert_eq!(tool_info.dynamic_tools.len(), 0);
+        assert_eq!(tool_info.dynamic_provider_tools.len(), 0);
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_legacy_only_empty_arrays() {
+        // Test that when ONLY empty dynamic_tools and dynamic_provider_tools arrays are present
+        // (no tool_params, no allowed_tools/tool_choice), they get filtered out and we get None
+        // This handles the case where ClickHouse returns default empty arrays but no actual tool data
+        let json = json!({
+            "baz": "only_empty_arrays",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": []
+        });
+
+        // This should deserialize to None because:
+        // 1. We're NOT in full format mode (no allowed_tools/tool_choice)
+        // 2. Empty arrays for dynamic_tools and dynamic_provider_tools get filtered out
+        // 3. After filtering, values is empty
+        // 4. Empty values results in None
+        assert_deserialize_to_none(json, "only_empty_arrays");
+    }
 }
