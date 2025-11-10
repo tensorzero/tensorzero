@@ -228,7 +228,7 @@ jobs:
         with:
           working-directory: ./clients/python
           command: sdist
-          args: --out dist
+          args: --out dist --interpreter python3.12
       - name: Upload sdist
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
