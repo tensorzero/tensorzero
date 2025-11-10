@@ -3,7 +3,7 @@
 
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:24.12-alpine
+    image: clickhouse:24.12
     environment:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -24,7 +24,7 @@ services:
       timeout: 1s
 
   postgres:
-    image: postgres:14-alpine
+    image: postgres:14
     environment:
       POSTGRES_DB: tensorzero
       POSTGRES_USER: postgres
