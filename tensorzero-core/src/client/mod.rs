@@ -405,12 +405,28 @@ impl ClientBuilder {
                 http_client,
                 timeout,
             } => {
+                // Validation: Batch writes are not supported in embedded mode
+                if config.gateway.observability.batch_writes.enabled
+                    && !config
+                        .gateway
+                        .observability
+                        .batch_writes
+                        .__force_allow_embedded_batch_writes
+                {
+                    return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                        source: crate::error::Error::new(ErrorDetails::Config {
+                            message: "`[gateway.observability.batch_writes]` is not yet supported in embedded gateway mode".to_string(),
+                        })
+                        .into(),
+                    }));
+                }
+
                 // Validation: Auth is not supported in embedded mode
                 if config.gateway.auth.enabled {
                     return Err(ClientBuilderError::AuthNotSupportedInEmbeddedMode(
                         TensorZeroError::Other {
                             source: crate::error::Error::new(ErrorDetails::Config {
-                                message: "`[gateway.auth]` is not supported in embedded gateway mode. Authentication is only available when using HTTP gateway mode.".to_string(),
+                                message: "`[gateway.auth]` is not supported in embedded gateway mode. Authentication is only available when using HTTP gateway mode. Please either disable authentication by setting `gateway.auth.enabled = false` or use HTTP mode instead.".to_string(),
                             })
                             .into(),
                         },
@@ -1129,6 +1145,56 @@ mod tests {
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("`[gateway.auth]` is not supported in embedded gateway"),
+            "Bad error message: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_from_components_rejects_batch_writes() {
+        // Create a config that enables batch writes, which is not supported in embedded mode
+        let config_str = r"
+        [gateway.observability.batch_writes]
+        enabled = true
+        ";
+        let tmp_config = NamedTempFile::new().unwrap();
+        std::fs::write(tmp_config.path(), config_str).unwrap();
+
+        // Load config
+        let config = Arc::new(
+            Config::load_from_path_optional_verify_credentials(
+                &ConfigFileGlob::new(tmp_config.path().to_string_lossy().to_string()).unwrap(),
+                false,
+            )
+            .await
+            .unwrap(),
+        );
+
+        // Create mock components
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let postgres_connection_info = PostgresConnectionInfo::Disabled;
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+
+        // Attempt to build client with FromComponents mode
+        let err = ClientBuilder::new(ClientBuilderMode::FromComponents {
+            config,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            http_client,
+            timeout: None,
+        })
+        .build()
+        .await
+        .expect_err("ClientBuilder should have failed");
+
+        // Verify it returns the correct error
+        assert!(
+            matches!(err, ClientBuilderError::Clickhouse(_)),
+            "Expected Clickhouse error, got: {err:?}"
+        );
+
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("`[gateway.observability.batch_writes]` is not yet supported"),
             "Bad error message: {err_msg}"
         );
     }
