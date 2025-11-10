@@ -89,6 +89,9 @@ jobs:
         with:
           wait-for-builder: true
 
+      - name: Cleanup disk space
+        run: ./ci/free-disk-space.sh
+
       - name: Download provider-proxy cache
         # When running as a cron job, don't use the provider-proxy cache.
         # The cron job is used to gather information about provider flakiness.
