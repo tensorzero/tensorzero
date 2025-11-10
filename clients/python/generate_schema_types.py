@@ -1,13 +1,37 @@
 #!/usr/bin/env python3
-"""
-Generate Python dataclasses from Rust JSON schemas.
+f"""
+Generate Python dataclasses from JSON schemas derived from Rust types.
 
-This script:
+
+For pure value types (mostly used in APIs), we use `schemars` to generate the JSON schemas from Rust types,
+and `datamodel-code-generator` to generate the Python dataclasses from the JSON schemas.
+
+Rust Types (with annotations)
+    ↓ (cargo test export_schema)
+JSON Schemas (in clients/schemas/)
+    ↓ (python generate_schema_types.py)
+Python Dataclasses (in clients/python/tensorzero/generated_types)
+
+
+This script runs both steps of the generation pipeline:
+
 1. Runs cargo tests to generate JSON schemas from Rust types (using #[export_schema])
+    - See `tensorzero-derive` crate for more details on the macro, and https://graham.cool/schemars/ for schemars docs.
 2. Generates Python dataclasses from those JSON schemas
+    - For detailed configuration options, see https://koxudaxi.github.io/datamodel-code-generator/.
+  
+It also sets up customizations to make them work well together:
 
-Run this script from the clients/python directory:
-    python generate_schema_types.py
+1.  `schemars` generates one JSON Schema file for each Rust type, bringing in all its dependencies. Naively
+    generating Python dataclasses from these JSON Schemas would cause dependencies to be repeatedly generated, so
+    we merge them into a single schema file before generating Python dataclasses.
+2.  To generate the __init__.py file so clients can simply write `from tensorzero.generated_types import X`, we
+    collect all the type names from the schema and export them.
+3.  We generate a custom header file for the generated types to include the `UNSET` sentinel value.
+
+
+
+To run this script: run `pnpm generate-python-schemas` from the root of the repository.
 """
 
 import json
@@ -84,65 +108,6 @@ def preprocess_and_merge_schemas(schema_files: List[Path], output_file: Path) ->
     print(f"✓ Merged schema written to {output_file}")
 
 
-def extract_names_from_schema_recursive(schema: Any, exported_names: set[str]) -> None:  # pyright: ignore[reportUnknownParameterType]
-    """
-    Recursively extract all type names from a schema definition.
-
-    This processes:
-    - title fields (become class names)
-    - oneOf variants (discriminated unions with inline schemas)
-    - allOf compositions (inheritance)
-    - nested schemas
-
-    Note: We skip titles in oneOf/anyOf variants that are just $ref pointers,
-    since those don't create new types - they just reference existing ones.
-
-    Args:
-        schema: A JSON schema definition dictionary
-                Takes Any to handle non-dict inputs gracefully
-        exported_names: Set to accumulate exported type names into
-    """
-    if not isinstance(schema, dict):
-        return
-
-    # Extract title if present, but only if this isn't just a $ref wrapper
-    # (titles on $ref-only schemas are just documentation)
-    if "title" in schema and "$ref" not in schema:
-        exported_names.add(schema["title"])  # pyright: ignore[reportUnknownArgumentType]
-
-    # Recursively process oneOf (discriminated unions)
-    # Only extract names from inline schemas, not from $ref pointers
-    # Note: pyright can't infer types through dict iteration when input is Any
-    if "oneOf" in schema:
-        for variant in schema["oneOf"]:  # pyright: ignore[reportUnknownVariableType]
-            # Skip variants that are just $ref pointers - they don't create new types
-            if isinstance(variant, dict) and "$ref" not in variant:
-                extract_names_from_schema_recursive(variant, exported_names)
-
-    # Recursively process allOf (composition/inheritance)
-    # For allOf, we do want to process $ref items to find inline properties
-    if "allOf" in schema:
-        for item in schema["allOf"]:  # pyright: ignore[reportUnknownVariableType]
-            # Only recurse into inline schemas, not $ref pointers
-            if isinstance(item, dict) and "$ref" not in item:
-                extract_names_from_schema_recursive(item, exported_names)
-
-    # Recursively process anyOf
-    if "anyOf" in schema:
-        for item in schema["anyOf"]:  # pyright: ignore[reportUnknownVariableType]
-            # Skip variants that are just $ref pointers
-            if isinstance(item, dict) and "$ref" not in item:
-                extract_names_from_schema_recursive(item, exported_names)
-
-    # Recursively process properties
-    if "properties" in schema:
-        for prop_schema in schema["properties"].values():  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
-            extract_names_from_schema_recursive(prop_schema, exported_names)
-
-    # Recursively process items (for arrays)
-    if "items" in schema:
-        extract_names_from_schema_recursive(schema["items"], exported_names)
-
 
 def extract_exported_names_from_schema(merged_schema: Dict[str, Any]) -> List[str]:
     """
@@ -156,6 +121,65 @@ def extract_exported_names_from_schema(merged_schema: Dict[str, Any]) -> List[st
     """
     exported_names: set[str] = set()
 
+    def extract_names_from_schema_recursive(schema: Any) -> None:  # pyright: ignore[reportUnknownParameterType]
+        """
+        Recursively extract all type names from a schema definition.
+
+        This processes:
+        - title fields (become class names)
+        - oneOf variants (discriminated unions with inline schemas)
+        - allOf compositions (inheritance)
+        - nested schemas
+
+        Note: We skip titles in oneOf/anyOf variants that are just $ref pointers,
+        since those don't create new types - they just reference existing ones.
+
+        Args:
+            schema: A JSON schema definition dictionary
+                    Takes Any to handle non-dict inputs gracefully
+            exported_names: Set to accumulate exported type names into
+        """
+        if not isinstance(schema, dict):
+            return
+
+        # Extract title if present, but only if this isn't just a $ref wrapper
+        # (titles on $ref-only schemas are just documentation)
+        if "title" in schema and "$ref" not in schema:
+            exported_names.add(schema["title"])  # pyright: ignore[reportUnknownArgumentType]
+
+        # Recursively process oneOf (discriminated unions)
+        # Only extract names from inline schemas, not from $ref pointers
+        # Note: pyright can't infer types through dict iteration when input is Any
+        if "oneOf" in schema:
+            for variant in schema["oneOf"]:  # pyright: ignore[reportUnknownVariableType]
+                # Skip variants that are just $ref pointers - they don't create new types
+                if isinstance(variant, dict) and "$ref" not in variant:
+                    extract_names_from_schema_recursive(variant)
+
+        # Recursively process allOf (composition/inheritance)
+        # For allOf, we do want to process $ref items to find inline properties
+        if "allOf" in schema:
+            for item in schema["allOf"]:  # pyright: ignore[reportUnknownVariableType]
+                # Only recurse into inline schemas, not $ref pointers
+                if isinstance(item, dict) and "$ref" not in item:
+                    extract_names_from_schema_recursive(item)
+
+        # Recursively process anyOf
+        if "anyOf" in schema:
+            for item in schema["anyOf"]:  # pyright: ignore[reportUnknownVariableType]
+                # Skip variants that are just $ref pointers
+                if isinstance(item, dict) and "$ref" not in item:
+                    extract_names_from_schema_recursive(item)
+
+        # Recursively process properties
+        if "properties" in schema:
+            for prop_schema in schema["properties"].values():  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
+                extract_names_from_schema_recursive(prop_schema)
+
+        # Recursively process items (for arrays)
+        if "items" in schema:
+            extract_names_from_schema_recursive(schema["items"])
+
     # Extract all definitions from $defs
     if "$defs" not in merged_schema:
         return []
@@ -165,7 +189,7 @@ def extract_exported_names_from_schema(merged_schema: Dict[str, Any]) -> List[st
         exported_names.add(def_name)
 
         # Recursively extract names from this definition
-        extract_names_from_schema_recursive(def_schema, exported_names)
+        extract_names_from_schema_recursive(def_schema)
 
     # Sort the names for consistent output
     return sorted(exported_names)
@@ -408,7 +432,7 @@ def main() -> None:
     print("Generated types can be imported with:")
     print("    from tensorzero.generated_types import Input, DynamicToolParams, ...")
     print()
-    print("See tensorzero/generated_exports.py for the complete list of exports.")
+    print("See tensorzero/generated_types/__init__.py for the complete list of exports.")
 
 
 if __name__ == "__main__":
