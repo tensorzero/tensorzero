@@ -306,11 +306,7 @@ pub async fn inference(
     }
 
     // Validate the input
-    // We skip validation if using dynamic variant config and there are no candidate variants
-    // This assumes that we are using a built-in tensorzero function
-    if !candidate_variants.is_empty() || params.internal_dynamic_variant_config.is_none() {
-        function.validate_inference_params(&params)?;
-    }
+    function.validate_inference_params(&params)?;
 
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
