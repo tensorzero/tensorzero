@@ -11,6 +11,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage};
+use tensorzero_core::tool::Tool;
 use tensorzero_core::{
     db::clickhouse::{
         test_helpers::select_batch_model_inferences_clickhouse, ClickHouseConnectionInfo, TableName,
@@ -1756,7 +1757,15 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         // Verify new Migration 0041 columns (decomposed tool call storage format)
         // Verify dynamic_tools column (should be empty for static tools)
         let dynamic_tools = result.get("dynamic_tools").unwrap().as_array().unwrap();
-        assert!(dynamic_tools.is_empty());
+        if i < 4 {
+            assert!(dynamic_tools.is_empty());
+        } else {
+            assert_eq!(dynamic_tools.len(), 1);
+            let tool: Tool =
+                serde_json::from_value(dynamic_tools.first().unwrap().clone()).unwrap();
+            let Tool::ClientSideFunction(tool) = tool;
+            assert_eq!(tool.name, "self_destruct");
+        }
 
         // Verify dynamic_provider_tools column (should be empty)
         let dynamic_provider_tools = result
