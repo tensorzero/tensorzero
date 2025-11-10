@@ -1,8 +1,0 @@
-Extract all named entities from the given text and classify them into four categories:
-
-- person
-- organization
-- location
-- miscellaneous
-
-Return your answer as JSON.
