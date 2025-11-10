@@ -1,6 +1,18 @@
 /* eslint-disable no-console */
 import { isErrorLike } from "~/utils/common";
 
+const APP_VERSION = (() => {
+  if (typeof __APP_VERSION__ === "string") {
+    return __APP_VERSION__;
+  }
+
+  if (typeof process !== "undefined") {
+    return process.env.npm_package_version;
+  }
+
+  return null;
+})();
+
 export const logger = {
   info: (message: unknown, ...args: unknown[]) => {
     console.info(getErrorMessage(message), ...args);
@@ -18,7 +30,7 @@ export const logger = {
 };
 
 const getErrorMessage = (error: unknown): string => {
-  const prefix = `[TensorZero UI ${__APP_VERSION__}]`;
+  const prefix = APP_VERSION ? `[TensorZero UI ${APP_VERSION}]` : null;
   let messageString: string | null = null;
   try {
     messageString =

@@ -8,9 +8,6 @@ export interface ToastState {
 
 export type Toast = Omit<ToasterToast, "id">;
 
-// export type ToastActionType =
-//   (typeof ToastActionType)[keyof typeof ToastActionType];
-
 export type ToastAction =
   | { type: "ADD_TOAST"; toast: ToasterToast }
   | {
