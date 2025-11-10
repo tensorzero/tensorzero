@@ -1,7 +1,7 @@
 use axum::body::Body;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
-use axum::{debug_handler, Json};
+use axum::{debug_handler, Extension, Json};
 use futures::future::{join_all, try_join_all};
 use itertools::{izip, Itertools};
 use metrics::counter;
@@ -21,6 +21,7 @@ use super::inference::{
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
@@ -111,9 +112,10 @@ pub type BatchOutputSchemas = Vec<Option<Value>>;
 #[debug_handler(state = AppStateData)]
 pub async fn start_batch_inference_handler(
     State(app_state): State<AppStateData>,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<StartBatchInferenceParams>,
 ) -> Result<Response<Body>, Error> {
-    Ok(Json(start_batch_inference(app_state, params).await?).into_response())
+    Ok(Json(start_batch_inference(app_state, params, api_key_ext).await?).into_response())
 }
 
 pub async fn start_batch_inference(
@@ -126,6 +128,7 @@ pub async fn start_batch_inference(
         ..
     }: AppStateData,
     params: StartBatchInferenceParams,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<PrepareBatchInferenceOutput, Error> {
     // Get the function config or return an error if it doesn't exist
     let function = config.get_function(&params.function_name)?;
@@ -238,7 +241,7 @@ pub async fn start_batch_inference(
         tags: tags.clone(),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
-        scope_info: ScopeInfo { tags: tags.clone() },
+        scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
     };
 
     let inference_models = InferenceModels {
@@ -772,7 +775,7 @@ async fn write_start_batch_inference<'a>(
             function_name: metadata.function_name.into(),
             variant_name: metadata.variant_name.into(),
             episode_id: metadata.episode_ids[i],
-            input: resolved_input.into_stored_input()?,
+            input: resolved_input.into_stored_input(),
             input_messages: try_join_all(
                 row.input_messages
                     .into_iter()
@@ -988,7 +991,7 @@ pub async fn write_completed_batch_inference<'a>(
             raw_request,
             model_name: _,
             model_provider_name: _,
-            tags: _,
+            tags,
         } = batch_model_inference;
         let ProviderBatchInferenceOutput {
             id: _,
@@ -1081,7 +1084,7 @@ pub async fn write_completed_batch_inference<'a>(
             tool_config,
             processing_time: None,
             ttft_ms: None,
-            tags: HashMap::new(),
+            tags,
             // Not currently supported as a batch inference parameter
             extra_body: Default::default(),
             extra_headers: Default::default(),

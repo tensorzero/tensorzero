@@ -1,6 +1,6 @@
-# Guide: Organize your configuration
+# Code Example: Organize your configuration
 
-This directory contains a code example for the **[Organize your configuration](https://www.tensorzero.com/docs/operations/organize-your-configuration)** guide.
+This folder contains the code for the [Guides » Operations » Organize your configuration](https://www.tensorzero.com/docs/operations/organize-your-configuration) page in the documentation.
 
 The example shows how to:
 

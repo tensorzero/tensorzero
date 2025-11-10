@@ -7,13 +7,55 @@ The configuration file is the backbone of TensorZero.
 It defines the behavior of the gateway, including the models and their providers, functions and their variants, tools, metrics, and more.
 Developers express the behavior of LLM calls by defining the relevant prompt templates, schemas, and other parameters in this configuration file.
 
-You can see an example configuration file [here](https://github.com/tensorzero/tensorzero/blob/main/tensorzero-core/fixtures/config/tensorzero.toml).
-
 The configuration file is a <a href="https://toml.io/en/" target="_blank">TOML</a> file with a few major sections (TOML tables): `gateway`, `clickhouse`, `models`, `model_providers`, `functions`, `variants`, `tools`, `metrics`, `rate_limiting`, and `object_storage`.
 
 ## `[gateway]`
 
 The `[gateway]` section defines the behavior of the TensorZero Gateway.
+
+### `auth.cache.enabled`
+
+- **Type:** boolean
+- **Required:** no (default: `true`)
+
+Enable caching of authentication database queries.
+When enabled, the gateway caches authentication results to reduce database load and improve performance.
+
+See [Set up auth for TensorZero](/operations/set-up-auth-for-tensorzero) for more details.
+
+### `auth.cache.ttl_ms`
+
+- **Type:** integer
+- **Required:** no (default: `1000`)
+
+The time-to-live (TTL) in milliseconds for cached authentication queries.
+By default, authentication results are cached for 1 second (1000 ms).
+
+```toml title="tensorzero.toml"
+[gateway.auth.cache]
+enabled = true
+ttl_ms = 60_000  # Cache for one minute
+```
+
+See [Set up auth for TensorZero](/operations/set-up-auth-for-tensorzero) for more details.
+
+### `auth.enabled`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Enable authentication for the TensorZero Gateway.
+When enabled, all gateway endpoints except `/status` and `/health` will require a valid API key.
+
+You must set up Postgres to use authentication features.
+API keys can be created and managed through the TensorZero UI or CLI.
+
+```toml title="tensorzero.toml"
+[gateway]
+auth.enabled = true
+```
+
+See [Set up auth for TensorZero](/operations/set-up-auth-for-tensorzero) for a complete guide.
 
 ### `base_path`
 

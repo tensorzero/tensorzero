@@ -55,7 +55,7 @@ We'll use Docker Compose to deploy the TensorZero Gateway, ClickHouse, and MinIO
 
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:24.12-alpine
+    image: clickhouse:24.12-alpine
     environment:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1

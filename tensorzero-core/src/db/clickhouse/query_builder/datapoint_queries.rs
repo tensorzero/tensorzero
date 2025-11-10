@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
-use crate::db::clickhouse::query_builder::{ClickhouseType, QueryParameter, TagFilter, TimeFilter};
+use crate::db::clickhouse::query_builder::{ClickhouseType, QueryParameter};
+use crate::endpoints::stored_inferences::v1::types::{TagFilter, TimeFilter};
 
 /// Filter tree for querying datapoints.
 /// This is similar to `InferenceFilter` but without metric filters, as datapoints don't have associated metrics.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DatapointFilter {
     /// Filter by tag key-value pair

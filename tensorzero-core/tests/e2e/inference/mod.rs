@@ -38,12 +38,10 @@ use tensorzero_core::{
         DUMMY_JSON_RESPONSE_RAW, DUMMY_RAW_REQUEST, DUMMY_STREAMING_RESPONSE,
         DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
     },
-    tool::{ToolCall, ToolCallInput},
+    tool::{ToolCall, ToolCallWrapper},
 };
 use tokio::task::JoinSet;
 use tokio::time::{sleep, Duration};
-use tracing_test::traced_test;
-use url::Url;
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::{
@@ -3225,11 +3223,15 @@ async fn test_image_inference_without_object_store() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Base64(Base64File {
-                            source_url: None,
-                            mime_type: mime::IMAGE_PNG,
-                            data: BASE64_STANDARD.encode(FERRIS_PNG),
-                        })),
+                        ClientInputMessageContent::File(File::Base64(
+                            Base64File::new(
+                                None,
+                                mime::IMAGE_PNG,
+                                BASE64_STANDARD.encode(FERRIS_PNG),
+                                None,
+                            )
+                            .expect("test data should be valid"),
+                        )),
                     ],
                 }],
             },
@@ -3381,9 +3383,8 @@ async fn test_inference_input_tokens_output_tokens_zero() {
 }
 
 #[tokio::test]
-#[traced_test]
-
 async fn test_tool_call_input_no_warning() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     client
         .inference(ClientInferenceParams {
@@ -3396,16 +3397,15 @@ async fn test_tool_call_input_no_warning() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        ClientInputMessageContent::ToolCall(ToolCallInput {
-                            name: Some("get_temperature".to_string()),
-                            arguments: Some(json!({
+                        ClientInputMessageContent::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
+                            id: "0".to_string(),
+                            name: "get_temperature".to_string(),
+                            arguments: json!({
                                 "location": "Brooklyn",
                                 "units": "celsius"
-                            })),
-                            raw_arguments: None,
-                            raw_name: None,
-                            id: "0".to_string(),
-                        }),
+                            })
+                            .to_string(),
+                        })),
                     ],
                 }],
             },
@@ -3469,65 +3469,6 @@ async fn test_client_detect_version() {
     // The client should have used the version header (overridden by 'x-tensorzero-e2e-version-override')
     let version = gateway.get_gateway_version().await;
     assert_eq!(version, Some("3025.01.12".to_string()));
-}
-
-#[tokio::test]
-async fn test_client_adjust_tool_call() {
-    let bad_gateway = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
-        url: Url::parse("http://tensorzero.invalid").unwrap(),
-    })
-    .build()
-    .await
-    .unwrap();
-
-    let params = ClientInferenceParams {
-        function_name: Some("basic_test".to_string()),
-        input: ClientInput {
-            system: None,
-            messages: vec![ClientInputMessage {
-                role: Role::User,
-                content: vec![ClientInputMessageContent::ToolCall(ToolCallInput {
-                    name: Some("my_tool_call".to_string()),
-                    arguments: Some(json!({
-                        "location": "Brooklyn",
-                        "units": "celsius"
-                    })),
-                    id: "my_id".to_string(),
-                    raw_arguments: None,
-                    raw_name: None,
-                })],
-            }],
-        },
-        ..Default::default()
-    };
-    bad_gateway.inference(params.clone()).await.unwrap_err();
-    let stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":"{\"location\":\"Brooklyn\",\"units\":\"celsius\"}","id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"provider_tools":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[],"internal_dynamic_variant_config":null}"#;
-    let non_stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":{"location":"Brooklyn","units":"celsius"},"id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"provider_tools":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[],"internal_dynamic_variant_config":null}"#;
-
-    // With an invalid gateway url, we shouldn't get a version
-    assert_eq!(bad_gateway.get_gateway_version().await, None);
-
-    let last_body = { bad_gateway.last_body.lock().await.take().unwrap() };
-
-    assert_eq!(last_body, stringified_tool_call_args);
-
-    // Set an older gateway version, and verify that we still stringify the tool call arguments
-    bad_gateway
-        .e2e_update_gateway_version("2025.03.2".to_string())
-        .await;
-    bad_gateway.inference(params.clone()).await.unwrap_err();
-
-    let last_body = { bad_gateway.last_body.lock().await.take().unwrap() };
-    assert_eq!(last_body, stringified_tool_call_args);
-
-    // Set a newer gateway version, and verify that we do not stringify the arguments
-    bad_gateway
-        .e2e_update_gateway_version("2025.03.3".to_string())
-        .await;
-    bad_gateway.inference(params).await.unwrap_err();
-
-    let last_body = { bad_gateway.last_body.lock().await.take().unwrap() };
-    assert_eq!(last_body, non_stringified_tool_call_args);
 }
 
 /// Test that a json inference with null response (i.e. no generated content blocks) works as expected.

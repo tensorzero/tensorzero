@@ -10,7 +10,6 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::time::error::Elapsed;
-use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -54,9 +53,8 @@ pub mod mixture_of_n;
 
 /// Holds a particular variant implementation, plus additional top-level configuration
 /// that is applicable to any variant type.
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct VariantInfo {
     pub inner: VariantConfig,
     pub timeouts: TimeoutsConfig,
@@ -68,9 +66,8 @@ impl VariantInfo {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Debug, Serialize)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum VariantConfig {
     ChatCompletion(chat_completion::ChatCompletionConfig),
@@ -224,6 +221,7 @@ pub trait Variant {
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error>;
 
+    #[expect(clippy::too_many_arguments)]
     async fn validate(
         &self,
         function: Arc<FunctionConfig>,
@@ -232,6 +230,7 @@ pub trait Variant {
         templates: &TemplateConfig,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &chrono::Duration,
     ) -> Result<(), Error>;
 
     fn get_all_template_paths(&self) -> Vec<&PathWithContents>;
@@ -356,7 +355,7 @@ impl Variant for VariantInfo {
             }
         };
         if let Some(timeout) = self.timeouts.non_streaming.total_ms {
-            let timeout = Duration::from_millis(timeout);
+            let timeout = tokio::time::Duration::from_millis(timeout);
             tokio::time::timeout(timeout, fut)
                 .await
                 // Convert the outer `Elapsed` error into a TensorZero error,
@@ -458,7 +457,7 @@ impl Variant for VariantInfo {
         // This future includes a call to `peek_first_chunk`, so applying
         // `streaming_ttft_timeout` is correct.
         if let Some(timeout) = self.timeouts.streaming.ttft_ms {
-            let timeout = Duration::from_millis(timeout);
+            let timeout = tokio::time::Duration::from_millis(timeout);
             tokio::time::timeout(timeout, fut)
                 .await
                 .unwrap_or_else(|_: Elapsed| {
@@ -511,7 +510,9 @@ impl Variant for VariantInfo {
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &chrono::Duration,
     ) -> Result<(), Error> {
+        self.timeouts.validate(global_outbound_http_timeout)?;
         match &self.inner {
             VariantConfig::ChatCompletion(params) => {
                 params
@@ -522,6 +523,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -534,6 +536,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -546,6 +549,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -558,6 +562,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -570,6 +575,7 @@ impl Variant for VariantInfo {
                         templates,
                         function_name,
                         variant_name,
+                        global_outbound_http_timeout,
                     )
                     .await
             }
@@ -652,6 +658,7 @@ fn prepare_model_inference_request<'request>(
                 extra_cache_key: inference_config.extra_cache_key.clone(),
                 inference_params_v2: ChatCompletionInferenceParamsV2 {
                     reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    service_tier: inference_params.chat_completion.service_tier.clone(),
                     thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
                     verbosity: inference_params.chat_completion.verbosity.clone(),
                 },
@@ -700,6 +707,7 @@ fn prepare_model_inference_request<'request>(
                 extra_cache_key: inference_config.extra_cache_key.clone(),
                 inference_params_v2: ChatCompletionInferenceParamsV2 {
                     reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    service_tier: inference_params.chat_completion.service_tier.clone(),
                     thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
                     verbosity: inference_params.chat_completion.verbosity.clone(),
                 },
@@ -900,8 +908,6 @@ mod tests {
 
     use serde_json::json;
     use std::collections::HashMap;
-    use tracing_test::traced_test;
-
     #[tokio::test]
     async fn test_prepare_model_inference_request() {
         // Setup common variables
@@ -1136,7 +1142,7 @@ mod tests {
     async fn test_infer_model_request() {
         // Setup common variables
         let api_keys = InferenceCredentials::default();
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: client.clone(),
@@ -1153,6 +1159,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let templates = Arc::new(get_test_template_config());
@@ -1437,11 +1444,11 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_infer_model_request_errors() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Setup common variables
         let api_keys = InferenceCredentials::default();
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: client.clone(),
@@ -1458,6 +1465,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let templates = Arc::new(get_test_template_config());
@@ -1602,14 +1610,14 @@ mod tests {
             InferenceResult::Json(_) => panic!("Expected Chat inference result"),
         }
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" stream=false}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" stream=false}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 
     #[tokio::test]
     async fn test_infer_model_request_stream() {
         // Set up the HTTP client and ClickHouse connection info
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
@@ -1627,6 +1635,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let retry_config = RetryConfig::default();
@@ -1760,11 +1769,11 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_infer_model_request_errors_stream() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Setup common variables
         let api_keys = InferenceCredentials::default();
-        let client = TensorzeroHttpClient::new().unwrap();
+        let client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: client.clone(),
@@ -1781,6 +1790,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let inference_params = InferenceParams::default();
@@ -1930,7 +1940,7 @@ mod tests {
         assert_eq!(full_response, expected_response);
 
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" stream=true}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" stream=true}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 }

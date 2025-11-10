@@ -9,6 +9,8 @@ use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 
 pub mod gateway;
 pub mod retries;
+#[cfg(any(test, feature = "e2e_tests"))]
+pub mod testing;
 pub mod uuid;
 
 /// A helper function that wraps a future that might have unbounded recursion.

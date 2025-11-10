@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import VariantTemplate from "./VariantTemplate";
-import type { VariantConfig } from "tensorzero-node";
+import type { VariantConfig } from "~/types/tensorzero";
 
 const meta = {
   title: "Variant Detail Page/VariantTemplate",

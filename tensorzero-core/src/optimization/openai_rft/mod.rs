@@ -38,9 +38,8 @@ use crate::model::CredentialLocation;
 
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct OpenAIRFTConfig {
     pub model: String,
     pub grader: OpenAIGrader,
@@ -61,9 +60,8 @@ pub struct OpenAIRFTConfig {
     pub suffix: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTConfig"))]
 pub struct UninitializedOpenAIRFTConfig {
     pub model: String,
@@ -236,9 +234,8 @@ impl UninitializedOpenAIRFTConfig {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct OpenAIRFTJobHandle {
     pub job_id: String,
@@ -299,7 +296,10 @@ impl Optimizer for OpenAIRFTConfig {
             None
         };
 
-        let api_key = self.credentials.get_api_key(credentials)?;
+        let api_key = self
+            .credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
 
         // Run these concurrently
         let api_base = self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL);
@@ -430,7 +430,9 @@ impl JobHandle for OpenAIRFTJobHandle {
             .get_defaulted_credential(None, default_credentials)
             .await?;
         let mut request = client.get(self.job_api_url.clone());
-        let api_key = openai_credentials.get_api_key(credentials)?;
+        let api_key = openai_credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
         if let Some(api_key) = api_key {
             request = request.bearer_auth(api_key.expose_secret());
         }

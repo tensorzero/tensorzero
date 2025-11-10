@@ -193,7 +193,7 @@ const result = await client.chat.completions.create(
       "tensorzero-otlp-traces-extra-header-user-id": "user-123",
       "tensorzero-otlp-traces-extra-header-request-source": "mobile-app",
     },
-  }
+  },
 );
 ```
 
@@ -228,6 +228,43 @@ This will attach the headers `user-id: user-123` and `request-source: mobile-app
 </Tab>
 
 </Tabs>
+
+### Send custom OpenTelemetry attributes
+
+You can attach custom span attributes using headers prefixed with `tensorzero-otlp-traces-extra-attribute-`.
+The values must be valid JSON; TensorZero currently supports strings and booleans only.
+For example:
+
+```bash
+curl -X POST http://localhost:3000/inference \
+  -H "tensorzero-otlp-traces-extra-attribute-user_id: \"user-123\"" \
+  -H "tensorzero-otlp-traces-extra-attribute-is_premium: true" \
+  -d '{ ... }'
+```
+
+### Send custom OpenTelemetry resources
+
+You can attach custom resource attributes using headers prefixed with `tensorzero-otlp-traces-extra-resource-`.
+For example:
+
+```bash
+curl -X POST http://localhost:3000/inference \
+  -H "tensorzero-otlp-traces-extra-resource-service.namespace: production" \
+  -d '{ ... }'
+```
+
+### Link to existing traces with `traceparent`
+
+TensorZero automatically handles incoming `traceparent` headers for distributed tracing when OTLP is enabled.
+This follows the [W3C Trace Context standard](https://www.w3.org/TR/trace-context/).
+
+```bash
+curl -X POST http://localhost:3000/inference \
+  -H "traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01" \
+  -d '{ ... }'
+```
+
+TensorZero spans will become children of the incoming trace, preserving the trace ID across services.
 
 ### Export OpenInference traces
 

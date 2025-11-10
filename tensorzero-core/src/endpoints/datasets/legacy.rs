@@ -16,6 +16,11 @@ use crate::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, GetDatapointParams,
     JsonInferenceDatapointInsert,
 };
+use crate::endpoints::datasets::v1::create_datapoints;
+use crate::endpoints::datasets::v1::types::{
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest,
+    CreateJsonDatapointRequest, JsonDatapointOutputUpdate,
+};
 use crate::endpoints::feedback::{
     validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo,
 };
@@ -412,7 +417,7 @@ pub async fn update_datapoint_handler(
                 name: chat.name,
                 id: path_params.datapoint_id,
                 episode_id: chat.episode_id,
-                input: resolved_input.into_stored_input()?,
+                input: resolved_input.into_stored_input(),
                 output,
                 tool_params: chat.tool_params,
                 tags: chat.tags,
@@ -501,7 +506,7 @@ pub async fn update_datapoint_handler(
                 name: json.name,
                 id: path_params.datapoint_id,
                 episode_id: json.episode_id,
-                input: resolved_input.into_stored_input()?,
+                input: resolved_input.into_stored_input(),
                 output,
                 output_schema: json.output_schema,
                 tags: json.tags,
@@ -551,12 +556,21 @@ pub struct InsertDatapointPathParams {
 
 // The handler for the POST `/datasets/{dataset_name}/datapoints` endpoint.
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
+/// DEPRECATED: Use the POST `/v1/datasets/{dataset_name}/datapoints` endpoint instead.
 #[tracing::instrument(name = "create_datapoints_handler", skip(app_state, params))]
+#[deprecated(
+    since = "2025.11.1",
+    note = "Use the POST `/v1/datasets/{dataset_name}/datapoints` endpoint instead."
+)]
 pub async fn create_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
+    tracing::warn!(
+        "DEPRECATION WARNING: The `/datasets/{dataset_name}/datapoints` endpoint is deprecated. Please use `/v1/datasets/{dataset_name}/datapoints` instead.",
+        dataset_name = path_params.dataset_name
+    );
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
         params,
@@ -568,18 +582,30 @@ pub async fn create_datapoints_handler(
     Ok(Json(datapoint_ids))
 }
 
-/// DEPRECATED: Use the POST `/datasets/{dataset_name}/datapoints` endpoint instead.
+/// DEPRECATED: Use the POST `/v1/datasets/{dataset_name}/datapoints` endpoint instead.
 #[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
+#[deprecated(
+    since = "2025.11.1",
+    note = "Use the POST `/v1/datasets/{dataset_name}/datapoints` endpoint instead."
+)]
 pub async fn bulk_insert_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
     tracing::warn!(
-        "DEPRECATION WARNING: The `/datasets/{dataset_name}/datapoints/bulk` endpoint is deprecated. Please use `/datasets/{dataset_name}/datapoints` instead.",
+        "DEPRECATION WARNING: The `/datasets/{dataset_name}/datapoints/bulk` endpoint is deprecated. Please use `/v1/datasets/{dataset_name}/datapoints` instead.",
         dataset_name = path_params.dataset_name
     );
-    create_datapoints_handler(State(app_state), Path(path_params), StructuredJson(params)).await
+    let datapoint_ids = insert_datapoint(
+        path_params.dataset_name,
+        params,
+        &app_state.config,
+        &app_state.http_client,
+        &app_state.clickhouse_connection_info,
+    )
+    .await?;
+    Ok(Json(datapoint_ids))
 }
 
 pub async fn insert_datapoint(
@@ -590,13 +616,10 @@ pub async fn insert_datapoint(
     clickhouse: &ClickHouseConnectionInfo,
 ) -> Result<Vec<Uuid>, Error> {
     validate_dataset_name(&dataset_name)?;
-    let mut chat_datapoints = Vec::with_capacity(params.datapoints.len());
-    let mut json_datapoints = Vec::with_capacity(params.datapoints.len());
-    let fetch_context = FetchContext {
-        client: http_client,
-        object_store_info: &config.object_store_info,
-    };
-    let mut datapoint_ids = Vec::with_capacity(params.datapoints.len());
+
+    // Convert legacy datapoints to v1 request format
+    let mut v1_datapoints = Vec::with_capacity(params.datapoints.len());
+
     for (i, datapoint) in params.datapoints.into_iter().enumerate() {
         let function_name = datapoint
             .get("function_name")
@@ -606,11 +629,13 @@ pub async fn insert_datapoint(
                     message: format!("Expected function name for datapoint {i}"),
                 })
             })?;
+
         let function_config = config.get_function(function_name).map_err(|e| {
             Error::new(ErrorDetails::InvalidRequest {
                 message: format!("Failed to get function config for datapoint {i}: {e}"),
             })
         })?;
+
         match &**function_config {
             FunctionConfig::Chat(_) => {
                 let chat: ChatDatapointInsert = serde_json::from_value(datapoint).map_err(|e| {
@@ -618,32 +643,11 @@ pub async fn insert_datapoint(
                         message: format!("Failed to deserialize chat datapoint {i}: {e}"),
                     })
                 })?;
-                // Validate the input
-                function_config.validate_input(&chat.input).map_err(|e| {
-                    Error::new(ErrorDetails::InvalidRequest {
-                        message: format!("Failed to validate chat input for datapoint {i}: {e}"),
-                    })
-                })?;
-                let resolved_input = chat
-                    .input
-                    .into_lazy_resolved_input(fetch_context)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InternalError {
-                            message: format!(
-                                "Failed to lazily resolve chat input for datapoint {i}: {e}"
-                            ),
-                        })
-                    })?
-                    .resolve()
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InternalError {
-                            message: format!("Failed to resolve chat input for datapoint {i}: {e}"),
-                        })
-                    })?;
+
+                // Convert the legacy Value output to Vec<ContentBlockChatOutput>
                 // Prepare the tool config
-                let tool_config =
-                    function_config.prepare_tool_config(chat.dynamic_tool_params, &config.tools)?;
+                let tool_config = function_config
+                    .prepare_tool_config(chat.dynamic_tool_params.clone(), &config.tools)?;
                 let dynamic_demonstration_info =
                     DynamicDemonstrationInfo::Chat(tool_config.clone());
                 // Validate the output
@@ -677,26 +681,16 @@ pub async fn insert_datapoint(
                 } else {
                     None
                 };
-                let datapoint_id = Uuid::now_v7();
-                datapoint_ids.push(datapoint_id);
-                chat_datapoints.push(StoredChatInferenceDatapoint {
-                    dataset_name: dataset_name.clone(),
+
+                v1_datapoints.push(CreateDatapointRequest::Chat(CreateChatDatapointRequest {
                     function_name: chat.function_name,
                     name: chat.name,
-                    id: datapoint_id,
                     episode_id: None,
-                    input: resolved_input.into_stored_input()?,
+                    input: chat.input,
                     output,
-                    tool_params: tool_config.as_ref().map(|x| x.clone().into()),
+                    dynamic_tool_params: chat.dynamic_tool_params,
                     tags: chat.tags,
-                    auxiliary: String::new(),
-                    is_deleted: false,
-                    is_custom: true,
-                    source_inference_id: None,
-                    staled_at: None,
-                    // Ignored during insert.
-                    updated_at: Utc::now().to_string(),
-                });
+                }));
             }
             FunctionConfig::Json(json_function_config) => {
                 let json: JsonDatapointInsert = serde_json::from_value(datapoint).map_err(|e| {
@@ -704,26 +698,12 @@ pub async fn insert_datapoint(
                         message: format!("Failed to deserialize json datapoint {i}: {e}"),
                     })
                 })?;
-                // Validate the input
-                function_config.validate_input(&json.input).map_err(|e| {
-                    Error::new(ErrorDetails::InvalidRequest {
-                        message: format!("Failed to validate input for datapoint {i}: {e}"),
-                    })
-                })?;
-                let resolved_input = json
-                    .input
-                    .into_lazy_resolved_input(fetch_context)?
-                    .resolve()
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InternalError {
-                            message: format!("Failed to resolve input for datapoint {i}: {e}"),
-                        })
-                    })?;
-                // Validate the output_schema if provided by user
-                let output_schema = if let Some(user_schema) = json.output_schema {
+
+                // Legacy insert_datapoint API requires JSON output to be valid, but v1 API doesn't, so we explicitly validate here.
+                // We throw away the validation output
+                let output_schema = if let Some(user_schema) = &json.output_schema {
                     // Validate the schema by attempting to parse it
-                    let schema_str = serde_json::to_string(&user_schema).map_err(|e| {
+                    let schema_str = serde_json::to_string(user_schema).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
                                 "Failed to serialize output_schema for datapoint {i}: {e}"
@@ -738,13 +718,13 @@ pub async fn insert_datapoint(
                         })?;
                     // Ensure the schema is valid by forcing compilation
                     parsed_schema.ensure_valid().await?;
-                    user_schema
+                    user_schema.clone()
                 } else {
                     json_function_config.output_schema.value.clone()
                 };
                 let dynamic_demonstration_info =
                     DynamicDemonstrationInfo::Json(output_schema.clone());
-                let output = if let Some(output) = json.output {
+                if let Some(output) = &json.output {
                     let validated_output = validate_parse_demonstration(
                         &function_config,
                         &serde_json::to_value(output).map_err(|e| {
@@ -764,64 +744,41 @@ pub async fn insert_datapoint(
                             ),
                         })
                     })?;
-                    let DemonstrationOutput::Json(output) = validated_output else {
+                    let DemonstrationOutput::Json(_) = validated_output else {
                         return Err(Error::new(ErrorDetails::InternalError {
                             message: "Expected valid JSON output from validate_parse_demonstration"
                                 .to_string(),
                         }));
                     };
-                    Some(JsonInferenceOutput {
-                        raw: output
-                            .get("raw")
-                            .and_then(|v| v.as_str().map(str::to_string)),
-                        parsed: output.get("parsed").cloned(),
-                    })
-                } else {
-                    None
-                };
-                let datapoint_id = Uuid::now_v7();
-                datapoint_ids.push(datapoint_id);
-                let datapoint = JsonInferenceDatapoint {
-                    dataset_name: dataset_name.clone(),
+                }
+
+                // Convert legacy Value output to JsonDatapointOutputUpdate
+                let output_update = json.output.map(|output| JsonDatapointOutputUpdate {
+                    raw: output.to_string(),
+                });
+
+                v1_datapoints.push(CreateDatapointRequest::Json(CreateJsonDatapointRequest {
                     function_name: json.function_name,
                     name: json.name,
-                    id: datapoint_id,
                     episode_id: None,
-                    input: resolved_input.into_stored_input()?,
-                    output,
-                    output_schema,
+                    input: json.input,
+                    output: output_update,
+                    output_schema: json.output_schema,
                     tags: json.tags,
-                    auxiliary: String::new(),
-                    is_deleted: false,
-                    is_custom: true,
-                    source_inference_id: None,
-                    staled_at: None,
-                    // Ignored during insert.
-                    updated_at: Utc::now().to_string(),
-                };
-                json_datapoints.push(datapoint);
+                }));
             }
         }
     }
 
-    // Convert to DatapointInsert enum and write all at once
-    let mut all_datapoints = Vec::with_capacity(chat_datapoints.len() + json_datapoints.len());
-    all_datapoints.extend(
-        chat_datapoints
-            .into_iter()
-            .map(|dp| DatapointInsert::Chat(dp.into())),
-    );
-    all_datapoints.extend(
-        json_datapoints
-            .into_iter()
-            .map(|dp| DatapointInsert::Json(dp.into())),
-    );
+    // Delegate to the v1 implementation
+    let v1_request = CreateDatapointsRequest {
+        datapoints: v1_datapoints,
+    };
 
-    if !all_datapoints.is_empty() {
-        clickhouse.insert_datapoints(&all_datapoints).await?;
-    }
+    let response =
+        create_datapoints(config, http_client, clickhouse, &dataset_name, v1_request).await?;
 
-    Ok(datapoint_ids)
+    Ok(response.ids)
 }
 
 #[derive(Debug, Deserialize)]
@@ -1151,8 +1108,8 @@ pub struct InsertDatapointResponse {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "Datapoint"))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum Datapoint {
     Chat(ChatInferenceDatapoint),
     Json(JsonInferenceDatapoint),
@@ -1453,8 +1410,8 @@ pub struct JsonDatapointInsert {
 /// This one should be used in all public interfaces.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1596,7 +1553,7 @@ impl From<StoredChatInferenceDatapoint> for ChatInferenceDatapointInsert {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,
@@ -1821,9 +1778,8 @@ pub(crate) fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct StaleDatasetResponse {
     pub num_staled_datapoints: u64,
 }

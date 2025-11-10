@@ -8,7 +8,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import { formatDate } from "~/utils/date";
+import { TableItemTime } from "~/components/ui/TableItems";
 import type { WorkflowEvaluationProject } from "~/utils/clickhouse/workflow_evaluations";
 import { toWorkflowEvaluationProjectUrl } from "~/utils/urls";
 
@@ -49,7 +49,7 @@ export default function WorkflowEvaluationProjectsTable({
                   </code>
                 </TableCell>
                 <TableCell>
-                  {formatDate(new Date(project.last_updated))}
+                  <TableItemTime timestamp={project.last_updated} />
                 </TableCell>
               </TableRow>
             ))

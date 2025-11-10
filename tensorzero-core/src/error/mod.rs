@@ -21,6 +21,7 @@ use crate::inference::types::Thought;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
 
 pub mod delayed_error;
+pub use delayed_error::DelayedError;
 
 /// Controls whether to include raw request/response details in error output
 ///
@@ -123,14 +124,9 @@ impl Error {
         Error(Arc::new(details))
     }
 
-    pub fn new_with_err_logging(details: ErrorDetails, err_logging: bool) -> Self {
-        if err_logging {
-            details.log();
-        }
-        Error(Arc::new(details))
-    }
-
-    pub fn new_without_logging(details: ErrorDetails) -> Self {
+    // If you need to construct an error without logging it, use `DelayedError` instead.
+    // This method should only be called within `DelayedError` itself.
+    fn new_without_logging(details: ErrorDetails) -> Self {
         Error(Arc::new(details))
     }
 

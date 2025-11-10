@@ -439,6 +439,8 @@ impl Migration for Migration0013<'_> {
         Ok(())
     }
 
+    // NOTE - we do *not* drop the uint_to_uuid function here, as ClickHouse user-defined functions are globally scoped.
+    // Dropping the function can break other migrations running concurrently in our test suite.
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         format!(
@@ -447,8 +449,6 @@ impl Migration for Migration0013<'_> {
             DROP VIEW IF EXISTS JsonInferenceByIdView{on_cluster_name};
             DROP VIEW IF EXISTS ChatInferenceByEpisodeIdView{on_cluster_name};
             DROP VIEW IF EXISTS JsonInferenceByEpisodeIdView{on_cluster_name};
-            /* Drop the function */\
-            DROP FUNCTION IF EXISTS uint_to_uuid{on_cluster_name};
             /* Drop the tables */\
             DROP TABLE IF EXISTS InferenceById{on_cluster_name} SYNC;
             DROP TABLE IF EXISTS InferenceByEpisodeId{on_cluster_name} SYNC;

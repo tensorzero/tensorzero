@@ -1,6 +1,7 @@
 name: Force add to merge queue
 permissions:
   contents: read
+  actions: write
 
 # This workflow allows us to add PRs to the merge queue without waiting on PR checks to pass.
 # It's activated by adding the special 'force-add-to-merge-queue' label to a PR.
@@ -31,4 +32,11 @@ jobs:
     name: Invoke helper workflow
     # Only run this job if the force-add-to-merge-queue label is present
     if: contains(github.event.pull_request.labels.*.name, 'force-add-to-merge-queue') && github.event.action == 'labeled'
-    uses: ./.github/workflows/force-merge-queue-helper.yml
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Invoke helper workflow via GitHub CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run force-merge-queue-helper.yml --ref "${{ github.event.pull_request.head.sha }}"

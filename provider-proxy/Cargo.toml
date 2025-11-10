@@ -12,7 +12,7 @@ path = "tests/e2e/tests.rs"
 [dependencies]
 anyhow = { workspace = true }
 bytes = { version = "1.10.0", features = ["serde"] }
-clap = { version = "4.5.49", features = ["derive"] }
+clap = { version = "4.5.51", features = ["derive"] }
 hex = "0.4.3"
 http = "1.2.0"
 http-body-util = "0.1.2"
@@ -23,7 +23,7 @@ moka = { version = "0.12.10", features = ["sync"] }
 pin-project = "1.1.10"
 rcgen = "0.14.2"
 reqwest.workspace = true
-rustls = "0.23.34"
+rustls = "0.23.35"
 serde = { workspace = true }
 serde_json.workspace = true
 sha2 = "0.10.9"

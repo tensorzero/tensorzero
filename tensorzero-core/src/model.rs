@@ -74,18 +74,16 @@ use crate::providers::{
     xai::XAIProvider,
 };
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
     pub timeouts: TimeoutsConfig,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
@@ -721,9 +719,8 @@ async fn wrap_provider_stream(
     )
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct UninitializedModelProvider {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
@@ -742,9 +739,8 @@ pub struct UninitializedModelProvider {
     pub discard_unknown_chunks: bool,
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModelProvider {
     pub name: Arc<str>,
     pub config: ProviderConfig,
@@ -758,6 +754,10 @@ pub struct ModelProvider {
 }
 
 impl ModelProvider {
+    fn validate(&self, global_outbound_http_timeout: &chrono::Duration) -> Result<(), Error> {
+        self.timeouts.validate(global_outbound_http_timeout)?;
+        Ok(())
+    }
     fn non_streaming_total_timeout(&self) -> Option<Duration> {
         Some(Duration::from_millis(self.timeouts.non_streaming.total_ms?))
     }
@@ -843,8 +843,8 @@ pub struct ModelProviderRequestInfo {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     #[serde(rename = "aws_bedrock")]
@@ -932,9 +932,8 @@ impl ProviderConfig {
 
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum HostedProviderKind {
@@ -942,8 +941,8 @@ pub enum HostedProviderKind {
     TGI,
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Debug, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
@@ -1981,7 +1980,7 @@ impl ModelProvider {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
     Env(String),
@@ -1997,7 +1996,7 @@ pub enum CredentialLocation {
 }
 
 /// Credential location with optional fallback support
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, ts_rs::TS)]
 #[serde(untagged)]
 pub enum CredentialLocationWithFallback {
     /// Single credential location (backward compatible)
@@ -2027,9 +2026,8 @@ impl CredentialLocationWithFallback {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
+#[ts(export)]
 pub enum EndpointLocation {
     /// Environment variable containing the actual endpoint URL
     Env(String),
@@ -2349,7 +2347,12 @@ impl ShorthandModelConfig for ModelConfig {
         })
     }
 
-    fn validate(&self, model_name: &str) -> Result<(), Error> {
+    fn validate(
+        &self,
+        model_name: &str,
+        global_outbound_http_timeout: &chrono::Duration,
+    ) -> Result<(), Error> {
+        self.timeouts.validate(global_outbound_http_timeout)?;
         // Ensure that the model has at least one provider
         if self.routing.is_empty() {
             return Err(ErrorDetails::Config {
@@ -2385,7 +2388,7 @@ impl ShorthandModelConfig for ModelConfig {
         }
 
         // Validate each provider
-        for provider_name in self.providers.keys() {
+        for (provider_name, provider) in &self.providers {
             if !seen_providers.contains(provider_name) {
                 return Err(ErrorDetails::Config {
                     message: format!(
@@ -2394,6 +2397,7 @@ impl ShorthandModelConfig for ModelConfig {
                 }
                 .into());
             }
+            provider.validate(global_outbound_http_timeout)?;
         }
         Ok(())
     }
@@ -2423,7 +2427,6 @@ mod tests {
     };
     use secrecy::SecretString;
     use tokio_stream::StreamExt;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
@@ -2455,7 +2458,7 @@ mod tests {
         };
         let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: http_client.clone(),
@@ -2472,6 +2475,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
 
@@ -2557,7 +2561,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_model_provider_infer_max_tokens_check() {
         let provider = ModelProvider {
             name: "test_provider".into(),
@@ -2571,7 +2574,7 @@ mod tests {
             discard_unknown_chunks: false,
         };
 
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let postgres_mock = PostgresConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
@@ -2602,6 +2605,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(tags.clone()),
+                api_key_public_id: None,
             },
         };
 
@@ -2657,8 +2661,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_model_config_infer_routing_fallback() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Test that fallback works with bad --> good model provider
 
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
@@ -2670,7 +2674,7 @@ mod tests {
             credentials: DummyCredentials::None,
         });
         let api_keys = InferenceCredentials::default();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: http_client.clone(),
@@ -2687,6 +2691,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         // Try inferring the good model only
@@ -2827,7 +2832,7 @@ mod tests {
             .infer_stream(
                 &request,
                 &InferenceClients {
-                    http_client: TensorzeroHttpClient::new().unwrap(),
+                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
                     clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: PostgresConnectionInfo::Disabled,
                     credentials: Arc::new(api_keys.clone()),
@@ -2841,6 +2846,7 @@ mod tests {
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
                     scope_info: ScopeInfo {
                         tags: Arc::new(HashMap::new()),
+                        api_key_public_id: None,
                     },
                 },
                 "my_model",
@@ -2899,7 +2905,7 @@ mod tests {
             .infer_stream(
                 &request,
                 &InferenceClients {
-                    http_client: TensorzeroHttpClient::new().unwrap(),
+                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
                     clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: PostgresConnectionInfo::Disabled,
                     credentials: Arc::new(api_keys.clone()),
@@ -2913,6 +2919,7 @@ mod tests {
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
                     scope_info: ScopeInfo {
                         tags: Arc::new(HashMap::new()),
+                        api_key_public_id: None,
                     },
                 },
                 "my_model",
@@ -2944,8 +2951,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_model_config_infer_stream_routing_fallback() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Test that fallback works with bad --> good model provider (streaming)
 
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
@@ -3018,7 +3025,7 @@ mod tests {
             .infer_stream(
                 &request,
                 &InferenceClients {
-                    http_client: TensorzeroHttpClient::new().unwrap(),
+                    http_client: TensorzeroHttpClient::new_testing().unwrap(),
                     clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: PostgresConnectionInfo::Disabled,
                     credentials: Arc::new(api_keys.clone()),
@@ -3032,6 +3039,7 @@ mod tests {
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
                     scope_info: ScopeInfo {
                         tags: Arc::new(HashMap::new()),
+                        api_key_public_id: None,
                     },
                 },
                 "my_model",
@@ -3096,7 +3104,7 @@ mod tests {
         };
         let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: http_client.clone(),
@@ -3113,6 +3121,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
 
@@ -3173,6 +3182,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let response = model_config
@@ -3218,7 +3228,7 @@ mod tests {
         };
         let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: http_client.clone(),
@@ -3235,6 +3245,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
 
@@ -3294,6 +3305,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let response = model_config
@@ -3362,6 +3374,7 @@ mod tests {
         let model_table: ModelTable = ModelTable::new(
             HashMap::from([("claude".into(), anthropic_model_config)]),
             ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            chrono::Duration::seconds(120),
         )
         .unwrap();
 

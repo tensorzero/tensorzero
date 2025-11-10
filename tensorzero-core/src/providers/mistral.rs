@@ -16,7 +16,7 @@ use url::Url;
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
-    error::{DisplayOrDebugGateway, Error, ErrorDetails},
+    error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails},
     inference::{
         types::{
             batch::{
@@ -55,9 +55,8 @@ lazy_static! {
 const PROVIDER_NAME: &str = "Mistral";
 pub const PROVIDER_TYPE: &str = "mistral";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct MistralProvider {
     model_name: String,
     #[serde(skip)]
@@ -113,33 +112,34 @@ impl MistralCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<&'a SecretString, DelayedError> {
         match self {
             MistralCredentials::Static(api_key) => Ok(api_key),
             MistralCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 })
             }
             MistralCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            MistralCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            MistralCredentials::None => Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            }
-            .into()),
+            })),
         }
     }
 }
@@ -169,7 +169,10 @@ impl InferenceProvider for MistralProvider {
             })
         })?;
         let request_url = get_chat_url(&MISTRAL_API_BASE)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(request_url)
@@ -263,7 +266,10 @@ impl InferenceProvider for MistralProvider {
             })
         })?;
         let request_url = get_chat_url(&MISTRAL_API_BASE)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(request_url)
@@ -279,7 +285,7 @@ impl InferenceProvider for MistralProvider {
             builder,
         )
         .await?;
-        let stream = stream_mistral(event_source, start_time).peekable();
+        let stream = stream_mistral(event_source, start_time, &raw_request).peekable();
         Ok((stream, raw_request))
     }
 
@@ -337,13 +343,15 @@ fn handle_mistral_error(
 pub fn stream_mistral(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     Box::pin(async_stream::stream! {
         while let Some(ev) = event_source.next().await {
             let mut last_tool_name = None;
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -358,7 +366,7 @@ pub fn stream_mistral(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: None,
                             }.into());
                         let latency = start_time.elapsed();
@@ -516,12 +524,17 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
         warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort", None);
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if thinking_budget_tokens.is_some() {
@@ -835,8 +848,6 @@ mod tests {
 
     use crate::inference::types::{FunctionType, RequestMessage, Role};
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
-    use tracing_test::traced_test;
-
     #[tokio::test]
     async fn test_mistral_request_new() {
         let request_with_tools = ModelInferenceRequest {
@@ -1274,10 +1285,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_mistral_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };

@@ -19,7 +19,7 @@ use crate::embeddings::{
 };
 
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, BatchStatus};
@@ -39,9 +39,8 @@ use crate::tool::{ToolCall, ToolCallChunk};
 const PROVIDER_NAME: &str = "Dummy";
 pub const PROVIDER_TYPE: &str = "dummy";
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct DummyProvider {
     pub model_name: String,
     #[serde(skip)]
@@ -170,16 +169,15 @@ impl DummyCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<Option<&'a SecretString>, Error> {
+    ) -> Result<Option<&'a SecretString>, DelayedError> {
         match self {
             DummyCredentials::None => Ok(None),
             DummyCredentials::Dynamic(key_name) => {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 }))
                 .transpose()
             }
@@ -279,7 +277,7 @@ impl InferenceProvider for DummyProvider {
             *counter += 1;
 
             // Fail on even-numbered calls
-            if *counter % 2 == 0 {
+            if counter.is_multiple_of(2) {
                 if self.model_name.contains("rate_limit") {
                     return Err(ErrorDetails::RateLimitExceeded {
                         failed_rate_limits: vec![FailedRateLimit {
@@ -337,7 +335,10 @@ impl InferenceProvider for DummyProvider {
             }
         }
 
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         if self.model_name == "test_key" {
             if let Some(api_key) = api_key {
                 if api_key.expose_secret() != "good_key" {
@@ -612,7 +613,7 @@ impl InferenceProvider for DummyProvider {
             *counter += 1;
 
             // Fail on even-numbered calls
-            if *counter % 2 == 0 {
+            if counter.is_multiple_of(2) {
                 return Err(ErrorDetails::InferenceClient {
                     raw_request: Some("raw request".to_string()),
                     raw_response: None,

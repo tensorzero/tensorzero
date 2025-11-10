@@ -62,6 +62,7 @@ pub struct ChatInferenceDatapointInsert {
     pub input: StoredInput,
 
     /// Output of the function that generated this datapoint. Optional.
+    /// TODO(#4405): this should be a new type StoredContentBlockChatOutput that takes the storage ToolCallOutput format.
     #[serde(
         default,
         deserialize_with = "deserialize_optional_string_or_parsed_json"
@@ -151,9 +152,8 @@ pub struct JsonInferenceDatapointInsert {
     pub is_custom: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct MetricFilter {
     pub metric: String,
     pub metric_type: MetricConfigType,
@@ -174,8 +174,7 @@ pub enum DatasetOutputSource {
     Demonstration,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct DatasetQueryParams {
     pub inference_type: DatapointKind,
@@ -191,8 +190,7 @@ pub struct DatasetQueryParams {
     pub offset: Option<u32>,
 }
 
-#[derive(Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct GetDatasetRowsParams {
     pub dataset_name: String,
@@ -200,18 +198,20 @@ pub struct GetDatasetRowsParams {
     pub offset: u32,
 }
 
-#[derive(Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct GetDatasetMetadataParams {
-    // Only select datasets matching a specific function
+    /// Only select datasets matching a specific function.
     pub function_name: Option<String>,
-    pub page_size: Option<u32>,
+
+    /// The maximum number of datasets to return.
+    pub limit: Option<u32>,
+
+    /// The number of datasets to skip before starting to return results.
     pub offset: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct DatasetDetailRow {
     pub id: String,
@@ -223,8 +223,7 @@ pub struct DatasetDetailRow {
     pub updated_at: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct DatasetMetadata {
     pub dataset_name: String,
@@ -232,16 +231,14 @@ pub struct DatasetMetadata {
     pub last_updated: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct AdjacentDatapointIds {
     pub previous_id: Option<Uuid>,
     pub next_id: Option<Uuid>,
 }
 
-#[derive(Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct StaleDatapointParams {
     pub dataset_name: String,
@@ -249,8 +246,7 @@ pub struct StaleDatapointParams {
     pub function_type: DatapointKind,
 }
 
-#[derive(Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct CountDatapointsForDatasetFunctionParams {
     pub dataset_name: String,
@@ -258,16 +254,14 @@ pub struct CountDatapointsForDatasetFunctionParams {
     pub function_type: DatapointKind,
 }
 
-#[derive(Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct GetAdjacentDatapointIdsParams {
     pub dataset_name: String,
     pub datapoint_id: Uuid,
 }
 
-#[derive(Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 /// Legacy struct for old get_datapoint clickhouse query. To be deprecated.
 pub struct GetDatapointParams {
@@ -277,8 +271,8 @@ pub struct GetDatapointParams {
     pub allow_stale: Option<bool>,
 }
 
-#[derive(Deserialize)]
 /// A struct representing query params for a SELECT datapoints query.
+#[derive(Deserialize)]
 pub struct GetDatapointsParams {
     /// Dataset name to query. If not provided, all datasets will be queried.
     /// At least one of `dataset_name` or `ids` must be provided.
@@ -295,7 +289,7 @@ pub struct GetDatapointsParams {
     pub ids: Option<Vec<Uuid>>,
 
     /// Maximum number of datapoints to return.
-    pub page_size: u32,
+    pub limit: u32,
 
     /// Number of datapoints to skip before starting to return results.
     pub offset: u32,

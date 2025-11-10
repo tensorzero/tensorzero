@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import FunctionSchema from "./FunctionSchema";
-import type { FunctionConfig } from "tensorzero-node";
+import type { FunctionConfig } from "~/types/tensorzero";
 
 const meta = {
   title: "Function Detail Page/FunctionSchema",

@@ -14,12 +14,14 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{
+    warn_discarded_unknown_chunk, DelayedError, DisplayOrDebugGateway, Error, ErrorDetails,
+};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
 };
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
@@ -55,9 +57,8 @@ const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const PROVIDER_NAME: &str = "Anthropic";
 pub const PROVIDER_TYPE: &str = "anthropic";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct AnthropicProvider {
     model_name: String,
     api_base: Option<Url>,
@@ -125,33 +126,34 @@ impl AnthropicCredentials {
     fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<&'a SecretString, DelayedError> {
         match self {
             AnthropicCredentials::Static(api_key) => Ok(api_key),
             AnthropicCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 })
             }
             AnthropicCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            AnthropicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            AnthropicCredentials::None => Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            }
-            .into()),
+            })),
         }
     }
 }
@@ -180,7 +182,10 @@ impl InferenceProvider for AnthropicProvider {
                         ),
                     })
                 })?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(self.base_url().as_ref())
@@ -276,7 +281,7 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 })?;
         let start_time = Instant::now();
-        let api_key = self.credentials.get_api_key(api_key)?;
+        let api_key = self.credentials.get_api_key(api_key).map_err(|e| e.log())?;
         let builder = http_client
             .post(self.base_url().as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
@@ -298,6 +303,7 @@ impl InferenceProvider for AnthropicProvider {
             model_provider,
             model_name,
             provider_name,
+            &raw_request,
         )
         .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
@@ -345,7 +351,9 @@ fn stream_anthropic(
     model_provider: &ModelProvider,
     model_name: &str,
     provider_name: &str,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
     let model_name = model_name.to_string();
     let provider_name = provider_name.to_string();
@@ -356,7 +364,7 @@ fn stream_anthropic(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -368,7 +376,7 @@ fn stream_anthropic(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
-                                raw_request: None,
+                                raw_request: Some(raw_request.to_string()),
                                 raw_response: Some(message.data.clone()),
                             }));
                         // Anthropic streaming API docs specify that this is the last message
@@ -582,11 +590,17 @@ impl<'a> AnthropicMessageContent<'a> {
                         FileUrl {
                             mime_type: Some(mime_type),
                             url,
+                            detail,
                         },
                     future: _,
                 } if !messages_config.fetch_and_encode_input_files_before_inference => {
                     // If the user provided a url, and we're not configured to fetch the file beforehand,
                     // then forward the url directly to Anthropic.
+                    if detail.is_some() {
+                        tracing::warn!(
+                            "The image detail parameter is not supported by Anthropic. The `detail` field will be ignored."
+                        );
+                    }
                     if mime_type.type_() == mime::IMAGE {
                         Ok(Some(FlattenUnknown::Normal(
                             AnthropicMessageContent::Image {
@@ -614,6 +628,11 @@ impl<'a> AnthropicMessageContent<'a> {
                     // Otherwise, fetch the file, encode it as base64, and send it to Anthropic
                     let resolved_file = file.resolve().await?;
                     let ObjectStorageFile { file, data } = &*resolved_file;
+                    if file.detail.is_some() {
+                        tracing::warn!(
+                            "The image detail parameter is not supported by Anthropic. The `detail` field will be ignored."
+                        );
+                    }
                     let document = AnthropicDocumentSource::Base64 {
                         media_type: file.mime_type.clone(),
                         data: data.clone(),
@@ -714,6 +733,8 @@ struct AnthropicRequestBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    service_tier: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequences: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<AnthropicToolChoice<'a>>,
@@ -798,6 +819,7 @@ impl<'a> AnthropicRequestBody<'a> {
             temperature: request.temperature,
             thinking: None,
             top_p: request.top_p,
+            service_tier: None, // handled below
             tool_choice,
             tools,
             stop_sequences: request.borrow_stop_sequences(),
@@ -815,6 +837,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -825,6 +848,21 @@ fn apply_inference_params(
             "reasoning_effort",
             Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
         );
+    }
+
+    // Map service_tier values to Anthropic-compatible values
+    if let Some(tier) = service_tier {
+        match tier {
+            ServiceTier::Auto | ServiceTier::Priority => {
+                request.service_tier = Some("auto".to_string());
+            }
+            ServiceTier::Default => {
+                request.service_tier = Some("standard_only".to_string());
+            }
+            ServiceTier::Flex => {
+                warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier (flex)", None);
+            }
+        }
     }
 
     if let Some(budget_tokens) = thinking_budget_tokens {
@@ -1156,7 +1194,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
     }
 }
 
-fn handle_anthropic_error(
+pub(super) fn handle_anthropic_error(
     response_code: StatusCode,
     raw_request: String,
     raw_response: String,
@@ -1506,14 +1544,19 @@ fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
 mod tests {
     use std::borrow::Cow;
 
+    use futures::FutureExt;
+    use serde_json::json;
+    use url::Url;
+    use uuid::Uuid;
+
     use super::*;
-    use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
+    use crate::inference::types::file::Detail;
+    use crate::inference::types::resolved_input::{FileUrl, LazyFile};
+    use crate::inference::types::{ContentBlock, FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
-    use serde_json::json;
-    use tracing_test::traced_test;
-    use uuid::Uuid;
+    use crate::utils::testing::capture_logs;
 
     #[test]
     fn test_try_from_tool_call_config() {
@@ -3224,8 +3267,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_chunk_warn() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let res = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             AnthropicStreamMessage::ContentBlockStart {
@@ -3247,10 +3290,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_anthropic_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };
@@ -3280,6 +3324,33 @@ mod tests {
         // Test that verbosity warns
         assert!(logs_contain(
             "Anthropic does not support the inference parameter `verbosity`"
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_anthropic_warns_on_detail() {
+        let logs_contain = capture_logs();
+
+        // Test URL forwarding path with detail
+        let url = Url::parse("https://example.com/image.png").unwrap();
+        let content_block = ContentBlock::File(Box::new(LazyFile::Url {
+            file_url: FileUrl {
+                url: url.clone(),
+                mime_type: Some(mime::IMAGE_PNG),
+                detail: Some(Detail::Low),
+            },
+            future: async { panic!("Should not resolve") }.boxed().shared(),
+        }));
+
+        let config = AnthropicMessagesConfig {
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let _result = AnthropicMessageContent::from_content_block(&content_block, config).await;
+
+        // Should log a warning about detail not being supported
+        assert!(logs_contain(
+            "The image detail parameter is not supported by Anthropic"
         ));
     }
 }

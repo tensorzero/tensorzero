@@ -41,6 +41,7 @@ use crate::inference::InferenceProvider;
 use crate::model::CredentialLocationWithFallback;
 use crate::model::{fully_qualified_name, ModelProvider};
 use crate::model_table::{GCPVertexAnthropicKind, ProviderType, ProviderTypeDefaultCredentials};
+use crate::providers::anthropic::handle_anthropic_error;
 use crate::providers::gcp_vertex_gemini::location_subdomain_prefix;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -56,9 +57,8 @@ use super::helpers::{convert_stream_error, peek_first_chunk};
 const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
 pub const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GCPVertexAnthropicProvider {
     model_id: String,
     request_url: String,
@@ -214,7 +214,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
-            .await?;
+            .await
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client.post(&self.request_url).headers(auth_headers);
 
@@ -270,17 +271,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 
             Ok(response_with_latency.try_into()?)
         } else {
-            let error_body: GCPVertexAnthropicError =
-                serde_json::from_str(&raw_response).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing JSON response: {e}: {raw_response}"),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: Some(raw_request.clone()),
-                        raw_response: Some(raw_response.clone()),
-                    })
-                })?;
-
-            handle_anthropic_error(response_status, error_body.error)
+            handle_anthropic_error(response_status, raw_request, raw_response)
         }
     }
 
@@ -311,7 +302,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
-            .await?;
+            .await
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(&self.streaming_request_url)
@@ -332,6 +324,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             model_provider,
             model_name,
             provider_name,
+            &raw_request,
         )
         .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
@@ -379,7 +372,9 @@ fn stream_anthropic(
     model_provider: &ModelProvider,
     model_name: &str,
     provider_name: &str,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
     let model_name = model_name.to_string();
     let provider_name = provider_name.to_string();
@@ -388,7 +383,7 @@ fn stream_anthropic(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -400,7 +395,7 @@ fn stream_anthropic(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: None,
                             }));
                         // Anthropic streaming API docs specify that this is the last message
@@ -581,6 +576,11 @@ impl<'a> GCPVertexAnthropicMessageContent<'a> {
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
                 let ObjectStorageFile { file, data } = &*resolved_file;
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "The image detail parameter is not supported by GCP Vertex Anthropic. The `detail` field will be ignored."
+                    );
+                }
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 Ok(Some(FlattenUnknown::Normal(
                     GCPVertexAnthropicMessageContent::Image {
@@ -686,6 +686,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -703,6 +704,10 @@ fn apply_inference_params(
             r#type: "enabled",
             budget_tokens: *budget_tokens,
         });
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if verbosity.is_some() {
@@ -910,18 +915,6 @@ fn prefill_json_message(messages: &mut Vec<GCPVertexAnthropicMessage>) {
     });
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct GCPVertexAnthropicError {
-    error: GCPVertexAnthropicErrorBody,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct GCPVertexAnthropicErrorBody {
-    r#type: Option<String>,
-    code: Option<u32>,
-    message: String,
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GCPVertexAnthropicContentBlock {
@@ -1076,34 +1069,6 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
                 finish_reason: response.stop_reason.map(AnthropicStopReason::into),
             },
         ))
-    }
-}
-
-fn handle_anthropic_error(
-    response_code: StatusCode,
-    response_body: GCPVertexAnthropicErrorBody,
-) -> Result<ProviderInferenceResponse, Error> {
-    match response_code {
-        StatusCode::UNAUTHORIZED
-        | StatusCode::BAD_REQUEST
-        | StatusCode::PAYLOAD_TOO_LARGE
-        | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::InferenceClient {
-            raw_response: Some(serde_json::to_string(&response_body).unwrap_or_default()),
-            message: response_body.message,
-            status_code: Some(response_code),
-            provider_type: PROVIDER_TYPE.to_string(),
-            raw_request: None,
-        }
-        .into()),
-        // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
-        // These are all captured in _ since they have the same error behavior
-        _ => Err(ErrorDetails::InferenceServer {
-            raw_response: Some(serde_json::to_string(&response_body).unwrap_or_default()),
-            message: response_body.message,
-            provider_type: PROVIDER_TYPE.to_string(),
-            raw_request: None,
-        }
-        .into()),
     }
 }
 
@@ -1458,7 +1423,6 @@ mod tests {
     use super::*;
 
     use serde_json::json;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
@@ -2222,94 +2186,6 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_anthropic_error() {
-        let error_body = GCPVertexAnthropicErrorBody {
-            r#type: None,
-            code: None,
-            message: "test_message".to_string(),
-        };
-        let response_code = StatusCode::BAD_REQUEST;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
-                status_code: Some(response_code),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-            }
-        );
-        let response_code = StatusCode::UNAUTHORIZED;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
-                status_code: Some(response_code),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-            }
-        );
-        let response_code = StatusCode::TOO_MANY_REQUESTS;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
-                status_code: Some(response_code),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-            }
-        );
-        let response_code = StatusCode::NOT_FOUND;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceServer {
-                message: "test_message".to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-                provider_type: PROVIDER_TYPE.to_string()
-            }
-        );
-        let response_code = StatusCode::INTERNAL_SERVER_ERROR;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceServer {
-                message: "test_message".to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-                provider_type: PROVIDER_TYPE.to_string()
-            }
-        );
-    }
-
-    #[test]
     fn test_anthropic_usage_to_usage() {
         let anthropic_usage = GCPVertexAnthropic {
             input_tokens: 100,
@@ -2973,8 +2849,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_chunk_warn() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let res = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             GCPVertexAnthropicStreamMessage::ContentBlockStart {
@@ -2995,10 +2871,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_gcp_vertex_anthropic_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };

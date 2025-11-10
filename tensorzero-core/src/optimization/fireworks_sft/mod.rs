@@ -144,9 +144,8 @@ impl<'a> FireworksSupervisedRow<'a> {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FireworksSFTConfig {
     pub model: String,
     pub early_stop: Option<bool>,
@@ -172,9 +171,8 @@ pub struct FireworksSFTConfig {
     pub api_base: Url,
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "FireworksSFTConfig"))]
 pub struct UninitializedFireworksSFTConfig {
     pub model: String,
@@ -577,7 +575,10 @@ impl Optimizer for FireworksSFTConfig {
             None
         };
 
-        let api_key = self.credentials.get_api_key(credentials)?;
+        let api_key = self
+            .credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
 
         // Run these concurrently
 
@@ -688,9 +689,8 @@ impl Optimizer for FireworksSFTConfig {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct FireworksSFTJobHandle {
     pub api_base: Url,
@@ -975,7 +975,9 @@ impl JobHandle for FireworksSFTJobHandle {
         let fireworks_credentials: FireworksCredentials = crate::model_table::FireworksKind
             .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
             .await?;
-        let api_key = fireworks_credentials.get_api_key(credentials)?;
+        let api_key = fireworks_credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
         let job_status = self.poll_job(client, api_key).await?;
         if let FireworksFineTuningJobState::JobStateCompleted = job_status.state {
             // Once the job has completed, start polling the model deployment.

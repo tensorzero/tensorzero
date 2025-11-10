@@ -8,20 +8,19 @@
 //! We convert the request into our internal types, call `endpoints::inference::inference` to perform the actual inference,
 //! and then convert the response into the OpenAI-compatible format.
 
-use std::collections::HashMap;
-
 use axum::body::Body;
-use axum::debug_handler;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use axum::{debug_handler, Extension};
 use futures::Stream;
 use mime::MediaType;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::collections::HashMap;
 use tokio_stream::StreamExt;
 use url::Url;
 use uuid::Uuid;
@@ -34,9 +33,10 @@ use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
 use crate::error::{Error, ErrorDetails};
+use crate::inference::types::chat_completion_inference_params::ServiceTier;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
-use crate::inference::types::file::filename_to_mime_type;
+use crate::inference::types::file::Detail;
 use crate::inference::types::{
     current_timestamp, Arguments, Base64File, ContentBlockChatOutput, ContentBlockChunk, File,
     FinishReason, Input, InputMessage, InputMessageContent, RawText, Role, System, Template, Text,
@@ -44,7 +44,8 @@ use crate::inference::types::{
 };
 
 use crate::tool::{
-    DynamicToolParams, ProviderTool, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult,
+    DynamicToolParams, InferenceResponseToolCall, ProviderTool, Tool, ToolCallWrapper, ToolChoice,
+    ToolResult,
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::JsonMode;
@@ -56,7 +57,7 @@ use super::inference::{
     InferenceStream,
 };
 use crate::embeddings::EmbeddingEncodingFormat;
-use crate::endpoints::RouteHandlers;
+use crate::endpoints::{RequestApiKeyExtension, RouteHandlers};
 use axum::routing::post;
 use axum::Router;
 
@@ -102,6 +103,7 @@ pub async fn inference_handler(
         deferred_tasks,
         ..
     }): AppState,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
     if !openai_compatible_params.unknown_fields.is_empty() {
@@ -154,6 +156,7 @@ pub async fn inference_handler(
         postgres_connection_info,
         deferred_tasks,
         params,
+        api_key_ext,
     )
     .await?;
 
@@ -268,6 +271,7 @@ pub async fn embeddings_handler(
         deferred_tasks,
         ..
     }): AppState,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
 ) -> Result<Json<OpenAIEmbeddingResponse>, Error> {
     let embedding_params = openai_compatible_params.try_into()?;
@@ -278,6 +282,7 @@ pub async fn embeddings_handler(
         postgres_connection_info,
         deferred_tasks,
         embedding_params,
+        api_key_ext,
     )
     .await?;
     Ok(Json(response.into()))
@@ -359,9 +364,8 @@ enum OpenAICompatibleResponseFormat {
     JsonObject,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonSchemaInfo {
     name: String,
@@ -568,6 +572,7 @@ pub struct OpenAICompatibleParams {
     parallel_tool_calls: Option<bool>,
     stop: Option<Vec<String>>,
     reasoning_effort: Option<String>,
+    service_tier: Option<ServiceTier>,
     verbosity: Option<String>,
     #[serde(rename = "tensorzero::variant_name")]
     tensorzero_variant_name: Option<String>,
@@ -738,6 +743,9 @@ impl Params {
             reasoning_effort: openai_compatible_params
                 .reasoning_effort
                 .or(inference_params.chat_completion.reasoning_effort),
+            service_tier: openai_compatible_params
+                .service_tier
+                .or(inference_params.chat_completion.service_tier),
             seed: openai_compatible_params
                 .seed
                 .or(inference_params.chat_completion.seed),
@@ -943,12 +951,15 @@ struct OpenAICompatibleImageUrl {
     url: Url,
     #[serde(rename = "tensorzero::mime_type")]
     mime_type: Option<MediaType>,
+    #[serde(default)]
+    detail: Option<Detail>,
 }
 
 #[derive(Deserialize, Debug)]
 struct OpenAICompatibleFile {
     file_data: String,
-    filename: String,
+    // TODO (#4478): collect and store filename
+    // filename: String,
     // OpenAI supports file_id with their files API
     // We do not so we require these two fields
 }
@@ -994,23 +1005,23 @@ impl<'de> Deserialize<'de> for TextContent {
     }
 }
 
-fn parse_base64_image_data_url(url: &str) -> Result<(MediaType, &str), Error> {
-    let Some(url) = url.strip_prefix("data:") else {
+fn parse_base64_file_data_url(data_url: &str) -> Result<(MediaType, &str), Error> {
+    let Some(url) = data_url.strip_prefix("data:") else {
         return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-            message: "Image data URL must start with `data:`".to_string(),
+            message: "Expected a base64-encoded data URL with MIME type (e.g. `data:image/png;base64,SGVsbG8sIFdvcmxkIQ==`), but got a value without the `data:` prefix.".to_string(),
         }));
     };
     let Some((mime_type, data)) = url.split_once(";base64,") else {
         return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-            message: "Image data URL must contain a base64-encoded data part".to_string(),
+            message: "Expected a base64-encoded data URL with MIME type (e.g. `data:image/png;base64,SGVsbG8sIFdvcmxkIQ==`), but got a value without the `;base64,` separator.".to_string(),
         }));
     };
-    let image_type: MediaType = mime_type.parse().map_err(|_| {
+    let file_type: MediaType = mime_type.parse().map_err(|_| {
         Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-            message: format!("Unknown content type `{mime_type}`"),
+            message: format!("Unknown MIME type `{mime_type}` in data URL"),
         })
     })?;
-    Ok((image_type, data))
+    Ok((file_type, data))
 }
 
 fn convert_openai_message_content(
@@ -1033,15 +1044,18 @@ fn convert_openai_message_content(
                     }
                     Ok(OpenAICompatibleContentBlock::ImageUrl { image_url }) => {
                         if image_url.url.scheme() == "data" {
-                            let url_str = image_url.url.to_string();
-                            let (mime_type, data) = parse_base64_image_data_url(&url_str)?;
-                            InputMessageContent::File(File::Base64(Base64File { source_url: None, mime_type, data: data.to_string() }))
+                            let image_url_str = image_url.url.to_string();
+                            let (mime_type, data) = parse_base64_file_data_url(&image_url_str)?;
+                            let base64_file = Base64File::new(None, mime_type, data.to_string(), image_url.detail)?;
+                            InputMessageContent::File(File::Base64(base64_file))
                         } else {
-                            InputMessageContent::File(File::Url(UrlFile { url: image_url.url, mime_type: image_url.mime_type }))
+                            InputMessageContent::File(File::Url(UrlFile { url: image_url.url, mime_type: image_url.mime_type, detail: image_url.detail }))
                         }
                     }
                     Ok(OpenAICompatibleContentBlock::File { file }) => {
-                        InputMessageContent::File(File::Base64(Base64File { source_url: None, mime_type: filename_to_mime_type(&file.filename)?, data: file.file_data }))
+                        let (mime_type, data) = parse_base64_file_data_url(&file.file_data)?;
+                        let base64_file = Base64File::new(None, mime_type, data.to_string(), None)?;
+                        InputMessageContent::File(File::Base64(base64_file))
                     }
                     Err(e) => {
                         if let Some(obj) = val.as_object() {
@@ -1099,15 +1113,15 @@ impl From<OpenAICompatibleTool> for Tool {
     }
 }
 
-impl From<OpenAICompatibleToolCall> for ToolCallInput {
+impl From<OpenAICompatibleToolCall> for ToolCallWrapper {
     fn from(tool_call: OpenAICompatibleToolCall) -> Self {
-        ToolCallInput {
+        ToolCallWrapper::InferenceResponseToolCall(InferenceResponseToolCall {
             id: tool_call.id,
-            raw_name: Some(tool_call.function.name),
-            raw_arguments: Some(tool_call.function.arguments),
+            raw_name: tool_call.function.name,
+            raw_arguments: tool_call.function.arguments,
             name: None,
             arguments: None,
-        }
+        })
     }
 }
 
@@ -1200,8 +1214,8 @@ fn process_chat_content(
     (content_str, tool_calls)
 }
 
-impl From<ToolCallOutput> for OpenAICompatibleToolCall {
-    fn from(tool_call: ToolCallOutput) -> Self {
+impl From<InferenceResponseToolCall> for OpenAICompatibleToolCall {
+    fn from(tool_call: InferenceResponseToolCall) -> Self {
         OpenAICompatibleToolCall {
             id: tool_call.id,
             r#type: "function".to_string(),
@@ -1461,12 +1475,11 @@ fn prepare_serialized_openai_compatible_events(
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use serde_json::json;
-    use tracing_test::traced_test;
 
     use crate::cache::CacheEnabledMode;
+    use crate::inference::types::file::Detail;
     use crate::inference::types::{System, Text, TextChunk};
     use crate::tool::ToolCallChunk;
 
@@ -1650,13 +1663,15 @@ mod tests {
         let expected_text = InputMessageContent::Text(Text {
             text: "Hello, world!".to_string(),
         });
-        let expected_tool_call = InputMessageContent::ToolCall(ToolCallInput {
-            id: "1".to_string(),
-            raw_name: Some("test_tool".to_string()),
-            raw_arguments: Some("{}".to_string()),
-            name: None,
-            arguments: None,
-        });
+        let expected_tool_call = InputMessageContent::ToolCall(
+            ToolCallWrapper::InferenceResponseToolCall(InferenceResponseToolCall {
+                id: "1".to_string(),
+                raw_name: "test_tool".to_string(),
+                raw_arguments: "{}".to_string(),
+                name: None,
+                arguments: None,
+            }),
+        );
 
         assert!(
             input.messages[0].content.contains(&expected_text),
@@ -1978,8 +1993,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_deprecated_custom_block() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let content = json!([{
             "country": "Japan",
             "city": "Tokyo",
@@ -2019,7 +2034,7 @@ mod tests {
             ContentBlockChatOutput::Text(Text {
                 text: "Hello".to_string(),
             }),
-            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 arguments: None,
                 name: Some("test_tool".to_string()),
                 id: "1".to_string(),
@@ -2048,7 +2063,7 @@ mod tests {
             ContentBlockChatOutput::Text(Text {
                 text: " second part".to_string(),
             }),
-            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 arguments: None,
                 name: Some("middle_tool".to_string()),
                 id: "123".to_string(),
@@ -2150,23 +2165,39 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_base64() {
+    fn test_parse_base64_file_data_url() {
         assert_eq!(
             (mime::IMAGE_JPEG, "YWJjCg=="),
-            parse_base64_image_data_url("data:image/jpeg;base64,YWJjCg==").unwrap()
+            parse_base64_file_data_url("data:image/jpeg;base64,YWJjCg==").unwrap()
         );
         assert_eq!(
             (mime::IMAGE_PNG, "YWJjCg=="),
-            parse_base64_image_data_url("data:image/png;base64,YWJjCg==").unwrap()
+            parse_base64_file_data_url("data:image/png;base64,YWJjCg==").unwrap()
         );
         assert_eq!(
             ("image/webp".parse().unwrap(), "YWJjCg=="),
-            parse_base64_image_data_url("data:image/webp;base64,YWJjCg==").unwrap()
+            parse_base64_file_data_url("data:image/webp;base64,YWJjCg==").unwrap()
         );
         assert_eq!(
-            ("image/svg".parse().unwrap(), "YWJjCg=="),
-            parse_base64_image_data_url("data:image/svg;base64,YWJjCg==").unwrap()
+            ("application/pdf".parse().unwrap(), "JVBERi0xLjQK"),
+            parse_base64_file_data_url("data:application/pdf;base64,JVBERi0xLjQK").unwrap()
         );
+
+        // Test error when prefix is missing
+        let result = parse_base64_file_data_url("YWJjCg==");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("without the `data:` prefix"));
+
+        // Test error when base64 separator is missing
+        let result = parse_base64_file_data_url("data:image/png,YWJjCg==");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("without the `;base64,` separator"));
     }
 
     #[test]
@@ -2346,10 +2377,9 @@ mod tests {
             }
         );
     }
-
-    #[traced_test]
     #[test]
     fn test_try_from_embedding_params_deprecated() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let openai_embedding_params = OpenAICompatibleEmbeddingParams {
             input: EmbeddingInput::Single("foo".to_string()),
             model: "text-embedding-ada-002".to_string(),
@@ -2365,10 +2395,9 @@ mod tests {
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
         assert!(logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
     }
-
-    #[traced_test]
     #[test]
     fn test_try_from_embedding_params_strip() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let openai_embedding_params = OpenAICompatibleEmbeddingParams {
             input: EmbeddingInput::Single("foo".to_string()),
             model: "tensorzero::embedding_model_name::text-embedding-ada-002".to_string(),
@@ -2630,5 +2659,83 @@ mod tests {
         let required_mode = OpenAICompatibleAllowedToolsMode::Required;
         let tool_choice: ToolChoice = required_mode.into();
         assert_eq!(tool_choice, ToolChoice::Required);
+    }
+
+    #[test]
+    fn test_deserialize_image_url_with_detail() {
+        // Test deserialization with detail: low
+        let json_low = json!({
+            "type": "image_url",
+            "image_url": {
+                "url": "https://example.com/image.png",
+                "detail": "low"
+            }
+        });
+        let block: OpenAICompatibleContentBlock = serde_json::from_value(json_low).unwrap();
+        match block {
+            OpenAICompatibleContentBlock::ImageUrl { image_url } => {
+                assert_eq!(image_url.url.as_str(), "https://example.com/image.png");
+                assert_eq!(image_url.detail, Some(Detail::Low));
+            }
+            _ => panic!("Expected ImageUrl variant"),
+        }
+
+        // Test deserialization with detail: high
+        let json_high = json!({
+            "type": "image_url",
+            "image_url": {
+                "url": "https://example.com/image.png",
+                "detail": "high"
+            }
+        });
+        let block: OpenAICompatibleContentBlock = serde_json::from_value(json_high).unwrap();
+        match block {
+            OpenAICompatibleContentBlock::ImageUrl { image_url } => {
+                assert_eq!(image_url.detail, Some(Detail::High));
+            }
+            _ => panic!("Expected ImageUrl variant"),
+        }
+
+        // Test deserialization with detail: auto
+        let json_auto = json!({
+            "type": "image_url",
+            "image_url": {
+                "url": "https://example.com/image.png",
+                "detail": "auto"
+            }
+        });
+        let block: OpenAICompatibleContentBlock = serde_json::from_value(json_auto).unwrap();
+        match block {
+            OpenAICompatibleContentBlock::ImageUrl { image_url } => {
+                assert_eq!(image_url.detail, Some(Detail::Auto));
+            }
+            _ => panic!("Expected ImageUrl variant"),
+        }
+
+        // Test deserialization without detail (should default to None)
+        let json_none = json!({
+            "type": "image_url",
+            "image_url": {
+                "url": "https://example.com/image.png"
+            }
+        });
+        let block: OpenAICompatibleContentBlock = serde_json::from_value(json_none).unwrap();
+        match block {
+            OpenAICompatibleContentBlock::ImageUrl { image_url } => {
+                assert_eq!(image_url.detail, None);
+            }
+            _ => panic!("Expected ImageUrl variant"),
+        }
+
+        // Test deserialization with invalid detail should fail
+        let json_invalid = json!({
+            "type": "image_url",
+            "image_url": {
+                "url": "https://example.com/image.png",
+                "detail": "invalid"
+            }
+        });
+        let result: Result<OpenAICompatibleContentBlock, _> = serde_json::from_value(json_invalid);
+        assert!(result.is_err());
     }
 }

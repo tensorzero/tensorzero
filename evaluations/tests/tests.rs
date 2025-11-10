@@ -8,8 +8,8 @@ use evaluations::dataset::query_dataset;
 use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEvaluatorParams};
 use evaluations::{Clients, ThrottledTensorZeroClient};
 use serde_json::json;
-use tensorzero::input_handling::resolved_input_to_client_input;
 use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::client::input_handling::resolved_input_to_client_input;
 use tensorzero_core::db::clickhouse::test_helpers::{
     select_inference_evaluation_human_feedback_clickhouse, select_model_inferences_clickhouse,
 };
@@ -28,8 +28,9 @@ use evaluations::{run_evaluation, stats::EvaluationUpdate, Args, OutputFormat};
 use std::collections::HashMap;
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
-use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
-use tensorzero::{InferenceResponse, Role};
+use tensorzero_core::client::{
+    ClientBuilder, ClientBuilderMode, FeedbackParams, InferenceResponse, Role,
+};
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
@@ -1028,8 +1029,8 @@ async fn run_llm_judge_evaluation_chat_pretty() {
     assert!(output_str.contains("Run ID:"));
     assert!(output_str.contains("Number of datapoints:"));
     // Check for the expected evaluation results
-    assert!(output_str.contains("topic_starts_with_f: 0.30 ± 0.14"));
-    assert!(output_str.contains("exact_match: 0.00 ± 0.00"));
+    assert!(output_str.contains("topic_starts_with_f: 0.30 ± 0.14 (n=10)"));
+    assert!(output_str.contains("exact_match: 0.00 ± 0.00 (n=0)"));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1071,7 +1072,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
     assert!(output_str.contains("Run ID:"));
     assert!(output_str.contains("Number of datapoints:"));
     // Check for the expected evaluation results
-    assert!(output_str.contains("count_sports: 0.50 ± 0.20"));
+    assert!(output_str.contains("count_sports: 0.50 ± 0.20 (n=6)"));
     // We don't assert the exact value here because it's not deterministic
     assert!(output_str.contains("exact_match: "));
     let err = err.to_string();
@@ -1177,7 +1178,9 @@ async fn test_parse_args() {
 
 #[tokio::test]
 async fn test_run_evaluation_binary() {
-    let bin_path = env!("CARGO_BIN_EXE_evaluations");
+    // Compatibility with 'cargo nextest archive': https://nexte.st/docs/ci-features/archiving/#making-tests-relocatable
+    let bin_path = std::env::var("NEXTEST_BIN_EXE_evaluations")
+        .unwrap_or_else(|_| env!("CARGO_BIN_EXE_evaluations").to_string());
     println!("Running evaluations binary at {bin_path}");
     let output = std::process::Command::new(bin_path)
         .output()
@@ -1321,7 +1324,8 @@ async fn test_run_llm_judge_evaluator_chat() {
             .reresolve(&clients.tensorzero_client)
             .await
             .unwrap(),
-    );
+    )
+    .unwrap();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,
@@ -1497,7 +1501,8 @@ async fn test_run_llm_judge_evaluator_json() {
             .reresolve(&clients.tensorzero_client)
             .await
             .unwrap(),
-    );
+    )
+    .unwrap();
     let result = run_llm_judge_evaluator(RunLLMJudgeEvaluatorParams {
         inference_response: &inference_response,
         datapoint: &datapoint,

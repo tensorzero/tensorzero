@@ -18,7 +18,9 @@ use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{
+    warn_discarded_thought_block, DelayedError, DisplayOrDebugGateway, Error, ErrorDetails,
+};
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
@@ -57,9 +59,8 @@ lazy_static! {
 const PROVIDER_NAME: &str = "OpenRouter";
 pub const PROVIDER_TYPE: &str = "openrouter";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct OpenRouterProvider {
     model_name: String,
     #[serde(skip)]
@@ -116,29 +117,31 @@ impl OpenRouterCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<Option<&'a SecretString>, Error> {
+    ) -> Result<Option<&'a SecretString>, DelayedError> {
         match self {
             OpenRouterCredentials::Static(api_key) => Ok(Some(api_key)),
             OpenRouterCredentials::Dynamic(key_name) => {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 }))
                 .transpose()
             }
             OpenRouterCredentials::None => Ok(None),
             OpenRouterCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
         }
     }
@@ -153,7 +156,10 @@ impl InferenceProvider for OpenRouterProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let request_body_obj = OpenRouterRequest::new(&self.model_name, request.request).await?;
         let request_body = serde_json::to_value(request_body_obj).map_err(|e| {
@@ -263,7 +269,10 @@ impl InferenceProvider for OpenRouterProvider {
                     })
                 })?;
         let request_url = get_chat_url(&OPENROUTER_DEFAULT_BASE_URL)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let mut request_builder = http_client
             .post(request_url)
@@ -288,6 +297,7 @@ impl InferenceProvider for OpenRouterProvider {
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
+            &raw_request,
         )
         .peekable();
         Ok((stream, raw_request))
@@ -322,7 +332,9 @@ pub fn stream_openrouter(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let mut tool_call_ids = Vec::new();
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
@@ -334,7 +346,7 @@ pub fn stream_openrouter(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(provider_type.clone(), e).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e).await);
                         }
                     }
                 }
@@ -349,7 +361,7 @@ pub fn stream_openrouter(
                                 message: format!(
                                     "Error parsing chunk. Error: {e}",
                                 ),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                                 provider_type: provider_type.clone(),
                             }));
@@ -716,6 +728,11 @@ async fn tensorzero_to_openrouter_user_messages(
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
                 let ObjectStorageFile { file, data } = &*resolved_file;
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
+                    );
+                }
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 user_content_blocks.push(OpenRouterContentBlock::ImageUrl {
                     image_url: OpenRouterImageUrl {
@@ -785,6 +802,11 @@ async fn tensorzero_to_openrouter_assistant_messages(
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
                 let ObjectStorageFile { file, data } = &*resolved_file;
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
+                    );
+                }
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 assistant_content_blocks.push(OpenRouterContentBlock::ImageUrl {
                     image_url: OpenRouterImageUrl {
@@ -1002,12 +1024,17 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
         request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if thinking_budget_tokens.is_some() {
@@ -1375,10 +1402,6 @@ fn openrouter_to_tensorzero_chunk(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-    use std::borrow::Cow;
-    use tracing_test::traced_test;
-
     use crate::{
         inference::types::{FunctionType, RequestMessage},
         providers::test_helpers::{
@@ -1386,6 +1409,8 @@ mod tests {
         },
         tool::ToolCallConfig,
     };
+    use serde_json::json;
+    use std::borrow::Cow;
 
     #[test]
     fn test_get_chat_url() {
@@ -2771,10 +2796,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_openrouter_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };

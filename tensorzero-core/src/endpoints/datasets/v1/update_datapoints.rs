@@ -19,7 +19,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{FetchContext, Input};
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::{DynamicJSONSchema, JsonSchemaRef};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
@@ -57,7 +57,7 @@ pub async fn update_datapoints_handler(
 /// and inserts the updated datapoints into ClickHouse.
 ///
 /// Returns an error if there are no datapoints, or if there are duplicate datapoint IDs.
-async fn update_datapoints(
+pub async fn update_datapoints(
     app_state: &AppStateData,
     dataset_name: &str,
     request: UpdateDatapointsRequest,
@@ -96,7 +96,7 @@ async fn update_datapoints(
             dataset_name: Some(dataset_name.to_string()),
             function_name: None,
             ids: Some(datapoint_ids),
-            page_size: u32::MAX, // No limit - fetch all matching datapoints
+            limit: u32::MAX, // No limit - fetch all matching datapoints
             offset: 0,
             allow_stale: false,
             filter: None, // No filtering when updating datapoints
@@ -332,7 +332,11 @@ async fn prepare_json_update(
     // Validate the output against the output schema. If the output is invalid, we only store the raw output.
     if let Some(new_output) = update.output {
         updated_datapoint.output = match new_output {
-            Some(output) => Some(output.into_json_inference_output(&output_schema).await),
+            Some(output) => Some(
+                output
+                    .into_json_inference_output(JsonSchemaRef::Dynamic(&output_schema))
+                    .await,
+            ),
             None => None,
         };
     }
@@ -414,7 +418,7 @@ pub async fn update_datapoints_metadata_handler(
 /// Business logic for updating datapoint metadata in a dataset.
 /// This function only updates metadata fields (like name) without creating new datapoint IDs.
 /// Unlike update_datapoints, this does NOT stale the old datapoint or create a new ID.
-async fn update_datapoints_metadata(
+pub async fn update_datapoints_metadata(
     clickhouse_handler: &impl DatasetQueries,
     dataset_name: &str,
     request: UpdateDatapointsMetadataRequest,
@@ -443,7 +447,7 @@ async fn update_datapoints_metadata(
             dataset_name: Some(dataset_name.to_string()),
             function_name: None,
             ids: Some(datapoint_ids.clone()),
-            page_size: u32::MAX,
+            limit: u32::MAX,
             offset: 0,
             allow_stale: false,
             filter: None,
@@ -476,10 +480,8 @@ async fn update_datapoints_metadata(
                     }));
                 }
 
-                if let Some(metadata) = update.metadata {
-                    if let Some(new_name) = metadata.name {
-                        existing_datapoint.name = new_name;
-                    }
+                if let Some(new_name) = update.metadata.name {
+                    existing_datapoint.name = new_name;
                 }
 
                 datapoints.push(DatapointInsert::Chat(existing_datapoint.into()));
@@ -494,10 +496,8 @@ async fn update_datapoints_metadata(
                     }));
                 }
 
-                if let Some(metadata) = update.metadata {
-                    if let Some(new_name) = metadata.name {
-                        existing_datapoint.name = new_name;
-                    }
+                if let Some(new_name) = update.metadata.name {
+                    existing_datapoint.name = new_name;
                 }
 
                 datapoints.push(DatapointInsert::Json(existing_datapoint.into()));
@@ -560,6 +560,7 @@ mod tests {
                 source_url: Some("https://example.com/original.png".parse().unwrap()),
                 mime_type: mime::IMAGE_PNG,
                 storage_path: storage_path.clone(),
+                detail: None,
             });
 
             let input = Input {
@@ -584,7 +585,7 @@ mod tests {
 
             // Create fetch context with NO actual object storage info.
             // If the code tries to access object storage, it will fail with an error.
-            let http_client = TensorzeroHttpClient::new().unwrap();
+            let http_client = TensorzeroHttpClient::new_testing().unwrap();
             let object_store_info: Option<ObjectStoreInfo> = None;
             let fetch_context = FetchContext {
                 client: &http_client,
@@ -628,11 +629,15 @@ mod tests {
             // - File::ObjectStorage: future is discarded, no async operations, just metadata passthrough
             // - File::Base64: goes through async resolve() -> write_file() -> storage write (or no-op if disabled)
 
-            let file = File::Base64(Base64File {
-                source_url: None,
-                mime_type: mime::IMAGE_PNG,
-                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
-            });
+            let file = File::Base64(
+                Base64File::new(
+                    None,
+                    mime::IMAGE_PNG,
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
+                    None,
+                )
+                .expect("test data should be valid"),
+            );
 
             let input = Input {
                 system: None,
@@ -656,7 +661,7 @@ mod tests {
 
             // Create fetch context with disabled storage
             // File::Base64 will call write_file() but it no-ops with disabled storage
-            let http_client = TensorzeroHttpClient::new().unwrap();
+            let http_client = TensorzeroHttpClient::new_testing().unwrap();
             let object_store_info = Some(ObjectStoreInfo {
                 object_store: None, // Disabled storage - write_file() returns Ok(()) without writing
                 kind: StorageKind::Disabled,
@@ -1873,9 +1878,9 @@ mod tests {
             let request = UpdateDatapointsMetadataRequest {
                 datapoints: vec![UpdateDatapointMetadataRequest {
                     id: datapoint_id,
-                    metadata: Some(DatapointMetadataUpdate {
+                    metadata: DatapointMetadataUpdate {
                         name: Some(Some("new_name".to_string())),
-                    }),
+                    },
                 }],
             };
 
@@ -1927,9 +1932,9 @@ mod tests {
             let request = UpdateDatapointsMetadataRequest {
                 datapoints: vec![UpdateDatapointMetadataRequest {
                     id: datapoint_id,
-                    metadata: Some(DatapointMetadataUpdate {
+                    metadata: DatapointMetadataUpdate {
                         name: Some(Some("updated_json_name".to_string())),
-                    }),
+                    },
                 }],
             };
 
@@ -1963,39 +1968,7 @@ mod tests {
             let request = UpdateDatapointsMetadataRequest {
                 datapoints: vec![UpdateDatapointMetadataRequest {
                     id: datapoint_id,
-                    metadata: Some(DatapointMetadataUpdate { name: Some(None) }),
-                }],
-            };
-
-            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
-            assert!(result.is_ok());
-        }
-
-        #[tokio::test]
-        async fn test_update_metadata_no_metadata_provided() {
-            let dataset_name = "test_dataset";
-            let existing_datapoint = create_sample_chat_datapoint(dataset_name);
-            let datapoint_id = existing_datapoint.id;
-            let original_name = existing_datapoint.name.clone();
-
-            let mut mock_db = MockDatasetQueries::new();
-            let existing_datapoint_clone = existing_datapoint.clone();
-            mock_db.expect_get_datapoints().returning(move |_| {
-                let dp = existing_datapoint_clone.clone();
-                Box::pin(async move { Ok(vec![StoredDatapoint::Chat(dp)]) })
-            });
-            mock_db
-                .expect_insert_datapoints()
-                .withf(move |datapoints| {
-                    datapoints.len() == 1
-                        && matches!(&datapoints[0], DatapointInsert::Chat(dp) if dp.name == original_name)
-                })
-                .returning(|_| Box::pin(async move { Ok(1) }));
-
-            let request = UpdateDatapointsMetadataRequest {
-                datapoints: vec![UpdateDatapointMetadataRequest {
-                    id: datapoint_id,
-                    metadata: None,
+                    metadata: DatapointMetadataUpdate { name: Some(None) },
                 }],
             };
 
@@ -2016,9 +1989,9 @@ mod tests {
             let request = UpdateDatapointsMetadataRequest {
                 datapoints: vec![UpdateDatapointMetadataRequest {
                     id: non_existent_id,
-                    metadata: Some(DatapointMetadataUpdate {
+                    metadata: DatapointMetadataUpdate {
                         name: Some(Some("new_name".to_string())),
-                    }),
+                    },
                 }],
             };
 
@@ -2041,15 +2014,15 @@ mod tests {
                 datapoints: vec![
                     UpdateDatapointMetadataRequest {
                         id: duplicate_id,
-                        metadata: Some(DatapointMetadataUpdate {
+                        metadata: DatapointMetadataUpdate {
                             name: Some(Some("name1".to_string())),
-                        }),
+                        },
                     },
                     UpdateDatapointMetadataRequest {
                         id: duplicate_id,
-                        metadata: Some(DatapointMetadataUpdate {
+                        metadata: DatapointMetadataUpdate {
                             name: Some(Some("name2".to_string())),
-                        }),
+                        },
                     },
                 ],
             };
@@ -2109,15 +2082,15 @@ mod tests {
                 datapoints: vec![
                     UpdateDatapointMetadataRequest {
                         id: id1,
-                        metadata: Some(DatapointMetadataUpdate {
+                        metadata: DatapointMetadataUpdate {
                             name: Some(Some("updated_name1".to_string())),
-                        }),
+                        },
                     },
                     UpdateDatapointMetadataRequest {
                         id: id2,
-                        metadata: Some(DatapointMetadataUpdate {
+                        metadata: DatapointMetadataUpdate {
                             name: Some(Some("updated_name2".to_string())),
-                        }),
+                        },
                     },
                 ],
             };

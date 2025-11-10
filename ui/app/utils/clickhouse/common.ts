@@ -8,7 +8,7 @@ import type {
   StoredInput,
   StoragePath as BackendStoragePath,
   StorageKind as BackendStorageKind,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 
 /**
  * JSON types
@@ -81,10 +81,26 @@ export const rawTextInputSchema = z.object({
 });
 export type RawTextInput = z.infer<typeof rawTextInputSchema>;
 
+export const thoughtSummaryBlockSchema = z.object({
+  text: z.string(),
+  type: z.literal("summary_text"),
+});
+export type ThoughtSummaryBlock = z.infer<typeof thoughtSummaryBlockSchema>;
+
 export const thoughtContentSchema = z.object({
   type: z.literal("thought"),
-  text: z.string().nullable(),
-  signature: z.string().optional(),
+  text: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? undefined),
+  signature: z
+    .string()
+    .nullish()
+    .transform((val) => val ?? undefined),
+  summary: z
+    .array(thoughtSummaryBlockSchema)
+    .nullish()
+    .transform((val) => val ?? undefined),
   _internal_provider_type: z.string().optional(),
 });
 export type ThoughtContent = z.infer<typeof thoughtContentSchema>;
@@ -283,6 +299,7 @@ export const displayModelInferenceInputMessageContentSchema =
     toolResultContentSchema,
     resolvedFileContentSchema,
     resolvedFileContentErrorSchema,
+    thoughtContentSchema,
   ]);
 
 export const displayModelInferenceInputMessageSchema = z.object({
@@ -345,7 +362,7 @@ export const jsonInferenceOutputSchema = z.object({
   parsed: JsonValueSchema.nullable(),
 }) satisfies z.ZodType<JsonInferenceOutput>;
 
-export const toolCallOutputSchema = z
+export const inferenceResponseToolCallSchema = z
   .object({
     type: z.literal("tool_call"),
     arguments: JsonValueSchema.nullable(),
@@ -356,11 +373,13 @@ export const toolCallOutputSchema = z
   })
   .strict();
 
-export type ToolCallOutput = z.infer<typeof toolCallOutputSchema>;
+export type InferenceResponseToolCall = z.infer<
+  typeof inferenceResponseToolCallSchema
+>;
 
 export const contentBlockChatOutputSchema = z.discriminatedUnion("type", [
   textContentSchema,
-  toolCallOutputSchema,
+  inferenceResponseToolCallSchema,
   thoughtContentSchema,
   unknownSchema,
 ]);

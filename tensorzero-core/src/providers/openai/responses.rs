@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::inference::types::{
     chat_completion_inference_params::{
-        warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+        warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
     },
     ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
 };
@@ -22,10 +22,10 @@ use url::Url;
 use crate::{
     error::{warn_discarded_thought_block, Error, ErrorDetails},
     inference::types::{
-        ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
-        ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-        ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-        TextChunk, Thought, ThoughtChunk, UnknownChunk, Usage,
+        file::Detail, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason,
+        FlattenUnknown, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+        ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+        RequestMessage, Role, Text, TextChunk, Thought, ThoughtChunk, UnknownChunk, Usage,
     },
     model::fully_qualified_name,
     providers::openai::{
@@ -62,6 +62,8 @@ pub struct OpenAIResponsesRequest<'a> {
     include: Option<Vec<OpenAIResponsesInclude>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<OpenAIResponsesReasoningConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    service_tier: Option<ServiceTier>,
     stream: bool,
 }
 
@@ -448,7 +450,8 @@ impl<'a> OpenAIResponsesRequest<'a> {
             } else {
                 None
             },
-            reasoning: None, // handled below
+            reasoning: None,    // handled below
+            service_tier: None, // handled below
             stream: request.stream,
         };
         apply_inference_params(&mut openai_responses_request, &request.inference_params_v2);
@@ -462,6 +465,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -470,6 +474,10 @@ fn apply_inference_params(
         request.reasoning = Some(OpenAIResponsesReasoningConfig {
             effort: reasoning_effort.clone(),
         });
+    }
+
+    if service_tier.is_some() {
+        request.service_tier = service_tier.clone();
     }
 
     if thinking_budget_tokens.is_some() {
@@ -580,6 +588,8 @@ pub enum OpenAIResponsesInputMessageContent<'a> {
     },
     InputImage {
         image_url: Cow<'a, str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        detail: Option<Detail>,
     },
     InputFile {
         #[serde(flatten)]
@@ -609,6 +619,8 @@ impl Serialize for OpenAIResponsesInputMessageContent<'_> {
             },
             InputImage {
                 image_url: &'a str,
+                #[serde(skip_serializing_if = "Option::is_none")]
+                detail: Option<&'a Detail>,
             },
             InputFile {
                 #[serde(flatten)]
@@ -622,8 +634,12 @@ impl Serialize for OpenAIResponsesInputMessageContent<'_> {
             OpenAIResponsesInputMessageContent::InputText { text } => {
                 Helper::InputText { text }.serialize(serializer)
             }
-            OpenAIResponsesInputMessageContent::InputImage { image_url } => {
-                Helper::InputImage { image_url }.serialize(serializer)
+            OpenAIResponsesInputMessageContent::InputImage { image_url, detail } => {
+                Helper::InputImage {
+                    image_url,
+                    detail: detail.as_ref(),
+                }
+                .serialize(serializer)
             }
             OpenAIResponsesInputMessageContent::InputFile { file } => {
                 Helper::InputFile { file }.serialize(serializer)
@@ -732,6 +748,7 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                                 role: "user",
                                 content: vec![OpenAIResponsesInputMessageContent::InputImage {
                                     image_url: Cow::Owned(image_url.url),
+                                    detail: image_url.detail,
                                 }],
                             }),
                         ));
@@ -985,7 +1002,9 @@ pub fn stream_openai_responses(
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let mut current_tool_id: Option<String> = None;
     let mut current_tool_name: Option<String> = None;
     let model_name = model_name.to_string();
@@ -1001,7 +1020,7 @@ pub fn stream_openai_responses(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(provider_type.clone(), e).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e).await);
                         }
                     }
                 }
@@ -1044,6 +1063,7 @@ pub fn stream_openai_responses(
                             discard_unknown_chunks,
                             &model_name,
                             &provider_name,
+                            &raw_request,
                         );
 
                         match stream_message {
@@ -1081,6 +1101,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
+    raw_request: &str,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match event {
         // Text delta - the main content streaming event
@@ -1129,7 +1150,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                             message: "Got function_call_arguments.delta without current tool id"
                                 .to_string(),
                             provider_type: PROVIDER_TYPE.to_string(),
-                            raw_request: None,
+                            raw_request: Some(raw_request.to_string()),
                             raw_response: Some(raw_message.clone()),
                         })
                     })?,
@@ -1249,7 +1270,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: error_msg.to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
+                raw_request: Some(raw_request.to_string()),
                 raw_response: Some(raw_message),
             }))
         }
@@ -1280,7 +1301,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: format!("Model refused to respond: {delta}"),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
+                raw_request: Some(raw_request.to_string()),
                 raw_response: Some(raw_message),
             }))
         }
@@ -1290,7 +1311,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             Err(Error::new(ErrorDetails::InferenceServer {
                 message: error.to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
+                raw_request: Some(raw_request.to_string()),
                 raw_response: Some(raw_message),
             }))
         }
@@ -1337,7 +1358,6 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 mod tests {
     use super::*;
     use std::time::Duration;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::inference::types::{FunctionType, ModelInferenceRequest, RequestMessage, Role};
@@ -1580,6 +1600,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1615,6 +1636,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1661,6 +1683,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1702,6 +1725,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1740,6 +1764,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1785,6 +1810,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1818,6 +1844,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1848,6 +1875,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1876,6 +1904,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1914,6 +1943,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         );
 
         assert!(result.is_err());
@@ -1946,6 +1976,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -1991,6 +2022,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -2032,6 +2064,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         );
 
         assert!(result.is_err());
@@ -2058,6 +2091,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         );
 
         assert!(result.is_err());
@@ -2084,6 +2118,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         );
 
         assert!(result.is_err());
@@ -2123,6 +2158,7 @@ mod tests {
                 false,
                 "test_model",
                 "test_provider",
+                "",
             )
             .unwrap();
 
@@ -2150,6 +2186,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap()
         .unwrap();
@@ -2189,6 +2226,7 @@ mod tests {
             true,
             "test_model",
             "test_provider",
+            "",
         )
         .unwrap();
 
@@ -2449,8 +2487,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_openai_responses_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -2460,6 +2498,7 @@ mod tests {
             function_type: FunctionType::Chat,
             inference_params_v2: ChatCompletionInferenceParamsV2 {
                 reasoning_effort: Some("high".to_string()),
+                service_tier: None,
                 thinking_budget_tokens: Some(1024),
                 verbosity: Some("low".to_string()),
             },
@@ -2494,5 +2533,46 @@ mod tests {
             openai_responses_request.text.verbosity,
             Some("low".to_string())
         );
+    }
+
+    #[test]
+    fn test_input_image_serialization_with_detail() {
+        use crate::inference::types::file::Detail;
+
+        // Test serialization with detail: low
+        let input_low = OpenAIResponsesInputMessageContent::InputImage {
+            image_url: Cow::Borrowed("https://example.com/image.png"),
+            detail: Some(Detail::Low),
+        };
+        let json_low = serde_json::to_value(&input_low).unwrap();
+        assert_eq!(json_low["type"], "input_image");
+        assert_eq!(json_low["image_url"], "https://example.com/image.png");
+        assert_eq!(json_low["detail"], "low");
+
+        // Test serialization with detail: high
+        let input_high = OpenAIResponsesInputMessageContent::InputImage {
+            image_url: Cow::Borrowed("https://example.com/image.png"),
+            detail: Some(Detail::High),
+        };
+        let json_high = serde_json::to_value(&input_high).unwrap();
+        assert_eq!(json_high["detail"], "high");
+
+        // Test serialization with detail: auto
+        let input_auto = OpenAIResponsesInputMessageContent::InputImage {
+            image_url: Cow::Borrowed("https://example.com/image.png"),
+            detail: Some(Detail::Auto),
+        };
+        let json_auto = serde_json::to_value(&input_auto).unwrap();
+        assert_eq!(json_auto["detail"], "auto");
+
+        // Test serialization with detail: None (should be omitted from JSON)
+        let input_none = OpenAIResponsesInputMessageContent::InputImage {
+            image_url: Cow::Borrowed("https://example.com/image.png"),
+            detail: None,
+        };
+        let json_none = serde_json::to_value(&input_none).unwrap();
+        assert_eq!(json_none["type"], "input_image");
+        assert_eq!(json_none["image_url"], "https://example.com/image.png");
+        assert!(json_none.get("detail").is_none());
     }
 }

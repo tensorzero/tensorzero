@@ -19,7 +19,7 @@ use crate::{
         },
         inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams},
     },
-    endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
+    endpoints::{inference::InferenceCredentials, stored_inferences::render_samples},
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
@@ -32,9 +32,8 @@ use crate::{
     utils::gateway::{AppState, AppStateData, StructuredJson},
 };
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
+#[ts(export)]
 pub struct LaunchOptimizationWorkflowParams {
     pub function_name: String,
     pub template_variant_name: String,
@@ -135,9 +134,8 @@ pub async fn launch_optimization_workflow(
         .await
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Debug, Deserialize)]
+#[ts(export)]
 pub struct LaunchOptimizationParams {
     pub train_samples: Vec<RenderedSample>,
     pub val_samples: Option<Vec<RenderedSample>>,

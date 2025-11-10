@@ -61,18 +61,16 @@ fn default_weight_decay() -> f64 {
     0.0
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(rename_all = "lowercase")]
 pub enum TogetherBatchSizeDescription {
     Max,
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(untagged)]
 pub enum TogetherBatchSize {
@@ -86,9 +84,8 @@ impl Default for TogetherBatchSize {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize)]
+#[ts(export)]
 pub struct TogetherSFTConfig {
     pub model: String,
     #[serde(skip)]
@@ -125,9 +122,8 @@ pub struct TogetherSFTConfig {
     pub hf_output_repo_name: Option<String>,
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct TogetherSFTJobHandle {
     pub api_base: Url,
@@ -145,9 +141,8 @@ impl std::fmt::Display for TogetherSFTJobHandle {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, Serialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "TogetherSFTConfig"))]
 pub struct UninitializedTogetherSFTConfig {
     pub model: String,
@@ -629,9 +624,8 @@ struct TogetherCreateJobRequest {
 }
 
 // Nested configuration structs that match Together's API format
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(tag = "lr_scheduler_type", rename_all = "snake_case")]
 pub enum TogetherLRScheduler {
@@ -653,9 +647,8 @@ impl Default for TogetherLRScheduler {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(tag = "type")]
 pub enum TogetherTrainingType {
@@ -683,9 +676,8 @@ impl Default for TogetherTrainingType {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Debug, Clone, Serialize, Deserialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum TogetherTrainingMethod {
@@ -747,7 +739,10 @@ impl Optimizer for TogetherSFTConfig {
             None
         };
         // Upload the training and validation rows to Together files
-        let api_key = self.credentials.get_api_key(credentials)?;
+        let api_key = self
+            .credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
         let train_file_fut = self.upload_file(client, &api_key, &train_rows, "fine-tune");
         let (train_file_id, val_file_id) = if let Some(val_rows) = val_rows.as_ref() {
             // Upload the files in parallel
@@ -855,7 +850,9 @@ impl JobHandle for TogetherSFTJobHandle {
             .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
             .await?;
 
-        let api_key = together_credentials.get_api_key(credentials)?;
+        let api_key = together_credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
         let res: TogetherJobResponse = client
             .get(
                 self.api_base

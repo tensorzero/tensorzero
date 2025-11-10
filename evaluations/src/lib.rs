@@ -10,13 +10,13 @@ use evaluators::{evaluate_inference, EvaluateInferenceParams};
 use helpers::{get_cache_options, get_tool_params_args};
 use serde::{Deserialize, Serialize};
 use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
-use tensorzero::{
+use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::client::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
     InferenceResponse,
 };
-use tensorzero::{ClientInput, StoragePath};
-use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::client::{ClientInput, StoragePath};
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
 use tensorzero_core::error::Error;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
@@ -94,7 +94,7 @@ pub struct Clients {
 /// This struct encapsulates all the necessary components for evaluation execution
 pub struct EvaluationCoreArgs {
     /// TensorZero client for making inference requests
-    pub tensorzero_client: tensorzero::Client,
+    pub tensorzero_client: Client,
 
     /// ClickHouse client for database operations
     pub clickhouse_client: ClickHouseConnectionInfo,
@@ -412,7 +412,7 @@ pub async fn run_evaluation_core_streaming(
         let datapoint_id = datapoint.id();
         let inference_cache = args.inference_cache;
         let abort_handle = join_set.spawn(async move {
-            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?));
+            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?)?);
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
                     clients: &clients_clone,
@@ -736,6 +736,7 @@ mod tests {
                 stats::EvaluatorStats {
                     mean: 0.4,
                     stderr: 0.1,
+                    count: 10,
                 },
             );
             stats.insert(
@@ -743,6 +744,7 @@ mod tests {
                 stats::EvaluatorStats {
                     mean: 0.3,
                     stderr: 0.1,
+                    count: 10,
                 },
             );
             stats.insert(
@@ -750,6 +752,7 @@ mod tests {
                 stats::EvaluatorStats {
                     mean: 0.1,
                     stderr: 0.05,
+                    count: 10,
                 },
             );
             stats

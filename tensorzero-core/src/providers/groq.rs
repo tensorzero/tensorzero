@@ -12,11 +12,13 @@ use tokio::time::Instant;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{
+    warn_discarded_thought_block, DelayedError, DisplayOrDebugGateway, Error, ErrorDetails,
+};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
 };
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
@@ -39,9 +41,8 @@ use crate::providers::helpers::{
 const PROVIDER_NAME: &str = "Groq";
 pub const PROVIDER_TYPE: &str = "groq";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GroqProvider {
     model_name: String,
     #[serde(skip)]
@@ -96,28 +97,30 @@ impl GroqCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<Option<&'a SecretString>, Error> {
+    ) -> Result<Option<&'a SecretString>, DelayedError> {
         match self {
             GroqCredentials::Static(api_key) => Ok(Some(api_key)),
             GroqCredentials::Dynamic(key_name) => {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 }))
                 .transpose()
             }
             GroqCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
             GroqCredentials::None => Ok(None),
         }
@@ -133,7 +136,10 @@ impl InferenceProvider for GroqProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_url = "https://api.groq.com/openai/v1/chat/completions".to_string();
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
 
         let request_body =
@@ -241,7 +247,10 @@ impl InferenceProvider for GroqProvider {
                 })
             })?;
         let request_url = "https://api.groq.com/openai/v1/chat/completions".to_string();
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let mut request_builder = http_client.post(request_url);
         if let Some(api_key) = api_key {
@@ -262,6 +271,7 @@ impl InferenceProvider for GroqProvider {
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
+            &raw_request,
         )
         .peekable();
         Ok((stream, raw_request))
@@ -296,7 +306,9 @@ pub fn stream_groq(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let mut tool_call_ids = Vec::new();
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
@@ -308,7 +320,7 @@ pub fn stream_groq(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(provider_type.clone(), e).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e).await);
                         }
                     }
                 }
@@ -323,7 +335,7 @@ pub fn stream_groq(
                                 message: format!(
                                     "Error parsing chunk. Error: {e}",
                                     ),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                                 provider_type: provider_type.clone(),
                             }));
@@ -646,6 +658,11 @@ async fn tensorzero_to_groq_user_messages(
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
                 let ObjectStorageFile { file, data } = &*resolved_file;
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                    );
+                }
                 user_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         url: format!("data:{};base64,{}", file.mime_type, data),
@@ -710,6 +727,11 @@ async fn tensorzero_to_groq_assistant_messages(
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
                 let ObjectStorageFile { file, data } = &*resolved_file;
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                    );
+                }
                 assistant_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         url: format!("data:{};base64,{}", file.mime_type, data),
@@ -899,6 +921,8 @@ struct GroqRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    service_tier: Option<ServiceTier>,
 }
 
 fn apply_inference_params(
@@ -907,12 +931,29 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
         request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    // Groq supports auto and flex, but not priority and default
+    if let Some(tier) = service_tier {
+        match tier {
+            ServiceTier::Auto | ServiceTier::Flex => {
+                request.service_tier = Some(tier.clone());
+            }
+            ServiceTier::Priority | ServiceTier::Default => {
+                warn_inference_parameter_not_supported(
+                    PROVIDER_NAME,
+                    &format!("service_tier ({tier})"),
+                    None,
+                );
+            }
+        }
     }
 
     if thinking_budget_tokens.is_some() {
@@ -981,6 +1022,7 @@ impl<'a> GroqRequest<'a> {
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None,
+            service_tier: None, // handled below
         };
 
         apply_inference_params(&mut groq_request, &request.inference_params_v2);
@@ -1289,18 +1331,25 @@ fn groq_to_tensorzero_chunk(
 }
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use serde_json::json;
     use std::borrow::Cow;
-    use tracing_test::traced_test;
 
-    use crate::{
-        inference::types::{FunctionType, RequestMessage},
-        providers::test_helpers::{
-            MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
-        },
-        tool::ToolCallConfig,
+    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+    use base64::Engine;
+    use serde_json::json;
+
+    use super::*;
+    use crate::inference::types::file::Detail;
+    use crate::inference::types::resolved_input::LazyFile;
+    use crate::inference::types::storage::{StorageKind, StoragePath};
+    use crate::inference::types::{
+        ContentBlock, FunctionType, ObjectStorageFile, ObjectStoragePointer,
+        PendingObjectStoreFile, RequestMessage,
     };
+    use crate::providers::test_helpers::{
+        MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
+    };
+    use crate::tool::ToolCallConfig;
+    use crate::utils::testing::capture_logs;
 
     #[test]
     fn test_handle_groq_error() {
@@ -1664,6 +1713,7 @@ mod tests {
             parallel_tool_calls: None,
             stop: None,
             reasoning_effort: None,
+            service_tier: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
@@ -1762,6 +1812,7 @@ mod tests {
             parallel_tool_calls: None,
             stop: None,
             reasoning_effort: None,
+            service_tier: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
@@ -1830,6 +1881,7 @@ mod tests {
             parallel_tool_calls: None,
             stop: None,
             reasoning_effort: None,
+            service_tier: None,
         };
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_no_choices,
@@ -1888,6 +1940,7 @@ mod tests {
             parallel_tool_calls: None,
             stop: None,
             reasoning_effort: None,
+            service_tier: None,
         };
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_multiple_choices,
@@ -2483,10 +2536,11 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_groq_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };
@@ -2508,6 +2562,35 @@ mod tests {
         // Test that verbosity warns
         assert!(logs_contain(
             "Groq does not support the inference parameter `verbosity`"
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_groq_warns_on_detail() {
+        let logs_contain = capture_logs();
+
+        // Test with resolved file (base64 encoding path) with detail
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let content_blocks = vec![ContentBlock::File(Box::new(LazyFile::Base64(
+            PendingObjectStoreFile(ObjectStorageFile {
+                file: ObjectStoragePointer {
+                    source_url: None,
+                    mime_type: mime::IMAGE_PNG,
+                    storage_path: dummy_storage_path,
+                    detail: Some(Detail::High),
+                },
+                data: BASE64_STANDARD.encode(b"fake image data"),
+            }),
+        )))];
+
+        let _result = tensorzero_to_groq_user_messages(&content_blocks).await;
+
+        // Should log a warning about detail not being supported
+        assert!(logs_contain(
+            "The image detail parameter is not supported by Groq"
         ));
     }
 }

@@ -35,15 +35,14 @@ use tensorzero::{
     ClientInputMessageContent, ClientSecretString, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
-use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
-use tracing_test::traced_test;
-
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
+use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 
-use tensorzero_core::inference::types::file::{Base64File, ObjectStoragePointer, UrlFile};
+use tensorzero_core::inference::types::file::{Base64File, Detail, ObjectStoragePointer, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{Arguments, FinishReason, System, TextKind, Thought};
 use tensorzero_core::utils::gateway::AppStateData;
+use tensorzero_core::utils::testing::reset_capture_logs;
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
@@ -200,9 +199,10 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test(flavor = "multi_thread")]
         async fn test_warn_ignored_thought_block() {
+            let logs_contain = tensorzero_core::utils::testing::capture_logs();
             let providers = $func().await.simple_inference;
             for provider in providers {
-                test_warn_ignored_thought_block_with_provider(provider).await;
+                test_warn_ignored_thought_block_with_provider(provider, &logs_contain).await;
             }
         }
 
@@ -301,12 +301,13 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_provider_type_fallback_credentials() {
+            let logs_contain = tensorzero_core::utils::testing::capture_logs();
             // We just need a longhand model
             let all_providers = $func().await;
             let providers = all_providers.credential_fallbacks;
             let supports_dynamic_credentials = !all_providers.provider_type_default_credentials.is_empty();
             for provider in providers {
-                test_provider_type_fallback_credentials_with_provider(provider, supports_dynamic_credentials).await;
+                test_provider_type_fallback_credentials_with_provider(provider, supports_dynamic_credentials, &logs_contain).await;
             }
         }
 
@@ -1148,11 +1149,12 @@ defaults.{}
 /// 4. Infers with the dynamic credential
 /// 5. Infers with the default credential
 /// 6. Asserts that the logs contain exactly one message about falling back
-#[traced_test]
 pub async fn test_provider_type_fallback_credentials_with_provider(
     provider: ModelTestProvider,
     supports_dynamic_credentials_test: bool,
+    logs_contain: &impl Fn(&str) -> bool,
 ) {
+    reset_capture_logs();
     // Get the default credential location for this provider
     let default_location = get_default_credential_location(&provider.provider_type);
 
@@ -1303,7 +1305,11 @@ model = "test-model"
         result.err()
     );
 
-    assert!(logs_contain("attempting fallback"));
+    assert!(logs_contain("Using fallback credential"));
+    assert!(
+        !logs_contain("ERROR"),
+        "We should not log an error when credential fallback occurs"
+    );
 }
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
@@ -1366,7 +1372,7 @@ async fn check_object_fetch_via_embedded(
 async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_data: &[u8]) {
     // Try using the running HTTP gateway (which is *not* configured with an object store)
     // to fetch the `StoragePath`
-    let client = TensorzeroHttpClient::new().unwrap();
+    let client = TensorzeroHttpClient::new_testing().unwrap();
     let res = client
         .get(get_gateway_endpoint(&format!(
             "/internal/object_storage?storage_path={}",
@@ -1656,6 +1662,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                             ClientInputMessageContent::File(File::Url(UrlFile {
                                 url: image_url.clone(),
                                 mime_type: None,
+                                detail: Some(Detail::Low),
                             })),
                         ],
                     }],
@@ -1714,11 +1721,15 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the PDF".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Base64(Base64File {
-                                source_url: None,
-                                mime_type: mime::APPLICATION_PDF,
-                                data: pdf_data.clone(),
-                            })),
+                            ClientInputMessageContent::File(File::Base64(
+                                Base64File::new(
+                                    None,
+                                    mime::APPLICATION_PDF,
+                                    pdf_data.clone(),
+                                    None,
+                                )
+                                .expect("test data should be valid"),
+                            )),
                         ],
                     }],
                 },
@@ -1775,11 +1786,15 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                     ClientInputMessageContent::Text(TextKind::Text {
                         text: "Describe the contents of the image".to_string(),
                     }),
-                    ClientInputMessageContent::File(File::Base64(Base64File {
-                        source_url: None,
-                        mime_type: mime::IMAGE_PNG,
-                        data: image_data.clone(),
-                    })),
+                    ClientInputMessageContent::File(File::Base64(
+                        Base64File::new(
+                            None,
+                            mime::IMAGE_PNG,
+                            image_data.clone(),
+                            Some(Detail::Low),
+                        )
+                        .expect("test data should be valid"),
+                    )),
                 ],
             }],
         },
@@ -1835,12 +1850,10 @@ pub async fn test_base64_image_inference_with_provider_and_store(
 
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
-    params.input.messages[0].content[1] =
-        ClientInputMessageContent::File(File::Base64(Base64File {
-            source_url: None,
-            mime_type: mime::IMAGE_PNG,
-            data: updated_base64,
-        }));
+    params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64(
+        Base64File::new(None, mime::IMAGE_PNG, updated_base64, None)
+            .expect("test data should be valid"),
+    ));
 
     let response = client.inference(params.clone()).await.unwrap();
 
@@ -2397,9 +2410,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
 
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
 }
-
-#[traced_test]
-pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProvider) {
+pub async fn test_warn_ignored_thought_block_with_provider(
+    provider: E2ETestProvider,
+    logs_contain: &impl Fn(&str) -> bool,
+) {
+    reset_capture_logs();
     // Bedrock rejects input thoughts for these models
     if provider.model_name == "claude-3-haiku-20240307-aws-bedrock"
         || provider.model_name == "deepseek-r1-aws-bedrock"
@@ -2456,6 +2471,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
 
     if ["anthropic", "aws-bedrock", "gcp_vertex_anthropic"]
         .contains(&provider.model_provider_name.as_str())
+        || ["openai-responses"].contains(&provider.variant_name.as_str())
     {
         assert!(
             !logs_contain("TensorZero doesn't support input thought blocks for the"),
@@ -2464,7 +2480,9 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
     } else {
         assert!(
             logs_contain("TensorZero doesn't support input thought blocks for the"),
-            "Missing expected warning"
+            "Missing expected warning for model_provider {} variant {}",
+            provider.model_provider_name,
+            provider.variant_name
         );
     }
 }
@@ -2664,6 +2682,7 @@ pub async fn check_base64_pdf_response(
                     source_url: None,
                     mime_type: mime::APPLICATION_PDF,
                     storage_path: expected_storage_path.clone(),
+                    detail: None,
                 },)))
             ]
         },]
@@ -2779,6 +2798,7 @@ pub async fn check_base64_image_response(
                             "kind": kind_json,
                             "path": format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                         },
+                        "detail": "low"
                     }
                 ]
             }
@@ -2815,6 +2835,7 @@ pub async fn check_base64_image_response(
                     source_url: None,
                     mime_type: mime::IMAGE_PNG,
                     storage_path: expected_storage_path.clone(),
+                    detail: Some(Detail::Low),
                 },)))
             ]
         },]
@@ -2930,6 +2951,7 @@ pub async fn check_url_image_response(
                             "kind": kind_json,
                             "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                         },
+                        "detail": "low"
                     }
                 ]
             }
@@ -2964,6 +2986,7 @@ pub async fn check_url_image_response(
                             kind: kind.clone(),
                             path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
                         },
+                        detail: Some(Detail::Low),
                     },
                 )))]
             },
@@ -3279,6 +3302,9 @@ pub async fn check_simple_image_inference_response(
     if let Some(episode_id) = episode_id {
         assert_eq!(retrieved_episode_id, episode_id);
     }
+    let tags = result.get("tags").unwrap();
+    // All callers set this tag so this tests that tags are propagated to the ultimate sink of the inference data
+    tags.get("test_type").unwrap();
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
