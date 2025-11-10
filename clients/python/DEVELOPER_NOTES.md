@@ -55,9 +55,9 @@ For pure value types (mostly used in APIs), we generate them from Rust, via JSON
 
 There are a few important ways we should customize the JSON Schemas generated from Rust:
 
-### Naming enum variants
+### Naming tagged enum variants
 
-For Rust enums (union types), add a title to each variant that holds values, especially if the enum is tagged in Serde representation:
+For Rust enums (union types), add a title to each variant that holds values if the enum is **tagged** in Serde representation. Do not add this to **untagged** enums.
 
 ```rust
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -97,6 +97,8 @@ ContentBlock = ContentBlock1 | ContentBlock2
 ```
 
 This is bad for Python consumers who construct the enum variants (`ContentBlock1` instead of `ContentBlockText`) directly.
+
+However, for untagged enums, the underlying type is directly included as a `$ref` and generated as one of the union types, so the title is useless.
 
 ### Explicitly tagging "double option" fields
 

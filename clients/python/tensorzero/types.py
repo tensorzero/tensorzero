@@ -1,6 +1,6 @@
 import warnings
 from abc import ABC
-from dataclasses import asdict, dataclass, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from json import JSONEncoder
 from typing import Any, Dict, List, Literal, Optional, Protocol, Union, cast
@@ -561,6 +561,7 @@ class TensorZeroTypeEncoder(JSONEncoder):
     Helper used to serialize Python objects to JSON, which may contain dataclasses like `Text`
     Used by the Rust native module
     """
+
     def default(self, o: Any) -> Any:
         if isinstance(o, UUID) or isinstance(o, uuid_utils.UUID):
             return str(o)
@@ -575,7 +576,7 @@ class TensorZeroTypeEncoder(JSONEncoder):
                 if not isinstance(value, UnsetType):
                     # Recursively handle nested dataclasses/lists/dicts
                     result[field.name] = self._convert_value(value)
-            return result
+            return result  # pyright: ignore[reportUnknownVariableType]
         else:
             super().default(o)
 
@@ -586,18 +587,19 @@ class TensorZeroTypeEncoder(JSONEncoder):
             return None
         elif is_dataclass(value) and not isinstance(value, type):
             # Recursively convert nested dataclasses
-            result = {}
+            # Note: pyright can't infer types through dict operations when value is Any
+            result: dict[str, Any] = {}
             for field in fields(value):
                 field_value = getattr(value, field.name)
                 if not isinstance(field_value, UnsetType):
                     result[field.name] = self._convert_value(field_value)
-            return result
+            return result  # pyright: ignore[reportUnknownVariableType]
         elif isinstance(value, (list, tuple)):
             # Handle lists/tuples
-            return [self._convert_value(item) for item in value]
+            return [self._convert_value(item) for item in value]  # pyright: ignore[reportUnknownVariableType]
         elif isinstance(value, dict):
             # Handle dicts
-            return {k: self._convert_value(v) for k, v in value.items()}
+            return {k: self._convert_value(v) for k, v in value.items()}  # pyright: ignore[reportUnknownVariableType]
         else:
             # Return as-is for primitive types
             return value
