@@ -620,7 +620,7 @@ jobs:
       - name: Print ClickHouse error logs (non-replicated)
         if: always() && matrix.replicated == false
         run: |
-          docker exec clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+          docker exec e2e-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
 
       - name: Print ClickHouse error logs (replicated)
         if: always() && matrix.replicated == true
