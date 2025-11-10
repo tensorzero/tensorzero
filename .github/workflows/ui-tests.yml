@@ -7,6 +7,10 @@ on:
         required: true
         type: boolean
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   ui-tests:
     runs-on: namespace-profile-tensorzero-8x16
