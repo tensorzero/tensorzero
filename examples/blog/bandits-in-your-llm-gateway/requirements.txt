@@ -339,7 +339,7 @@ numpy==2.3.4 ; python_full_version >= '3.11' \
 openai==2.6.1 \
     --hash=sha256:27ae704d190615fca0c0fc2b796a38f8b5879645a3a52c9c453b23f97141bb49 \
     --hash=sha256:904e4b5254a8416746a2f05649594fa41b19d799843cd134dac86167e094edef
-    # via tensorzero-examples-docs-guides-experimentation-run-adaptive-ab-tests
+    # via tensorzero-examples-blog-bandits-in-your-llm-gateway
 pandas==2.3.3 \
     --hash=sha256:0242fe9a49aa8b4d78a4fa03acb397a58833ef6199e9aa40a95f027bb3a1b6e7 \
     --hash=sha256:1611aedd912e1ff81ff41c745822980c49ce4a7907537be8692c8dbc31924593 \
@@ -396,7 +396,7 @@ pandas==2.3.3 \
     --hash=sha256:ee67acbbf05014ea6c763beb097e03cd629961c8a632075eeb34247120abcb4b \
     --hash=sha256:f086f6fe114e19d92014a1966f43a3e62285109afe874f067f5abbdcbb10e59c \
     --hash=sha256:f8bfc0e12dc78f777f323f55c58649591b2cd0c43534e8355c51d3fede5f4dee
-    # via tensorzero-examples-docs-guides-experimentation-run-adaptive-ab-tests
+    # via tensorzero-examples-blog-bandits-in-your-llm-gateway
 pydantic==2.12.3 \
     --hash=sha256:1da1c82b0fc140bb0103bc1441ffe062154c8d38491189751ee00fd8ca65ce74 \
     --hash=sha256:6986454a854bc3bc6e5443e1369e06a3a456af9d339eda45510f517d9ea5c6bf
@@ -550,13 +550,13 @@ tensorzero==2025.11.0 \
     --hash=sha256:c3cb67862b5aa969f1bd105713f346a1b32cf9afd4199ab0977a6d58d5155def \
     --hash=sha256:ef0027fa01a78cbc3295e2f2fa9b98c1d6adedafff93fb5fed4393eed1a679e4 \
     --hash=sha256:ffb64a1aa3eb8f26653eb9bc52ea9e5fe04f243b78f176292d54011fb4b1270d
-    # via tensorzero-examples-docs-guides-experimentation-run-adaptive-ab-tests
+    # via tensorzero-examples-blog-bandits-in-your-llm-gateway
 tqdm==4.67.1 \
     --hash=sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2 \
     --hash=sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2
     # via
     #   openai
-    #   tensorzero-examples-docs-guides-experimentation-run-adaptive-ab-tests
+    #   tensorzero-examples-blog-bandits-in-your-llm-gateway
 typing-extensions==4.15.0 \
     --hash=sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466 \
     --hash=sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548
