@@ -38,7 +38,7 @@ workspace = true
 async-stream = { workspace = true }
 async-trait = { workspace = true }
 aws-config = { version = "1.8", features = ["behavior-version-latest"] }
-aws-sdk-bedrockruntime = { version = "1.112.0", default-features = false, features = [
+aws-sdk-bedrockruntime = { version = "1.113.0", default-features = false, features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
@@ -96,7 +96,7 @@ url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 tensorzero-derive = { path = "../internal/tensorzero-derive" }
 clap = { workspace = true }
-aws-sdk-sagemakerruntime = { version = "1.90.0", features = [
+aws-sdk-sagemakerruntime = { version = "1.91.0", features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
