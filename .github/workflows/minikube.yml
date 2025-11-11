@@ -40,13 +40,14 @@ jobs:
         helm repo update
         kubectl create namespace clickhouse
         helm install clickhouse altinity/clickhouse -n clickhouse -f clickhouse-values.yaml
+        kubectl wait --for=condition=ready pod chi-clickhouse-clickhouse-0-0-0 -n clickhouse --timeout=60s
 
     - name: Install TensorZero on minikube
       run: |
         cd examples/production-deployment-k8s-helm
         kubectl create namespace tensorzero
         kubectl create secret generic tensorzero-secret -n tensorzero \
-            --from-literal=TENSORZERO_CLICKHOUSE_URL="http://default:tensorzero@chi-clickhouse-clickhouse-0-0-0.clickhouse.svc.cluster.local:8123" \
+            --from-literal=TENSORZERO_CLICKHOUSE_URL="http://default:tensorzero@chi-clickhouse-clickhouse-0-0-0.chi-clickhouse-clickhouse-0-0.clickhouse.svc.cluster.local:8123" \
             --from-literal=TENSORZERO_GATEWAY_URL="http://tensorzero-gateway.tensorzero.svc.cluster.local:3000" \
             --from-literal=OPENAI_API_KEY="fake-openai-api-key"
         helm upgrade --install tensorzero .  -f values.yaml -f helm-ci-overrides.yaml -n tensorzero
