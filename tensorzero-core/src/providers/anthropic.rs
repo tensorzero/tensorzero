@@ -435,7 +435,7 @@ impl From<Role> for AnthropicRole {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-enum AnthropicToolChoice<'a> {
+pub enum AnthropicToolChoice<'a> {
     Auto {
         disable_parallel_tool_use: Option<bool>,
     },

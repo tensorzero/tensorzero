@@ -40,6 +40,14 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let pdf_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "gcp_vertex_anthropic".to_string(),
+        model_name: "gcp_vertex_anthropic::projects/tensorzero-public/locations/global/publishers/anthropic/models/claude-sonnet-4-5@20250929".into(),
+        model_provider_name: "gcp_vertex_anthropic".into(),
+        credentials: HashMap::new(),
+    }];
+
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "gcp-vertex-haiku-extra-body".to_string(),
@@ -122,11 +130,11 @@ async fn get_providers() -> E2ETestProviders {
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
-        parallel_tool_use_inference: vec![],
+        parallel_tool_use_inference: standard_providers.clone(),
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers,
-        pdf_inference: vec![],
+        pdf_inference: pdf_providers,
         shorthand_inference: shorthand_providers,
         credential_fallbacks,
     }

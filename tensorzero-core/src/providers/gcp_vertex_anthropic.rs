@@ -36,6 +36,7 @@ use crate::model::{fully_qualified_name, ModelProvider};
 use crate::model_table::{GCPVertexAnthropicKind, ProviderType, ProviderTypeDefaultCredentials};
 use crate::providers::anthropic::{
     anthropic_to_tensorzero_stream_message, handle_anthropic_error, AnthropicStreamMessage,
+    AnthropicToolChoice,
 };
 use crate::providers::gcp_vertex_gemini::location_subdomain_prefix;
 use crate::tool::{ToolCall, ToolChoice};
@@ -428,35 +429,6 @@ fn stream_anthropic(
     })
 }
 
-/// We can instruct Anthropic to use a particular tool,
-/// any tool (but to use one), or to use a tool if needed.
-#[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-enum GCPVertexAnthropicToolChoice<'a> {
-    Auto,
-    Any,
-    Tool { name: &'a str },
-}
-
-// We map our ToolChoice enum to the Anthropic one that serializes properly
-impl<'a> TryFrom<&'a ToolChoice> for GCPVertexAnthropicToolChoice<'a> {
-    type Error = Error;
-    fn try_from(tool_choice: &'a ToolChoice) -> Result<Self, Error> {
-        match tool_choice {
-            ToolChoice::Auto => Ok(GCPVertexAnthropicToolChoice::Auto),
-            ToolChoice::Required => Ok(GCPVertexAnthropicToolChoice::Any),
-            ToolChoice::Specific(name) => Ok(GCPVertexAnthropicToolChoice::Tool { name }),
-            // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
-            // for tool choice. Instead, we return Auto but the request construction will ensure
-            // that no tools are sent in the request payload. This achieves the same effect
-            // as explicitly telling the model not to use tools, since without any tools
-            // being provided, the model cannot make tool calls.
-            ToolChoice::None => Ok(GCPVertexAnthropicToolChoice::Auto),
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Serialize)]
 struct GCPVertexAnthropicThinkingConfig {
     r#type: &'static str,
@@ -482,7 +454,7 @@ struct GCPVertexAnthropicRequestBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<GCPVertexAnthropicToolChoice<'a>>,
+    tool_choice: Option<AnthropicToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<AnthropicTool<'a>>>,
 }
@@ -571,11 +543,11 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             }
         });
         // `tool_choice` should only be set if tools are set and non-empty
-        let tool_choice: Option<GCPVertexAnthropicToolChoice> = tools
+        let tool_choice: Option<AnthropicToolChoice> = tools
             .as_ref()
             .filter(|t| !t.is_empty())
             .and(request.tool_config.as_ref())
-            .and_then(|c| (&c.tool_choice).try_into().ok());
+            .and_then(|c| c.as_ref().try_into().ok());
 
         let max_tokens = match request.max_tokens {
             Some(max_tokens) => Ok(max_tokens),
@@ -906,42 +878,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_try_from_tool_choice() {
-        // Test conversion of ToolChoice::None - now maps to Auto
-        let tool_choice = ToolChoice::None;
-        let anthropic_tool_choice = GCPVertexAnthropicToolChoice::try_from(&tool_choice);
-        assert!(anthropic_tool_choice.is_ok());
-        assert_eq!(
-            anthropic_tool_choice.unwrap(),
-            GCPVertexAnthropicToolChoice::Auto
-        );
-
-        let tool_choice = ToolChoice::Auto;
-        let anthropic_tool_choice = GCPVertexAnthropicToolChoice::try_from(&tool_choice);
-        assert!(anthropic_tool_choice.is_ok());
-        assert_eq!(
-            anthropic_tool_choice.unwrap(),
-            GCPVertexAnthropicToolChoice::Auto
-        );
-
-        let tool_choice = ToolChoice::Required;
-        let anthropic_tool_choice = GCPVertexAnthropicToolChoice::try_from(&tool_choice);
-        assert!(anthropic_tool_choice.is_ok());
-        assert_eq!(
-            anthropic_tool_choice.unwrap(),
-            GCPVertexAnthropicToolChoice::Any
-        );
-
-        let tool_choice = ToolChoice::Specific("test".to_string());
-        let anthropic_tool_choice = GCPVertexAnthropicToolChoice::try_from(&tool_choice);
-        assert!(anthropic_tool_choice.is_ok());
-        assert_eq!(
-            anthropic_tool_choice.unwrap(),
-            GCPVertexAnthropicToolChoice::Tool { name: "test" }
-        );
-    }
-
     #[tokio::test]
     async fn test_from_tool() {
         let parameters = json!({
@@ -1269,8 +1205,9 @@ mod tests {
                 }]),
                 temperature: Some(0.5),
                 top_p: Some(0.9),
-                tool_choice: Some(GCPVertexAnthropicToolChoice::Tool {
+                tool_choice: Some(AnthropicToolChoice::Tool {
                     name: "get_temperature",
+                    disable_parallel_tool_use: Some(false),
                 }),
                 tools: Some(vec![AnthropicTool {
                     name: WEATHER_TOOL.name(),
