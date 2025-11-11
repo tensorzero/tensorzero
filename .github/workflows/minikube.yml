@@ -35,6 +35,7 @@ jobs:
       run: |
         cd examples/production-deployment-k8s-helm
         kubectl get pods -A
+        kubectl create namespace tensorzero
         helm upgrade --install tensorzero .  -f values.yaml -f helm-ci-overrides.yaml -n tensorzero
         kubectl port-forward service/tensorzero-gateway -n tensorzero 3000:3000 &
     
