@@ -102,6 +102,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_off_inference,
         image_inference: vec![],
         pdf_inference: vec![],
+        input_audio: vec![],
         shorthand_inference: vec![],
         // Azure AI foundry uses same code as Azure regular for fallbacks so we don't
         // need to double test
