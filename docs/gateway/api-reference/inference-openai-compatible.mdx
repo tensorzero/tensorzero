@@ -296,17 +296,17 @@ Allows you to override inference parameters dynamically at request time.
 
 This field accepts an object with a `chat_completion` field containing any of the following parameters:
 
-- `temperature` (float): Controls randomness in the output
-- `max_tokens` (integer): Maximum number of tokens to generate
-- `seed` (integer): Random seed for deterministic outputs
-- `top_p` (float): Nucleus sampling parameter
-- `presence_penalty` (float): Penalizes tokens based on their presence
 - `frequency_penalty` (float): Penalizes tokens based on their frequency
 - `json_mode` (object): Controls JSON output formatting
-- `stop_sequences` (list of strings): Sequences that stop generation
+- `max_tokens` (integer): Maximum number of tokens to generate
+- `presence_penalty` (float): Penalizes tokens based on their presence
 - `reasoning_effort` (string): Effort level for reasoning models
+- `seed` (integer): Random seed for deterministic outputs
 - `service_tier` (string): Service tier for the request
+- `stop_sequences` (list of strings): Sequences that stop generation
+- `temperature` (float): Controls randomness in the output
 - `thinking_budget_tokens` (integer): Token budget for thinking/reasoning
+- `top_p` (float): Nucleus sampling parameter
 - `verbosity` (string): Output verbosity level
 
 <Note>
@@ -315,7 +315,7 @@ When using the OpenAI-compatible endpoint, parameters provided directly in the r
 
 </Note>
 
-<Accordion title="Example: `tensorzero::params`">
+<Accordion title="Example">
 
 ```python
 from openai import OpenAI

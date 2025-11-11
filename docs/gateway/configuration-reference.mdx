@@ -2802,18 +2802,10 @@ The supported values are:
 
 <Warning>
 
-Only some model providers support this parameter. TensorZero will warn and ignore it if unsupported.
-
-Currently supported providers: OpenAI, Anthropic, GCP Vertex Anthropic.
+Only some model providers support this parameter.
+TensorZero will warn and ignore it if unsupported.
 
 </Warning>
-
-```toml title="tensorzero.toml"
-[functions.draft-email.variants.prompt-v1]
-# ...
-service_tier = "priority"
-# ...
-```
 
 ##### `stop_sequences`
 
@@ -2822,13 +2814,6 @@ service_tier = "priority"
 
 Defines a list of sequences where the model will stop generating further tokens.
 When the model encounters any of these sequences in its output, it will immediately stop generation.
-
-```toml title="tensorzero.toml"
-[functions.draft-email.variants.prompt-v1]
-# ...
-stop_sequences = ["END", "\n\n"]
-# ...
-```
 
 ##### `system_template`
 
