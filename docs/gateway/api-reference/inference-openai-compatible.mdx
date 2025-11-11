@@ -33,6 +33,24 @@ API keys sent from the OpenAI client will be ignored.
 
 </Warning>
 
+#### `tensorzero::cache_options`
+
+- **Type:** object
+- **Required:** no
+
+Controls inference caching behavior. This object accepts two fields:
+
+- `enabled` (string): The cache mode. Can be one of:
+  - `"write_only"` (default): Only write to cache but don't serve cached responses
+  - `"read_only"`: Only read from cache but don't write new entries
+  - `"on"`: Both read from and write to cache
+  - `"off"`: Disable caching completely
+- `max_age_s` (integer or null): Maximum age in seconds for cache entries to be considered valid when reading from cache. Does not set a TTL for cache expiration. Default is `null` (no age limit).
+
+When using the OpenAI client libraries, pass this parameter via `extra_body`.
+
+See the [Inference Caching](/gateway/guides/inference-caching) guide for more details.
+
 #### `tensorzero::credentials`
 
 - **Type:** object (a map from dynamic credential names to API keys)
@@ -150,11 +168,7 @@ The values provided at inference-time take priority over the values in the confi
 
 </Tip>
 
-<Accordion title="
-
-Example: `tensorzero::extra_body`
-
-">
+<Accordion title="Example">
 
 If TensorZero would normally send this request body to the provider...
 
@@ -237,11 +251,7 @@ The values provided at inference-time take priority over the values in the confi
 
 </Tip>
 
-<Accordion title="
-
-Example: `tensorzero::extra_headers`
-
-">
+<Accordion title="Example">
 
 If TensorZero would normally send the following request headers to the provider...
 
@@ -276,15 +286,6 @@ Intelligence-Level: AGI
 ```
 
 </Accordion>
-
-#### `tensorzero::tags`
-
-- **Type:** flat JSON object with string keys and values
-- **Required:** no
-
-User-provided tags to associate with the inference.
-
-For example, `{"user_id": "123"}` or `{"author": "Alice"}`.
 
 #### `tensorzero::params`
 
@@ -342,6 +343,15 @@ response = client.chat.completions.create(
 ```
 
 </Accordion>
+
+#### `tensorzero::tags`
+
+- **Type:** flat JSON object with string keys and values
+- **Required:** no
+
+User-provided tags to associate with the inference.
+
+For example, `{"user_id": "123"}` or `{"author": "Alice"}`.
 
 #### `frequency_penalty`
 
@@ -535,11 +545,7 @@ If true, the gateway will stream the response to the client in an OpenAI-compati
 
 If `"include_usage"` is `true`, the gateway will include usage information in the response.
 
-<Accordion title="
-
-Example: `stream_options`
-
-">
+<Accordion title="Example">
 
 If the following `stream_options` is provided...
 
