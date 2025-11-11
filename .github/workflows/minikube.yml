@@ -17,6 +17,7 @@ jobs:
     - name: Load gateway container
       run: |
         docker load < gateway-container.tar
+        minikube image load gateway-container.tar
 
     - name: Create helm overrides file
       run: |
