@@ -195,26 +195,26 @@ pub async fn write_file(
 /// Produces a `StoredInput` from a `ResolvedInput` by discarding the data for any nested `File`s.
 /// The data can be recovered later by re-fetching from the object store using `StoredInput::reresolve`.
 impl ResolvedInput {
-    pub fn into_stored_input(self) -> Result<StoredInput, Error> {
-        Ok(StoredInput {
+    pub fn into_stored_input(self) -> StoredInput {
+        StoredInput {
             system: self.system,
             messages: self
                 .messages
                 .into_iter()
                 .map(ResolvedInputMessage::into_stored_input_message)
-                .collect::<Result<_, _>>()?,
-        })
+                .collect(),
+        }
     }
 
-    pub fn into_lazy_resolved_input(self) -> Result<LazyResolvedInput, Error> {
-        Ok(LazyResolvedInput {
+    pub fn into_lazy_resolved_input(self) -> LazyResolvedInput {
+        LazyResolvedInput {
             system: self.system,
             messages: self
                 .messages
                 .into_iter()
                 .map(ResolvedInputMessage::into_lazy_resolved_input_message)
-                .collect::<Result<_, _>>()?,
-        })
+                .collect(),
+        }
     }
 
     /// Writes all the files in the input to the object store,
@@ -303,26 +303,26 @@ pub struct ResolvedInputMessage {
 }
 
 impl ResolvedInputMessage {
-    pub fn into_stored_input_message(self) -> Result<StoredInputMessage, Error> {
-        Ok(StoredInputMessage {
+    pub fn into_stored_input_message(self) -> StoredInputMessage {
+        StoredInputMessage {
             role: self.role,
             content: self
                 .content
                 .into_iter()
                 .map(ResolvedInputMessageContent::into_stored_input_message_content)
-                .collect::<Result<_, _>>()?,
-        })
+                .collect(),
+        }
     }
 
-    pub fn into_lazy_resolved_input_message(self) -> Result<LazyResolvedInputMessage, Error> {
-        Ok(LazyResolvedInputMessage {
+    pub fn into_lazy_resolved_input_message(self) -> LazyResolvedInputMessage {
+        LazyResolvedInputMessage {
             role: self.role,
             content: self
                 .content
                 .into_iter()
                 .map(ResolvedInputMessageContent::into_lazy_resolved_input_message_content)
-                .collect::<Result<_, _>>()?,
-        })
+                .collect(),
+        }
     }
 }
 
@@ -381,8 +381,8 @@ pub enum ResolvedInputMessageContent {
 }
 
 impl ResolvedInputMessageContent {
-    pub fn into_stored_input_message_content(self) -> Result<StoredInputMessageContent, Error> {
-        Ok(match self {
+    pub fn into_stored_input_message_content(self) -> StoredInputMessageContent {
+        match self {
             ResolvedInputMessageContent::Text(text) => StoredInputMessageContent::Text(text),
             ResolvedInputMessageContent::Template(template) => {
                 StoredInputMessageContent::Template(template)
@@ -405,13 +405,11 @@ impl ResolvedInputMessageContent {
             ResolvedInputMessageContent::Unknown(unknown) => {
                 StoredInputMessageContent::Unknown(unknown)
             }
-        })
+        }
     }
 
-    pub fn into_lazy_resolved_input_message_content(
-        self,
-    ) -> Result<LazyResolvedInputMessageContent, Error> {
-        Ok(match self {
+    pub fn into_lazy_resolved_input_message_content(self) -> LazyResolvedInputMessageContent {
+        match self {
             ResolvedInputMessageContent::Text(text) => LazyResolvedInputMessageContent::Text(text),
             ResolvedInputMessageContent::Template(template) => {
                 LazyResolvedInputMessageContent::Template(template)
@@ -435,7 +433,7 @@ impl ResolvedInputMessageContent {
             ResolvedInputMessageContent::Unknown(unknown) => {
                 LazyResolvedInputMessageContent::Unknown(unknown)
             }
-        })
+        }
     }
 }
 

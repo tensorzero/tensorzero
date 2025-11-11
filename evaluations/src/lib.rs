@@ -9,7 +9,12 @@ use dataset::query_dataset;
 use evaluators::{evaluate_inference, EvaluateInferenceParams};
 use helpers::{get_cache_options, get_tool_params_args};
 use serde::{Deserialize, Serialize};
-use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
+
+// Public re-exports for external consumers
+pub use stats::{
+    mean, std_deviation, EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate,
+    EvaluatorStats,
+};
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
