@@ -1067,7 +1067,7 @@ impl TensorZeroGateway {
     ///
     /// * `evaluation_name` - User chosen name of the evaluation.
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
-    /// * `variant_name` - The name of the variant to evaluate
+    /// * `variant_name` - Optional name of the variant to evaluate (omit when using dynamic_variant_config)
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
@@ -1128,9 +1128,20 @@ impl TensorZeroGateway {
             evaluation_name,
             evaluation_run_id,
             dataset_name,
-            variant: match dynamic_variant_config {
-                Some(info) => EvaluationVariant::Info(Box::new(info)),
-                None => EvaluationVariant::Name(variant_name.unwrap_or_default()),
+            variant: match (dynamic_variant_config, variant_name) {
+                (Some(info), None) => EvaluationVariant::Info(Box::new(info)),
+                (None, Some(name)) => EvaluationVariant::Name(name),
+                (None, None) => {
+                    return Err(PyValueError::new_err(
+                        "Either 'variant_name' or 'dynamic_variant_config' must be provided.",
+                    ));
+                }
+                (Some(_), Some(_)) => {
+                    return Err(PyValueError::new_err(
+                        "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
+                        When using a dynamic variant, provide only 'dynamic_variant_config'.",
+                    ));
+                }
             },
             concurrency,
             inference_cache: inference_cache_enum,
@@ -1944,7 +1955,7 @@ impl AsyncTensorZeroGateway {
     ///
     /// * `evaluation_name` - User chosen name of the evaluation.
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
-    /// * `variant_name` - The name of the variant to evaluate
+    /// * `variant_name` - Optional name of the variant to evaluate (omit when using dynamic_variant_config)
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
@@ -2006,9 +2017,20 @@ impl AsyncTensorZeroGateway {
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,
-                variant: match dynamic_variant_config {
-                    Some(info) => EvaluationVariant::Info(Box::new(info)),
-                    None => EvaluationVariant::Name(variant_name.unwrap_or_default()),
+                variant: match (dynamic_variant_config, variant_name) {
+                    (Some(info), None) => EvaluationVariant::Info(Box::new(info)),
+                    (None, Some(name)) => EvaluationVariant::Name(name),
+                    (None, None) => {
+                        return Err(PyValueError::new_err(
+                            "Either 'variant_name' or 'dynamic_variant_config' must be provided.",
+                        ));
+                    }
+                    (Some(_), Some(_)) => {
+                        return Err(PyValueError::new_err(
+                            "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
+                            When using a dynamic variant, provide only 'dynamic_variant_config'.",
+                        ));
+                    }
                 },
                 concurrency,
                 inference_cache: inference_cache_enum,
