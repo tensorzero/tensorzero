@@ -1074,12 +1074,12 @@ impl TensorZeroGateway {
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
-                        variant_name,
+                        variant_name=String::new(),
                         concurrency=1,
                         inference_cache="on".to_string(),
                         dynamic_variant_config=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency=1, inference_cache='on', dynamic_variant_config=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name='', concurrency=1, inference_cache='on', dynamic_variant_config=None)"
     )]
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
@@ -1951,12 +1951,12 @@ impl AsyncTensorZeroGateway {
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
-                        variant_name,
+                        variant_name=String::new(),
                         concurrency=1,
                         inference_cache="on".to_string(),
                         dynamic_variant_config=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency=1, inference_cache='on', dynamic_variant_config=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name='', concurrency=1, inference_cache='on', dynamic_variant_config=None)"
     )]
     fn experimental_run_evaluation<'py>(
         this: PyRef<'py, Self>,

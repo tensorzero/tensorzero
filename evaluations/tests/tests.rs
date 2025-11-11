@@ -2219,8 +2219,6 @@ async fn test_query_skips_staled_datapoints() {
     assert_eq!(dataset.len(), 21);
 }
 
-// NEW TESTS FOR DYNAMIC VARIANT CONFIG START HERE
-
 #[tokio::test(flavor = "multi_thread")]
 async fn test_evaluation_with_no_dynamic_config() {
     init_tracing_for_tests();
