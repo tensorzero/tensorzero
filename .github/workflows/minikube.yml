@@ -43,3 +43,8 @@ jobs:
     - name: Ping the gateway
       run: |
         curl http://localhost:3000/health
+
+    - name: Print pod statuses
+      if: always()
+      run: |
+        kubectl get pods -A
