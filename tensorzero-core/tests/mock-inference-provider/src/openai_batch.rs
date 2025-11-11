@@ -20,6 +20,7 @@ static OPENAI_FILES: OnceLock<Mutex<HashMap<String, FileData>>> = OnceLock::new(
 // Storage for batch jobs (batch_id -> BatchJob)
 static OPENAI_BATCHES: OnceLock<Mutex<HashMap<String, BatchJob>>> = OnceLock::new();
 
+#[expect(dead_code)]
 #[derive(Clone)]
 pub struct FileData {
     pub content: String,
@@ -144,7 +145,7 @@ pub async fn get_batch(Path(batch_id): Path<String>) -> Result<Json<serde_json::
     let mut batches = OPENAI_BATCHES.get_or_init(Default::default).lock().unwrap();
     let batch = batches.get_mut(&batch_id).ok_or_else(|| {
         Error::new(
-            format!("Batch not found: {}", batch_id),
+            format!("Batch not found: {batch_id}"),
             StatusCode::NOT_FOUND,
         )
     })?;
@@ -221,11 +222,8 @@ pub async fn get_file_content(Path(file_id): Path<String>) -> Response {
     let file = match files.get(&file_id) {
         Some(f) => f.clone(),
         None => {
-            return Error::new(
-                format!("File not found: {}", file_id),
-                StatusCode::NOT_FOUND,
-            )
-            .into_response()
+            return Error::new(format!("File not found: {file_id}"), StatusCode::NOT_FOUND)
+                .into_response()
         }
     };
 
@@ -277,24 +275,39 @@ fn generate_batch_output(input_content: &str) -> String {
 /// Detect the type of response needed and generate it
 fn detect_and_generate_response(body: Option<&serde_json::Value>) -> (serde_json::Value, String) {
     use crate::batch_response_generator::{
-        generate_json_object, generate_simple_text, generate_simple_text_from_request, generate_tool_args,
+        generate_json_object, generate_json_object_from_schema, generate_simple_text,
+        generate_simple_text_from_request, generate_tool_args, generate_tool_result_summary,
         openai::{generate_json_message, generate_text_message, generate_tool_call_message},
         ToolCallSpec,
     };
     use serde_json::Value;
 
     let Some(body) = body else {
-        return (generate_text_message(&generate_simple_text()), "stop".to_string());
+        return (
+            generate_text_message(&generate_simple_text()),
+            "stop".to_string(),
+        );
     };
+
+    if let Some(summary) = generate_tool_result_summary(body) {
+        return (generate_text_message(&summary), "stop".to_string());
+    }
 
     // Check for JSON mode (response_format)
     if let Some(response_format) = body.get("response_format") {
         if let Some(format_type) = response_format.get("type").and_then(|v| v.as_str()) {
-            if format_type == "json_object" || format_type == "json_schema" {
+            if format_type == "json_object" {
                 return (
                     generate_json_message(&generate_json_object()),
                     "stop".to_string(),
                 );
+            }
+            if format_type == "json_schema" {
+                let schema = response_format
+                    .get("json_schema")
+                    .and_then(|json_schema| json_schema.get("schema").or(Some(json_schema)));
+                let json_obj = generate_json_object_from_schema(schema);
+                return (generate_json_message(&json_obj), "stop".to_string());
             }
         }
     }
@@ -308,7 +321,10 @@ fn detect_and_generate_response(body: Option<&serde_json::Value>) -> (serde_json
             match tool_choice {
                 // Explicit "none" - no tool calls
                 Some(Value::String(s)) if s == "none" => {
-                    return (generate_text_message(&generate_simple_text_from_request(body)), "stop".to_string());
+                    return (
+                        generate_text_message(&generate_simple_text_from_request(body)),
+                        "stop".to_string(),
+                    );
                 }
                 // "required" - must use tools
                 Some(Value::String(s)) if s == "required" => {
@@ -357,14 +373,19 @@ fn detect_and_generate_response(body: Option<&serde_json::Value>) -> (serde_json
                                 .iter()
                                 .take(2) // Use first 2 tools for parallel
                                 .filter_map(|t| {
-                                    t.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str())
+                                    t.get("function")
+                                        .and_then(|f| f.get("name"))
+                                        .and_then(|n| n.as_str())
                                 })
                                 .map(|name| ToolCallSpec {
                                     name: name.to_string(),
                                     args: generate_tool_args(name),
                                 })
                                 .collect();
-                            return (generate_tool_call_message(&tool_specs), "tool_calls".to_string());
+                            return (
+                                generate_tool_call_message(&tool_specs),
+                                "tool_calls".to_string(),
+                            );
                         } else {
                             // Single tool call
                             let tool_name = tools[0]
@@ -388,7 +409,10 @@ fn detect_and_generate_response(body: Option<&serde_json::Value>) -> (serde_json
     }
 
     // Default: simple text response
-    (generate_text_message(&generate_simple_text_from_request(body)), "stop".to_string())
+    (
+        generate_text_message(&generate_simple_text_from_request(body)),
+        "stop".to_string(),
+    )
 }
 
 /// Heuristic to determine if tools should be used in "auto" mode
@@ -399,10 +423,11 @@ fn should_use_tools(body: &serde_json::Value, tools: &[serde_json::Value]) -> bo
         return false;
     }
 
-    let last_message = messages
-        .and_then(|msgs| msgs.iter().rev().find(|msg| {
-            msg.get("role").and_then(|r| r.as_str()) == Some("user")
-        }));
+    let last_message = messages.and_then(|msgs| {
+        msgs.iter()
+            .rev()
+            .find(|msg| msg.get("role").and_then(|r| r.as_str()) == Some("user"))
+    });
 
     if last_message.is_none() {
         return false;

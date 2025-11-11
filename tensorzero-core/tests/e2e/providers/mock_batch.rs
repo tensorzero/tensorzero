@@ -851,13 +851,8 @@ pub async fn test_multi_turn_tool_use_unified_mock_batch_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_tool_use_multi_turn_inference_response(
-        inferences_json[0].clone(),
-        provider,
-        None,
-        true,
-    )
-    .await;
+    check_tool_use_multi_turn_inference_response(inferences_json[0].clone(), provider, None, true)
+        .await;
 
     // Step 4: Verify ClickHouse storage
     let clickhouse = get_clickhouse().await;

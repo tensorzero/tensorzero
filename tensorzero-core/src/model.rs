@@ -2261,11 +2261,9 @@ impl ShorthandModelConfig for ModelConfig {
                         .await?,
                 )?)
             }
-            "gcp_vertex_gemini" => {
-                ProviderConfig::GCPVertexGemini(
-                    GCPVertexGeminiProvider::new_shorthand(model_name, default_credentials).await?,
-                )
-            }
+            "gcp_vertex_gemini" => ProviderConfig::GCPVertexGemini(
+                GCPVertexGeminiProvider::new_shorthand(model_name, default_credentials).await?,
+            ),
             "gcp_vertex_anthropic" => ProviderConfig::GCPVertexAnthropic(
                 GCPVertexAnthropicProvider::new_shorthand(model_name, default_credentials).await?,
             ),

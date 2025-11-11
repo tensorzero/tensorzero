@@ -47,6 +47,7 @@ impl JobState {
     }
 }
 
+#[expect(dead_code)]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct InputConfig {
@@ -62,6 +63,7 @@ struct GCSSource {
     uris: String,
 }
 
+#[expect(dead_code)]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct OutputConfig {
@@ -97,10 +99,7 @@ pub async fn create_batch_prediction_job(
     let now = chrono::Utc::now();
     let complete_at = now.timestamp() + 2; // Complete after 2 seconds
 
-    let job_name = format!(
-        "projects/{}/locations/{}/batchPredictionJobs/{}",
-        project, location, job_id
-    );
+    let job_name = format!("projects/{project}/locations/{location}/batchPredictionJobs/{job_id}");
 
     let batch = BatchJob {
         name: job_name.clone(),
@@ -133,10 +132,7 @@ pub async fn get_batch_prediction_job(
 ) -> Result<Json<serde_json::Value>, Error> {
     apply_delay().await;
 
-    let job_name = format!(
-        "projects/{}/locations/{}/batchPredictionJobs/{}",
-        project, location, job_id
-    );
+    let job_name = format!("projects/{project}/locations/{location}/batchPredictionJobs/{job_id}");
 
     tracing::debug!("Looking for job: {}", job_name);
 
@@ -146,7 +142,7 @@ pub async fn get_batch_prediction_job(
 
     let job = jobs.get_mut(&job_name).ok_or_else(|| {
         Error::new(
-            format!("Batch prediction job not found: {}", job_name),
+            format!("Batch prediction job not found: {job_name}"),
             StatusCode::NOT_FOUND,
         )
     })?;
@@ -172,10 +168,14 @@ pub async fn get_batch_prediction_job(
 
         // Spawn async task to generate and upload output
         // This avoids blocking the handler with GCS operations
+        #[expect(clippy::disallowed_methods)]
         tokio::spawn(async move {
             match generate_and_upload_batch_output(&input_uri, &output_uri_prefix).await {
                 Ok(()) => {
-                    tracing::info!("Successfully uploaded batch output to {}", output_uri_prefix);
+                    tracing::info!(
+                        "Successfully uploaded batch output to {}",
+                        output_uri_prefix
+                    );
                     // Update job state to succeeded
                     let mut jobs = GCP_BATCH_JOBS.get_or_init(Default::default).lock().unwrap();
                     if let Some(job) = jobs.get_mut(&job_name_clone) {
@@ -197,7 +197,7 @@ pub async fn get_batch_prediction_job(
         jobs = GCP_BATCH_JOBS.get_or_init(Default::default).lock().unwrap();
         let job = jobs.get(&job_name).ok_or_else(|| {
             Error::new(
-                format!("Batch prediction job not found: {}", job_name),
+                format!("Batch prediction job not found: {job_name}"),
                 StatusCode::NOT_FOUND,
             )
         })?;
@@ -283,14 +283,21 @@ fn generate_batch_output(input_content: &[u8]) -> String {
 fn detect_and_generate_gcp_response(request: &serde_json::Value) -> Vec<serde_json::Value> {
     use crate::batch_response_generator::{
         gcp::{generate_function_call_parts, generate_json_parts, generate_text_parts},
-        generate_json_object, generate_simple_text_from_request, generate_tool_args, ToolCallSpec,
+        generate_json_object_from_schema, generate_simple_text_from_request, generate_tool_args,
+        generate_tool_result_summary, ToolCallSpec,
     };
+
+    if let Some(summary) = generate_tool_result_summary(request) {
+        return generate_text_parts(&summary);
+    }
 
     // Check for JSON mode (generationConfig.responseMimeType)
     if let Some(gen_config) = request.get("generationConfig") {
         if let Some(mime_type) = gen_config.get("responseMimeType").and_then(|v| v.as_str()) {
             if mime_type == "application/json" {
-                return generate_json_parts(&generate_json_object());
+                let schema = gen_config.get("responseSchema");
+                let json_obj = generate_json_object_from_schema(schema);
+                return generate_json_parts(&json_obj);
             }
         }
     }
@@ -320,7 +327,7 @@ fn detect_and_generate_gcp_response(request: &serde_json::Value) -> Vec<serde_js
                         args,
                     }]);
                 }
-                "AUTO" | _ => {
+                _ => {
                     // Use heuristics to decide
                     if should_use_functions_gcp(request, tools) {
                         // Check for allowed function names (specific tools)
@@ -413,9 +420,9 @@ fn should_use_functions_gcp(request: &serde_json::Value, tools: &[serde_json::Va
 
     let last_user_content = contents
         .and_then(|msgs| {
-            msgs.iter().rev().find(|msg| {
-                msg.get("role").and_then(|r| r.as_str()) == Some("user")
-            })
+            msgs.iter()
+                .rev()
+                .find(|msg| msg.get("role").and_then(|r| r.as_str()) == Some("user"))
         })
         .and_then(|msg| msg.get("parts"))
         .and_then(|parts| parts.as_array())
@@ -444,7 +451,10 @@ fn should_use_functions_gcp(request: &serde_json::Value, tools: &[serde_json::Va
 
     // Check if any function names are mentioned (but not "temperature" since that's ambiguous)
     for tool in tools {
-        if let Some(func_decls) = tool.get("functionDeclarations").and_then(|fd| fd.as_array()) {
+        if let Some(func_decls) = tool
+            .get("functionDeclarations")
+            .and_then(|fd| fd.as_array())
+        {
             for decl in func_decls {
                 if let Some(func_name) = decl.get("name").and_then(|n| n.as_str()) {
                     // Don't match on "temperature" alone since it can be part of the question
@@ -471,7 +481,10 @@ async fn generate_and_upload_batch_output(
     let output_content = generate_batch_output(&input_content);
 
     // Upload to GCS
-    let output_path = format!("{}/predictions.jsonl", output_uri_prefix.trim_end_matches('/'));
+    let output_path = format!(
+        "{}/predictions.jsonl",
+        output_uri_prefix.trim_end_matches('/')
+    );
     upload_to_gcs(&output_path, output_content.as_bytes()).await?;
 
     Ok(())
@@ -507,11 +520,11 @@ struct StoreAndPath {
 async fn make_gcp_object_store(gs_url: &str) -> Result<StoreAndPath, anyhow::Error> {
     let bucket_and_path = gs_url
         .strip_prefix("gs://")
-        .ok_or_else(|| anyhow::anyhow!("GCS url does not start with 'gs://': {}", gs_url))?;
+        .ok_or_else(|| anyhow::anyhow!("GCS url does not start with 'gs://': {gs_url}"))?;
 
     let (bucket, path) = bucket_and_path
         .split_once('/')
-        .ok_or_else(|| anyhow::anyhow!("GCS url does not contain a bucket name: {}", gs_url))?;
+        .ok_or_else(|| anyhow::anyhow!("GCS url does not contain a bucket name: {gs_url}"))?;
 
     let key = object_store::path::Path::parse(path)?;
 
