@@ -1,12 +1,10 @@
 use std::borrow::Cow;
 use std::fmt::Display;
-use std::time::Duration;
 
 use futures::future::try_join_all;
 use futures::StreamExt;
 use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::fmt::Debug;
 use tokio::time::Instant;
 
@@ -16,7 +14,7 @@ use super::helpers::{
 use crate::cache::ModelProviderRequest;
 use crate::config::skip_credential_validation;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
@@ -28,10 +26,10 @@ use crate::inference::types::{
     ModelInferenceRequestJsonMode,
 };
 use crate::inference::types::{
-    ContentBlockChunk, ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
+    ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, Thought, ThoughtChunk, UnknownChunk, Usage,
+    ProviderInferenceResponseArgs,
+    ProviderInferenceResponseStreamInner, Thought, Usage,
 };
 use crate::inference::InferenceProvider;
 use crate::model::CredentialLocationWithFallback;
@@ -41,11 +39,10 @@ use crate::providers::anthropic::{
     anthropic_to_tensorzero_stream_message, handle_anthropic_error, AnthropicStreamMessage,
 };
 use crate::providers::gcp_vertex_gemini::location_subdomain_prefix;
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice};
+use crate::tool::{ToolCall, ToolChoice};
 
 use super::anthropic::{
-    prefill_json_chunk_response, prefill_json_response, AnthropicMessage, AnthropicMessageContent,
-    AnthropicMessageDelta, AnthropicMessagesConfig, AnthropicRole, AnthropicStopReason,
+    prefill_json_chunk_response, prefill_json_response, AnthropicMessage, AnthropicMessageContent, AnthropicMessagesConfig, AnthropicRole, AnthropicStopReason,
     AnthropicSystemBlock, AnthropicTool,
 };
 use super::gcp_vertex_gemini::{parse_shorthand_url, GCPVertexCredentials, ShorthandUrl};
