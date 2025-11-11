@@ -539,6 +539,26 @@ impl BaseTensorZeroGateway {
         })
     }
 }
+
+/// Helper function to construct an EvaluationVariant from the optional variant_name and dynamic_variant_config parameters.
+/// Validates that exactly one of the two is provided and returns an appropriate error if not.
+fn construct_evaluation_variant(
+    dynamic_variant_config: Option<UninitializedVariantInfo>,
+    variant_name: Option<String>,
+) -> PyResult<EvaluationVariant> {
+    match (dynamic_variant_config, variant_name) {
+        (Some(info), None) => Ok(EvaluationVariant::Info(Box::new(info))),
+        (None, Some(name)) => Ok(EvaluationVariant::Name(name)),
+        (None, None) => Err(PyValueError::new_err(
+            "Either 'variant_name' or 'dynamic_variant_config' must be provided.",
+        )),
+        (Some(_), Some(_)) => Err(PyValueError::new_err(
+            "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
+            When using a dynamic variant, provide only 'dynamic_variant_config'.",
+        )),
+    }
+}
+
 #[pymethods]
 impl TensorZeroGateway {
     #[classmethod]
@@ -1120,21 +1140,7 @@ impl TensorZeroGateway {
             evaluation_name,
             evaluation_run_id,
             dataset_name,
-            variant: match (dynamic_variant_config, variant_name) {
-                (Some(info), None) => EvaluationVariant::Info(Box::new(info)),
-                (None, Some(name)) => EvaluationVariant::Name(name),
-                (None, None) => {
-                    return Err(PyValueError::new_err(
-                        "Either 'variant_name' or 'dynamic_variant_config' must be provided.",
-                    ));
-                }
-                (Some(_), Some(_)) => {
-                    return Err(PyValueError::new_err(
-                        "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
-                        When using a dynamic variant, provide only 'dynamic_variant_config'.",
-                    ));
-                }
-            },
+            variant: construct_evaluation_variant(dynamic_variant_config, variant_name)?,
             concurrency,
             inference_cache: inference_cache_enum,
         };
@@ -2001,21 +2007,7 @@ impl AsyncTensorZeroGateway {
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,
-                variant: match (dynamic_variant_config, variant_name) {
-                    (Some(info), None) => EvaluationVariant::Info(Box::new(info)),
-                    (None, Some(name)) => EvaluationVariant::Name(name),
-                    (None, None) => {
-                        return Err(PyValueError::new_err(
-                            "Either 'variant_name' or 'dynamic_variant_config' must be provided.",
-                        ));
-                    }
-                    (Some(_), Some(_)) => {
-                        return Err(PyValueError::new_err(
-                            "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
-                            When using a dynamic variant, provide only 'dynamic_variant_config'.",
-                        ));
-                    }
-                },
+                variant: construct_evaluation_variant(dynamic_variant_config, variant_name)?,
                 concurrency,
                 inference_cache: inference_cache_enum,
             };
