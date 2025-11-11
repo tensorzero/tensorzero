@@ -33,6 +33,25 @@ API keys sent from the OpenAI client will be ignored.
 
 </Warning>
 
+#### `tensorzero::cache_options`
+
+- **Type:** object
+- **Required:** no
+
+Controls caching behavior for inference requests.
+This object accepts two fields:
+
+- `enabled` (string): The cache mode. Can be one of:
+  - `"write_only"` (default): Only write to cache but don't serve cached responses
+  - `"read_only"`: Only read from cache but don't write new entries
+  - `"on"`: Both read from and write to cache
+  - `"off"`: Disable caching completely
+- `max_age_s` (integer or null): Maximum age in seconds for cache entries to be considered valid when reading from cache. Does not set a TTL for cache expiration. Default is `null` (no age limit).
+
+When using the OpenAI client libraries, pass this parameter via `extra_body`.
+
+See the [Inference Caching](/gateway/guides/inference-caching) guide for more details.
+
 #### `tensorzero::credentials`
 
 - **Type:** object (a map from dynamic credential names to API keys)
@@ -150,11 +169,7 @@ The values provided at inference-time take priority over the values in the confi
 
 </Tip>
 
-<Accordion title="
-
-Example: `tensorzero::extra_body`
-
-">
+<Accordion title="Example">
 
 If TensorZero would normally send this request body to the provider...
 
@@ -237,11 +252,7 @@ The values provided at inference-time take priority over the values in the confi
 
 </Tip>
 
-<Accordion title="
-
-Example: `tensorzero::extra_headers`
-
-">
+<Accordion title="Example">
 
 If TensorZero would normally send the following request headers to the provider...
 
@@ -274,6 +285,150 @@ Safety-Checks: on
 Safety-Checks: off
 Intelligence-Level: AGI
 ```
+
+</Accordion>
+
+#### `tensorzero::params`
+
+- **Type:** object
+- **Required:** no
+
+Allows you to override inference parameters dynamically at request time.
+
+This field accepts an object with a `chat_completion` field containing any of the following parameters:
+
+- `frequency_penalty` (float): Penalizes tokens based on their frequency
+- `json_mode` (object): Controls JSON output formatting
+- `max_tokens` (integer): Maximum number of tokens to generate
+- `presence_penalty` (float): Penalizes tokens based on their presence
+- `reasoning_effort` (string): Effort level for reasoning models
+- `seed` (integer): Random seed for deterministic outputs
+- `service_tier` (string): Service tier for the request
+- `stop_sequences` (list of strings): Sequences that stop generation
+- `temperature` (float): Controls randomness in the output
+- `thinking_budget_tokens` (integer): Token budget for thinking/reasoning
+- `top_p` (float): Nucleus sampling parameter
+- `verbosity` (string): Output verbosity level
+
+<Note>
+
+When using the OpenAI-compatible endpoint, parameters provided directly in the request body (e.g., top-level `temperature`, `max_tokens`) take precedence over values specified in `tensorzero::params`.
+
+</Note>
+
+<Accordion title="Example">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:3000/openai/v1",
+    api_key="your_api_key",
+)
+
+response = client.chat.completions.create(
+    model="tensorzero::function_name::my_function",
+    messages=[
+        {"role": "user", "content": "Explain quantum computing"}
+    ],
+    extra_body={
+        "tensorzero::params": {
+            "chat_completion": {
+                "temperature": 0.7,
+                "max_tokens": 500,
+                "reasoning_effort": "high"
+            }
+        }
+    }
+)
+```
+
+</Accordion>
+
+#### `tensorzero::provider_tools`
+
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
+
+A list of provider-specific built-in tools that can be used by the model during inference.
+These are tools that run server-side on the provider's infrastructure, such as OpenAI's web search tool.
+
+Each object in the array has the following fields:
+
+- `scope` (object, optional): Limits which model/provider combination can use this tool. If omitted, the tool is available to all compatible providers.
+  - `model_name` (string): The model name as defined in your configuration
+  - `model_provider_name` (string): The provider name for that model
+- `tool` (object, required): The provider-specific tool configuration as defined by the provider's API
+
+When using OpenAI client libraries, pass this parameter via `extra_body`.
+
+This field allows for dynamic provider tool configuration at runtime.
+You should prefer to define provider tools in the configuration file if possible (see [Configuration Reference](/gateway/configuration-reference/#provider_tools)).
+Only use this field if dynamic provider tool configuration is necessary for your use case.
+
+<Accordion title="Example: OpenAI Web Search (Unscoped)">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:3000/openai/v1",
+    api_key="your_api_key",
+)
+
+response = client.chat.completions.create(
+    model="tensorzero::function_name::my_function",
+    messages=[
+        {"role": "user", "content": "What were the latest developments in AI this week?"}
+    ],
+    extra_body={
+        "tensorzero::provider_tools": [
+            {
+                "tool": {
+                    "type": "web_search"
+                }
+            }
+        ]
+    }
+)
+```
+
+This makes the web search tool available to all compatible providers configured for the function.
+
+</Accordion>
+
+<Accordion title="Example: OpenAI Web Search (Scoped)">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:3000/openai/v1",
+    api_key="your_api_key",
+)
+
+response = client.chat.completions.create(
+    model="tensorzero::function_name::my_function",
+    messages=[
+        {"role": "user", "content": "What were the latest developments in AI this week?"}
+    ],
+    extra_body={
+        "tensorzero::provider_tools": [
+            {
+                "scope": {
+                    "model_name": "gpt-5-mini",
+                    "model_provider_name": "openai"
+                },
+                "tool": {
+                    "type": "web_search"
+                }
+            }
+        ]
+    }
+)
+```
+
+This makes the web search tool available only to the OpenAI provider for the `gpt-5-mini` model.
 
 </Accordion>
 
@@ -330,7 +485,7 @@ Each message is an object with the following fields:
     - `arguments`: A JSON string containing the function arguments
 - `tool_call_id` (required for `tool` messages, otherwise disallowed): The ID of the tool call to associate with the message. This should be one that was originally returned by the gateway in a tool call `id` field.
 
-A content block is an object that can have type `text` or `image_url`.
+A content block is an object that can have type `text`, `image_url`, or TensorZero-specific types.
 
 If the content block has type `text`, it must have either of the following additional fields:
 
@@ -339,15 +494,14 @@ If the content block has type `text`, it must have either of the following addit
 
 If a content block has type `image_url`, it must have the following additional fields:
 
-- `"image_url"`: A JSON object with the following field:
+- `"image_url"`: A JSON object with the following fields:
   - `url`: The URL for a remote image (e.g. `"https://example.com/image.png"`) or base64-encoded data for an embedded image (e.g. `"data:image/png;base64,..."`).
+  - `detail` (optional): Controls the fidelity of image processing. Only applies to image files; ignored for other file types. Can be `low`, `high`, or `auto`. Affects token consumption and image quality.
 
-<Warning>
+The TensorZero-specific content block types are:
 
-Currently, the OpenAI-compatible inference endpoint does not accept other content blocks like `raw_text` or `unknown`.
-See the [Inference API Reference](/gateway/api-reference/inference/) for details on how to provide such content blocks as input.
-
-</Warning>
+- `tensorzero::raw_text`: Bypasses templates and schemas, sending text directly to the model. Useful for testing prompts or dynamic injection without configuration changes. Must have a `value` field containing the text.
+- `tensorzero::template`: Explicitly specify a template to use. Must have `name` and `arguments` fields.
 
 #### `model`
 
@@ -477,11 +631,7 @@ If true, the gateway will stream the response to the client in an OpenAI-compati
 
 If `"include_usage"` is `true`, the gateway will include usage information in the response.
 
-<Accordion title="
-
-Example: `stream_options`
-
-">
+<Accordion title="Example">
 
 If the following `stream_options` is provided...
 
@@ -544,6 +694,7 @@ Controls which (if any) tool is called by the model by overriding the value in c
 - `"auto"`: The model can pick between generating a message or calling one or more tools
 - `"required"`: The model must call one or more tools
 - `{"type": "function", "function": {"name": "my_function"}}`: Forces the model to call the specified tool
+- `{"type": "allowed_tools", "allowed_tools": {"tools": [...], "mode": "auto"|"required"}}`: Restricts which tools can be called
 
 #### `top_p`
 

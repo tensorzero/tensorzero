@@ -73,7 +73,7 @@ struct Demonstration {
 async fn query_demonstration(
     clickhouse: &ClickHouseConnectionInfo,
     inference_id: Uuid,
-    page_size: u32,
+    limit: u32,
 ) -> Result<Demonstration, Error> {
     let result = clickhouse
         .run_query_synchronous(
@@ -86,12 +86,12 @@ async fn query_demonstration(
         FROM DemonstrationFeedbackByInferenceId
         WHERE inference_id = {inference_id:String}
         ORDER BY toUInt128(id) DESC
-        LIMIT {page_size:UInt32}
+        LIMIT {limit:UInt32}
         FORMAT JSONEachRow;"
                 .to_string(),
             &HashMap::from([
                 ("inference_id", inference_id.to_string().as_str()),
-                ("page_size", page_size.to_string().as_str()),
+                ("limit", limit.to_string().as_str()),
             ]),
         )
         .await?;

@@ -278,14 +278,14 @@ export class DatabaseClient {
   }
 
   async queryEpisodeTable(
-    pageSize: number,
+    limit: number,
     before?: string,
     after?: string,
   ): Promise<EpisodeByIdRow[]> {
     const params = safeStringify({
-      page_size: pageSize,
-      before: before,
-      after: after,
+      limit,
+      before,
+      after,
     });
     const episodeTableString =
       await this.nativeDatabaseClient.queryEpisodeTable(params);

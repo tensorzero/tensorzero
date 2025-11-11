@@ -127,7 +127,7 @@ use crate::git::GitInfo;
 // ```rust
 // client.list_datapoints("dataset-name", ListDatapointsRequest {
 //     function_name: None,
-//     page_size: Some(100),
+//     limit: Some(100),
 //     offset: Some(0),
 //     filter: None,
 // });

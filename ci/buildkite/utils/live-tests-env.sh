@@ -38,6 +38,12 @@ if [ -z "$AZURE_OPENAI_API_KEY" ]; then
     exit 1
 fi
 
+export AZURE_OPENAI_EASTUS2_API_KEY=$(buildkite-agent secret get AZURE_OPENAI_EASTUS2_API_KEY)
+if [ -z "$AZURE_OPENAI_EASTUS2_API_KEY" ]; then
+    echo "Error: AZURE_OPENAI_EASTUS2_API_KEY is not set"
+    exit 1
+fi
+
 export AZURE_AI_FOUNDRY_API_KEY=$(buildkite-agent secret get AZURE_AI_FOUNDRY_API_KEY)
 if [ -z "$AZURE_AI_FOUNDRY_API_KEY" ]; then
     echo "Error: AZURE_AI_FOUNDRY_API_KEY is not set"

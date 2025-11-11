@@ -27,7 +27,7 @@ import { useReadOnly } from "~/context/read-only";
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
   const url = new URL(request.url);
-  const pageSize = Number(url.searchParams.get("pageSize")) || 15;
+  const limit = Number(url.searchParams.get("limit")) || 15;
   const offset = Number(url.searchParams.get("offset")) || 0;
   const rowsAddedParam = url.searchParams.get("rowsAdded");
   const rowsSkippedParam = url.searchParams.get("rowsSkipped");
@@ -35,13 +35,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const rowsSkipped =
     rowsSkippedParam !== null ? Number(rowsSkippedParam) : null;
 
-  if (pageSize > 100) {
-    throw data("Page size cannot exceed 100", { status: 400 });
+  if (limit > 100) {
+    throw data("Limit cannot exceed 100", { status: 400 });
   }
 
   const [counts, rows] = await Promise.all([
     getDatasetMetadata({}),
-    getDatasetRows({ dataset_name, page_size: pageSize, offset }),
+    getDatasetRows({ dataset_name, limit, offset }),
   ]);
   const count_info = counts.find(
     (count) => count.dataset_name === dataset_name,
@@ -49,7 +49,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!count_info) {
     throw data("Dataset not found", { status: 404 });
   }
-  return { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped };
+  return { rows, count_info, limit, offset, rowsAdded, rowsSkipped };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -113,7 +113,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 export default function DatasetDetailPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped } =
+  const { rows, count_info, limit, offset, rowsAdded, rowsSkipped } =
     loaderData;
   const { toast } = useToast();
   const isReadOnly = useReadOnly();
@@ -139,12 +139,12 @@ export default function DatasetDetailPage({
   };
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + pageSize));
+    searchParams.set("offset", String(offset + limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - pageSize));
+    searchParams.set("offset", String(offset - limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -171,7 +171,7 @@ export default function DatasetDetailPage({
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset === 0}
-          disableNext={offset + pageSize >= count_info.count}
+          disableNext={offset + limit >= count_info.count}
         />
       </SectionLayout>
 

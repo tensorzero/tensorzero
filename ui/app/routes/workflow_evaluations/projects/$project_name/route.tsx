@@ -25,7 +25,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const projectName = params.project_name;
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
-  const pageSize = parseInt(searchParams.get("pageSize") || "15");
+  const limit = parseInt(searchParams.get("limit") || "15");
   const offset = parseInt(searchParams.get("offset") || "0");
   const runIds = searchParams.get("run_ids")?.split(",") || [];
 
@@ -45,7 +45,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
     const episodeInfoPromise = getWorkflowEvaluationRunEpisodesByTaskName(
       runIds,
-      pageSize,
+      limit,
       offset,
     );
     const countPromise = countWorkflowEvaluationRunEpisodesByTaskName(runIds);
@@ -69,7 +69,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       runStats,
       episodeInfo,
       count,
-      pageSize,
+      limit,
       offset,
     };
   } else {
@@ -79,7 +79,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       runStats: {},
       episodeInfo: [],
       count: 0,
-      pageSize,
+      limit,
       offset,
     };
   }
@@ -88,25 +88,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 export default function WorkflowEvaluationProjectPage({
   loaderData,
 }: Route.ComponentProps) {
-  const {
-    projectName,
-    runInfos,
-    runStats,
-    episodeInfo,
-    count,
-    pageSize,
-    offset,
-  } = loaderData;
+  const { projectName, runInfos, runStats, episodeInfo, count, limit, offset } =
+    loaderData;
   const navigate = useNavigate();
   const selectedRunIds = runInfos.map((run) => run.id);
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + pageSize));
+    searchParams.set("offset", String(offset + limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - pageSize));
+    searchParams.set("offset", String(offset - limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   return (
@@ -127,7 +120,7 @@ export default function WorkflowEvaluationProjectPage({
             onPreviousPage={handlePreviousPage}
             onNextPage={handleNextPage}
             disablePrevious={offset <= 0}
-            disableNext={offset + pageSize >= count}
+            disableNext={offset + limit >= count}
           />
         </SectionLayout>
       </PageLayout>
