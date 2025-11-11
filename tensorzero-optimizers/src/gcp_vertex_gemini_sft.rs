@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use futures::{future::try_join_all, try_join};
+use std::sync::Arc;
 use url::Url;
 use uuid::Uuid;
 
@@ -48,7 +49,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: &Config,
+        _config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()

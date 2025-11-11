@@ -43,7 +43,7 @@ impl Optimizer for DiclOptimizationConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
-        config: &Config,
+        config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         // Validate training examples
         validate_train_examples(&train_examples)?;
@@ -116,7 +116,7 @@ impl Optimizer for DiclOptimizationConfig {
 
         // Process embeddings with batching and concurrency control
         let all_embeddings = process_embeddings_with_batching(
-            config,
+            &config,
             &self.embedding_model,
             client,
             credentials,

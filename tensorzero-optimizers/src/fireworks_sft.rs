@@ -20,6 +20,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::fmt::Display;
+use std::sync::Arc;
 use url::Url;
 use uuid::Uuid;
 
@@ -59,7 +60,7 @@ impl Optimizer for FireworksSFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: &Config,
+        _config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()

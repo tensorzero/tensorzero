@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
 use serde_json::{json, Value};
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, fs, sync::Arc};
 use tempfile::TempDir;
 use tokio::time::{sleep, Duration};
 use tokio_stream::StreamExt;
@@ -124,7 +124,7 @@ pub async fn test_dicl_optimization_chat() {
             val_examples,
             &credentials,
             &clickhouse,
-            &config,
+            Arc::new(config),
         )
         .await
         .unwrap();
@@ -405,7 +405,7 @@ pub async fn test_dicl_optimization_json() {
             val_examples,
             &credentials,
             &clickhouse,
-            &config,
+            Arc::new(config),
         )
         .await
         .unwrap();

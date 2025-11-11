@@ -55,7 +55,7 @@ repos:
         name: "prettier: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run format'
         language: node
-        language_version: "22.9.0"
+        language_version: "24.11.0"
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
         additional_dependencies:
@@ -69,7 +69,7 @@ repos:
         name: "prettier: openai-node"
         entry: bash -c 'pnpm --filter=openai-node run format'
         language: node
-        language_version: "22.9.0"
+        language_version: "24.11.0"
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
         additional_dependencies:
@@ -83,7 +83,7 @@ repos:
         name: "prettier: tensorzero-node"
         entry: bash -c 'pnpm --filter=tensorzero-node run format'
         language: node
-        language_version: "22.9.0"
+        language_version: "24.11.0"
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
         additional_dependencies:
@@ -97,7 +97,7 @@ repos:
         name: "eslint: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run lint'
         language: node
-        language_version: "22.9.0"
+        language_version: "24.11.0"
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
           - eslint
@@ -109,7 +109,7 @@ repos:
         name: "eslint: openai-node"
         entry: bash -c 'pnpm --filter=openai-node run lint'
         language: node
-        language_version: "22.9.0"
+        language_version: "24.11.0"
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
           - eslint
@@ -121,7 +121,7 @@ repos:
         name: "eslint: tensorzero-node"
         entry: bash -c 'pnpm --filter=tensorzero-node run lint'
         language: node
-        language_version: "22.9.0"
+        language_version: "24.11.0"
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
           - eslint
@@ -133,7 +133,7 @@ repos:
         name: "tsc: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run typecheck'
         language: node
-        language_version: "22.9.0"
+        language_version: "24.11.0"
         types_or: [ts, tsx]
         additional_dependencies:
           - typescript
@@ -143,7 +143,7 @@ repos:
         name: "tsc: openai-node"
         entry: bash -c 'pnpm --filter=openai-node run typecheck'
         language: node
-        language_version: "22.9.0"
+        language_version: "24.11.0"
         types_or: [ts, tsx]
         additional_dependencies:
           - typescript
@@ -153,7 +153,7 @@ repos:
         name: "tsc: tensorzero-node"
         entry: bash -c 'pnpm --filter=tensorzero-node run typecheck'
         language: node
-        language_version: "22.9.0"
+        language_version: "24.11.0"
         types_or: [ts, tsx]
         additional_dependencies:
           - typescript

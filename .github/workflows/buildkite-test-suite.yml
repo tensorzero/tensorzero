@@ -7,6 +7,10 @@ on:
   # pull_request:
   #   branches: ["main"]
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   unit-tests:
     if: github.repository == 'tensorzero/tensorzero' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
