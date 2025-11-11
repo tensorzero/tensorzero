@@ -4267,7 +4267,7 @@ always = true
 - **Required:** no (default: `[]`)
 
 Defines the scope to which the rate limit applies.
-Scopes allow you to apply rate limits to specific subsets of requests based on tags.
+Scopes allow you to apply rate limits to specific subsets of requests based on tags or API keys.
 
 The following scopes are supported:
 
@@ -4277,6 +4277,11 @@ The following scopes are supported:
     - `tensorzero::each`: Apply the limit separately to each unique value of the tag.
     - `tensorzero::total`: Apply the limit to the aggregate of all requests with this tag, regardless of the tag's value.
     - Any other string: Apply the limit only when the tag has this specific value.
+
+- API Key Public ID (requires authentication to be enabled):
+  - `api_key_public_id` (string): The API key public ID to match against. This can be:
+    - `tensorzero::each`: Apply the limit separately to each API key.
+    - A specific 12-character public ID: Apply the limit only to requests authenticated with this API key.
 
 For example:
 
@@ -4295,5 +4300,21 @@ priority = 1
 model_inferences_per_minute = 5
 scope = [
     { tag_key = "user_id", tag_value = "ceo" }
+]
+
+# Each API key can make a maximum of 100 model inferences per hour
+[[rate_limiting.rules]]
+priority = 0
+model_inferences_per_hour = 100
+scope = [
+    { api_key_public_id = "tensorzero::each" }
+]
+
+# But override the limit for a specific API key
+[[rate_limiting.rules]]
+priority = 1
+model_inferences_per_hour = 1000
+scope = [
+    { api_key_public_id = "xxxxxxxxxxxx" }
 ]
 ```
