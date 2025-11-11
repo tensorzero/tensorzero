@@ -239,6 +239,10 @@ jobs:
       - name: Check local sdist
         run: |
           ./ci/check-local-wheel.sh ./clients/python/dist/tensorzero-*.tar.gz
+      - name: Run twine on sdist
+        run: |
+          uv pip install twine
+          uv run twine check ./clients/python/dist/tensorzero-*.tar.gz
 
   check-artifacts:
     needs: [linux, musllinux, windows, macos, sdist]
