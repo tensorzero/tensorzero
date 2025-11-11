@@ -1,0 +1,151 @@
+---
+title: How to configure functions & variants
+sidebarTitle: Configure functions & variants
+description: Learn how to configure functions and variants to define your LLM application logic with TensorZero.
+---
+
+- A **function** represents a task in your application (e.g. "write a product description" or "answer a customer question").
+- A **variant** is a specific way to accomplish that task: a choice of model, prompt, inference parameters, etc.
+
+You can call models directly when getting started, but functions and variants unlock powerful capabilities as your application matures.
+Some of the benefits include:
+
+- **[Collect metrics and feedback](/gateway/guides/metrics-feedback):** Track performance and gather feedback for optimization.
+- **[Run A/B tests](/experimentation/run-adaptive-ab-tests):** Experiment with different models, prompts, and parameters.
+- **[Create prompt templates](/gateway/create-a-prompt-template):** Decouple prompts from application code for easier iteration.
+- **[Configure retries & fallbacks](/gateway/guides/retries-fallbacks):** Build systems that handle provider downtime gracefully.
+- **[Use advanced inference strategies](/gateway/guides/inference-time-optimizations):** Easily implement advanced inference-time optimizations like dynamic in-context-learning and best-of-N sampling.
+
+## Configure functions & variants
+
+TensorZero supports two function types:
+
+- **`chat`** is the typical chat interface used by most LLMs. It returns unstructured text responses.
+- **`json`** is for structured outputs. It returns responses that conform to a JSON schema.
+
+The skeleton of a function configuration looks like this:
+
+```toml title="tensorzero.toml"
+[functions.my_function_name]
+type = "..." # "chat" or "json"
+# ... other fields depend on the function type ...
+```
+
+A variant is a particular implementation of a function.
+It specifies the model to use, prompt templates, decoding strategy, hyperparameters, and other settings.
+
+The skeleton of a variant configuration looks like this:
+
+```toml title="tensorzero.toml"
+[functions.my_function_name.variants.my_variant_name]
+type = "..." # e.g. "chat_completion"
+model = "..." # e.g. "openai::gpt-5" or "my_gpt_5"
+# ... other fields (e.g. prompt templates, inference parameters) ...
+```
+
+The simplest variant type is **`chat_completion`**, which is the typical chat completion format used by OpenAI and many other LLM providers.
+TensorZero supports other variant types that implement [inference-time optimizations](/gateway/guides/inference-time-optimizations/).
+
+You can define prompt templates in your variant configuration rather than sending prompts directly in your inference requests.
+This decouples prompts from application code and enables easier experimentation and optimization.
+See [Create a prompt template](/gateway/create-a-prompt-template) for more details.
+
+If you define multiple variants, TensorZero will randomly sample one of them at inference time.
+You can define more advanced experimentation strategies (e.g. [Run adaptive A/B tests](/experimentation/run-adaptive-ab-tests/)), fallback-only variants (e.g. [Retries & Fallbacks](/gateway/guides/retries-fallbacks/)), and more.
+
+### Example
+
+Let's create a function called `answer_customer` with two variants: GPT-5 and Claude Sonnet 4.5.
+
+```toml title="tensorzero.toml"
+[functions.answer_customer]
+type = "chat"
+
+[functions.answer_customer.variants.gpt_5_baseline]
+type = "chat_completion"
+model = "openai::gpt-5"
+
+[functions.answer_customer.variants.claude_sonnet_4_5]
+type = "chat_completion"
+model = "anthropic::claude-sonnet-4-5"
+```
+
+You can now call the `answer_customer` function and TensorZero will randomly select one of the two variants for each request.
+
+## Make inference requests
+
+Once you've configured a function and its variants, you can make inference requests to the TensorZero Gateway.
+
+<Tabs>
+
+<Tab title="Python">
+
+```python
+result = t0.inference(
+    function_name="answer_customer",
+    input={
+        "messages": [
+            {"role": "user", "content": "What is your return policy?"},
+        ],
+    },
+)
+```
+
+</Tab>
+
+<Tab title="Python (OpenAI SDK)">
+
+```python
+result = client.chat.completions.create(
+    model="tensorzero::function_name::answer_customer",
+    messages=[
+        {"role": "user", "content": "What is your return policy?"},
+    ],
+)
+```
+
+</Tab>
+
+<Tab title="Node (OpenAI SDK)">
+
+```ts
+const response = await client.chat.completions.create({
+  model: "tensorzero::function_name::answer_customer",
+  messages: [
+    {
+      role: "user",
+      content: "What is your return policy?",
+    },
+  ],
+});
+```
+
+</Tab>
+
+<Tab title="HTTP">
+
+```bash
+curl -X POST "http://localhost:3000/inference" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function_name": "answer_customer",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "What is your return policy?"
+        }
+      ]
+    }
+  }'
+```
+
+</Tab>
+
+</Tabs>
+
+<Tip>
+
+See [Call any LLM](/gateway/call-any-llm) for complete examples including setup and sample responses.
+
+</Tip>
