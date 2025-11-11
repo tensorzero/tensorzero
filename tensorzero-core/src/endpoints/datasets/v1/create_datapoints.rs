@@ -193,7 +193,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_datapoints_success_single_chat_datapoint() {
         let config = create_test_config();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let dataset_name = "test_dataset";
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
@@ -264,7 +264,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_datapoints_success_single_json_datapoint() {
         let config = create_test_config();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let dataset_name = "test_dataset";
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
@@ -339,7 +339,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_datapoints_success_multiple_datapoints() {
         let config = create_test_config();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let dataset_name = "test_dataset";
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
@@ -416,7 +416,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_datapoints_error_empty_datapoints() {
         let config = create_test_config();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let dataset_name = "test_dataset";
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
@@ -446,7 +446,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_datapoints_error_invalid_dataset_name() {
         let config = create_test_config();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let invalid_dataset_name = "builder"; // Reserved name
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
@@ -484,7 +484,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_datapoints_error_nonexistent_function() {
         let config = create_test_config();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let dataset_name = "test_dataset";
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
@@ -524,7 +524,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_datapoints_error_wrong_function_type() {
         let config = create_test_config();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let dataset_name = "test_dataset";
 
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
@@ -565,7 +565,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_datapoints_with_tags_and_episode() {
         let config = create_test_config();
-        let http_client = TensorzeroHttpClient::new().unwrap();
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
         let dataset_name = "test_dataset";
         let episode_id = Uuid::now_v7();
 

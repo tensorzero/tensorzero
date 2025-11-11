@@ -138,13 +138,12 @@ pub use streams::{
  */
 
 /// A request is made that contains an Input
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[ts(export, optional_fields)]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[cfg_attr(test, ts(optional))]
+    #[ts(optional)]
     pub system: Option<System>,
     #[serde(default)]
     pub messages: Vec<InputMessage>,
@@ -578,7 +577,7 @@ impl LazyResolvedInputMessageContent {
                 }
             },
             // All other cases delegate to the "resolve" case, which is mostly just a type conversion.
-            other => other.resolve().await?.into_stored_input_message_content()?,
+            other => other.resolve().await?.into_stored_input_message_content(),
         })
     }
 }
@@ -586,9 +585,8 @@ impl LazyResolvedInputMessageContent {
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 /// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
-#[derive(Clone, Debug, Serialize, PartialEq)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export, optional_fields)]
 pub struct InputMessage {
     pub role: Role,
     pub content: Vec<InputMessageContent>,
@@ -616,10 +614,9 @@ pub enum System {
     Template(Arguments),
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
+#[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum InputMessageContent {
     Text(Text),
     Template(Template),
@@ -930,9 +927,8 @@ impl RateLimitedInputContent for ContentBlock {
 
 /// The version of `ContentBlock` that is stored in ClickHouse.
 /// This is almost identical to `ContentBlock`, but without `File` data.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StoredContentBlock {
     Text(Text),
@@ -961,9 +957,8 @@ pub enum StoredContentBlock {
 
 /// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
 /// As a result, it can implement both `Serialize` and `Deserialize`
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ResolvedContentBlock {
     Text(Text),
@@ -1259,10 +1254,9 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
 }
 
 /// For use in rendering for optimization purposes
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ModelInput {
     pub system: Option<String>,

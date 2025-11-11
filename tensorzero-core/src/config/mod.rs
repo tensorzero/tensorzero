@@ -1,5 +1,6 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
+use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
 ///            IT IS MEANT FOR INTERNAL USE ONLY.
 ///            EXPECT FREQUENT, UNANNOUNCED BREAKING CHANGES.
@@ -52,6 +53,7 @@ use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
+pub mod built_in;
 pub mod gateway;
 pub mod path;
 pub mod provider_types;
@@ -77,9 +79,8 @@ pub fn skip_credential_validation() -> bool {
     SKIP_CREDENTIAL_VALIDATION.try_with(|()| ()).is_ok()
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 // Note - the `Default` impl only exists for convenience in tests
 // It might produce a completely broken config - if a test fails,
 // use one of the public `Config` constructors instead.
@@ -131,10 +132,38 @@ pub struct TimeoutsConfig {
     pub streaming: StreamingTimeouts,
 }
 
+impl TimeoutsConfig {
+    pub fn validate(&self, global_outbound_http_timeout: &Duration) -> Result<(), Error> {
+        let TimeoutsConfig {
+            non_streaming: NonStreamingTimeouts { total_ms },
+            streaming: StreamingTimeouts { ttft_ms },
+        } = self;
+
+        let global_ms = global_outbound_http_timeout.num_milliseconds();
+
+        if let Some(total_ms) = total_ms {
+            if Duration::milliseconds(*total_ms as i64) > *global_outbound_http_timeout {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!("The `timeouts.non_streaming.total_ms` value `{total_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"),
+                }));
+            }
+        }
+        if let Some(ttft_ms) = ttft_ms {
+            if Duration::milliseconds(*ttft_ms as i64) > *global_outbound_http_timeout {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!("The `timeouts.streaming.ttft_ms` value `{ttft_ms}` is greater than `gateway.global_outbound_http_timeout_ms`: `{global_ms}`"),
+                }));
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct TemplateFilesystemAccess {
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for `{% include %}`
     /// Defaults to `false`
@@ -143,9 +172,8 @@ pub struct TemplateFilesystemAccess {
     base_path: Option<ResolvedTomlPath>,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ObjectStoreInfo {
     // This will be `None` if we have `StorageKind::Disabled`
     #[serde(skip)]
@@ -292,8 +320,8 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
@@ -314,8 +342,8 @@ fn default_max_rows() -> usize {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct BatchWritesConfig {
     pub enabled: bool,
     // An internal flag to allow us to test batch writes in embedded gateway mode.
@@ -341,8 +369,8 @@ impl Default for BatchWritesConfig {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ExportConfig {
     #[serde(default)]
     pub otlp: OtlpConfig,
@@ -350,8 +378,8 @@ pub struct ExportConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct OtlpConfig {
     #[serde(default)]
     pub traces: OtlpTracesConfig,
@@ -400,8 +428,8 @@ impl OtlpConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct OtlpTracesConfig {
     /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
     #[serde(default)]
@@ -415,7 +443,7 @@ pub struct OtlpTracesConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "lowercase")]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[cfg_attr(test, ts(export, rename_all = "lowercase"))]
 pub enum OtlpTracesFormat {
     /// Sets 'gen_ai' attributes based on the OpenTelemetry GenAI semantic conventions:
@@ -429,8 +457,8 @@ pub enum OtlpTracesFormat {
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct MetricConfig {
     pub r#type: MetricConfigType,
     pub optimize: MetricConfigOptimize,
@@ -440,8 +468,8 @@ pub struct MetricConfig {
 #[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum MetricConfigType {
     Boolean,
     Float,
@@ -468,8 +496,8 @@ pub enum MetricConfigOptimize {
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum MetricConfigLevel {
     Inference,
     Episode,
@@ -770,15 +798,36 @@ impl Config {
 
         let mut templates = TemplateConfig::new();
 
-        let functions = uninitialized_config
+        let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
+
+        let gateway_config = uninitialized_config
+            .gateway
+            .load(object_store_info.as_ref())?;
+
+        // Load built-in functions first
+        let mut functions = built_in::get_all_built_in_functions()?;
+
+        // Load user-defined functions and ensure they don't use tensorzero:: prefix
+        let user_functions = uninitialized_config
             .functions
             .into_iter()
             .map(|(name, config)| {
+                // Prevent user functions from using tensorzero:: prefix
+                if name.starts_with("tensorzero::") {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "User-defined function name cannot start with 'tensorzero::': {name}"
+                        ),
+                    }));
+                }
                 config
                     .load(&name, &uninitialized_config.metrics)
                     .map(|c| (name, Arc::new(c)))
             })
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
+
+        // Merge user functions into the functions map
+        functions.extend(user_functions);
 
         let tools = uninitialized_config
             .tools
@@ -820,7 +869,6 @@ impl Config {
         .into_iter()
         .collect::<HashMap<_, _>>();
 
-        let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
         let optimizers = try_join_all(uninitialized_config.optimizers.into_iter().map(
             |(name, config)| async {
                 config
@@ -832,25 +880,29 @@ impl Config {
         .await?
         .into_iter()
         .collect::<HashMap<_, _>>();
-        let models =
-            ModelTable::new(models, provider_type_default_credentials.clone()).map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Failed to load models: {e}"),
-                })
-            })?;
-        let embedding_models =
-            EmbeddingModelTable::new(embedding_models, provider_type_default_credentials).map_err(
-                |e| {
-                    Error::new(ErrorDetails::Config {
-                        message: format!("Failed to load embedding models: {e}"),
-                    })
-                },
-            )?;
+        let models = ModelTable::new(
+            models,
+            provider_type_default_credentials.clone(),
+            gateway_config.global_outbound_http_timeout,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Failed to load models: {e}"),
+            })
+        })?;
+        let embedding_models = EmbeddingModelTable::new(
+            embedding_models,
+            provider_type_default_credentials,
+            gateway_config.global_outbound_http_timeout,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Failed to load embedding models: {e}"),
+            })
+        })?;
 
         let mut config = Config {
-            gateway: uninitialized_config
-                .gateway
-                .load(object_store_info.as_ref())?,
+            gateway: gateway_config,
             models: Arc::new(models),
             embedding_models: Arc::new(embedding_models),
             functions,
@@ -940,6 +992,7 @@ impl Config {
                         &config.embedding_models,
                         &templates,
                         &evaluation_function_name,
+                        &config.gateway.global_outbound_http_timeout,
                     )
                     .await?;
                 config
@@ -989,15 +1042,10 @@ impl Config {
             .into());
         }
         // Validate each function
+        // Note: We don't check for tensorzero:: prefix here because:
+        // 1. Built-in functions are allowed to have this prefix
+        // 2. User-defined functions are prevented from using it during loading
         for (function_name, function) in &self.functions {
-            if function_name.starts_with("tensorzero::") {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Function name cannot start with 'tensorzero::': {function_name}"
-                    ),
-                }
-                .into());
-            }
             function
                 .validate(
                     &self.tools,
@@ -1005,6 +1053,7 @@ impl Config {
                     &self.embedding_models,
                     &self.templates,
                     function_name,
+                    &self.gateway.global_outbound_http_timeout,
                 )
                 .await?;
         }
@@ -1033,7 +1082,7 @@ impl Config {
                 }
                 .into());
             }
-            model.validate(model_name)?;
+            model.validate(model_name, &self.gateway.global_outbound_http_timeout)?;
         }
 
         for embedding_model_name in self.embedding_models.table.keys() {
@@ -1347,9 +1396,8 @@ pub struct UninitializedFunctionConfigJson {
 
 /// Holds all of the schemas used by a chat completion function.
 /// These are used by variants to construct a `TemplateWithSchema`
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SchemaData {
     #[serde(flatten)]
     pub inner: HashMap<String, SchemaWithMetadata>,
@@ -1690,9 +1738,8 @@ impl UninitializedToolConfig {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct PathWithContents {
     #[cfg_attr(test, ts(type = "string"))]
     pub path: ResolvedTomlPath,
@@ -1708,8 +1755,8 @@ impl PathWithContents {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct PostgresConfig {
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,

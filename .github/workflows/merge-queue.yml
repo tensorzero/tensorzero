@@ -61,6 +61,7 @@ jobs:
   batch-tests:
     permissions:
       contents: read
+      actions: read
     if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit

@@ -42,9 +42,8 @@ lazy_static! {
 const PROVIDER_NAME: &str = "Hyperbolic";
 pub const PROVIDER_TYPE: &str = "hyperbolic";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct HyperbolicProvider {
     model_name: String,
     #[serde(skip)]
@@ -279,6 +278,7 @@ impl InferenceProvider for HyperbolicProvider {
             PROVIDER_TYPE.to_string(),
             event_source.map_err(TensorZeroEventError::EventSource),
             start_time,
+            &raw_request,
         )
         .peekable();
         Ok((stream, raw_request))

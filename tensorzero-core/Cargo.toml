@@ -4,6 +4,7 @@ version.workspace = true
 rust-version.workspace = true
 edition = "2021"
 license.workspace = true
+exclude = ["tests/", "fixtures/"]
 
 
 [features]
@@ -38,7 +39,7 @@ workspace = true
 async-stream = { workspace = true }
 async-trait = { workspace = true }
 aws-config = { version = "1.8", features = ["behavior-version-latest"] }
-aws-sdk-bedrockruntime = { version = "1.112.0", default-features = false, features = [
+aws-sdk-bedrockruntime = { version = "1.113.0", default-features = false, features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
@@ -96,14 +97,13 @@ url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true }
 tensorzero-derive = { path = "../internal/tensorzero-derive" }
 clap = { workspace = true }
-aws-sdk-sagemakerruntime = { version = "1.90.0", features = [
+aws-sdk-sagemakerruntime = { version = "1.91.0", features = [
     "behavior-version-latest",
     "rt-tokio",
     "default-https-client",
 ], default-features = false }
 aws-smithy-runtime-api = "1.9.1"
 eventsource-stream = "0.2.3"
-scoped-tls = "1.0.1"
 opentelemetry_sdk = "0.31.0"
 opentelemetry = "0.31.0"
 tracing-opentelemetry = "0.32.0"
@@ -113,7 +113,7 @@ opentelemetry-otlp = { version = "0.31.0", features = [
     "tls-roots",
 ] }
 opentelemetry-semantic-conventions = "0.31.0"
-init-tracing-opentelemetry = "0.32.1"
+init-tracing-opentelemetry = "0.33.0"
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
     "http",
@@ -151,6 +151,7 @@ tempfile = { version = "3.21.0" }
 tempfile = "3.21.0"
 rand_distr = "0.5.1"
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
+evaluations = { path = "../evaluations" }
 paste = "1.0.15"
 base64 = "0.22.1"
 aws-credential-types = { version = "1.2.2", features = [

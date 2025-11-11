@@ -103,9 +103,8 @@ pub struct ReinforcementHyperparameters {
     pub reasoning_effort: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAIGrader {
@@ -196,9 +195,8 @@ impl<'py> IntoPyObject<'py> for Box<OpenAIGrader> {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIStringCheckOp"))]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAIStringCheckOp {
@@ -215,9 +213,8 @@ impl std::fmt::Display for OpenAIStringCheckOp {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAISimilarityMetric"))]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAISimilarityMetric {
@@ -240,9 +237,8 @@ impl std::fmt::Display for OpenAISimilarityMetric {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIModelGraderInputMessage"))]
 pub struct OpenAIModelGraderInput {
     pub role: OpenAIRFTRole,
@@ -292,9 +288,8 @@ impl OpenAIRFTRole {
 /// If no response format is specified but the model is instructed (e.g., via prompts)
 /// to produce structured outputs, those outputs will be returned as raw JSON strings
 /// in the `output_text` field of the Sample namespace instead.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "OpenAIRFTResponseFormat"))]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
@@ -311,9 +306,8 @@ impl std::fmt::Display for OpenAIRFTResponseFormat {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "RFTJsonSchemaInfoOption"))]
 #[serde(untagged)]
 pub enum RFTJsonSchemaInfoOption {

@@ -1393,7 +1393,7 @@ async fn check_object_fetch_via_embedded(
 async fn check_object_fetch_via_gateway(storage_path: &StoragePath, expected_data: &[u8]) {
     // Try using the running HTTP gateway (which is *not* configured with an object store)
     // to fetch the `StoragePath`
-    let client = TensorzeroHttpClient::new().unwrap();
+    let client = TensorzeroHttpClient::new_testing().unwrap();
     let res = client
         .get(get_gateway_endpoint(&format!(
             "/internal/object_storage?storage_path={}",
@@ -3323,6 +3323,9 @@ pub async fn check_simple_image_inference_response(
     if let Some(episode_id) = episode_id {
         assert_eq!(retrieved_episode_id, episode_id);
     }
+    let tags = result.get("tags").unwrap();
+    // All callers set this tag so this tests that tags are propagated to the ultimate sink of the inference data
+    tags.get("test_type").unwrap();
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();

@@ -35,7 +35,7 @@ services:
 
   # We use ClickHouse to store observability data from the TensorZero Gateway (optional).
   clickhouse:
-    image: clickhouse/clickhouse-server:24.12-alpine
+    image: clickhouse:24.12
     environment:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1

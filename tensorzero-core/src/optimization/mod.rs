@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::Arc;
 
 use crate::config::Config;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -42,16 +43,14 @@ pub mod openai_rft;
 pub mod openai_sft;
 pub mod together_sft;
 
-#[derive(Clone, Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct OptimizerInfo {
     inner: OptimizerConfig,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 enum OptimizerConfig {
     Dicl(DiclOptimizationConfig),
     OpenAISFT(OpenAISFTConfig),
@@ -61,9 +60,8 @@ enum OptimizerConfig {
     TogetherSFT(Box<TogetherSFTConfig>),
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OptimizationJobHandle {
@@ -157,23 +155,21 @@ impl JobHandle for OptimizationJobHandle {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", content = "content", rename_all = "snake_case")]
 pub enum OptimizerOutput {
     Variant(Box<UninitializedVariantConfig>),
     Model(UninitializedModelConfig),
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum OptimizationJobInfo {
     Pending {
         message: String,
-        #[cfg_attr(test, ts(type = "Date | null"))]
+        #[ts(type = "Date | null")]
         estimated_finish: Option<DateTime<Utc>>,
         trained_tokens: Option<u64>,
         error: Option<Value>,
@@ -283,7 +279,7 @@ pub trait Optimizer {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
-        config: &Config,
+        config: Arc<Config>,
     ) -> Result<Self::Handle, Error>;
 }
 
@@ -296,7 +292,7 @@ impl Optimizer for OptimizerInfo {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
-        config: &Config,
+        config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         match &self.inner {
             OptimizerConfig::Dicl(optimizer_config) => optimizer_config
@@ -306,7 +302,7 @@ impl Optimizer for OptimizerInfo {
                     val_examples,
                     credentials,
                     clickhouse_connection_info,
-                    config,
+                    config.clone(),
                 )
                 .await
                 .map(OptimizationJobHandle::Dicl),
@@ -317,7 +313,7 @@ impl Optimizer for OptimizerInfo {
                     val_examples,
                     credentials,
                     clickhouse_connection_info,
-                    config,
+                    config.clone(),
                 )
                 .await
                 .map(OptimizationJobHandle::OpenAISFT),
@@ -328,7 +324,7 @@ impl Optimizer for OptimizerInfo {
                     val_examples,
                     credentials,
                     clickhouse_connection_info,
-                    config,
+                    config.clone(),
                 )
                 .await
                 .map(OptimizationJobHandle::OpenAIRFT),
@@ -339,7 +335,7 @@ impl Optimizer for OptimizerInfo {
                     val_examples,
                     credentials,
                     clickhouse_connection_info,
-                    config,
+                    config.clone(),
                 )
                 .await
                 .map(OptimizationJobHandle::FireworksSFT),
@@ -350,7 +346,7 @@ impl Optimizer for OptimizerInfo {
                     val_examples,
                     credentials,
                     clickhouse_connection_info,
-                    config,
+                    config.clone(),
                 )
                 .await
                 .map(OptimizationJobHandle::GCPVertexGeminiSFT),
@@ -361,7 +357,7 @@ impl Optimizer for OptimizerInfo {
                     val_examples,
                     credentials,
                     clickhouse_connection_info,
-                    config,
+                    config.clone(),
                 )
                 .await
                 .map(OptimizationJobHandle::TogetherSFT),
@@ -369,9 +365,8 @@ impl Optimizer for OptimizerInfo {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct UninitializedOptimizerInfo {
     #[serde(flatten)]
     pub inner: UninitializedOptimizerConfig,
@@ -388,9 +383,8 @@ impl UninitializedOptimizerInfo {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedOptimizerConfig {
     #[serde(rename = "dicl")]

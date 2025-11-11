@@ -30,9 +30,8 @@ impl<'a> JsonSchemaRef<'a> {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct StaticJSONSchema {
     #[serde(skip)]
     pub compiled: Arc<Validator>,
@@ -119,9 +118,8 @@ impl StaticJSONSchema {
 /// Wraps a schema with metadata indicating whether it was defined using legacy syntax
 /// (e.g., `user_schema`, `assistant_schema`, `system_schema`) or new syntax (e.g., `schemas.<name>`).
 /// This is used to determine whether to show a "Legacy" badge in the UI.
-#[derive(Clone, Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SchemaWithMetadata {
     pub schema: StaticJSONSchema,
     pub legacy_definition: bool,
@@ -134,9 +132,8 @@ pub struct SchemaWithMetadata {
 ///
 /// The public API of this struct should look very normal except validation is `async`
 /// There are just `new` and `validate` methods.
-#[derive(Debug, Serialize, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct DynamicJSONSchema {
     pub value: Value,
     #[serde(skip)]

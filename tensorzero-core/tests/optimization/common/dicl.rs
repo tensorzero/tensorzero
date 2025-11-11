@@ -1,6 +1,6 @@
 #![expect(clippy::unwrap_used, clippy::panic, clippy::print_stdout)]
 use serde_json::{json, Value};
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, fs, sync::Arc};
 use tempfile::TempDir;
 use tokio::time::{sleep, Duration};
 use tokio_stream::StreamExt;
@@ -91,7 +91,7 @@ pub async fn test_dicl_optimization_chat() {
         .load(&ProviderTypeDefaultCredentials::default())
         .await
         .unwrap();
-    let client = TensorzeroHttpClient::new().unwrap();
+    let client = TensorzeroHttpClient::new_testing().unwrap();
     let test_examples = get_pinocchio_examples(false);
     let val_examples = None; // No validation examples needed for this test
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
@@ -123,7 +123,7 @@ pub async fn test_dicl_optimization_chat() {
             val_examples,
             &credentials,
             &clickhouse,
-            &config,
+            Arc::new(config),
         )
         .await
         .unwrap();
@@ -372,7 +372,7 @@ pub async fn test_dicl_optimization_json() {
         .await
         .unwrap();
 
-    let client = TensorzeroHttpClient::new().unwrap();
+    let client = TensorzeroHttpClient::new_testing().unwrap();
     let test_examples = get_pinocchio_examples(true);
     let val_examples = None; // No validation examples needed for this test
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
@@ -404,7 +404,7 @@ pub async fn test_dicl_optimization_json() {
             val_examples,
             &credentials,
             &clickhouse,
-            &config,
+            Arc::new(config),
         )
         .await
         .unwrap();

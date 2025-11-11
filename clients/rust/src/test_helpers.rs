@@ -115,7 +115,8 @@ macro_rules! make_gateway_test_functions {
     };
 }
 
-fn get_gateway_endpoint(path: &str) -> String {
+#[cfg(any(test, feature = "e2e_tests"))]
+pub fn get_gateway_endpoint(path: &str) -> String {
     let gateway_host =
         std::env::var("TENSORZERO_GATEWAY_HOST").unwrap_or_else(|_| "localhost".to_string());
     let gateway_port =

@@ -87,6 +87,7 @@ export const ExperimentationPieChart = memo(function ExperimentationPieChart({
               cy="50%"
               outerRadius={100}
               label={({ percentage }) => percentage}
+              isAnimationActive={false}
             >
               {data.map((entry) => (
                 <Cell

@@ -130,14 +130,14 @@ pub enum LazyResolvedInputMessageContent {
 #[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
 #[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ResolvedInput {
     #[cfg_attr(
         any(feature = "pyo3", test),
         serde(skip_serializing_if = "Option::is_none")
     )]
-    #[cfg_attr(test, ts(optional))]
+    #[ts(optional)]
     pub system: Option<System>,
 
     #[cfg_attr(any(feature = "pyo3", test), serde(default))]
@@ -195,26 +195,26 @@ pub async fn write_file(
 /// Produces a `StoredInput` from a `ResolvedInput` by discarding the data for any nested `File`s.
 /// The data can be recovered later by re-fetching from the object store using `StoredInput::reresolve`.
 impl ResolvedInput {
-    pub fn into_stored_input(self) -> Result<StoredInput, Error> {
-        Ok(StoredInput {
+    pub fn into_stored_input(self) -> StoredInput {
+        StoredInput {
             system: self.system,
             messages: self
                 .messages
                 .into_iter()
                 .map(ResolvedInputMessage::into_stored_input_message)
-                .collect::<Result<_, _>>()?,
-        })
+                .collect(),
+        }
     }
 
-    pub fn into_lazy_resolved_input(self) -> Result<LazyResolvedInput, Error> {
-        Ok(LazyResolvedInput {
+    pub fn into_lazy_resolved_input(self) -> LazyResolvedInput {
+        LazyResolvedInput {
             system: self.system,
             messages: self
                 .messages
                 .into_iter()
                 .map(ResolvedInputMessage::into_lazy_resolved_input_message)
-                .collect::<Result<_, _>>()?,
-        })
+                .collect(),
+        }
     }
 
     /// Writes all the files in the input to the object store,
@@ -295,34 +295,34 @@ impl ResolvedInput {
 #[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
 #[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ResolvedInputMessage {
     pub role: Role,
     pub content: Vec<ResolvedInputMessageContent>,
 }
 
 impl ResolvedInputMessage {
-    pub fn into_stored_input_message(self) -> Result<StoredInputMessage, Error> {
-        Ok(StoredInputMessage {
+    pub fn into_stored_input_message(self) -> StoredInputMessage {
+        StoredInputMessage {
             role: self.role,
             content: self
                 .content
                 .into_iter()
                 .map(ResolvedInputMessageContent::into_stored_input_message_content)
-                .collect::<Result<_, _>>()?,
-        })
+                .collect(),
+        }
     }
 
-    pub fn into_lazy_resolved_input_message(self) -> Result<LazyResolvedInputMessage, Error> {
-        Ok(LazyResolvedInputMessage {
+    pub fn into_lazy_resolved_input_message(self) -> LazyResolvedInputMessage {
+        LazyResolvedInputMessage {
             role: self.role,
             content: self
                 .content
                 .into_iter()
                 .map(ResolvedInputMessageContent::into_lazy_resolved_input_message_content)
-                .collect::<Result<_, _>>()?,
-        })
+                .collect(),
+        }
     }
 }
 
@@ -366,8 +366,8 @@ impl ResolvedInputMessage {
     any(feature = "pyo3", test),
     serde(tag = "type", rename_all = "snake_case")
 )]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum ResolvedInputMessageContent {
     Text(Text),
     Template(Template),
@@ -381,8 +381,8 @@ pub enum ResolvedInputMessageContent {
 }
 
 impl ResolvedInputMessageContent {
-    pub fn into_stored_input_message_content(self) -> Result<StoredInputMessageContent, Error> {
-        Ok(match self {
+    pub fn into_stored_input_message_content(self) -> StoredInputMessageContent {
+        match self {
             ResolvedInputMessageContent::Text(text) => StoredInputMessageContent::Text(text),
             ResolvedInputMessageContent::Template(template) => {
                 StoredInputMessageContent::Template(template)
@@ -405,13 +405,11 @@ impl ResolvedInputMessageContent {
             ResolvedInputMessageContent::Unknown(unknown) => {
                 StoredInputMessageContent::Unknown(unknown)
             }
-        })
+        }
     }
 
-    pub fn into_lazy_resolved_input_message_content(
-        self,
-    ) -> Result<LazyResolvedInputMessageContent, Error> {
-        Ok(match self {
+    pub fn into_lazy_resolved_input_message_content(self) -> LazyResolvedInputMessageContent {
+        match self {
             ResolvedInputMessageContent::Text(text) => LazyResolvedInputMessageContent::Text(text),
             ResolvedInputMessageContent::Template(template) => {
                 LazyResolvedInputMessageContent::Template(template)
@@ -435,7 +433,7 @@ impl ResolvedInputMessageContent {
             ResolvedInputMessageContent::Unknown(unknown) => {
                 LazyResolvedInputMessageContent::Unknown(unknown)
             }
-        })
+        }
     }
 }
 
@@ -458,9 +456,8 @@ impl RateLimitedInputContent for LazyFile {
 }
 
 /// Like `RequestMessage`, but holds fully-resolved files instead of `LazyFile`s
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ResolvedRequestMessage {
     pub role: Role,

@@ -39,6 +39,7 @@ use tensorzero_core::{
 };
 
 pub mod dicl;
+pub mod evaluations;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
 pub mod openai_rft;
@@ -77,7 +78,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .await
         .unwrap();
 
-    let client = TensorzeroHttpClient::new().unwrap();
+    let client = TensorzeroHttpClient::new_testing().unwrap();
     let test_examples = get_examples(test_case, 10);
     let val_examples = Some(get_examples(test_case, 10));
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
@@ -119,7 +120,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             val_examples,
             &credentials,
             &clickhouse,
-            &config,
+            Arc::new(config),
         )
         .await
         .unwrap();
