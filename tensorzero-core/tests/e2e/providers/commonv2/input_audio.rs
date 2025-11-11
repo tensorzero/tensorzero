@@ -7,6 +7,7 @@ use tensorzero::{
 };
 use tensorzero_core::{
     cache::CacheEnabledMode,
+    db::clickhouse::test_helpers::{get_clickhouse, select_model_inference_clickhouse},
     inference::types::{
         file::Base64File,
         storage::{StorageKind, StoragePath},
@@ -161,13 +162,18 @@ pub async fn check_base64_audio_response(
     response: InferenceResponse,
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
-    _should_be_cached: bool,
+    should_be_cached: bool,
     kind: &StorageKind,
     prefix: &str,
 ) -> StoragePath {
-    // Extract content based on response type
-    let (content, response_episode_id, variant_name) = match &response {
-        InferenceResponse::Chat(chat) => (&chat.content, chat.episode_id, &chat.variant_name),
+    // Extract content and inference_id based on response type
+    let (content, response_episode_id, variant_name, inference_id) = match &response {
+        InferenceResponse::Chat(chat) => (
+            &chat.content,
+            chat.episode_id,
+            &chat.variant_name,
+            chat.inference_id,
+        ),
         InferenceResponse::Json(_) => panic!("Expected chat inference response"),
     };
 
@@ -193,6 +199,21 @@ pub async fn check_base64_audio_response(
 
     // Check variant name
     assert_eq!(variant_name, &provider.variant_name);
+
+    // Check cache status in ModelInference table
+    let clickhouse = get_clickhouse().await;
+    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        model_inference.get("cached").unwrap().as_bool().unwrap(),
+        should_be_cached,
+        "Expected cached={} but got cached={} for inference_id={}",
+        should_be_cached,
+        model_inference.get("cached").unwrap(),
+        inference_id
+    );
 
     // Return the storage path for the audio file
     object_store::path::Path::parse(format!("{prefix}observability/files/{AUDIO_FILE_HASH}.mp3"))
