@@ -502,10 +502,8 @@ struct StoreAndPath {
 }
 
 /// Create a GCS object store from a gs:// URL
-/// This uses Application Default Credentials (ADC) - it will work if:
-/// - GOOGLE_APPLICATION_CREDENTIALS environment variable is set, or
-/// - gcloud CLI is authenticated, or
-/// - Running on GCP with a service account
+/// This uses service account credentials from GOOGLE_APPLICATION_CREDENTIALS if set,
+/// otherwise falls back to Application Default Credentials (ADC)
 async fn make_gcp_object_store(gs_url: &str) -> Result<StoreAndPath, anyhow::Error> {
     let bucket_and_path = gs_url
         .strip_prefix("gs://")
@@ -517,9 +515,17 @@ async fn make_gcp_object_store(gs_url: &str) -> Result<StoreAndPath, anyhow::Err
 
     let key = object_store::path::Path::parse(path)?;
 
-    // GoogleCloudStorageBuilder will automatically use Application Default Credentials
-    // when no explicit credentials are provided
-    let builder = GoogleCloudStorageBuilder::default().with_bucket_name(bucket);
+    let mut builder = GoogleCloudStorageBuilder::default()
+        .with_bucket_name(bucket)
+        // Skip metadata server check - we're not running on GCP
+        .with_skip_signature(false);
+
+    // If GOOGLE_APPLICATION_CREDENTIALS is set, use service account key file directly
+    // This avoids attempting to contact the GCP metadata server first
+    if let Ok(credentials_path) = std::env::var("GOOGLE_APPLICATION_CREDENTIALS") {
+        builder = builder.with_service_account_path(&credentials_path);
+    }
+
     let store = builder.build()?;
 
     Ok(StoreAndPath {

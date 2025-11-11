@@ -61,13 +61,38 @@ pub fn generate_simple_text() -> String {
 fn extract_last_user_message(request: &serde_json::Value) -> Option<String> {
     // Try OpenAI format first (messages array)
     if let Some(messages) = request.get("messages").and_then(|m| m.as_array()) {
-        return messages
+        let user_msg = messages
             .iter()
             .rev()
-            .find(|msg| msg.get("role").and_then(|r| r.as_str()) == Some("user"))
-            .and_then(|msg| msg.get("content"))
-            .and_then(|c| c.as_str())
-            .map(String::from);
+            .find(|msg| msg.get("role").and_then(|r| r.as_str()) == Some("user"));
+
+        if let Some(msg) = user_msg {
+            if let Some(content) = msg.get("content") {
+                // Handle string content
+                if let Some(text) = content.as_str() {
+                    return Some(text.to_string());
+                }
+                // Handle array content (multimodal messages with text and images)
+                if let Some(content_array) = content.as_array() {
+                    // Extract text from content parts
+                    let text_parts: Vec<String> = content_array
+                        .iter()
+                        .filter_map(|part| {
+                            if part.get("type").and_then(|t| t.as_str()) == Some("text") {
+                                part.get("text").and_then(|t| t.as_str()).map(String::from)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect();
+
+                    if !text_parts.is_empty() {
+                        return Some(text_parts.join(" "));
+                    }
+                }
+            }
+        }
+        return None;
     }
 
     // Try GCP format (contents array)

@@ -294,7 +294,7 @@ type = "gcp_vertex_gemini"
 model_id = "gemini-2.0-flash-001"
 location = "us-central1"
 project_id = "test-project"
-credential_location = "none"
+credential_location = "sdk"
 api_base = "http://localhost:3030/v1/"
 
 [models."gcp-gemini-2.5-pro"]
@@ -506,12 +506,6 @@ routing = ["xai"]
 storage_type = "cloud_storage"
 input_uri_prefix = "gs://tensorzero-batch-tests-input/input-prefix/"
 output_uri_prefix = "gs://tensorzero-batch-tests-output/output-prefix/"
-
-# Mock batch testing configuration - uses same buckets but different prefix
-[provider_types.gcp_vertex_gemini_mock_batch.batch]
-storage_type = "cloud_storage"
-input_uri_prefix = "gs://tensorzero-batch-tests-input/mock-input/"
-output_uri_prefix = "gs://tensorzero-batch-tests-output/mock-output/"
 
 [models."grok_2_1212-dynamic".providers.xai]
 type = "xai"

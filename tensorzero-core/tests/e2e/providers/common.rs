@@ -3237,7 +3237,26 @@ pub async fn check_simple_image_inference_response(
     is_batch: bool,
     should_be_cached: bool,
 ) {
-    let hardcoded_function_name = "basic_test";
+    check_simple_image_inference_response_with_function_name(
+        response_json,
+        episode_id,
+        provider,
+        is_batch,
+        should_be_cached,
+        "basic_test",
+    )
+    .await
+}
+
+pub async fn check_simple_image_inference_response_with_function_name(
+    response_json: Value,
+    episode_id: Option<Uuid>,
+    provider: &E2ETestProvider,
+    is_batch: bool,
+    should_be_cached: bool,
+    expected_function_name: &str,
+) {
+    let hardcoded_function_name = expected_function_name;
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -4375,6 +4394,23 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     episode_id: Option<Uuid>,
     is_batch: bool,
 ) {
+    check_tool_use_tool_choice_auto_used_inference_response_with_function_name(
+        response_json,
+        provider,
+        episode_id,
+        is_batch,
+        "weather_helper",
+    )
+    .await
+}
+
+pub async fn check_tool_use_tool_choice_auto_used_inference_response_with_function_name(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+    expected_function_name: &str,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -4447,7 +4483,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(function_name, expected_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -5020,6 +5056,23 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     episode_id: Option<Uuid>,
     is_batch: bool,
 ) {
+    check_tool_use_tool_choice_auto_unused_inference_response_with_function_name(
+        response_json,
+        provider,
+        episode_id,
+        is_batch,
+        "weather_helper",
+    )
+    .await
+}
+
+pub async fn check_tool_use_tool_choice_auto_unused_inference_response_with_function_name(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+    expected_function_name: &str,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
     let content = response_json.get("content").unwrap().as_array().unwrap();
@@ -5056,7 +5109,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(function_name, expected_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -5587,6 +5640,23 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     episode_id: Option<Uuid>,
     is_batch: bool,
 ) {
+    check_tool_use_tool_choice_required_inference_response_with_function_name(
+        response_json,
+        provider,
+        episode_id,
+        is_batch,
+        "weather_helper",
+    )
+    .await
+}
+
+pub async fn check_tool_use_tool_choice_required_inference_response_with_function_name(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+    expected_function_name: &str,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -5667,7 +5737,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(function_name, expected_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -6249,6 +6319,23 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     episode_id: Option<Uuid>,
     is_batch: bool,
 ) {
+    check_tool_use_tool_choice_none_inference_response_with_function_name(
+        response_json,
+        provider,
+        episode_id,
+        is_batch,
+        "weather_helper",
+    )
+    .await
+}
+
+pub async fn check_tool_use_tool_choice_none_inference_response_with_function_name(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+    expected_function_name: &str,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -6297,7 +6384,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(function_name, expected_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -6825,6 +6912,23 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     episode_id: Option<Uuid>,
     is_batch: bool,
 ) {
+    check_tool_use_tool_choice_specific_inference_response_with_function_name(
+        response_json,
+        provider,
+        episode_id,
+        is_batch,
+        "weather_helper",
+    )
+    .await
+}
+
+pub async fn check_tool_use_tool_choice_specific_inference_response_with_function_name(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+    expected_function_name: &str,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -6890,7 +6994,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "weather_helper");
+    assert_eq!(function_name, expected_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -9578,7 +9682,26 @@ pub async fn check_parallel_tool_use_inference_response(
     is_batch: bool,
     parallel_param: Value,
 ) {
-    let hardcoded_function_name = "weather_helper_parallel";
+    check_parallel_tool_use_inference_response_with_function_name(
+        response_json,
+        provider,
+        episode_id,
+        is_batch,
+        parallel_param,
+        "weather_helper_parallel",
+    )
+    .await
+}
+
+pub async fn check_parallel_tool_use_inference_response_with_function_name(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+    parallel_param: Value,
+    expected_function_name: &str,
+) {
+    let hardcoded_function_name = expected_function_name;
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -10373,6 +10496,23 @@ pub async fn check_json_mode_inference_response(
     episode_id: Option<Uuid>,
     is_batch: bool,
 ) {
+    check_json_mode_inference_response_with_function_name(
+        response_json,
+        provider,
+        episode_id,
+        is_batch,
+        "json_success",
+    )
+    .await
+}
+
+pub async fn check_json_mode_inference_response_with_function_name(
+    response_json: Value,
+    provider: &E2ETestProvider,
+    episode_id: Option<Uuid>,
+    is_batch: bool,
+    expected_function_name: &str,
+) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -10420,7 +10560,7 @@ pub async fn check_json_mode_inference_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, "json_success");
+    assert_eq!(function_name, expected_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
