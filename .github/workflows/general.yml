@@ -260,10 +260,11 @@ jobs:
         run: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
       - name: Install Python 3.10
         run: uv python install 3.10
+      - name: Set PYO3_PYTHON
+        run: echo "PYO3_PYTHON=$(uv python find python3.10)" >> $GITHUB_ENV
+        shell: bash
       - name: Build Rust
         run: cargo build --workspace
-        env:
-          PYO3_PYTHON: "python3.10"
 
   lint-rust:
     permissions:
