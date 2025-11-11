@@ -429,27 +429,20 @@ pub async fn test_json_mode_unified_mock_batch_with_provider(
     let batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
     let batch_id = Uuid::parse_str(batch_id).unwrap();
 
-    // Step 2: Wait for the mock provider to complete the batch
-    println!("Waiting for batch to complete...");
-    sleep(Duration::from_secs(3)).await;
+    // Step 2: Poll until the batch completes
+    println!("Polling for batch completion...");
+    let response_json = poll_until_completed(batch_id, 20, 500)
+        .await
+        .expect("Batch should complete within 10 seconds");
 
-    // Step 3: Poll the batch and verify it's completed
-    let url = get_poll_batch_inference_url(PollPathParams {
-        batch_id,
-        inference_id: None,
-    });
-    let response = Client::new().get(url).send().await.unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-    println!("Poll response: {response_json:#?}");
+    println!("Batch completed: {response_json:#?}");
 
     assert_eq!(
         response_json.get("status").unwrap().as_str().unwrap(),
         "completed"
     );
 
-    // Step 4: Verify the inference response
+    // Step 3: Verify the inference response
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
@@ -547,27 +540,20 @@ pub async fn test_tool_use_unified_mock_batch_with_provider(
     let batch_id = response_json.get("batch_id").unwrap().as_str().unwrap();
     let batch_id = Uuid::parse_str(batch_id).unwrap();
 
-    // Step 2: Wait for the mock provider to complete the batch
-    println!("Waiting for batch to complete...");
-    sleep(Duration::from_secs(3)).await;
+    // Step 2: Poll until the batch completes
+    println!("Polling for batch completion...");
+    let response_json = poll_until_completed(batch_id, 20, 500)
+        .await
+        .expect("Batch should complete within 10 seconds");
 
-    // Step 3: Poll the batch and verify it's completed
-    let url = get_poll_batch_inference_url(PollPathParams {
-        batch_id,
-        inference_id: None,
-    });
-    let response = Client::new().get(url).send().await.unwrap();
-
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-    println!("Poll response: {response_json:#?}");
+    println!("Batch completed: {response_json:#?}");
 
     assert_eq!(
         response_json.get("status").unwrap().as_str().unwrap(),
         "completed"
     );
 
-    // Step 4: Verify the inference responses
+    // Step 3: Verify the inference responses
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 5);
 
