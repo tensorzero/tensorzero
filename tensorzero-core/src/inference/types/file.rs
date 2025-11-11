@@ -78,16 +78,6 @@ pub enum Detail {
     Auto,
 }
 
-pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), Error> {
-    if mime_type.type_() != mime::IMAGE {
-        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
-            content_block_type: format!("file: {mime_type}"),
-            provider_type: provider_type.to_string(),
-        }));
-    }
-    Ok(())
-}
-
 /// A file already encoded as base64
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass)]
@@ -734,20 +724,54 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
 /// to provide to OpenAI (which doesn't accept mime types for file input)
 pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, Error> {
     Ok(match mime_type {
-        _ if mime_type == &mime::IMAGE_JPEG => Some("jpg"),
-        _ if mime_type == &mime::IMAGE_PNG => Some("png"),
-        _ if mime_type == &mime::IMAGE_GIF => Some("gif"),
-        _ if mime_type == &mime::APPLICATION_PDF => Some("pdf"),
+        _ if mime_type == "image/jpeg" => Some("jpg"),
+        _ if mime_type == "image/png" => Some("png"),
+        _ if mime_type == "image/gif" => Some("gif"),
+        _ if mime_type == "application/pdf" => Some("pdf"),
         _ if mime_type == "image/webp" => Some("webp"),
         _ if mime_type == "text/plain" => Some("txt"),
+        _ if mime_type == "audio/midi" => Some("mid"),
+        _ if mime_type == "audio/mpeg" || mime_type == "audio/mp3" => Some("mp3"),
+        _ if mime_type == "audio/m4a" || mime_type == "audio/mp4" => Some("m4a"),
+        _ if mime_type == "audio/ogg" => Some("ogg"),
+        _ if mime_type == "audio/x-flac" || mime_type == "audio/flac" => Some("flac"),
+        _ if mime_type == "audio/x-wav"
+            || mime_type == "audio/wav"
+            || mime_type == "audio/wave" =>
+        {
+            Some("wav")
+        }
+        _ if mime_type == "audio/amr" => Some("amr"),
+        _ if mime_type == "audio/aac" || mime_type == "audio/x-aac" => Some("aac"),
+        _ if mime_type == "audio/x-aiff" || mime_type == "audio/aiff" => Some("aiff"),
+        _ if mime_type == "audio/x-dsf" => Some("dsf"),
+        _ if mime_type == "audio/x-ape" => Some("ape"),
+        _ if mime_type == "audio/webm" => Some("webm"),
         _ => {
             let guess = mime_guess::get_mime_extensions_str(mime_type.as_ref())
                 .and_then(|types| types.last());
             if guess.is_some() {
-                tracing::warn!("Guessed file extension {guess:?} for mime-type {mime_type} - this may not be correct");
+                tracing::warn!("Guessed file extension `{guess:?}` for MIME type `{mime_type}`. This may not be correct.");
             }
             guess.copied()
         }
+    })
+}
+
+/// Converts audio MIME types to OpenAI's audio format strings.
+pub fn mime_type_to_audio_format(mime_type: &MediaType) -> Result<&'static str, Error> {
+    if mime_type.type_() != mime::AUDIO {
+        return Err(Error::new(ErrorDetails::InvalidMessage {
+            message: format!("Expected audio MIME type, got: {mime_type}"),
+        }));
+    }
+
+    mime_type_to_ext(mime_type)?.ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidMessage {
+            message: format!(
+                "Unsupported audio MIME type: {mime_type}. Supported types: audio/midi, audio/mpeg, audio/m4a, audio/mp4, audio/ogg, audio/x-flac, audio/x-wav, audio/amr, audio/aac, audio/x-aiff, audio/x-dsf, audio/x-ape. Please open a feature request if your provider supports another audio format: https://github.com/tensorzero/tensorzero/discussions/categories/feature-requests"
+            ),
+        })
     })
 }
 
@@ -905,6 +929,18 @@ mod tests {
         let inferred = infer::get(webp_bytes).expect("Should detect WebP");
         assert_eq!(inferred.mime_type(), "image/webp");
         assert_eq!(inferred.extension(), "webp");
+
+        // Test WAV detection (magic bytes: RIFF....WAVE)
+        let wav_bytes = b"RIFF\x00\x00\x00\x00WAVEfmt ";
+        let inferred = infer::get(wav_bytes).expect("Should detect WAV");
+        assert_eq!(inferred.mime_type(), "audio/x-wav");
+        assert_eq!(inferred.extension(), "wav");
+
+        // Test MP3 detection (magic bytes: FF FB or ID3)
+        let mp3_bytes = [0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00];
+        let inferred = infer::get(&mp3_bytes).expect("Should detect MP3");
+        assert_eq!(inferred.mime_type(), "audio/mpeg");
+        assert_eq!(inferred.extension(), "mp3");
 
         // Test that unknown bytes return None
         let unknown_bytes = [0x00, 0x01, 0x02, 0x03];
