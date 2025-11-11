@@ -129,7 +129,7 @@ pub async fn launch_optimization_workflow(
             val_examples,
             &InferenceCredentials::default(),
             clickhouse_connection_info,
-            &config,
+            config.clone(),
         )
         .await
 }
@@ -169,7 +169,7 @@ pub async fn launch_optimization(
             val_examples,
             &InferenceCredentials::default(),
             clickhouse_connection_info,
-            &config,
+            config.clone(),
         )
         .await
 }

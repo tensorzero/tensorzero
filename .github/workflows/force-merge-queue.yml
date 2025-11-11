@@ -39,4 +39,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh workflow run force-merge-queue-helper.yml --ref "${{ github.event.pull_request.head.sha }}"
+          gh workflow run force-merge-queue-helper.yml --ref "${{ github.head_ref }}"

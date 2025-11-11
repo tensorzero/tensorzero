@@ -92,6 +92,14 @@ jobs:
           OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
           OPENAI_API_KEY=dummy docker compose down
 
+      - name: Apply Postgres migrations for examples/blog/bandits-in-your-llm-gateway
+        # Note: In isolation, applying migrations should not require `ANTHROPIC_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/blog/bandits-in-your-llm-gateway
+          ANTHROPIC_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          ANTHROPIC_API_KEY=dummy docker compose down
+
       - name: Check latest docker-compose
         run: ./ci/check-all-docker-compose.sh
 
@@ -154,6 +162,14 @@ jobs:
           OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
           OPENAI_API_KEY=dummy docker compose down
 
+      - name: Apply Postgres migrations for examples/blog/bandits-in-your-llm-gateway
+        # Note: In isolation, applying migrations should not require `ANTHROPIC_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/blog/bandits-in-your-llm-gateway
+          ANTHROPIC_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          ANTHROPIC_API_KEY=dummy docker compose down
+
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
 
@@ -175,7 +191,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "22.9.0"
+          node-version: "24.11.0"
 
       - name: Install pnpm
         run: |
@@ -308,7 +324,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "22.9.0"
+          node-version: "24.11.0"
 
       - name: Install pnpm
         run: |

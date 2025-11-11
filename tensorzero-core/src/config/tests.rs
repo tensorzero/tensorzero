@@ -1033,7 +1033,7 @@ async fn test_config_validate_function_name_tensorzero_prefix() {
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
-            message: "Function name cannot start with 'tensorzero::': tensorzero::bad_function"
+            message: "User-defined function name cannot start with 'tensorzero::': tensorzero::bad_function"
                 .to_string()
         })
     );
@@ -3037,4 +3037,67 @@ async fn test_config_file_glob_recursive() {
 
     // Should match both files
     assert_eq!(config_glob.paths.len(), 2);
+}
+
+/// Test that built-in functions are automatically loaded
+#[tokio::test]
+async fn test_built_in_functions_loaded() {
+    // Load a minimal config (empty table)
+    let config = toml::Table::new();
+    let config = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect("Failed to load config");
+
+    // Check that both built-in functions are available
+    assert!(config.functions.contains_key("tensorzero::hello_chat"));
+    assert!(config.functions.contains_key("tensorzero::hello_json"));
+
+    // Verify hello_chat is a Chat function with no variants
+    let hello_chat = config.functions.get("tensorzero::hello_chat").unwrap();
+    match &**hello_chat {
+        FunctionConfig::Chat(chat_config) => {
+            assert!(chat_config.variants.is_empty());
+            assert!(chat_config.tools.is_empty());
+            assert!(chat_config.description.is_some());
+        }
+        FunctionConfig::Json(_) => panic!("Expected tensorzero::hello_chat to be a Chat function"),
+    }
+
+    // Verify hello_json is a JSON function with no variants
+    let hello_json = config.functions.get("tensorzero::hello_json").unwrap();
+    match &**hello_json {
+        FunctionConfig::Json(json_config) => {
+            assert!(json_config.variants.is_empty());
+            assert!(json_config.description.is_some());
+        }
+        FunctionConfig::Chat(_) => panic!("Expected tensorzero::hello_json to be a JSON function"),
+    }
+}
+
+/// Test that built-in functions can be retrieved via get_function
+#[tokio::test]
+async fn test_get_built_in_function() {
+    let config = toml::Table::new();
+    let config = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect("Failed to load config");
+
+    // Should be able to get both built-in functions
+    assert!(config.get_function("tensorzero::hello_chat").is_ok());
+    assert!(config.get_function("tensorzero::hello_json").is_ok());
+}
+
+/// Test that built-in functions work alongside user-defined functions
+#[tokio::test]
+async fn test_built_in_and_user_functions_coexist() {
+    let config = get_sample_valid_config();
+
+    let config = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect("Failed to load config");
+
+    // Check that both built-in and user functions exist
+    assert!(config.functions.contains_key("tensorzero::hello_chat"));
+    assert!(config.functions.contains_key("tensorzero::hello_json"));
+    assert!(config.functions.contains_key("generate_draft"));
 }
