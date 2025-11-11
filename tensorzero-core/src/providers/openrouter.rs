@@ -734,6 +734,45 @@ pub(super) fn tensorzero_to_openrouter_system_message<'a>(
     }
 }
 
+async fn prepare_openrouter_file_content_block(
+    file: &crate::inference::types::resolved_input::LazyFile,
+) -> Result<OpenRouterContentBlock<'static>, Error> {
+    let resolved_file = file.resolve().await?;
+    let ObjectStorageFile { file, data } = &*resolved_file;
+    let base64_url = format!("data:{};base64,{}", file.mime_type, data);
+
+    if file.mime_type.type_() == mime::IMAGE {
+        if file.detail.is_some() {
+            tracing::warn!(
+                "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
+            );
+        }
+        Ok(OpenRouterContentBlock::ImageUrl {
+            image_url: OpenRouterImageUrl { url: base64_url },
+        })
+    } else if file.mime_type.type_() == mime::AUDIO {
+        let format = mime_type_to_audio_format(&file.mime_type)?;
+        Ok(OpenRouterContentBlock::InputAudio {
+            input_audio: OpenRouterInputAudio {
+                data: Cow::Owned(data.clone()),
+                format: Cow::Owned(format.to_string()),
+            },
+        })
+    } else {
+        let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidMessage {
+                message: format!("Mime type {} has no filetype suffix", file.mime_type),
+            })
+        })?;
+        Ok(OpenRouterContentBlock::File {
+            file: OpenRouterFile {
+                file_data: Some(Cow::Owned(base64_url)),
+                filename: Some(Cow::Owned(format!("input.{suffix}"))),
+            },
+        })
+    }
+}
+
 pub(super) async fn tensorzero_to_openrouter_messages(
     message: &RequestMessage,
 ) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
@@ -772,40 +811,7 @@ async fn tensorzero_to_openrouter_user_messages(
                 ));
             }
             ContentBlock::File(file) => {
-                let resolved_file = file.resolve().await?;
-                let ObjectStorageFile { file, data } = &*resolved_file;
-                let base64_url = format!("data:{};base64,{}", file.mime_type, data);
-
-                if file.mime_type.type_() == mime::IMAGE {
-                    if file.detail.is_some() {
-                        tracing::warn!(
-                            "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
-                        );
-                    }
-                    user_content_blocks.push(OpenRouterContentBlock::ImageUrl {
-                        image_url: OpenRouterImageUrl { url: base64_url },
-                    });
-                } else if file.mime_type.type_() == mime::AUDIO {
-                    let format = mime_type_to_audio_format(&file.mime_type)?;
-                    user_content_blocks.push(OpenRouterContentBlock::InputAudio {
-                        input_audio: OpenRouterInputAudio {
-                            data: Cow::Owned(data.clone()),
-                            format: Cow::Owned(format.to_string()),
-                        },
-                    });
-                } else {
-                    let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
-                        Error::new(ErrorDetails::InvalidMessage {
-                            message: format!("Mime type {} has no filetype suffix", file.mime_type),
-                        })
-                    })?;
-                    user_content_blocks.push(OpenRouterContentBlock::File {
-                        file: OpenRouterFile {
-                            file_data: Some(Cow::Owned(base64_url)),
-                            filename: Some(Cow::Owned(format!("input.{suffix}"))),
-                        },
-                    });
-                }
+                user_content_blocks.push(prepare_openrouter_file_content_block(file).await?);
             }
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);
@@ -865,40 +871,7 @@ async fn tensorzero_to_openrouter_assistant_messages(
                 }));
             }
             ContentBlock::File(file) => {
-                let resolved_file = file.resolve().await?;
-                let ObjectStorageFile { file, data } = &*resolved_file;
-                let base64_url = format!("data:{};base64,{}", file.mime_type, data);
-
-                if file.mime_type.type_() == mime::IMAGE {
-                    if file.detail.is_some() {
-                        tracing::warn!(
-                            "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
-                        );
-                    }
-                    assistant_content_blocks.push(OpenRouterContentBlock::ImageUrl {
-                        image_url: OpenRouterImageUrl { url: base64_url },
-                    });
-                } else if file.mime_type.type_() == mime::AUDIO {
-                    let format = mime_type_to_audio_format(&file.mime_type)?;
-                    assistant_content_blocks.push(OpenRouterContentBlock::InputAudio {
-                        input_audio: OpenRouterInputAudio {
-                            data: Cow::Owned(data.clone()),
-                            format: Cow::Owned(format.to_string()),
-                        },
-                    });
-                } else {
-                    let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
-                        Error::new(ErrorDetails::InvalidMessage {
-                            message: format!("Mime type {} has no filetype suffix", file.mime_type),
-                        })
-                    })?;
-                    assistant_content_blocks.push(OpenRouterContentBlock::File {
-                        file: OpenRouterFile {
-                            file_data: Some(Cow::Owned(base64_url)),
-                            filename: Some(Cow::Owned(format!("input.{suffix}"))),
-                        },
-                    });
-                }
+                assistant_content_blocks.push(prepare_openrouter_file_content_block(file).await?);
             }
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);
