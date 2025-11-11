@@ -47,7 +47,7 @@ async fn test_otel_export_trace_export_with_parent() {
 #[tokio::test]
 async fn test_otel_export_trace_export_with_custom_header() {
     // Prevent overloading Tempo (it gives us 'job queue full' errors if we send too many requests at once)
-    let semaphore = Arc::new(Semaphore::new(10));
+    let semaphore = Arc::new(Semaphore::new(2));
     let mut futures = JoinSet::new();
     let num_tasks = 100;
     for _ in 0..num_tasks {
