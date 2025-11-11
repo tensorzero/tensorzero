@@ -9,6 +9,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::Write;
+use std::sync::Arc;
 
 use crate::config::{Config, TimeoutsConfig};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -706,7 +707,7 @@ impl Optimizer for TogetherSFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: &Config,
+        _config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()

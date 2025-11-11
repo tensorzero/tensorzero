@@ -168,6 +168,7 @@ export function FeedbackCountsTimeseries({
                 stroke={chartConfig[variantName].color}
                 strokeWidth={0}
                 stackId="1"
+                isAnimationActive={false}
               />
             ))}
           </AreaChart>
