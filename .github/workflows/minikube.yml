@@ -36,6 +36,7 @@ jobs:
       run: |
         cd examples/production-deployment-k8s-helm
         kubectl get pods -A
+        kubectl describe pods
         kubectl create namespace tensorzero
         helm upgrade --install tensorzero .  -f values.yaml -f helm-ci-overrides.yaml -n tensorzero
         kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=tensorzero -n tensorzero --timeout=60s
@@ -49,6 +50,11 @@ jobs:
       if: always()
       run: |
         kubectl get pods -A
+
+    - name: Run 'kubectl describe pods'
+      if: always()
+      run: |
+        kubectl describe pods
 
     - name: Print kubectl logs
       if: always()
