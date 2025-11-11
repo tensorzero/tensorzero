@@ -38,7 +38,8 @@ API keys sent from the OpenAI client will be ignored.
 - **Type:** object
 - **Required:** no
 
-Controls inference caching behavior. This object accepts two fields:
+Controls caching behavior for inference requests.
+This object accepts two fields:
 
 - `enabled` (string): The cache mode. Can be one of:
   - `"write_only"` (default): Only write to cache but don't serve cached responses
@@ -484,7 +485,7 @@ Each message is an object with the following fields:
     - `arguments`: A JSON string containing the function arguments
 - `tool_call_id` (required for `tool` messages, otherwise disallowed): The ID of the tool call to associate with the message. This should be one that was originally returned by the gateway in a tool call `id` field.
 
-A content block is an object that can have type `text` or `image_url`.
+A content block is an object that can have type `text`, `image_url`, or TensorZero-specific types.
 
 If the content block has type `text`, it must have either of the following additional fields:
 
@@ -497,12 +498,10 @@ If a content block has type `image_url`, it must have the following additional f
   - `url`: The URL for a remote image (e.g. `"https://example.com/image.png"`) or base64-encoded data for an embedded image (e.g. `"data:image/png;base64,..."`).
   - `detail` (optional): Controls the fidelity of image processing. Only applies to image files; ignored for other file types. Can be `low`, `high`, or `auto`. Affects token consumption and image quality.
 
-<Warning>
+The TensorZero-specific content block types are:
 
-Currently, the OpenAI-compatible inference endpoint does not accept other content blocks like `raw_text` or `unknown`.
-See the [Inference API Reference](/gateway/api-reference/inference/) for details on how to provide such content blocks as input.
-
-</Warning>
+- `tensorzero::raw_text`: Bypasses templates and schemas, sending text directly to the model. Useful for testing prompts or dynamic injection without configuration changes. Must have a `value` field containing the text.
+- `tensorzero::template`: Explicitly specify a template to use. Must have `name` and `arguments` fields.
 
 #### `model`
 
@@ -695,6 +694,7 @@ Controls which (if any) tool is called by the model by overriding the value in c
 - `"auto"`: The model can pick between generating a message or calling one or more tools
 - `"required"`: The model must call one or more tools
 - `{"type": "function", "function": {"name": "my_function"}}`: Forces the model to call the specified tool
+- `{"type": "allowed_tools", "allowed_tools": {"tools": [...], "mode": "auto"|"required"}}`: Restricts which tools can be called
 
 #### `top_p`
 
