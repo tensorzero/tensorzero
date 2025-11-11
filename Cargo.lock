@@ -6195,7 +6195,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2025.11.3"
+version = "2025.11.4"
 dependencies = [
  "async-trait",
  "axum",
