@@ -159,6 +159,25 @@ This is recommended to ensure that TensorZero and the model providers see identi
 If set to `false`, TensorZero will forward the input file URLs directly to the model provider (when supported) and fetch them for observability in parallel with inference.
 This can be more efficient, but may result in different content being observed if the URL content changes between when the provider fetches it and when TensorZero fetches it for observability.
 
+### `global_outbound_http_timeout_ms`
+
+- **Type:** integer
+- **Required:** no (default: `300000` = 5 minutes)
+
+Sets the global timeout in milliseconds for all outbound HTTP requests made by TensorZero to external services such as model providers and APIs.
+
+By default, all HTTP requests will timeout after 5 minutes (300,000 ms).
+This timeout is intentionally set high to accommodate slow model responses, but you can customize it based on your requirements.
+
+The `global_outbound_http_timeout_ms` acts as an upper bound for all more specific timeout configurations in your system.
+Any variant-level timeouts (e.g., `timeouts.non_streaming.total_ms`, `timeouts.streaming.ttft_ms`), provider-level timeouts, or embedding model timeouts must be less than or equal to this global timeout.
+
+<Warning>
+
+Setting this value too low may cause legitimate requests to timeout before receiving a response from the model provider.
+
+</Warning>
+
 ### `observability.async_writes`
 
 - **Type:** boolean
@@ -2765,6 +2784,50 @@ Defines the seed to use for the variant.
 [functions.draft-email.variants.prompt-v1]
 # ...
 seed = 42
+```
+
+##### `service_tier`
+
+- **Type:** string
+- **Required:** no (default: `"auto"`)
+
+Controls the priority and latency characteristics of inference requests.
+
+The supported values are:
+
+- `auto`: Let the provider automatically select the appropriate service tier (default).
+- `default`: Use the provider's standard service tier.
+- `priority`: Use a higher-priority service tier with lower latency (may have higher costs).
+- `flex`: Use a lower-priority service tier optimized for cost efficiency (may have higher latency).
+
+<Warning>
+
+Only some model providers support this parameter. TensorZero will warn and ignore it if unsupported.
+
+Currently supported providers: OpenAI, Anthropic, GCP Vertex Anthropic.
+
+</Warning>
+
+```toml title="tensorzero.toml"
+[functions.draft-email.variants.prompt-v1]
+# ...
+service_tier = "priority"
+# ...
+```
+
+##### `stop_sequences`
+
+- **Type:** array of strings
+- **Required:** no (default: `null`)
+
+Defines a list of sequences where the model will stop generating further tokens.
+When the model encounters any of these sequences in its output, it will immediately stop generation.
+
+```toml title="tensorzero.toml"
+[functions.draft-email.variants.prompt-v1]
+# ...
+stop_sequences = ["END", "\n\n"]
+# ...
 ```
 
 ##### `system_template`
