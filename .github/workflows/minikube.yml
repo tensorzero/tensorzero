@@ -32,6 +32,14 @@ jobs:
         EOF
         sed -i 's/^        //' helm-ci-overrides.yaml
 
+
+    - name: Install ClickHouse on minikube
+      run: |
+        helm repo add altinity https://altinity.github.io/helm-charts
+        helm repo update
+        kubectl create namespace clickhouse
+        helm install clickhouse altinity/clickhouse -n clickhouse -f clickhouse-values.yaml
+
     - name: Install TensorZero on minikube
       run: |
         cd examples/production-deployment-k8s-helm
