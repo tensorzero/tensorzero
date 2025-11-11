@@ -1,0 +1,41 @@
+name: CI
+on:
+  - workflow_call
+jobs:
+  deploy-minikube:
+    runs-on: ubuntu-latest
+    name: Run 'examples/production-deployment-k8s-helm' on minikube
+    steps:
+    - uses: actions/checkout@v4
+    - name: Start minikube
+      uses: medyagh/setup-minikube@e3c7f79eb1e997eabccc536a6cf318a2b0fe19d9
+    - name: Download gateway container
+      uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+      with:
+        pattern: build-gateway-container
+        merge-multiple: true
+    - name: Load gateway container
+      run: |
+        docker load < gateway-container.tar
+
+    - name: Create helm overrides file
+      run: |
+        cd examples/production-deployment-k8s-helm
+        echo "
+          gateway:
+            image:
+              repository: tensorzero/gateway
+                # We load this from the build-gateway-container job
+                tag: sha-${{ github.sha }}
+                pullPolicy: IfNotPresent
+            " > helm-ci-overrides.yaml
+    - name: Install TensorZero on minikube
+      run: |
+        cd examples/production-deployment-k8s-helm
+        kubectl get pods -A
+        helm upgrade --install tensorzero .  -f values.yaml -f helm-ci-overrides.yaml -n tensorzero
+        kubectl port-forward service/tensorzero-gateway -n tensorzero 3000:3000 &
+    
+    - name: Ping the gateway
+      run: |
+        curl http://localhost:3000/health

@@ -842,6 +842,12 @@ jobs:
     uses: ./.github/workflows/merge-queue.yml
     secrets: inherit
 
+  minikube:
+    needs: [build-gateway-container]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/minikube.yml
+
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     permissions: {}
@@ -857,6 +863,7 @@ jobs:
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
+        minikube,
         validate,
         lint-rust,
         clickhouse-tests,
