@@ -48,6 +48,7 @@ use std::borrow::Cow;
 
 use futures::FutureExt;
 use mime::MediaType;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -60,6 +61,7 @@ use crate::{
 use aws_smithy_types::base64;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use tensorzero_derive::export_schema;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -69,9 +71,10 @@ pub enum FileEncoding {
 }
 
 /// Detail level for input images (affects fidelity and token cost)
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
+#[export_schema]
 pub enum Detail {
     Low,
     High,
@@ -79,15 +82,18 @@ pub enum Detail {
 }
 
 /// A file already encoded as base64
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[ts(export)]
+#[export_schema]
 pub struct Base64File {
     // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
     #[ts(optional)]
+    #[schemars(with = "Option<String>")]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
+    #[schemars(with = "String")]
     pub mime_type: MediaType,
     // This field contains *unprefixed* base64-encoded data.
     // It's private and validated by the constructor.
@@ -241,11 +247,14 @@ impl Base64File {
 }
 
 /// A file that can be located at a URL
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 pub struct UrlFile {
+    #[schemars(with = "String")]
     pub url: Url,
     #[ts(type = "string | null")]
+    #[schemars(with = "Option<String>")]
     pub mime_type: Option<MediaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -255,13 +264,16 @@ pub struct UrlFile {
 /// A file stored in an object storage backend, without data.
 /// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 pub struct ObjectStoragePointer {
     #[serde(alias = "url")] // DEPRECATED (SEE IMPORTANT NOTE BELOW)
     #[ts(optional)]
+    #[schemars(with = "Option<String>")]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
+    #[schemars(with = "String")]
     pub mime_type: MediaType,
     pub storage_path: StoragePath,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -272,7 +284,8 @@ pub struct ObjectStoragePointer {
 /// A file stored in an object storage backend, with data.
 /// This struct can NOT be stored in the database.
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 pub struct ObjectStorageFile {
     #[serde(flatten)]
@@ -284,8 +297,9 @@ pub struct ObjectStorageFile {
 
 /// A file that we failed to read from object storage.
 /// This struct can NOT be stored in the database.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 pub struct ObjectStorageError {
     #[serde(flatten)]
     pub file: ObjectStoragePointer,
@@ -349,18 +363,24 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 }
 
 /// A file for an inference or a datapoint.
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(tag = "file_type", rename_all = "snake_case")]
 #[ts(export)]
+#[export_schema]
 // NOTE(shuyangli, 2025-10-21): we're manually implementing Serialize and Deserialize for a while until we're confident
 // that clients are sending us the correct tagged versions. Serialization always produces tagged format, but
 // deserialization accepts both tagged and untagged formats for backwards compatibility.
 // TODO(#4107): Remove this once we're confident that clients are sending us the tagged version.
 pub enum File {
-    Url(UrlFile),                               // a file URL
-    Base64(Base64File),                         // a base64-encoded file
+    #[schemars(title = "FileUrlFile")]
+    Url(UrlFile), // a file URL
+    #[schemars(title = "FileBase64")]
+    Base64(Base64File), // a base64-encoded file
+    #[schemars(title = "FileObjectStoragePointer")]
     ObjectStoragePointer(ObjectStoragePointer), // a pointer to an object storage file (metadata only)
-    ObjectStorage(ObjectStorageFile),           // a file from object storage (metadata + data)
+    #[schemars(title = "FileObjectStorage")]
+    ObjectStorage(ObjectStorageFile), // a file from object storage (metadata + data)
+    #[schemars(title = "FileObjectStorageError")]
     ObjectStorageError(ObjectStorageError), // a file we couldn't fetch from object storage (metadata + error)
 }
 
