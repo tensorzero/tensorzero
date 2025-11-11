@@ -54,7 +54,7 @@ jobs:
     - name: Run 'kubectl describe pods'
       if: always()
       run: |
-        kubectl describe pods
+        kubectl describe pods -n tensorzero
 
     - name: Print kubectl logs
       if: always()
