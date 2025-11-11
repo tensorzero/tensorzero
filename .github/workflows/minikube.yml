@@ -27,7 +27,7 @@ jobs:
             repository: tensorzero/gateway
             # We load this from the build-gateway-container job
             tag: sha-${{ github.sha }}
-            pullPolicy: pullPolicy
+            pullPolicy: Never
         EOF
         sed -i 's/^        //' helm-ci-overrides.yaml
 
