@@ -843,8 +843,12 @@ jobs:
     secrets: inherit
 
   # See 'ci/README.md' at the repository root for more details.
-  check-all-general-jobs-passed:
-    permissions: {}
+  # This job creates a commit status named 'check-all-general-jobs-passed'.
+  # We don't name this job 'check-all-general-jobs-passed' to prevent Github from creating a 'check_run' status for it,
+  # which we don't seem to be able to override from another job.
+  check-job-statuses:
+    permissions:
+      actions: write
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
@@ -871,3 +875,11 @@ jobs:
       # In PR CI, some jobs may be intentionally skipped (e.g. due to running from a fork, or to save money)
       - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled' || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped'))) }}
         run: exit 1
+      - name: Create commit status 'check-all-general-jobs-passed'
+        run: |
+          gh api repos/${{ github.repository }}/statuses/${{ github.sha }} \
+            -f context=check-all-general-jobs-passed \
+            -f state=success \
+            -f target_url=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
