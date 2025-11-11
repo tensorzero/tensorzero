@@ -1304,21 +1304,24 @@ model_name = "gpt-4o-mini-2024-07-18"
 
 ##### `provider_tools`
 
-- **Type:** string or object
-- **Required:** no (default: `env::OPENAI_API_KEY` unless otherwise set in `provider_types.openai.defaults.api_key_location`)
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
 
-Defines the location of the API key for the OpenAI provider.
+Defines provider-specific built-in tools that are available for this model provider.
+These are tools that run server-side on the provider's infrastructure (e.g., OpenAI's web search tool).
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+Each object in the array should contain the provider-specific tool configuration as defined by the provider's API.
+For example, OpenAI's Responses API supports a `web_search` tool that enables the model to search the web for information.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+This field can be set statically in the configuration file or dynamically at inference time via the `provider_tools` parameter in the `/inference` endpoint or `tensorzero::provider_tools` in the OpenAI-compatible endpoint.
+See the [Inference API Reference](/gateway/api-reference/inference/#provider_tools) for more details on dynamic usage.
 
 ```toml title="tensorzero.toml"
 [models.gpt-5-mini-responses-web-search.providers.openai]
 # ...
 type = "openai"
 api_type = "responses"
-provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+provider_tools = [{type = "web_search"}]  # Enable OpenAI's built-in web search tool
 # ...
 ```
 
@@ -2715,7 +2718,8 @@ routing = ["openai", "azure"]
 Then:
 
 - `model = "gpt-4o"` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/gateway/guides/retries-fallbacks/) for details.
-- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model, ignoring the `gpt-4o` model defined above.
+- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model using the Chat Completions API, ignoring the `gpt-4o` model defined above.
+- `model = "openai::responses::gpt-5-codex"` calls the OpenAI Responses API directly for the `gpt-5-codex` model. See [OpenAI Responses API](/gateway/call-the-openai-responses-api/) for details.
 
 ##### `presence_penalty`
 
@@ -3531,7 +3535,8 @@ routing = ["openai", "azure"]
 Then:
 
 - `model = "gpt-4o"` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/gateway/guides/retries-fallbacks/) for details.
-- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model, ignoring the `gpt-4o` model defined above.
+- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model using the Chat Completions API, ignoring the `gpt-4o` model defined above.
+- `model = "openai::responses::gpt-5-codex"` calls the OpenAI Responses API directly for the `gpt-5-codex` model. See [OpenAI Responses API](/gateway/call-the-openai-responses-api/) for details.
 
 ##### `retries`
 

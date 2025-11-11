@@ -656,6 +656,83 @@ See ["Chat Function with Dynamic Inference Parameters"](#chat-function-with-dyna
 
 </Accordion>
 
+#### `provider_tools`
+
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
+
+A list of provider-specific built-in tools defined at inference time that can be used by the model.
+These are tools that run server-side on the provider's infrastructure, such as OpenAI's web search tool.
+
+Each object in the array has the following fields:
+
+- `scope` (object, optional): Limits which model/provider combination can use this tool. If omitted, the tool is available to all compatible providers.
+  - `model_name` (string): The model name as defined in your configuration
+  - `model_provider_name` (string): The provider name for that model
+- `tool` (object, required): The provider-specific tool configuration as defined by the provider's API
+
+This field allows for dynamic provider tool use at runtime.
+You should prefer to define provider tools in the configuration file if possible (see [Configuration Reference](/gateway/configuration-reference/#provider_tools)).
+Only use this field if dynamic provider tool configuration is necessary for your use case.
+
+<Accordion title="Example: OpenAI Web Search (Unscoped)">
+
+```json
+{
+  "function_name": "my_function",
+  "input": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "What were the latest developments in AI this week?"
+      }
+    ]
+  },
+  "provider_tools": [
+    {
+      "tool": {
+        "type": "web_search"
+      }
+    }
+  ]
+}
+```
+
+This makes the web search tool available to all compatible providers configured for the function.
+
+</Accordion>
+
+<Accordion title="Example: OpenAI Web Search (Scoped)">
+
+```json
+{
+  "function_name": "my_function",
+  "input": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "What were the latest developments in AI this week?"
+      }
+    ]
+  },
+  "provider_tools": [
+    {
+      "scope": {
+        "model_name": "gpt-5-mini",
+        "model_provider_name": "openai"
+      },
+      "tool": {
+        "type": "web_search"
+      }
+    }
+  ]
+}
+```
+
+This makes the web search tool available only to the OpenAI provider for the `gpt-5-mini` model.
+
+</Accordion>
+
 #### `stream`
 
 - **Type:** boolean
