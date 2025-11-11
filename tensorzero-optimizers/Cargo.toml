@@ -53,3 +53,25 @@ ts-rs = { workspace = true }
 
 [dev-dependencies]
 tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
+tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
+evaluations = { path = "../evaluations" }
+paste = "1.0.15"
+tempfile = "3.21.0"
+base64 = "0.22.1"
+tokio-stream = { workspace = true }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+
+[[test]]
+name = "optimization-live"
+path = "tests/live_tests.rs"
+required-features = ["e2e_tests"]
+
+[[test]]
+name = "optimization-mock"
+path = "tests/mock_tests.rs"
+required-features = ["e2e_tests"]
+
+[[test]]
+name = "e2e_dicl"
+path = "tests/e2e/dicl.rs"
+required-features = ["e2e_tests"]
