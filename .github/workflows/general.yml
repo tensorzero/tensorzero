@@ -261,7 +261,9 @@ jobs:
       - name: Install Python 3.10
         run: uv python install 3.10
       - name: Build Rust
-        run: PYO3_PYTHON=python3.10 cargo build --workspace
+        run: cargo build --workspace
+        env:
+          PYO3_PYTHON: "python3.10"
 
   lint-rust:
     permissions:
