@@ -256,6 +256,10 @@ jobs:
         with:
           cache-provider: "buildjet"
           save-if: ${{ github.event_name == 'merge_group' }}
+      - name: Install uv
+        run: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+      - name: Install Python 3.10
+        run: uv python install 3.10
       - name: Build Rust
         run: cargo build --workspace
 
