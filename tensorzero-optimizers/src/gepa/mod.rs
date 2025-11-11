@@ -3,7 +3,12 @@
 //! This module provides the trait implementations for the GEPA optimizer.
 //! The actual GEPA algorithm logic is in the `lib` submodule.
 
+mod analyze;
+mod evaluate;
 mod lib;
+mod mutate;
+mod pareto;
+mod sample;
 
 use async_trait::async_trait;
 
