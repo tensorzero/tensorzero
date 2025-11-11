@@ -37,7 +37,8 @@ jobs:
         kubectl get pods -A
         kubectl create namespace tensorzero
         helm upgrade --install tensorzero .  -f values.yaml -f helm-ci-overrides.yaml -n tensorzero
-        kubectl port-forward service/tensorzero-gateway -n tensorzero 3000:3000 &
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=tensorzero -n tensorzero --timeout=60s
+        kubectl port-forward service/tensorzero-gateway -n tensorzero 3000:3000
     
     - name: Ping the gateway
       run: |
