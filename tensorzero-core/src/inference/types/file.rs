@@ -738,28 +738,34 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
 /// to provide to OpenAI (which doesn't accept mime types for file input)
 pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, Error> {
     Ok(match mime_type {
-        _ if mime_type == &mime::IMAGE_JPEG => Some("jpg"),
-        _ if mime_type == &mime::IMAGE_PNG => Some("png"),
-        _ if mime_type == &mime::IMAGE_GIF => Some("gif"),
-        _ if mime_type == &mime::APPLICATION_PDF => Some("pdf"),
+        _ if mime_type == "image/jpeg" => Some("jpg"),
+        _ if mime_type == "image/png" => Some("png"),
+        _ if mime_type == "image/gif" => Some("gif"),
+        _ if mime_type == "application/pdf" => Some("pdf"),
         _ if mime_type == "image/webp" => Some("webp"),
         _ if mime_type == "text/plain" => Some("txt"),
         _ if mime_type == "audio/midi" => Some("mid"),
-        _ if mime_type == "audio/mpeg" => Some("mp3"),
-        _ if mime_type == "audio/m4a" => Some("m4a"),
+        _ if mime_type == "audio/mpeg" || mime_type == "audio/mp3" => Some("mp3"),
+        _ if mime_type == "audio/m4a" || mime_type == "audio/mp4" => Some("m4a"),
         _ if mime_type == "audio/ogg" => Some("ogg"),
-        _ if mime_type == "audio/x-flac" => Some("flac"),
-        _ if mime_type == "audio/x-wav" => Some("wav"),
+        _ if mime_type == "audio/x-flac" || mime_type == "audio/flac" => Some("flac"),
+        _ if mime_type == "audio/x-wav"
+            || mime_type == "audio/wav"
+            || mime_type == "audio/wave" =>
+        {
+            Some("wav")
+        }
         _ if mime_type == "audio/amr" => Some("amr"),
-        _ if mime_type == "audio/aac" => Some("aac"),
-        _ if mime_type == "audio/x-aiff" => Some("aiff"),
+        _ if mime_type == "audio/aac" || mime_type == "audio/x-aac" => Some("aac"),
+        _ if mime_type == "audio/x-aiff" || mime_type == "audio/aiff" => Some("aiff"),
         _ if mime_type == "audio/x-dsf" => Some("dsf"),
         _ if mime_type == "audio/x-ape" => Some("ape"),
+        _ if mime_type == "audio/webm" => Some("webm"),
         _ => {
             let guess = mime_guess::get_mime_extensions_str(mime_type.as_ref())
                 .and_then(|types| types.last());
             if guess.is_some() {
-                tracing::warn!("Guessed file extension {guess:?} for mime-type {mime_type} - this may not be correct");
+                tracing::warn!("Guessed file extension `{guess:?}` for MIME type `{mime_type}`. This may not be correct.");
             }
             guess.copied()
         }
@@ -767,33 +773,19 @@ pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, E
 }
 
 /// Converts audio MIME types to OpenAI's audio format strings.
-/// Returns an error if the MIME type is audio but not in the supported list.
-pub fn mime_type_to_audio_format(mime_type: &MediaType) -> Result<String, Error> {
+pub fn mime_type_to_audio_format(mime_type: &MediaType) -> Result<&'static str, Error> {
     if mime_type.type_() != mime::AUDIO {
         return Err(Error::new(ErrorDetails::InvalidMessage {
             message: format!("Expected audio MIME type, got: {mime_type}"),
         }));
     }
 
-    Ok(match mime_type.as_ref() {
-        "audio/midi" => "mid".to_string(),
-        "audio/mpeg" => "mp3".to_string(),
-        "audio/m4a" => "m4a".to_string(),
-        "audio/ogg" => "ogg".to_string(),
-        "audio/x-flac" => "flac".to_string(),
-        "audio/x-wav" => "wav".to_string(),
-        "audio/amr" => "amr".to_string(),
-        "audio/aac" => "aac".to_string(),
-        "audio/x-aiff" => "aiff".to_string(),
-        "audio/x-dsf" => "dsf".to_string(),
-        "audio/x-ape" => "ape".to_string(),
-        _ => {
-            return Err(Error::new(ErrorDetails::InvalidMessage {
-                message: format!(
-                    "Unsupported audio MIME type: {mime_type}. Supported types: audio/midi, audio/mpeg, audio/m4a, audio/ogg, audio/x-flac, audio/x-wav, audio/amr, audio/aac, audio/x-aiff, audio/x-dsf, audio/x-ape. Please open a feature request if your provider supports another audio format: https://github.com/tensorzero/tensorzero/discussions/categories/feature-requests"
-                ),
-            }));
-        }
+    mime_type_to_ext(mime_type)?.ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidMessage {
+            message: format!(
+                "Unsupported audio MIME type: {mime_type}. Supported types: audio/midi, audio/mpeg, audio/m4a, audio/ogg, audio/x-flac, audio/x-wav, audio/amr, audio/aac, audio/x-aiff, audio/x-dsf, audio/x-ape. Please open a feature request if your provider supports another audio format: https://github.com/tensorzero/tensorzero/discussions/categories/feature-requests"
+            ),
+        })
     })
 }
 

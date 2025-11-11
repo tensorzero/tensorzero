@@ -1706,7 +1706,7 @@ pub(super) async fn prepare_file_message(
                 Ok(OpenAIContentBlock::InputAudio {
                     input_audio: OpenAIInputAudio {
                         data: Cow::Owned(data.clone()),
-                        format: Cow::Owned(format),
+                        format: Cow::Owned(format.to_string()),
                     },
                 })
             } else {

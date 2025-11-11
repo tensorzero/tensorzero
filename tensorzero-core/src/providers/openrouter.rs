@@ -788,7 +788,7 @@ async fn tensorzero_to_openrouter_user_messages(
                     user_content_blocks.push(OpenRouterContentBlock::InputAudio {
                         input_audio: OpenRouterInputAudio {
                             data: Cow::Owned(data.clone()),
-                            format: Cow::Owned(format),
+                            format: Cow::Owned(format.to_string()),
                         },
                     });
                 } else {
@@ -881,7 +881,7 @@ async fn tensorzero_to_openrouter_assistant_messages(
                     assistant_content_blocks.push(OpenRouterContentBlock::InputAudio {
                         input_audio: OpenRouterInputAudio {
                             data: Cow::Owned(data.clone()),
-                            format: Cow::Owned(format),
+                            format: Cow::Owned(format.to_string()),
                         },
                     });
                 } else {
