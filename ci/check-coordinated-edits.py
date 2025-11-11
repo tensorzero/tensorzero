@@ -55,7 +55,7 @@ def get_changed_line_ranges(file_path: str, base_ref: str, head_ref: str) -> Lis
             # Match both old and new sides: @@ -old_start,old_count +new_start,new_count @@
             match = re.match(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", line)
             if match:
-                old_start = int(match.group(1))
+                _old_start = int(match.group(1))
                 old_count = int(match.group(2)) if match.group(2) else 1
                 new_start = int(match.group(3))
                 new_count = int(match.group(4)) if match.group(4) else 1
