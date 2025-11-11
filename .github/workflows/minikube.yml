@@ -27,7 +27,7 @@ jobs:
             repository: tensorzero/gateway
             # We load this from the build-gateway-container job
             tag: sha-${{ github.sha }}
-            pullPolicy: IfNotPresent
+            pullPolicy: pullPolicy
         EOF
         sed -i 's/^        //' helm-ci-overrides.yaml
 
@@ -48,3 +48,8 @@ jobs:
       if: always()
       run: |
         kubectl get pods -A
+
+    - name: Print kubectl logs
+      if: always()
+      run: |
+        kubectl logs -n tensorzero --timestamps=true --all-pod=true --all-containers=true
