@@ -384,8 +384,9 @@ impl ClientBuilder {
                 timeout,
             } => {
                 // Validate embedded gateway configuration
-                // Note: FromComponents doesn't have allow_batch_writes parameter,
-                // so we pass false to always validate batch writes config
+                // Note: FromComponents doesn't have an allow_batch_writes parameter,
+                // so we pass false to enforce that batch writes must be explicitly forced
+                // via __force_allow_embedded_batch_writes if enabled.
                 Self::validate_embedded_gateway_config(config, false)?;
 
                 // Construct Client directly from provided components
