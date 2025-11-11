@@ -238,9 +238,9 @@ test("should create, display, delete, and persist API key states", async ({
   await expect(refreshedActiveButton).not.toBeDisabled();
 });
 
-test("should paginate API keys with custom page size", async ({ page }) => {
-  // 1. Navigate to API Keys page with small pageSize
-  await page.goto("/api-keys?pageSize=2");
+test("should paginate API keys with custom limit", async ({ page }) => {
+  // 1. Navigate to API Keys page with small limit
+  await page.goto("/api-keys?limit=2");
   await page.waitForLoadState("networkidle");
 
   // Verify page loaded
@@ -248,7 +248,7 @@ test("should paginate API keys with custom page size", async ({ page }) => {
     page.getByRole("heading", { name: "TensorZero API Keys" }),
   ).toBeVisible();
 
-  // 2. Create 5 API keys (more than pageSize)
+  // 2. Create 5 API keys (more than limit)
   for (let i = 0; i < 5; i++) {
     await page.getByRole("button", { name: "Generate API Key" }).click();
     await expect(
@@ -272,7 +272,7 @@ test("should paginate API keys with custom page size", async ({ page }) => {
     await page.waitForLoadState("networkidle");
   }
 
-  // 3. Verify only 2 keys are visible on first page (pageSize=2)
+  // 3. Verify only 2 keys are visible on first page (limit=2)
   const tableRows = page.locator("tbody tr");
   await expect(tableRows).toHaveCount(2);
 
@@ -296,7 +296,7 @@ test("should paginate API keys with custom page size", async ({ page }) => {
 
   // 7. Verify URL changed (offset should be 2)
   expect(page.url()).toContain("offset=2");
-  expect(page.url()).toContain("pageSize=2");
+  expect(page.url()).toContain("limit=2");
 
   // 8. Verify still showing 2 rows on page 2
   await expect(tableRows).toHaveCount(2);

@@ -130,7 +130,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         params: &GetDatasetRowsParams,
     ) -> Result<Vec<DatasetDetailRow>, Error> {
         let dataset_name = &params.dataset_name;
-        let limit = params.page_size;
+        let limit = params.limit;
 
         // Ensure offset is not negative
         let offset = std::cmp::max(0, params.offset);
@@ -1823,7 +1823,7 @@ mod tests {
 
         let params = GetDatasetRowsParams {
             dataset_name: "test_dataset".to_string(),
-            page_size: 10,
+            limit: 10,
             offset: 20,
         };
 

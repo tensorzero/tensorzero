@@ -48,10 +48,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const afterInference = url.searchParams.get("afterInference");
   const beforeFeedback = url.searchParams.get("beforeFeedback");
   const afterFeedback = url.searchParams.get("afterFeedback");
-  const pageSize = Number(url.searchParams.get("pageSize")) || 10;
+  const limit = Number(url.searchParams.get("limit")) || 10;
   const newFeedbackId = url.searchParams.get("newFeedbackId");
-  if (pageSize > 100) {
-    throw data("Page size cannot exceed 100", { status: 400 });
+  if (limit > 100) {
+    throw data("Limit cannot exceed 100", { status: 400 });
   }
 
   const dbClient = await getNativeDatabaseClient();
@@ -60,12 +60,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // update the feedback table as it is eventually consistent.
   // In this case, we poll for the feedback item until it is found but time out and log a warning.
   const feedbackDataPromise = newFeedbackId
-    ? pollForFeedbackItem(episode_id, newFeedbackId, pageSize)
+    ? pollForFeedbackItem(episode_id, newFeedbackId, limit)
     : dbClient.queryFeedbackByTargetId({
         target_id: episode_id,
         before: beforeFeedback || undefined,
         after: afterFeedback || undefined,
-        page_size: pageSize,
+        limit,
       });
 
   const [
@@ -81,7 +81,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       episode_id,
       before: beforeInference ?? undefined,
       after: afterInference ?? undefined,
-      page_size: pageSize,
+      limit,
     }),
     queryInferenceTableBoundsByEpisodeId({
       episode_id,

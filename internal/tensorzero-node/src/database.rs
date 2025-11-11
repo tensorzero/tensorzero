@@ -54,7 +54,7 @@ impl DatabaseClient {
             query_episode_table,
             params,
             QueryEpisodeTableParams {
-                page_size,
+                limit,
                 before,
                 after
             }
@@ -120,7 +120,7 @@ impl DatabaseClient {
                 target_id,
                 before,
                 after,
-                page_size
+                limit
             }
         )
     }
@@ -194,7 +194,7 @@ impl DatabaseClient {
                 inference_id,
                 before,
                 after,
-                page_size
+                limit
             }
         )
     }
@@ -239,7 +239,7 @@ struct GetModelLatencyQuantilesParams {
 #[derive(Deserialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 struct QueryEpisodeTableParams {
-    pub page_size: u32,
+    pub limit: u32,
     #[ts(optional)]
     pub before: Option<Uuid>,
     #[ts(optional)]
@@ -262,7 +262,7 @@ struct QueryFeedbackByTargetIdParams {
     target_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
-    page_size: Option<u32>,
+    limit: Option<u32>,
 }
 
 #[derive(Deserialize, ts_rs::TS)]
@@ -271,7 +271,7 @@ struct QueryDemonstrationFeedbackByInferenceIdParams {
     inference_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
-    page_size: Option<u32>,
+    limit: Option<u32>,
 }
 
 #[derive(Deserialize, ts_rs::TS)]

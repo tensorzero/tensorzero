@@ -105,7 +105,7 @@ test("countInferencesForVariant returns correct counts", async () => {
 
 test("queryInferenceTable", async () => {
   const inferences = await queryInferenceTable({
-    page_size: 10,
+    limit: 10,
   });
   expect(inferences.length).toBe(10);
 
@@ -116,7 +116,7 @@ test("queryInferenceTable", async () => {
 
   const inferences2 = await queryInferenceTable({
     before: inferences[inferences.length - 1].id,
-    page_size: 10,
+    limit: 10,
   });
   expect(inferences2.length).toBe(10);
 });
@@ -125,20 +125,20 @@ test(
   "queryInferenceTable pagination samples front and near-end pages correctly",
   { timeout: 10_000 },
   async () => {
-    const PAGE_SIZE = 100;
+    const LIMIT = 100;
 
     // --- Front of the table (most recent entries) ---
-    const firstPage = await queryInferenceTable({ page_size: PAGE_SIZE });
-    expect(firstPage.length).toBe(PAGE_SIZE);
+    const firstPage = await queryInferenceTable({ limit: LIMIT });
+    expect(firstPage.length).toBe(LIMIT);
     for (let i = 1; i < firstPage.length; i++) {
       expect(firstPage[i - 1].id > firstPage[i].id).toBe(true);
     }
 
     const secondPage = await queryInferenceTable({
       before: firstPage[firstPage.length - 1].id,
-      page_size: PAGE_SIZE,
+      limit: LIMIT,
     });
-    expect(secondPage.length).toBe(PAGE_SIZE);
+    expect(secondPage.length).toBe(LIMIT);
     for (let i = 1; i < secondPage.length; i++) {
       expect(secondPage[i - 1].id > secondPage[i].id).toBe(true);
     }
@@ -150,7 +150,7 @@ test(
 
     const endPage1 = await queryInferenceTable({
       before: lastID,
-      page_size: PAGE_SIZE,
+      limit: LIMIT,
     });
     expect(endPage1.length).toBeGreaterThan(0);
     for (let i = 1; i < endPage1.length; i++) {
@@ -159,7 +159,7 @@ test(
 
     const endPage2 = await queryInferenceTable({
       before: endPage1[endPage1.length - 1].id,
-      page_size: PAGE_SIZE,
+      limit: LIMIT,
     });
     // this may be empty if there are no more older entries
     expect(endPage2.length).toBeGreaterThanOrEqual(0);
@@ -170,9 +170,9 @@ test(
     // Try to grab the last page by after
     const lastPageByAfter = await queryInferenceTable({
       after: endPage1[endPage1.length - 1].id,
-      page_size: PAGE_SIZE,
+      limit: LIMIT,
     });
-    expect(lastPageByAfter.length).toBe(PAGE_SIZE);
+    expect(lastPageByAfter.length).toBe(LIMIT);
     for (let i = 1; i < lastPageByAfter.length; i++) {
       expect(lastPageByAfter[i - 1].id > lastPageByAfter[i].id).toBe(true);
     }
@@ -180,7 +180,7 @@ test(
 );
 
 test("queryInferenceTable pages through results correctly using after with inference ID", async () => {
-  const PAGE_SIZE = 20;
+  const LIMIT = 20;
   // Get a limited sample of inferences instead of the full table
   const sampleSize = 100;
 
@@ -192,7 +192,7 @@ test("queryInferenceTable pages through results correctly using after with infer
   // Only page through our sample size
   while (results.length < sampleSize) {
     const page = await queryInferenceTable({
-      page_size: PAGE_SIZE,
+      limit: LIMIT,
       after,
     });
     if (page.length === 0) break;
@@ -206,7 +206,7 @@ test("queryInferenceTable pages through results correctly using after with infer
     after = page[page.length - 1].id;
     pageCount++;
 
-    if (page.length < PAGE_SIZE) break;
+    if (page.length < LIMIT) break;
 
     // Safety check to avoid infinite loops
     if (pageCount > 10) break;
@@ -221,7 +221,7 @@ test("queryInferenceTable after future timestamp is empty", async () => {
   const futureUUID = "ffffffff-ffff-7fff-ffff-ffffffffffff";
   const inferences = await queryInferenceTable({
     after: futureUUID,
-    page_size: 10,
+    limit: 10,
   });
   expect(inferences.length).toBe(0);
 });
@@ -231,22 +231,22 @@ test("queryInferenceTable before past timestamp is empty", async () => {
   const pastUUID = "00000000-0000-7000-0000-000000000000";
   const inferences = await queryInferenceTable({
     before: pastUUID,
-    page_size: 10,
+    limit: 10,
   });
   expect(inferences.length).toBe(0);
 });
 
 test("queryInferenceTableByEpisodeId pages through initial and final pages correctly using before with episode_id", async () => {
-  const PAGE_SIZE = 20;
+  const LIMIT = 20;
   const episodeId = "01942e26-618b-7b80-b492-34bed9f6d872";
 
   // First page
   const firstPage = await queryInferenceTableByEpisodeId({
-    page_size: PAGE_SIZE,
+    limit: LIMIT,
     episode_id: episodeId,
   });
-  // Should be exactly PAGE_SIZE
-  expect(firstPage.length).toBe(PAGE_SIZE);
+  // Should be exactly LIMIT
+  expect(firstPage.length).toBe(LIMIT);
   // IDs in descending order
   for (let i = 1; i < firstPage.length; i++) {
     expect(firstPage[i - 1].id > firstPage[i].id).toBe(true);
@@ -255,11 +255,11 @@ test("queryInferenceTableByEpisodeId pages through initial and final pages corre
   // Next (and in this case final) page
   const lastPage = await queryInferenceTableByEpisodeId({
     before: firstPage[firstPage.length - 1].id,
-    page_size: PAGE_SIZE,
+    limit: LIMIT,
     episode_id: episodeId,
   });
-  // Should be smaller or equal to PAGE_SIZE (here 15)
-  expect(lastPage.length).toBeLessThanOrEqual(PAGE_SIZE);
+  // Should be smaller or equal to LIMIT (here 15)
+  expect(lastPage.length).toBeLessThanOrEqual(LIMIT);
   // IDs in descending order
   for (let i = 1; i < lastPage.length; i++) {
     expect(lastPage[i - 1].id > lastPage[i].id).toBe(true);
@@ -270,17 +270,17 @@ test("queryInferenceTableByEpisodeId pages through initial and final pages corre
 });
 
 test("queryInferenceTableByEpisodeId pages through a sample of results correctly using after with episode_id", async () => {
-  const PAGE_SIZE = 20;
+  const LIMIT = 20;
   const episodeId = "01942e26-469a-7553-af00-cb0495dc7bb5";
 
   // Get the first page
   const firstPage = await queryInferenceTableByEpisodeId({
-    page_size: PAGE_SIZE,
+    limit: LIMIT,
     episode_id: episodeId,
   });
 
   // Verify first page properties
-  expect(firstPage.length).toBe(PAGE_SIZE);
+  expect(firstPage.length).toBe(LIMIT);
   for (let i = 1; i < firstPage.length; i++) {
     expect(firstPage[i - 1].id > firstPage[i].id).toBe(true);
   }
@@ -288,12 +288,12 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
   // Get the second page using the last ID of the first page
   const secondPage = await queryInferenceTableByEpisodeId({
     before: firstPage[firstPage.length - 1].id,
-    page_size: PAGE_SIZE,
+    limit: LIMIT,
     episode_id: episodeId,
   });
 
   // Verify second page properties
-  expect(secondPage.length).toBe(PAGE_SIZE);
+  expect(secondPage.length).toBe(LIMIT);
   for (let i = 1; i < secondPage.length; i++) {
     expect(secondPage[i - 1].id > secondPage[i].id).toBe(true);
   }
@@ -302,13 +302,13 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
   // Get a page starting after the first item of the second page
   const forwardPage = await queryInferenceTableByEpisodeId({
     after: secondPage[0].id,
-    page_size: PAGE_SIZE,
+    limit: LIMIT,
     episode_id: episodeId,
   });
 
   // Verify forward paging works
   expect(forwardPage.length).toBeGreaterThan(0);
-  expect(forwardPage.length).toBeLessThanOrEqual(PAGE_SIZE);
+  expect(forwardPage.length).toBeLessThanOrEqual(LIMIT);
 
   // Verify IDs are in descending order
   for (let i = 1; i < forwardPage.length; i++) {
@@ -320,19 +320,19 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
   let nextPage = secondPage;
 
   // Just get a couple more pages to avoid too many queries
-  for (let i = 0; i < 2 && nextPage.length === PAGE_SIZE; i++) {
+  for (let i = 0; i < 2 && nextPage.length === LIMIT; i++) {
     lastPage = nextPage;
     nextPage = await queryInferenceTableByEpisodeId({
       before: lastPage[lastPage.length - 1].id,
-      page_size: PAGE_SIZE,
+      limit: LIMIT,
       episode_id: episodeId,
     });
   }
 
   // Verify we can get to the end if needed
-  if (nextPage.length < PAGE_SIZE) {
+  if (nextPage.length < LIMIT) {
     // We reached the last page
-    expect(nextPage.length).toBeLessThan(PAGE_SIZE);
+    expect(nextPage.length).toBeLessThan(LIMIT);
   }
 
   // Verify total count is as expected (42 from previous test)
@@ -366,7 +366,7 @@ test("queryInferenceTableBounds with invalid episode_id", async () => {
 test("queryInferenceTableByFunctionName", async () => {
   const inferences = await queryInferenceTableByFunctionName({
     function_name: "extract_entities",
-    page_size: 10,
+    limit: 10,
   });
   expect(inferences.length).toBe(10);
 
@@ -379,7 +379,7 @@ test("queryInferenceTableByFunctionName", async () => {
   const inferences2 = await queryInferenceTableByFunctionName({
     function_name: "extract_entities",
     before: inferences[inferences.length - 1].id,
-    page_size: 10,
+    limit: 10,
   });
   expect(inferences2.length).toBe(10);
 
@@ -387,7 +387,7 @@ test("queryInferenceTableByFunctionName", async () => {
   const inferences3 = await queryInferenceTableByFunctionName({
     function_name: "extract_entities",
     after: inferences[0].id,
-    page_size: 10,
+    limit: 10,
   });
   expect(inferences3.length).toBe(0);
 });
@@ -404,7 +404,7 @@ test("queryInferenceTableByVariantName", async () => {
   const inferences = await queryInferenceTableByVariantName({
     function_name: "extract_entities",
     variant_name: "gpt4o_initial_prompt",
-    page_size: 10,
+    limit: 10,
   });
   expect(inferences.length).toBe(10);
 
@@ -418,7 +418,7 @@ test("queryInferenceTableByVariantName", async () => {
     function_name: "extract_entities",
     variant_name: "gpt4o_initial_prompt",
     before: inferences[inferences.length - 1].id,
-    page_size: 10,
+    limit: 10,
   });
   expect(inferences2.length).toBe(10);
 
@@ -427,7 +427,7 @@ test("queryInferenceTableByVariantName", async () => {
     function_name: "extract_entities",
     variant_name: "gpt4o_initial_prompt",
     after: inferences[0].id,
-    page_size: 10,
+    limit: 10,
   });
   expect(inferences3.length).toBe(0);
 });
