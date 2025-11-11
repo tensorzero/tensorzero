@@ -1074,18 +1074,18 @@ impl TensorZeroGateway {
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
-                        variant_name=String::new(),
+                        variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
                         dynamic_variant_config=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name='', concurrency=1, inference_cache='on', dynamic_variant_config=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None)"
     )]
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
         evaluation_name: String,
         dataset_name: String,
-        variant_name: String,
+        variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
         dynamic_variant_config: Option<&Bound<'_, PyDict>>,
@@ -1114,7 +1114,7 @@ impl TensorZeroGateway {
             };
 
         // Validate that both variant_name and dynamic_variant_config are not provided
-        if dynamic_variant_config.is_some() && !variant_name.is_empty() {
+        if dynamic_variant_config.is_some() && variant_name.is_some() {
             return Err(PyValueError::new_err(
                 "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
                 When using a dynamic variant, provide only 'dynamic_variant_config'.",
@@ -1130,7 +1130,7 @@ impl TensorZeroGateway {
             dataset_name,
             variant: match dynamic_variant_config {
                 Some(info) => EvaluationVariant::Info(Box::new(info)),
-                None => EvaluationVariant::Name(variant_name),
+                None => EvaluationVariant::Name(variant_name.unwrap_or_default()),
             },
             concurrency,
             inference_cache: inference_cache_enum,
@@ -1951,18 +1951,18 @@ impl AsyncTensorZeroGateway {
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
-                        variant_name=String::new(),
+                        variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
                         dynamic_variant_config=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name='', concurrency=1, inference_cache='on', dynamic_variant_config=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None)"
     )]
     fn experimental_run_evaluation<'py>(
         this: PyRef<'py, Self>,
         evaluation_name: String,
         dataset_name: String,
-        variant_name: String,
+        variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
         dynamic_variant_config: Option<&Bound<'py, PyDict>>,
@@ -1984,7 +1984,7 @@ impl AsyncTensorZeroGateway {
             };
 
         // Validate that both variant_name and dynamic_variant_config are not provided
-        if dynamic_variant_config.is_some() && !variant_name.is_empty() {
+        if dynamic_variant_config.is_some() && variant_name.is_some() {
             return Err(PyValueError::new_err(
                 "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
                 When using a dynamic variant, provide only 'dynamic_variant_config'.",
@@ -2008,7 +2008,7 @@ impl AsyncTensorZeroGateway {
                 dataset_name,
                 variant: match dynamic_variant_config {
                     Some(info) => EvaluationVariant::Info(Box::new(info)),
-                    None => EvaluationVariant::Name(variant_name),
+                    None => EvaluationVariant::Name(variant_name.unwrap_or_default()),
                 },
                 concurrency,
                 inference_cache: inference_cache_enum,

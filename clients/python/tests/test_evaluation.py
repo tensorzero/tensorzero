@@ -266,7 +266,6 @@ def test_sync_run_evaluation_with_dynamic_variant(
     job = embedded_sync_client.experimental_run_evaluation(
         evaluation_name="haiku_without_outputs",
         dataset_name=evaluation_datasets["good-haikus-no-output"],
-        variant_name="",  # Empty string when using dynamic variant
         dynamic_variant_config=dynamic_variant,
         concurrency=10,
         inference_cache="off",
@@ -337,7 +336,6 @@ async def test_async_run_evaluation_with_dynamic_variant(
     job = await embedded_async_client.experimental_run_evaluation(
         evaluation_name="entity_extraction",
         dataset_name=evaluation_datasets["extract_entities_0.8"],
-        variant_name="",  # Empty string when using dynamic variant
         dynamic_variant_config=dynamic_variant,
         concurrency=10,
         inference_cache="off",
