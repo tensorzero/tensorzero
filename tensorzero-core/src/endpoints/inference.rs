@@ -7,6 +7,7 @@ use futures::stream::Stream;
 use futures::FutureExt;
 use futures_core::FusedStream;
 use metrics::counter;
+use schemars::JsonSchema;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,6 +16,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
+use tensorzero_derive::export_schema;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
 use tokio_util::task::TaskTracker;
@@ -1046,15 +1048,19 @@ async fn write_inference(
 
 /// InferenceResponse and InferenceResultChunk determine what gets serialized and sent to the client
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(untagged, rename_all = "snake_case")]
+#[export_schema]
 pub enum InferenceResponse {
+    #[schemars(title = "InferenceResponseChat")]
     Chat(ChatInferenceResponse),
+    #[schemars(title = "InferenceResponseJson")]
     Json(JsonInferenceResponse),
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 pub struct ChatInferenceResponse {
     pub inference_id: Uuid,
@@ -1068,7 +1074,8 @@ pub struct ChatInferenceResponse {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 pub struct JsonInferenceResponse {
     pub inference_id: Uuid,

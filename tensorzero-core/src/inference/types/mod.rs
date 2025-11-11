@@ -1310,7 +1310,8 @@ impl ModelInput {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum FinishReason {
@@ -1353,8 +1354,9 @@ impl ProviderInferenceResponse {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 pub struct Usage {
     pub input_tokens: u32,
     pub output_tokens: u32,

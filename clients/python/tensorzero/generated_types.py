@@ -199,6 +199,15 @@ ProviderToolScope = ProviderToolScopeModelProvider | None
 
 
 @dataclass(kw_only=True)
+class Usage:
+    input_tokens: int
+    output_tokens: int
+
+
+FinishReason = Literal["stop", "stop_sequence", "length", "tool_call", "content_filter", "unknown"]
+
+
+@dataclass(kw_only=True)
 class InputMessageContentText:
     text: str
     type: Literal["text"] = "text"
@@ -332,6 +341,17 @@ InferenceOutputSource = str
 
 
 @dataclass(kw_only=True)
+class JsonInferenceResponse:
+    inference_id: str
+    episode_id: str
+    variant_name: str
+    output: JsonInferenceOutput
+    usage: Usage
+    original_response: str | None = None
+    finish_reason: FinishReason | None = None
+
+
+@dataclass(kw_only=True)
 class TagDatapointFilter(TagFilter):
     type: Literal["tag"] = "tag"
 
@@ -419,6 +439,12 @@ class GetInferencesRequest:
     Source of the inference output.
     Determines whether to return the original inference output or demonstration feedback
     (manually-curated output) if available.
+    """
+    function_name: str | None = None
+    """
+    Optional function name to filter by.
+    Including this improves query performance since `function_name` is the first column
+    in the ClickHouse primary key.
     """
 
 
@@ -580,6 +606,17 @@ class InferenceFilterTime(TimeFilter):
 
 
 @dataclass(kw_only=True)
+class ChatInferenceResponse:
+    inference_id: str
+    episode_id: str
+    variant_name: str
+    content: list[ContentBlockChatOutput]
+    usage: Usage
+    original_response: str | None = None
+    finish_reason: FinishReason | None = None
+
+
+@dataclass(kw_only=True)
 class OrderBy1:
     direction: OrderDirection
     """
@@ -630,6 +667,9 @@ class DynamicToolParams:
     """
     Provider-specific tool configurations (not persisted to database)
     """
+
+
+InferenceResponse = ChatInferenceResponse | JsonInferenceResponse
 
 
 @dataclass(kw_only=True)

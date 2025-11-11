@@ -19,14 +19,11 @@ from tensorzero.generated_types import (
     InferenceFilterOr,
     InferenceFilterTag,
     InferenceFilterTime,
+    Usage,
+    FinishReason,
+    System,
     UnsetType,
 )
-
-
-@dataclass
-class Usage:
-    input_tokens: int
-    output_tokens: int
 
 
 # For type checking purposes only
@@ -171,15 +168,6 @@ class UnknownContentBlock(ContentBlock):
     type: str = "unknown"
 
 
-class FinishReason(str, Enum):
-    STOP = "stop"
-    STOP_SEQUENCE = "stop_sequence"
-    LENGTH = "length"
-    TOOL_CALL = "tool_call"
-    CONTENT_FILTER = "content_filter"
-    UNKNOWN = "unknown"
-
-
 @dataclass
 class JsonInferenceOutput:
     raw: Optional[str] = None
@@ -213,9 +201,6 @@ class Message(TypedDict):
     content: Any
 
 
-System = Union[str, Dict[str, Any]]
-
-
 class InferenceInput(TypedDict):
     messages: NotRequired[List[Message]]
     system: NotRequired[System]
@@ -234,30 +219,24 @@ InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
 
 def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
     if "content" in data and isinstance(data["content"], list):
-        finish_reason = data.get("finish_reason")
-        finish_reason_enum = FinishReason(finish_reason) if finish_reason else None
-
         return ChatInferenceResponse(
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
             content=[parse_content_block(block) for block in data["content"]],  # type: ignore
             usage=Usage(**data["usage"]),
-            finish_reason=finish_reason_enum,
+            finish_reason=data.get("finish_reason"),
             original_response=data.get("original_response"),
         )
     elif "output" in data and isinstance(data["output"], dict):
         output = cast(Dict[str, Any], data["output"])
-        finish_reason = data.get("finish_reason")
-        finish_reason_enum = FinishReason(finish_reason) if finish_reason else None
-
         return JsonInferenceResponse(
             inference_id=UUID(data["inference_id"]),
             episode_id=UUID(data["episode_id"]),
             variant_name=data["variant_name"],
             output=JsonInferenceOutput(**output),
             usage=Usage(**data["usage"]),
-            finish_reason=finish_reason_enum,
+            finish_reason=data.get("finish_reason"),
             original_response=data.get("original_response"),
         )
     else:
@@ -383,9 +362,6 @@ ExtraBody = Union[VariantExtraBody, ProviderExtraBody]
 
 
 def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
-    finish_reason = chunk.get("finish_reason")
-    finish_reason_enum = FinishReason(finish_reason) if finish_reason else None
-
     if "content" in chunk:
         return ChatChunk(
             inference_id=UUID(chunk["inference_id"]),
@@ -393,7 +369,7 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             variant_name=chunk["variant_name"],
             content=[parse_content_block_chunk(block) for block in chunk["content"]],
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
-            finish_reason=finish_reason_enum,
+            finish_reason=chunk.get("finish_reason"),
         )
     elif "raw" in chunk:
         return JsonChunk(
@@ -402,7 +378,7 @@ def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
             variant_name=chunk["variant_name"],
             raw=chunk["raw"],
             usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
-            finish_reason=finish_reason_enum,
+            finish_reason=chunk.get("finish_reason"),
         )
     else:
         raise ValueError(f"Unable to determine response type: {chunk}")
