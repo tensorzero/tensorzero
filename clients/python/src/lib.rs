@@ -541,11 +541,20 @@ impl BaseTensorZeroGateway {
 }
 
 /// Helper function to construct an EvaluationVariant from the optional variant_name and dynamic_variant_config parameters.
-/// Validates that exactly one of the two is provided and returns an appropriate error if not.
+/// Deserializes the dynamic_variant_config if provided and validates that exactly one of the two is provided.
 fn construct_evaluation_variant(
-    dynamic_variant_config: Option<UninitializedVariantInfo>,
+    py: Python<'_>,
+    dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     variant_name: Option<String>,
 ) -> PyResult<EvaluationVariant> {
+    // Deserialize dynamic_variant_config if provided
+    let dynamic_variant_config: Option<UninitializedVariantInfo> =
+        if let Some(config) = dynamic_variant_config {
+            Some(deserialize_from_pyobj(py, config)?)
+        } else {
+            None
+        };
+
     match (dynamic_variant_config, variant_name) {
         (Some(info), None) => Ok(EvaluationVariant::Info(Box::new(info))),
         (None, Some(name)) => Ok(EvaluationVariant::Name(name)),
@@ -1125,13 +1134,8 @@ impl TensorZeroGateway {
                 &inference_cache.into_pyobject(this.py())?.into_any(),
             )?;
 
-        // Deserialize dynamic_variant_config if provided
-        let dynamic_variant_config: Option<UninitializedVariantInfo> =
-            if let Some(config) = dynamic_variant_config {
-                Some(deserialize_from_pyobj(this.py(), config)?)
-            } else {
-                None
-            };
+        let variant =
+            construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
 
         let core_args = EvaluationCoreArgs {
             tensorzero_client: (*client).clone(),
@@ -1140,7 +1144,7 @@ impl TensorZeroGateway {
             evaluation_name,
             evaluation_run_id,
             dataset_name,
-            variant: construct_evaluation_variant(dynamic_variant_config, variant_name)?,
+            variant,
             concurrency,
             inference_cache: inference_cache_enum,
         };
@@ -1984,13 +1988,8 @@ impl AsyncTensorZeroGateway {
                 &inference_cache.into_pyobject(this.py())?.into_any(),
             )?;
 
-        // Deserialize dynamic_variant_config if provided
-        let dynamic_variant_config: Option<UninitializedVariantInfo> =
-            if let Some(config) = dynamic_variant_config {
-                Some(deserialize_from_pyobj(this.py(), config)?)
-            } else {
-                None
-            };
+        let variant =
+            construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             // Get app state data
@@ -2007,7 +2006,7 @@ impl AsyncTensorZeroGateway {
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,
-                variant: construct_evaluation_variant(dynamic_variant_config, variant_name)?,
+                variant,
                 concurrency,
                 inference_cache: inference_cache_enum,
             };
