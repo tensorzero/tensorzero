@@ -47,6 +47,7 @@ weight = 1
 model = "dummy::json"
 max_tokens = 100
 json_mode = "strict"
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.dummy_function]
 type = "chat"
@@ -55,6 +56,7 @@ type = "chat"
 type = "chat_completion"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 model = "dummy::good"
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.extract_entities]
 type = "json"
@@ -66,7 +68,7 @@ type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "functions/extract_entities/initial_prompt/system_template.minijinja"
 json_mode = "strict"
-retries = { num_retries = 4 }
+retries = { num_retries = 4, max_delay_s = 10 }
 temperature = 0
 
 [functions.extract_entities.variants.gpt4o_initial_prompt]
@@ -162,8 +164,6 @@ model = "openai::gpt-4o-mini-2024-07-18"
 system_template = "functions/generate_secret/baseline/system_template.minijinja"
 json_mode = "strict"
 retries = { num_retries = 4, max_delay_s = 10 }
-
-# for creativity
 temperature = 1.5
 
 [functions.ask_question]
@@ -234,25 +234,25 @@ parallel_tool_calls = false
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
 system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
-retries = { num_retries = 3, max_delay_s = 10 }
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.multi_hop_rag_agent.variants."gpt-4.1-mini"]
 type = "chat_completion"
 model = "openai::gpt-4.1-mini"
 system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
-retries = { num_retries = 3, max_delay_s = 10 }
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.multi_hop_rag_agent.variants."gemini-2.5-flash"]
 type = "chat_completion"
 model = "google_ai_studio_gemini::gemini-2.5-flash-preview-04-17"
 system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
-retries = { num_retries = 3, max_delay_s = 10 }
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.multi_hop_rag_agent.variants."claude-3.5-haiku"]
 type = "chat_completion"
 model = "anthropic::claude-3-5-haiku-20241022"
 system_template = "functions/multi_hop_rag_agent/baseline/system_template.txt"
-retries = { num_retries = 3, max_delay_s = 10 }
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.compact_context]
 type = "chat"
@@ -262,19 +262,19 @@ system_schema = "functions/compact_context/system_schema.json"
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
 system_template = "functions/compact_context/baseline/system_template.minijinja"
-retries = { num_retries = 3, max_delay_s = 10 }
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.compact_context.variants."gpt-4.1-nano"]
 type = "chat_completion"
 model = "openai::gpt-4.1-nano"
 system_template = "functions/compact_context/baseline/system_template.minijinja"
-retries = { num_retries = 3, max_delay_s = 10 }
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.compact_context.variants."gemini-2.5-flash"]
 type = "chat_completion"
 model = "google_ai_studio_gemini::gemini-2.5-flash-preview-04-17"
 system_template = "functions/compact_context/baseline/system_template.minijinja"
-retries = { num_retries = 3, max_delay_s = 10 }
+retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.judge_answer]
 type = "json"
@@ -287,7 +287,7 @@ type = "experimental_chain_of_thought"
 model = "openai::gpt-4.1-mini"
 system_template = "functions/judge_answer/gpt-4.1-mini/system_template.minijinja"
 user_template = "functions/judge_answer/gpt-4.1-mini/user_template.minijinja"
-retries = { num_retries = 3, max_delay_s = 10 }
+retries = { num_retries = 4, max_delay_s = 10 }
 json_mode = "strict"
 
 [functions.custom_template_test]
@@ -303,7 +303,7 @@ model = "gpt-4o-mini-2024-07-18"
 templates.greeting_template.path = "functions/custom_template_test/baseline/greeting_template.minijinja"
 templates.analysis_prompt.path = "functions/custom_template_test/baseline/analysis_prompt.minijinja"
 templates.fun_fact_topic.path = "functions/custom_template_test/baseline/fun_fact_topic.minijinja"
-retries = { num_retries = 3, max_delay_s = 10 }
+retries = { num_retries = 4, max_delay_s = 10 }
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   TOOLS                                    │
