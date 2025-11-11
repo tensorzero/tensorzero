@@ -11,7 +11,10 @@ use uuid::Uuid;
 
 use tensorzero_core::{
     cache::CacheEnabledMode,
-    client::{Client, ClientBuilder, ClientBuilderMode, InferenceResponse},
+    client::{
+        Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput,
+        ClientInputMessage, ClientInputMessageContent, InferenceOutput, InferenceResponse,
+    },
     config::{
         path::ResolvedTomlPath, Config, MetricConfigOptimize, UninitializedVariantConfig,
         UninitializedVariantInfo,
@@ -31,7 +34,7 @@ use tensorzero_core::{
     evaluations::EvaluationConfig,
     function::FunctionConfig,
     http::TensorzeroHttpClient,
-    inference::types::Input,
+    inference::types::{ContentBlockChatOutput, Input, Role, TextKind},
     optimization::gepa::GEPAConfig,
     stored_inference::{RenderedSample, StoredOutput},
     variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig},
@@ -72,8 +75,7 @@ pub enum AnalysisReport {
 }
 
 /// Represents an inference output paired with its analysis feedback
-#[expect(dead_code)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct InferenceWithAnalysis {
     pub inference_output: InferenceResponse,
     pub analysis: AnalysisReport,
@@ -211,9 +213,6 @@ fn validate_gepa_config<'a>(
             })
         })?;
 
-    // Validate function configuration for GEPA
-    validate_function_config(&config.function_name, function_config)?;
-
     // Check that the evaluation exists
     if !tensorzero_config
         .metrics
@@ -228,22 +227,6 @@ fn validate_gepa_config<'a>(
     }
 
     Ok(function_config)
-}
-
-/// Validates that the function configuration is compatible with GEPA
-fn validate_function_config(
-    function_name: &str,
-    function_config: &FunctionConfig,
-) -> Result<(), Error> {
-    // GEPA currently only supports Chat functions (not JSON functions)
-    match function_config {
-        FunctionConfig::Chat(_) => Ok(()),
-        FunctionConfig::Json(_) => Err(Error::new(ErrorDetails::Config {
-            message: format!(
-                "function '{function_name}' is a JSON function, but GEPA only supports Chat functions"
-            ),
-        })),
-    }
 }
 
 /// Validates that examples are suitable for GEPA optimization
@@ -1171,6 +1154,154 @@ async fn create_evaluation_dataset(
     Ok(response.ids)
 }
 
+/// Build the input JSON for the analyze function
+fn build_analyze_input(
+    eval_info: &EvaluationInfo,
+    function_config: &FunctionConfig,
+) -> Result<serde_json::Value, Error> {
+    // Extract templates from the response's variant
+    // For now, we'll use placeholder values - in production, we'd need to extract from the actual variant
+    let system_template = ""; // TODO: Extract from variant
+    let user_template: Option<String> = None;
+    let assistant_template: Option<String> = None;
+
+    // Extract schemas from function config
+    let system_schema = function_config.system_schema().map(|s| s.value.clone());
+    let user_schema = function_config.user_schema().map(|s| s.value.clone());
+    let assistant_schema = function_config.assistant_schema().map(|s| s.value.clone());
+
+    // Extract output schema for JSON functions
+    let output_schema = match function_config {
+        FunctionConfig::Json(params) => Some(params.output_schema.value.clone()),
+        FunctionConfig::Chat(_) => None,
+    };
+
+    // Extract tools for Chat functions
+    let tools = match function_config {
+        FunctionConfig::Chat(params) => {
+            if params.tools.is_empty() {
+                None
+            } else {
+                Some(serde_json::json!(params.tools))
+            }
+        }
+        FunctionConfig::Json(_) => None,
+    };
+
+    // Serialize the inference output
+    let output = serde_json::to_value(&eval_info.response).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize inference response: {e}"),
+        })
+    })?;
+
+    // Get tags from datapoint (if any)
+    let tags = match &eval_info.datapoint {
+        tensorzero_core::endpoints::datasets::StoredDatapoint::Chat(dp) => dp.tags.clone(),
+        tensorzero_core::endpoints::datasets::StoredDatapoint::Json(dp) => dp.tags.clone(),
+    };
+
+    // Get function name from datapoint
+    let function_name = match &eval_info.datapoint {
+        tensorzero_core::endpoints::datasets::StoredDatapoint::Chat(dp) => &dp.function_name,
+        tensorzero_core::endpoints::datasets::StoredDatapoint::Json(dp) => &dp.function_name,
+    };
+
+    // Build the input object
+    let input = serde_json::json!({
+        "function_name": function_name,
+        "model": eval_info.response.variant_name(),
+        "system_template": system_template,
+        "user_template": user_template,
+        "assistant_template": assistant_template,
+        "system_schema": system_schema,
+        "user_schema": user_schema,
+        "assistant_schema": assistant_schema,
+        "output_schema": output_schema,
+        "tools": tools,
+        "tags": tags,
+        "input": eval_info.datapoint.input(),
+        "output": output,
+    });
+
+    Ok(input)
+}
+
+/// Parse the analysis response and extract the AnalysisReport
+fn parse_analysis_response(response: &InferenceResponse) -> Result<AnalysisReport, Error> {
+    let chat_response = match response {
+        InferenceResponse::Chat(chat_response) => chat_response,
+        InferenceResponse::Json(_) => {
+            return Err(Error::new(ErrorDetails::Inference {
+                message: "Expected Chat response from analyze function, got Json".to_string(),
+            }))
+        }
+    };
+
+    // Look for tool calls in the content blocks
+    for block in &chat_response.content {
+        if let ContentBlockChatOutput::ToolCall(tool_call) = block {
+            // Parse the tool call into an AnalysisReport
+            let args = tool_call.arguments.as_ref().ok_or_else(|| {
+                Error::new(ErrorDetails::Inference {
+                    message: "Tool call arguments not validated".to_string(),
+                })
+            })?;
+
+            return match tool_call.name.as_deref() {
+                Some("report_error") | Some("tensorzero::optimization::gepa::report_error") => {
+                    Ok(serde_json::from_value(args.clone()).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!("Failed to parse report_error arguments: {e}"),
+                        })
+                    })?)
+                }
+                Some("report_improvement")
+                | Some("tensorzero::optimization::gepa::report_improvement") => {
+                    Ok(serde_json::from_value(args.clone()).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!("Failed to parse report_improvement arguments: {e}"),
+                        })
+                    })?)
+                }
+                Some("report_optimal") | Some("tensorzero::optimization::gepa::report_optimal") => {
+                    Ok(serde_json::from_value(args.clone()).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!("Failed to parse report_optimal arguments: {e}"),
+                        })
+                    })?)
+                }
+                _ => Err(Error::new(ErrorDetails::Inference {
+                    message: format!("Unknown analysis tool: {:?}", tool_call.name),
+                })),
+            };
+        }
+    }
+
+    // If we didn't find a tool call, check if there's text content and warn
+    for block in &chat_response.content {
+        if let ContentBlockChatOutput::Text(_) = block {
+            tracing::warn!(
+                "Analyze function returned text instead of tool call for inference {}",
+                chat_response.inference_id
+            );
+            // Return a default error report indicating the issue
+            return Ok(AnalysisReport::Error {
+                reasoning: "Analyzer returned text instead of using a tool call".to_string(),
+                error_identification: "No structured analysis available".to_string(),
+                root_cause_analysis: "The analysis model did not use the required tool calls"
+                    .to_string(),
+                correct_output: "Unknown".to_string(),
+                key_insight: "Analysis infrastructure issue".to_string(),
+            });
+        }
+    }
+
+    Err(Error::new(ErrorDetails::Inference {
+        message: "No tool call or text found in analyze response".to_string(),
+    }))
+}
+
 /// Analyze inference outputs using the GEPA analyze function
 ///
 /// Takes evaluation results (datapoint + inference pairs) and calls the built-in
@@ -1179,20 +1310,200 @@ async fn create_evaluation_dataset(
 /// Returns a vector of InferenceWithAnalysis containing each inference paired with its analysis.
 #[expect(dead_code)]
 async fn analyze_inferences(
-    _gateway_client: &Client,
-    _evaluation_infos: &[EvaluationInfo],
-    _function_config: &FunctionConfig,
-    _analysis_model: &str,
+    gateway_client: &Client,
+    evaluation_infos: &[EvaluationInfo],
+    function_config: &FunctionConfig,
+    analysis_model: &str,
 ) -> Result<Vec<InferenceWithAnalysis>, Error> {
-    // TODO: Implement analysis phase
-    // For each evaluation_info:
-    // 1. Extract function metadata (templates, schemas, tools) from function_config
-    // 2. Build input for tensorzero::optimization::gepa::analyze
-    // 3. Call inference API with dynamic variant config for analysis model
-    // 4. Parse tool call response into AnalysisReport enum
+    tracing::info!(
+        "Analyzing {} inferences using model '{}'",
+        evaluation_infos.len(),
+        analysis_model
+    );
 
-    tracing::warn!("analyze_inferences not yet implemented");
-    Ok(Vec::new())
+    // Create dynamic variant config for the analyze function
+    let analyze_variant_config = UninitializedVariantInfo {
+        inner: UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
+            model: analysis_model.into(),
+            weight: None,
+            system_template: Some(ResolvedTomlPath::new_fake_path(
+                "gepa/analyze/system.minijinja".to_string(),
+                include_str!("config/functions/analyze/baseline/system_template.minijinja")
+                    .to_string(),
+            )),
+            user_template: Some(ResolvedTomlPath::new_fake_path(
+                "gepa/analyze/user.minijinja".to_string(),
+                include_str!("config/functions/analyze/baseline/user_template.minijinja")
+                    .to_string(),
+            )),
+            assistant_template: None,
+            ..Default::default()
+        }),
+        timeouts: None,
+    };
+
+    let mut results = Vec::new();
+
+    // Analyze each inference
+    for eval_info in evaluation_infos {
+        // Build input JSON for the analyze function
+        let input_data = build_analyze_input(eval_info, function_config)?;
+
+        // Create ClientInferenceParams for the analyze function
+        let params = ClientInferenceParams {
+            function_name: Some("tensorzero::optimization::gepa::analyze".to_string()),
+            model_name: None,
+            episode_id: None,
+            input: ClientInput {
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: serde_json::to_string(&input_data).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!("Failed to serialize analyze input: {e}"),
+                            })
+                        })?,
+                    })],
+                }],
+                system: None,
+            },
+            stream: None,
+            params: Default::default(),
+            variant_name: None,
+            dryrun: None,
+            internal: true,
+            tags: HashMap::new(),
+            dynamic_tool_params: Default::default(),
+            output_schema: None,
+            credentials: HashMap::new(),
+            cache_options: Default::default(),
+            include_original_response: false,
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            internal_dynamic_variant_config: Some(analyze_variant_config.clone()),
+            otlp_traces_extra_headers: HashMap::new(),
+        };
+
+        // Call the inference API
+        let inference_output = gateway_client.inference(params).await.map_err(|e| {
+            Error::new(ErrorDetails::Inference {
+                message: format!("Failed to call analyze function: {e}"),
+            })
+        })?;
+
+        // Extract the response
+        let response = match inference_output {
+            InferenceOutput::NonStreaming(response) => response,
+            InferenceOutput::Streaming(_) => {
+                return Err(Error::new(ErrorDetails::Inference {
+                    message: "Unexpected streaming response from analyze function".to_string(),
+                }))
+            }
+        };
+
+        // Parse the analysis from the response
+        let analysis = parse_analysis_response(&response)?;
+
+        results.push(InferenceWithAnalysis {
+            inference_output: eval_info.response.clone(),
+            analysis,
+        });
+    }
+
+    Ok(results)
+}
+
+/// Build the input JSON for the mutate function
+fn build_mutate_input(
+    analyses: &[InferenceWithAnalysis],
+    function_config: &FunctionConfig,
+    parent_variant_config: &UninitializedChatCompletionConfig,
+) -> Result<serde_json::Value, Error> {
+    // Extract templates from parent variant config
+    // For now, we'll use placeholder values - in production, we'd need to read the actual template content
+    let system_template = ""; // TODO: Extract actual content from parent_variant_config.system_template
+    let user_template: Option<String> = None; // TODO: Extract from parent_variant_config.user_template
+    let assistant_template: Option<String> = None; // TODO: Extract from parent_variant_config.assistant_template
+
+    // Extract schemas from function config
+    let system_schema = function_config.system_schema().map(|s| s.value.clone());
+    let user_schema = function_config.user_schema().map(|s| s.value.clone());
+    let assistant_schema = function_config.assistant_schema().map(|s| s.value.clone());
+
+    // Extract output schema for JSON functions
+    let output_schema = match function_config {
+        FunctionConfig::Json(params) => Some(params.output_schema.value.clone()),
+        FunctionConfig::Chat(_) => None,
+    };
+
+    // Extract tools for Chat functions
+    let tools = match function_config {
+        FunctionConfig::Chat(params) => {
+            if params.tools.is_empty() {
+                None
+            } else {
+                Some(serde_json::json!(params.tools))
+            }
+        }
+        FunctionConfig::Json(_) => None,
+    };
+
+    // Serialize analyses array
+    let analyses_json = serde_json::to_value(analyses).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize analyses: {e}"),
+        })
+    })?;
+
+    // Get function name from one of the analyses (they should all be for the same function)
+    let function_name = if let Some(first_analysis) = analyses.first() {
+        first_analysis.inference_output.variant_name()
+    } else {
+        "unknown"
+    };
+
+    // Build the input object
+    let input = serde_json::json!({
+        "function_name": function_name,
+        "model": parent_variant_config.model,
+        "system_template": system_template,
+        "user_template": user_template,
+        "assistant_template": assistant_template,
+        "system_schema": system_schema,
+        "user_schema": user_schema,
+        "assistant_schema": assistant_schema,
+        "output_schema": output_schema,
+        "tools": tools,
+        "analyses": analyses_json,
+    });
+
+    Ok(input)
+}
+
+/// Parse the mutate response and extract the MutateOutput
+fn parse_mutate_response(response: &InferenceResponse) -> Result<MutateOutput, Error> {
+    let json_response = match response {
+        InferenceResponse::Json(json_response) => json_response,
+        InferenceResponse::Chat(_) => {
+            return Err(Error::new(ErrorDetails::Inference {
+                message: "Expected Json response from mutate function, got Chat".to_string(),
+            }))
+        }
+    };
+
+    // Extract the parsed JSON output
+    let parsed_output = json_response.output.parsed.clone().ok_or_else(|| {
+        Error::new(ErrorDetails::Inference {
+            message: "Mutate function returned no parsed output".to_string(),
+        })
+    })?;
+
+    // Parse the JSON output into MutateOutput
+    serde_json::from_value(parsed_output).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to parse mutate output: {e}"),
+        })
+    })
 }
 
 /// Generate improved templates using the GEPA mutate function
@@ -1203,21 +1514,98 @@ async fn analyze_inferences(
 /// Returns MutateOutput with improved templates.
 #[expect(dead_code)]
 async fn mutate_templates(
-    _gateway_client: &Client,
-    _analyses: &[InferenceWithAnalysis],
-    _function_config: &FunctionConfig,
-    _mutation_model: &str,
+    gateway_client: &Client,
+    analyses: &[InferenceWithAnalysis],
+    function_config: &FunctionConfig,
+    parent_variant_config: &UninitializedChatCompletionConfig,
+    mutation_model: &str,
 ) -> Result<MutateOutput, Error> {
-    // TODO: Implement mutation phase
-    // 1. Build analyses array for mutate function input
-    // 2. Extract function metadata (templates, schemas, tools) from function_config
-    // 3. Call tensorzero::optimization::gepa::mutate with dynamic variant config
-    // 4. Parse JSON output into MutateOutput
+    tracing::info!(
+        "Generating improved templates using {} analyses with model '{}'",
+        analyses.len(),
+        mutation_model
+    );
 
-    tracing::warn!("mutate_templates not yet implemented");
-    Err(Error::new(ErrorDetails::InternalError {
-        message: "mutate_templates not yet implemented".to_string(),
-    }))
+    // Build input JSON for the mutate function
+    let input_data = build_mutate_input(analyses, function_config, parent_variant_config)?;
+
+    // Create dynamic variant config for the mutate function
+    let mutate_variant_config = UninitializedVariantInfo {
+        inner: UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
+            model: mutation_model.into(),
+            weight: None,
+            system_template: Some(ResolvedTomlPath::new_fake_path(
+                "gepa/mutate/system.minijinja".to_string(),
+                include_str!("config/functions/mutate/baseline/system_template.minijinja")
+                    .to_string(),
+            )),
+            user_template: Some(ResolvedTomlPath::new_fake_path(
+                "gepa/mutate/user.minijinja".to_string(),
+                include_str!("config/functions/mutate/baseline/user_template.minijinja")
+                    .to_string(),
+            )),
+            assistant_template: None,
+            ..Default::default()
+        }),
+        timeouts: None,
+    };
+
+    // Create ClientInferenceParams for the mutate function
+    let params = ClientInferenceParams {
+        function_name: Some("tensorzero::optimization::gepa::mutate".to_string()),
+        model_name: None,
+        episode_id: None,
+        input: ClientInput {
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: serde_json::to_string(&input_data).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!("Failed to serialize mutate input: {e}"),
+                        })
+                    })?,
+                })],
+            }],
+            system: None,
+        },
+        stream: None,
+        params: Default::default(),
+        variant_name: None,
+        dryrun: None,
+        internal: true,
+        tags: HashMap::new(),
+        dynamic_tool_params: Default::default(),
+        output_schema: None,
+        credentials: HashMap::new(),
+        cache_options: Default::default(),
+        include_original_response: false,
+        extra_body: Default::default(),
+        extra_headers: Default::default(),
+        internal_dynamic_variant_config: Some(mutate_variant_config),
+        otlp_traces_extra_headers: HashMap::new(),
+    };
+
+    // Call the inference API
+    let inference_output = gateway_client.inference(params).await.map_err(|e| {
+        Error::new(ErrorDetails::Inference {
+            message: format!("Failed to call mutate function: {e}"),
+        })
+    })?;
+
+    // Extract the response
+    let response = match inference_output {
+        InferenceOutput::NonStreaming(response) => response,
+        InferenceOutput::Streaming(_) => {
+            return Err(Error::new(ErrorDetails::Inference {
+                message: "Unexpected streaming response from mutate function".to_string(),
+            }))
+        }
+    };
+
+    // Parse the mutate output (JSON response)
+    let mutate_output = parse_mutate_response(&response)?;
+
+    Ok(mutate_output)
 }
 
 /// Create a new variant with mutated templates

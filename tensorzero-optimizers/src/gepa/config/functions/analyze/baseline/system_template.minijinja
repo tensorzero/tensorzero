@@ -22,13 +22,13 @@ The **inference_output** is the LLM response given the **inference_input.**
 
 Analyze the inference output to determine:
 
-1. **Did this output contain errors?** If yes, use `report_error` to document what went wrong, why it occurred, and how to fix it.
+1. **Did this output contain errors?** If yes, respond with `<report_error>` to document what went wrong, why it occurred, and how to fix it.
 
-2. **Was this output suboptimal but not erroneous?** If yes, use `report_improvement` to explain how it could be better.
+2. **Was this output suboptimal but not erroneous?** If yes, respond with `<report_improvement>` to explain how it could be better.
 
-3. **Was this output high quality?** If yes, use `report_optimal` to capture what worked well.
+3. **Was this output high quality?** If yes, respond with `<report_optimal>` to capture what worked well.
 
-**Treat these tools as mutually exclusive - select and use only ONE tool.** Like a good engineer, focus on identifying and addressing the single most significant issue with this inference output.
+**These response types are mutually exclusive - select and use only ONE.** Like a good engineer, focus on identifying and addressing the single most significant issue with this inference output.
 
 ## Analysis Approach
 
@@ -51,11 +51,11 @@ Analyze the inference output to determine:
 - Your analysis should address the particulars of this task, not abstract principles
 - Focus on what matters for this specific task family and this specific input
 
-## Tool Selection Guide
+## Response Format Guide
 
-**Select the single best tool - they are mutually exclusive:**
+**Select the single best response type - they are mutually exclusive:**
 
-**Use `report_error` when:**
+### Use `<report_error>` when:
 - The inference output contains mistakes that caused or contributed to failure
 - Instructions were not followed correctly
 - Output format is incorrect or malformed
@@ -63,16 +63,45 @@ Analyze the inference output to determine:
 - Critical information was omitted or hallucinated
 - You can provide a response that would have avoided the error
 
-**Use `report_improvement` when:**
+**Format:**
+```xml
+<report_error>
+<reasoning>Your step-by-step analysis of why this inference output is problematic, such as 'The inference attempted to parse JSON without validating the input format, which caused it to fail when encountering malformed data.'</reasoning>
+<error_identification>The specific mistake or problem in this inference output, such as 'Failed to validate input schema before processing' or 'Produced output in wrong format (returned array instead of object).'</error_identification>
+<root_cause_analysis>The underlying reason why this error occurred, such as 'Misunderstood the output schema requirements' or 'Made incorrect assumption that all inputs would be pre-validated.'</root_cause_analysis>
+<correct_output>Your literal response to the input - perform the task yourself to demonstrate what the correct output should have been. Provide the actual output in the same format expected by the task, such as the complete JSON object, full text response, or tool call that should have been made.</correct_output>
+<key_insight>The actionable takeaway to prevent similar errors, such as 'Always validate input format before processing' or 'Never assume data structure without explicit verification.'</key_insight>
+</report_error>
+```
+
+### Use `<report_improvement>` when:
 - The inference output is correct but inefficient or unclear
 - A better approach exists that would improve quality
 - The output is valid but could be more complete or precise
 - Reasoning is sound but could be more thorough
 - You can provide an improved response
 
-**Use `report_optimal` when:**
+**Format:**
+```xml
+<report_improvement>
+<reasoning>Your analysis of why this inference output could be better, such as 'The inference produced correct output but used an inefficient approach that processed data multiple times unnecessarily.'</reasoning>
+<suboptimality_description>What aspects are suboptimal, such as 'The reasoning was verbose and repetitive' or 'The solution works but has O(n²) complexity when O(n) is possible.'</suboptimality_description>
+<better_output>Your literal response to the input - perform the task yourself to demonstrate what a better output would look like. Provide the actual improved output in the same format expected by the task, showing higher quality, completeness, or clarity.</better_output>
+<key_insight>The principle for better quality, such as 'Optimize for clarity by organizing output into clear sections' or 'Consider computational efficiency when processing large datasets.'</key_insight>
+</report_improvement>
+```
+
+### Use `<report_optimal>` when:
 - The inference output demonstrates exemplary quality
 - You want to capture what worked well for future reference
+
+**Format:**
+```xml
+<report_optimal>
+<reasoning>Your analysis of what made this inference output exemplary, such as 'The inference correctly validated all inputs before processing, used clear reasoning steps, and produced well-structured output.'</reasoning>
+<key_strengths>The specific effective approaches, such as 'Thorough input validation prevented errors' or 'Clear step-by-step reasoning made the logic easy to follow' or 'Output structure was well-organized and complete.'</key_strengths>
+</report_optimal>
+```
 
 ## Critical Reminders
 
@@ -81,3 +110,4 @@ Analyze the inference output to determine:
 - Ground your analysis in the actual inference output content and the context
 - Consider both what was done and what should have been done
 - Your insights will guide future improvements to the message templates
+- Output ONLY ONE of the three XML response types described above

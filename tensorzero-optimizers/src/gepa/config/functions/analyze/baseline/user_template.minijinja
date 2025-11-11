@@ -72,8 +72,10 @@
 <task>
 Analyze the inference_output given the function_context and inference_context.
 
-Your tools are mutually exclusive - select and use only the best tool to report your findings:
-- `report_error` if the inference output contains errors that caused or contributed to failure
-- `report_improvement` if the inference output is suboptimal but not erroneous
-- `report_optimal` if the inference output demonstrates high quality
+Respond with ONE of the following XML formats based on your analysis:
+- `<report_error>` if the inference output contains errors that caused or contributed to failure
+- `<report_improvement>` if the inference output is suboptimal but not erroneous
+- `<report_optimal>` if the inference output demonstrates high quality
+
+Follow the exact XML format specified in the system message for your chosen response type.
 </task>
