@@ -8,21 +8,21 @@
 use std::collections::HashMap;
 
 use reqwest::{Client, StatusCode};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashSet;
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage};
 use tensorzero_core::{
     db::clickhouse::{
-        test_helpers::select_batch_model_inferences_clickhouse, ClickHouseConnectionInfo, TableName,
+        ClickHouseConnectionInfo, TableName, test_helpers::select_batch_model_inferences_clickhouse,
     },
     endpoints::batch_inference::PollPathParams,
     inference::types::{
-        batch::{BatchModelInferenceRow, BatchRequestRow},
         Role, Text,
+        batch::{BatchModelInferenceRow, BatchRequestRow},
     },
     tool::{ToolCall, ToolResult},
 };
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use url::Url;
 use uuid::Uuid;
 
@@ -31,8 +31,9 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 };
 
 use crate::providers::common::{
-    check_dynamic_json_mode_inference_response, check_dynamic_tool_use_inference_response,
-    check_json_mode_inference_response, check_multi_turn_parallel_tool_use_inference_response,
+    assert_model_name_matches, check_dynamic_json_mode_inference_response,
+    check_dynamic_tool_use_inference_response, check_json_mode_inference_response,
+    check_multi_turn_parallel_tool_use_inference_response,
     check_parallel_tool_use_inference_response, check_tool_use_multi_turn_inference_response,
     check_tool_use_tool_choice_allowed_tools_inference_response,
     check_tool_use_tool_choice_auto_unused_inference_response,
@@ -461,7 +462,7 @@ pub async fn check_clickhouse_batch_request_status(
     // We can't check that the batch params are exactly the same because they vary per-provider
     // We will check that they are valid by using them instead.
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_model_name_matches(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -801,7 +802,7 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
     );
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_model_name_matches(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -1109,9 +1110,11 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![
+            "What is the name of the capital city of Japan?"
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -1157,7 +1160,7 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     assert_eq!(frequency_penalty, 0.2);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_model_name_matches(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -1757,7 +1760,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         assert_eq!(inference_params, expected_inference_params[i]);
 
         let model_name = result.get("model_name").unwrap().as_str().unwrap();
-        assert_eq!(model_name, provider.model_name);
+        assert_model_name_matches(model_name, &provider.model_name);
 
         let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
         assert_eq!(model_provider_name, provider.model_provider_name);
@@ -2211,7 +2214,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_model_name_matches(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -2627,9 +2630,9 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-    system,
-    "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
-);
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
+    );
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();
@@ -2663,7 +2666,7 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
     );
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_model_name_matches(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -2868,7 +2871,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     );
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_model_name_matches(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -3417,7 +3420,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_model_name_matches(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -3779,7 +3782,7 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     assert_eq!(max_tokens, 100);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_model_name_matches(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -4097,9 +4100,11 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![
+            "What is the name of the capital city of Japan?"
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -4126,7 +4131,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_model_name_matches(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -4444,9 +4449,11 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec!["What is the name of the capital city of Japan?"
-            .to_string()
-            .into()],
+        content: vec![
+            "What is the name of the capital city of Japan?"
+                .to_string()
+                .into(),
+        ],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -4473,7 +4480,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_model_name_matches(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);

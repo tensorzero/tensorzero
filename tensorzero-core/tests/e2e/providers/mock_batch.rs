@@ -112,6 +112,7 @@ async fn poll_until_completed(
 /// ```
 /// crate::generate_unified_mock_batch_tests!(get_providers);
 /// ```
+/// Note: we break inside the loops since the mock server doesn't know or care about the model
 #[macro_export]
 macro_rules! generate_unified_mock_batch_tests {
     ($func:ident) => {
@@ -141,6 +142,7 @@ macro_rules! generate_unified_mock_batch_tests {
                         "basic_test_mock_batch",
                     )
                     .await;
+                    break;
                 }
             }
         }
@@ -157,6 +159,7 @@ macro_rules! generate_unified_mock_batch_tests {
                         "json_success_mock_batch",
                     )
                     .await;
+                    break;
                 }
             }
         }
@@ -173,6 +176,7 @@ macro_rules! generate_unified_mock_batch_tests {
                         "weather_helper_mock_batch",
                     )
                     .await;
+                    break;
                 }
             }
         }
@@ -189,6 +193,7 @@ macro_rules! generate_unified_mock_batch_tests {
                         "weather_helper_mock_batch",
                     )
                     .await;
+                    break;
                 }
             }
         }
@@ -205,6 +210,7 @@ macro_rules! generate_unified_mock_batch_tests {
                         "basic_test_mock_batch",
                     )
                     .await;
+                    break;
                 }
             }
         }
@@ -221,6 +227,7 @@ macro_rules! generate_unified_mock_batch_tests {
                         "weather_helper_mock_batch",
                     )
                     .await;
+                    break;
                 }
             }
         }
@@ -237,6 +244,7 @@ macro_rules! generate_unified_mock_batch_tests {
                         "weather_helper_parallel_mock_batch",
                     )
                     .await;
+                    break;
                 }
             }
         }
@@ -253,6 +261,7 @@ macro_rules! generate_unified_mock_batch_tests {
                         "basic_test_mock_batch",
                     )
                     .await;
+                    break;
                 }
             }
         }
@@ -269,6 +278,7 @@ macro_rules! generate_unified_mock_batch_tests {
                         "dynamic_json_mock_batch",
                     )
                     .await;
+                    break;
                 }
             }
         }
@@ -285,6 +295,7 @@ macro_rules! generate_unified_mock_batch_tests {
                         "basic_test_mock_batch",
                     )
                     .await;
+                    break;
                 }
             }
         }
