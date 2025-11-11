@@ -1113,14 +1113,6 @@ impl TensorZeroGateway {
                 None
             };
 
-        // Validate that both variant_name and dynamic_variant_config are not provided
-        if dynamic_variant_config.is_some() && variant_name.is_some() {
-            return Err(PyValueError::new_err(
-                "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
-                When using a dynamic variant, provide only 'dynamic_variant_config'.",
-            ));
-        }
-
         let core_args = EvaluationCoreArgs {
             tensorzero_client: (*client).clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
@@ -1993,14 +1985,6 @@ impl AsyncTensorZeroGateway {
             } else {
                 None
             };
-
-        // Validate that both variant_name and dynamic_variant_config are not provided
-        if dynamic_variant_config.is_some() && variant_name.is_some() {
-            return Err(PyValueError::new_err(
-                "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
-                When using a dynamic variant, provide only 'dynamic_variant_config'.",
-            ));
-        }
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             // Get app state data
