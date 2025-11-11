@@ -21,14 +21,16 @@ jobs:
     - name: Create helm overrides file
       run: |
         cd examples/production-deployment-k8s-helm
-        echo "
-          gateway:
-            image:
-              repository: tensorzero/gateway
-                # We load this from the build-gateway-container job
-                tag: sha-${{ github.sha }}
-                pullPolicy: IfNotPresent
-            " > helm-ci-overrides.yaml
+        cat > helm-ci-overrides.yaml <<EOF
+        gateway:
+          image:
+            repository: tensorzero/gateway
+            # We load this from the build-gateway-container job
+            tag: sha-${{ github.sha }}
+            pullPolicy: IfNotPresent
+        EOF
+        sed -i 's/^        //' helm-ci-overrides.yaml
+
     - name: Install TensorZero on minikube
       run: |
         cd examples/production-deployment-k8s-helm
