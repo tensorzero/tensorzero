@@ -3796,6 +3796,27 @@ model = "gemini-2.0-flash-001_mock_batch"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.dynamic_json_mock_batch]
+type = "json"
+system_schema = "../../fixtures/config/functions/dynamic_json/system_schema.json"
+user_schema = "../../fixtures/config/functions/dynamic_json/user_schema.json"
+
+[functions.dynamic_json_mock_batch.variants.openai]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18_mock_batch"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "strict"
+max_tokens = 100
+
+[functions.dynamic_json_mock_batch.variants.gcp-vertex-gemini-flash]
+type = "chat_completion"
+model = "gemini-2.0-flash-001_mock_batch"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "strict"
+max_tokens = 100
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
