@@ -317,29 +317,7 @@ impl ClientBuilder {
                         }
                     })?)
                 };
-                if !allow_batch_writes
-                    && config.gateway.observability.batch_writes.enabled
-                    && !config
-                        .gateway
-                        .observability
-                        .batch_writes
-                        .__force_allow_embedded_batch_writes
-                {
-                    return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
-                        source: crate::error::Error::new(ErrorDetails::Config {
-                            message: "`[gateway.observability.batch_writes]` is not yet supported in embedded gateway mode".to_string(),
-                        })
-                        .into(),
-                    }));
-                }
-                if config.gateway.auth.enabled {
-                    return Err(ClientBuilderError::AuthNotSupportedInEmbeddedMode(TensorZeroError::Other {
-                        source: crate::error::Error::new(ErrorDetails::Config {
-                            message: "`[gateway.auth]` is not supported in embedded gateway mode. Authentication is only available when using HTTP gateway mode. Please either disable authentication by setting `gateway.auth.enabled = false` or use HTTP mode instead.".to_string(),
-                        })
-                        .into(),
-                    }));
-                }
+                Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let clickhouse_connection_info =
                     setup_clickhouse(&config, clickhouse_url.clone(), true)
                         .await
@@ -405,33 +383,10 @@ impl ClientBuilder {
                 http_client,
                 timeout,
             } => {
-                // Validation: Batch writes are not supported in embedded mode
-                if config.gateway.observability.batch_writes.enabled
-                    && !config
-                        .gateway
-                        .observability
-                        .batch_writes
-                        .__force_allow_embedded_batch_writes
-                {
-                    return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
-                        source: crate::error::Error::new(ErrorDetails::Config {
-                            message: "`[gateway.observability.batch_writes]` is not yet supported in embedded gateway mode".to_string(),
-                        })
-                        .into(),
-                    }));
-                }
-
-                // Validation: Auth is not supported in embedded mode
-                if config.gateway.auth.enabled {
-                    return Err(ClientBuilderError::AuthNotSupportedInEmbeddedMode(
-                        TensorZeroError::Other {
-                            source: crate::error::Error::new(ErrorDetails::Config {
-                                message: "`[gateway.auth]` is not supported in embedded gateway mode. Authentication is only available when using HTTP gateway mode. Please either disable authentication by setting `gateway.auth.enabled = false` or use HTTP mode instead.".to_string(),
-                            })
-                            .into(),
-                        },
-                    ));
-                }
+                // Validate embedded gateway configuration
+                // Note: FromComponents doesn't have allow_batch_writes parameter,
+                // so we pass false to always validate batch writes config
+                Self::validate_embedded_gateway_config(config, false)?;
 
                 // Construct Client directly from provided components
                 Ok(Client {
@@ -499,6 +454,44 @@ impl ClientBuilder {
             #[cfg(feature = "e2e_tests")]
             last_body: Default::default(),
         })
+    }
+
+    /// Validates configuration for embedded gateway mode.
+    /// Checks for unsupported features like batch writes and authentication.
+    fn validate_embedded_gateway_config(
+        config: &Config,
+        allow_batch_writes: bool,
+    ) -> Result<(), ClientBuilderError> {
+        // Validate batch writes configuration
+        if !allow_batch_writes
+            && config.gateway.observability.batch_writes.enabled
+            && !config
+                .gateway
+                .observability
+                .batch_writes
+                .__force_allow_embedded_batch_writes
+        {
+            return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                source: crate::error::Error::new(ErrorDetails::Config {
+                    message: "`[gateway.observability.batch_writes]` is not yet supported in embedded gateway mode".to_string(),
+                })
+                .into(),
+            }));
+        }
+
+        // Validate auth configuration
+        if config.gateway.auth.enabled {
+            return Err(ClientBuilderError::AuthNotSupportedInEmbeddedMode(
+                TensorZeroError::Other {
+                    source: crate::error::Error::new(ErrorDetails::Config {
+                        message: "`[gateway.auth]` is not supported in embedded gateway mode. Authentication is only available when using HTTP gateway mode. Please either disable authentication by setting `gateway.auth.enabled = false` or use HTTP mode instead.".to_string(),
+                    })
+                    .into(),
+                },
+            ));
+        }
+
+        Ok(())
     }
 
     /// Builds a `Client` in HTTPGateway mode, erroring if the mode is not HTTPGateway
