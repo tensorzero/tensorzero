@@ -221,8 +221,11 @@ pub async fn get_file_content(Path(file_id): Path<String>) -> Response {
     let file = match files.get(&file_id) {
         Some(f) => f.clone(),
         None => {
-            return Error::new(format!("File not found: {}", file_id), StatusCode::NOT_FOUND)
-                .into_response()
+            return Error::new(
+                format!("File not found: {}", file_id),
+                StatusCode::NOT_FOUND,
+            )
+            .into_response()
         }
     };
 
@@ -235,6 +238,9 @@ pub async fn get_file_content(Path(file_id): Path<String>) -> Response {
 
 /// Generate mock batch output from input
 fn generate_batch_output(input_content: &str) -> String {
+    use crate::batch_response_generator::openai::wrap_batch_response;
+    use serde_json::Value;
+
     let mut output_lines = Vec::new();
 
     for line in input_content.lines() {
@@ -243,51 +249,203 @@ fn generate_batch_output(input_content: &str) -> String {
         }
 
         // Parse the input line
-        let input: serde_json::Value = match serde_json::from_str(line) {
+        let input: Value = match serde_json::from_str(line) {
             Ok(v) => v,
-            Err(_) => continue,
+            Err(e) => {
+                tracing::warn!("Failed to parse input line: {}: {}", e, line);
+                continue;
+            }
         };
 
         let custom_id = input
             .get("custom_id")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
-        let request_id = format!("batch_req_{}", Uuid::now_v7());
 
-        // Generate a mock response
-        let response = json!({
-            "id": request_id,
-            "custom_id": custom_id,
-            "response": {
-                "status_code": 200,
-                "request_id": format!("req_{}", Uuid::now_v7()),
-                "body": {
-                    "id": format!("chatcmpl-{}", Uuid::now_v7()),
-                    "object": "chat.completion",
-                    "created": chrono::Utc::now().timestamp(),
-                    "model": "gpt-4",
-                    "choices": [{
-                        "index": 0,
-                        "message": {
-                            "role": "assistant",
-                            "content": "This is a mock response for batch inference."
-                        },
-                        "finish_reason": "stop"
-                    }],
-                    "usage": {
-                        "prompt_tokens": 10,
-                        "completion_tokens": 10,
-                        "total_tokens": 20
-                    }
-                }
-            },
-            "error": null
-        });
+        let body = input.get("body");
 
+        // Detect response type and generate appropriate message
+        let (message, finish_reason) = detect_and_generate_response(body);
+
+        let response = wrap_batch_response(custom_id, message, &finish_reason);
         output_lines.push(serde_json::to_string(&response).unwrap());
     }
 
     output_lines.join("\n")
+}
+
+/// Detect the type of response needed and generate it
+fn detect_and_generate_response(body: Option<&serde_json::Value>) -> (serde_json::Value, String) {
+    use crate::batch_response_generator::{
+        generate_json_object, generate_simple_text, generate_simple_text_from_request, generate_tool_args,
+        openai::{generate_json_message, generate_text_message, generate_tool_call_message},
+        ToolCallSpec,
+    };
+    use serde_json::Value;
+
+    let Some(body) = body else {
+        return (generate_text_message(&generate_simple_text()), "stop".to_string());
+    };
+
+    // Check for JSON mode (response_format)
+    if let Some(response_format) = body.get("response_format") {
+        if let Some(format_type) = response_format.get("type").and_then(|v| v.as_str()) {
+            if format_type == "json_object" || format_type == "json_schema" {
+                return (
+                    generate_json_message(&generate_json_object()),
+                    "stop".to_string(),
+                );
+            }
+        }
+    }
+
+    // Check for tool use
+    if let Some(tools) = body.get("tools").and_then(|v| v.as_array()) {
+        if !tools.is_empty() {
+            // Check tool_choice
+            let tool_choice = body.get("tool_choice");
+
+            match tool_choice {
+                // Explicit "none" - no tool calls
+                Some(Value::String(s)) if s == "none" => {
+                    return (generate_text_message(&generate_simple_text_from_request(body)), "stop".to_string());
+                }
+                // "required" - must use tools
+                Some(Value::String(s)) if s == "required" => {
+                    let tool_name = tools[0]
+                        .get("function")
+                        .and_then(|f| f.get("name"))
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("unknown");
+                    let args = generate_tool_args(tool_name);
+                    return (
+                        generate_tool_call_message(&[ToolCallSpec {
+                            name: tool_name.to_string(),
+                            args,
+                        }]),
+                        "tool_calls".to_string(),
+                    );
+                }
+                // Specific tool choice
+                Some(Value::Object(obj)) if obj.contains_key("function") => {
+                    let tool_name = obj
+                        .get("function")
+                        .and_then(|f| f.get("name"))
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("unknown");
+                    let args = generate_tool_args(tool_name);
+                    return (
+                        generate_tool_call_message(&[ToolCallSpec {
+                            name: tool_name.to_string(),
+                            args,
+                        }]),
+                        "tool_calls".to_string(),
+                    );
+                }
+                // "auto" or default - use heuristics
+                _ => {
+                    if should_use_tools(body, tools) {
+                        // Check if parallel tool calls
+                        let parallel = body
+                            .get("parallel_tool_calls")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true);
+
+                        if parallel && tools.len() > 1 {
+                            // Generate parallel tool calls
+                            let tool_specs: Vec<ToolCallSpec> = tools
+                                .iter()
+                                .take(2) // Use first 2 tools for parallel
+                                .filter_map(|t| {
+                                    t.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str())
+                                })
+                                .map(|name| ToolCallSpec {
+                                    name: name.to_string(),
+                                    args: generate_tool_args(name),
+                                })
+                                .collect();
+                            return (generate_tool_call_message(&tool_specs), "tool_calls".to_string());
+                        } else {
+                            // Single tool call
+                            let tool_name = tools[0]
+                                .get("function")
+                                .and_then(|f| f.get("name"))
+                                .and_then(|n| n.as_str())
+                                .unwrap_or("unknown");
+                            let args = generate_tool_args(tool_name);
+                            return (
+                                generate_tool_call_message(&[ToolCallSpec {
+                                    name: tool_name.to_string(),
+                                    args,
+                                }]),
+                                "tool_calls".to_string(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Default: simple text response
+    (generate_text_message(&generate_simple_text_from_request(body)), "stop".to_string())
+}
+
+/// Heuristic to determine if tools should be used in "auto" mode
+fn should_use_tools(body: &serde_json::Value, tools: &[serde_json::Value]) -> bool {
+    // Get the last user message
+    let messages = body.get("messages").and_then(|m| m.as_array());
+    if messages.is_none() {
+        return false;
+    }
+
+    let last_message = messages
+        .and_then(|msgs| msgs.iter().rev().find(|msg| {
+            msg.get("role").and_then(|r| r.as_str()) == Some("user")
+        }));
+
+    if last_message.is_none() {
+        return false;
+    }
+
+    let content = last_message
+        .and_then(|msg| msg.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("");
+
+    let content_lower = content.to_lowercase();
+
+    // Keywords suggesting tool use
+    let tool_keywords = [
+        "use the",
+        "call the",
+        "use both",
+        "call both",
+        "temperature",
+        "humidity",
+        "weather",
+    ];
+
+    for keyword in &tool_keywords {
+        if content_lower.contains(keyword) {
+            return true;
+        }
+    }
+
+    // Check if any tool names are mentioned
+    for tool in tools {
+        if let Some(tool_name) = tool
+            .get("function")
+            .and_then(|f| f.get("name"))
+            .and_then(|n| n.as_str())
+        {
+            if content_lower.contains(tool_name) {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 /// Store file data for testing

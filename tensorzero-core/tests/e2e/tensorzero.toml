@@ -30,6 +30,15 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 
+# Mock batch testing model - OpenAI
+[models."gpt-4o-mini-2024-07-18-mock-batch"]
+routing = ["openai-mock-batch"]
+
+[models."gpt-4o-mini-2024-07-18-mock-batch".providers.openai-mock-batch]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+api_base = "http://localhost:3030/openai/"
+
 [models."responses-gpt-4o-mini-2024-07-18"]
 routing = ["openai"]
 
@@ -276,6 +285,18 @@ location = "us-central1"
 project_id = "tensorzero-public"
 credential_location = "sdk"
 
+# Mock batch testing model - GCP Vertex Gemini
+[models."gemini-2.0-flash-001-mock-batch"]
+routing = ["gcp-vertex-gemini-mock-batch"]
+
+[models."gemini-2.0-flash-001-mock-batch".providers.gcp-vertex-gemini-mock-batch]
+type = "gcp_vertex_gemini"
+model_id = "gemini-2.0-flash-001"
+location = "us-central1"
+project_id = "test-project"
+credential_location = "none"
+api_base = "http://localhost:3030/v1/"
+
 [models."gcp-gemini-2.5-pro"]
 routing = ["gcp_vertex_gemini"]
 
@@ -485,6 +506,12 @@ routing = ["xai"]
 storage_type = "cloud_storage"
 input_uri_prefix = "gs://tensorzero-batch-tests-input/input-prefix/"
 output_uri_prefix = "gs://tensorzero-batch-tests-output/output-prefix/"
+
+# Mock batch testing configuration - uses same buckets but different prefix
+[provider_types.gcp_vertex_gemini_mock_batch.batch]
+storage_type = "cloud_storage"
+input_uri_prefix = "gs://tensorzero-batch-tests-input/mock-input/"
+output_uri_prefix = "gs://tensorzero-batch-tests-output/mock-output/"
 
 [models."grok_2_1212-dynamic".providers.xai]
 type = "xai"
@@ -3716,6 +3743,67 @@ max_tokens = 100
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
+# │                        MOCK BATCH TEST FUNCTIONS                           │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.basic_test_mock_batch]
+type = "chat"
+system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.basic_test_mock_batch.variants.openai]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18-mock-batch"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test_mock_batch.variants.gcp-vertex-gemini-flash]
+type = "chat_completion"
+model = "gemini-2.0-flash-001-mock-batch"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.json_success_mock_batch]
+type = "json"
+schemas.system.path = "../../fixtures/config/functions/basic_test/system_schema.json"
+user_schema = "../../fixtures/config/functions/json_success/user_schema.json"
+output_schema = "../../fixtures/config/functions/basic_test/output_schema.json"
+
+[functions.json_success_mock_batch.variants.openai]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18-mock-batch"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.json_success_mock_batch.variants.gcp-vertex-gemini-flash]
+type = "chat_completion"
+model = "gemini-2.0-flash-001-mock-batch"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.weather_helper_mock_batch]
+type = "chat"
+system_schema = "../../fixtures/config/functions/weather_helper/system_schema.json"
+tools = ["get_temperature"]
+tool_choice = "auto"
+
+[functions.weather_helper_mock_batch.variants.openai]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18-mock-batch"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper_mock_batch.variants.gcp-vertex-gemini-flash]
+type = "chat_completion"
+model = "gemini-2.0-flash-001-mock-batch"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  METRICS                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 
@@ -3765,6 +3853,11 @@ optimize = "max"
 level = "inference"
 
 [metrics.exact_match]
+type = "boolean"
+optimize = "max"
+level = "inference"
+
+[metrics.test_metric]
 type = "boolean"
 optimize = "max"
 level = "inference"

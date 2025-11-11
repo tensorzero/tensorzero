@@ -437,7 +437,7 @@ macro_rules! generate_batch_inference_tests {
     };
 }
 
-async fn check_clickhouse_batch_request_status(
+pub async fn check_clickhouse_batch_request_status(
     clickhouse: &ClickHouseConnectionInfo,
     batch_id: Uuid,
     provider: &E2ETestProvider,
@@ -473,7 +473,7 @@ async fn check_clickhouse_batch_request_status(
     assert_eq!(errors.len(), 0);
 }
 
-fn get_poll_batch_inference_url(query: PollPathParams) -> Url {
+pub fn get_poll_batch_inference_url(query: PollPathParams) -> Url {
     let mut url = get_gateway_endpoint("/batch_inference");
     match query {
         PollPathParams {

@@ -121,7 +121,7 @@ tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
 tower-http = { workspace = true }
 tower-layer = "0.3.3"
 pyo3 = { workspace = true, optional = true }
-google-cloud-auth = "1.1.0"
+google-cloud-auth = { workspace = true }
 mime = { workspace = true }
 mime_guess = "2.0.5"
 indexmap = "2.12.0"

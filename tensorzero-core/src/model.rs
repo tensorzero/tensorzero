@@ -998,6 +998,8 @@ pub enum UninitializedProviderConfig {
         project_id: String,
         #[cfg_attr(test, ts(type = "string | null"))]
         credential_location: Option<CredentialLocationWithFallback>,
+        #[cfg(feature = "e2e_tests")]
+        api_base: Option<Url>,
     },
     #[strum(serialize = "google_ai_studio_gemini")]
     #[serde(rename = "google_ai_studio_gemini")]
@@ -1219,18 +1221,24 @@ impl UninitializedProviderConfig {
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexGemini(
-                GCPVertexGeminiProvider::new(
+                #[cfg(feature = "e2e_tests")]
+                api_base,
+            } => {
+                let provider = GCPVertexGeminiProvider::new(
                     model_id,
                     endpoint_id,
                     location,
                     project_id,
+                    #[cfg(feature = "e2e_tests")]
+                    api_base,
                     api_key_location,
                     provider_types,
                     provider_type_default_credentials,
                 )
-                .await?,
-            ),
+                .await?;
+
+                ProviderConfig::GCPVertexGemini(provider)
+            }
             UninitializedProviderConfig::GoogleAIStudioGemini {
                 model_name,
                 api_key_location,
@@ -2253,9 +2261,11 @@ impl ShorthandModelConfig for ModelConfig {
                         .await?,
                 )?)
             }
-            "gcp_vertex_gemini" => ProviderConfig::GCPVertexGemini(
-                GCPVertexGeminiProvider::new_shorthand(model_name, default_credentials).await?,
-            ),
+            "gcp_vertex_gemini" => {
+                ProviderConfig::GCPVertexGemini(
+                    GCPVertexGeminiProvider::new_shorthand(model_name, default_credentials).await?,
+                )
+            }
             "gcp_vertex_anthropic" => ProviderConfig::GCPVertexAnthropic(
                 GCPVertexAnthropicProvider::new_shorthand(model_name, default_credentials).await?,
             ),

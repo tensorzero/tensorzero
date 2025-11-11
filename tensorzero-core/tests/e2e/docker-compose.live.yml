@@ -14,6 +14,11 @@ services:
       dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
     environment:
       RUST_LOG: debug
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp_jwt_key.json
+    volumes:
+      # Mount GCP JWT key file for GCS access (needed for batch inference)
+      # Can be overridden with GCP_CREDENTIALS_PATH env var
+      - ${GCP_CREDENTIALS_PATH:-../../../gcp_jwt_key.json}:/app/gcp_jwt_key.json:ro
     ports:
       - "3030:3030"
     healthcheck:

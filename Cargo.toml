@@ -49,6 +49,7 @@ clap = { version = "4.5.51", features = ["derive"] }
 futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
 url = "2.5.4"
+google-cloud-auth = "1.1.0"
 serde-untagged = "0.1.8"
 object_store = { version = "0.12.2", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"

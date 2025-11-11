@@ -41,22 +41,70 @@ output_uri_prefix = "gs://mock-bucket/output/"
 # This will be overridden to point to mock server via provider URL override
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   TOOLS                                    │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[tools.get_temperature]
+description = "Get the current temperature in a given location"
+parameters = "../../fixtures/config/tools/get_temperature.json"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [functions.basic_test]
 type = "chat"
 
-[functions.basic_test.variants.openai_batch]
+[functions.basic_test.variants.openai]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "You are a helpful assistant."
 max_tokens = 100
 
-[functions.basic_test.variants.gcp_batch]
+[functions.basic_test.variants.gcp-vertex-gemini-flash]
 type = "chat_completion"
 model = "gemini-2.0-flash-001"
 system_template = "You are a helpful assistant."
+max_tokens = 100
+
+[functions.json_success]
+type = "json"
+schemas.system.path = "../../fixtures/config/functions/basic_test/system_schema.json"
+user_schema = "../../fixtures/config/functions/json_success/user_schema.json"
+output_schema = "../../fixtures/config/functions/basic_test/output_schema.json"
+
+[functions.json_success.variants.openai]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.json_success.variants.gcp-vertex-gemini-flash]
+type = "chat_completion"
+model = "gemini-2.0-flash-001"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.weather_helper]
+type = "chat"
+system_schema = "../../fixtures/config/functions/weather_helper/system_schema.json"
+tools = ["get_temperature"]
+tool_choice = "auto"
+
+[functions.weather_helper.variants.openai]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper.variants.gcp-vertex-gemini-flash]
+type = "chat_completion"
+model = "gemini-2.0-flash-001"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
 # ┌────────────────────────────────────────────────────────────────────────────┐

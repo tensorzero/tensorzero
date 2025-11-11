@@ -1,9 +1,12 @@
 use axum::{extract::Path, http::StatusCode, Json};
+use bytes::Bytes;
+use object_store::gcp::GoogleCloudStorageBuilder;
+use object_store::ObjectStore;
 use serde::Deserialize;
 use serde_json::json;
 use std::{
     collections::HashMap,
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 use uuid::Uuid;
 
@@ -23,6 +26,8 @@ struct BatchJob {
     create_time: String,
     // Timestamp when this job should transition to succeeded
     complete_at: i64,
+    // Flag to track if output has been generated and uploaded
+    output_generated: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -47,6 +52,7 @@ impl JobState {
 struct InputConfig {
     #[serde(rename = "instancesFormat")]
     instances_format: String,
+    #[serde(alias = "gcs_source")]
     gcs_source: GCSSource,
 }
 
@@ -61,6 +67,7 @@ struct GCSSource {
 struct OutputConfig {
     #[serde(rename = "predictionsFormat")]
     predictions_format: String,
+    #[serde(alias = "gcs_destination")]
     gcs_destination: GCSDestination,
 }
 
@@ -104,6 +111,7 @@ pub async fn create_batch_prediction_job(
         output_config: request.output_config,
         create_time: now.to_rfc3339(),
         complete_at,
+        output_generated: false,
     };
 
     let mut jobs = GCP_BATCH_JOBS.get_or_init(Default::default).lock().unwrap();
@@ -130,7 +138,12 @@ pub async fn get_batch_prediction_job(
         project, location, job_id
     );
 
+    tracing::debug!("Looking for job: {}", job_name);
+
     let mut jobs = GCP_BATCH_JOBS.get_or_init(Default::default).lock().unwrap();
+
+    tracing::debug!("Available jobs: {:?}", jobs.keys().collect::<Vec<_>>());
+
     let job = jobs.get_mut(&job_name).ok_or_else(|| {
         Error::new(
             format!("Batch prediction job not found: {}", job_name),
@@ -140,10 +153,72 @@ pub async fn get_batch_prediction_job(
 
     let now = chrono::Utc::now().timestamp();
 
-    // Update job state based on time
-    if now >= job.complete_at && !matches!(job.state, JobState::Succeeded) {
-        // Transition to succeeded
-        job.state = JobState::Succeeded;
+    // Update job state based on time and generate output if needed
+    let should_start_upload = now >= job.complete_at
+        && !matches!(job.state, JobState::Succeeded)
+        && !job.output_generated;
+
+    if should_start_upload {
+        let input_uri = job.input_config.gcs_source.uris.clone();
+        let output_uri_prefix = job.output_config.gcs_destination.output_uri_prefix.clone();
+        let job_name_clone = job_name.clone();
+
+        // Mark as output being generated to prevent duplicate uploads
+        job.output_generated = true;
+        job.state = JobState::Running;
+
+        // Drop the lock before spawning the async task
+        drop(jobs);
+
+        // Spawn async task to generate and upload output
+        // This avoids blocking the handler with GCS operations
+        tokio::spawn(async move {
+            match generate_and_upload_batch_output(&input_uri, &output_uri_prefix).await {
+                Ok(()) => {
+                    tracing::info!("Successfully uploaded batch output to {}", output_uri_prefix);
+                    // Update job state to succeeded
+                    let mut jobs = GCP_BATCH_JOBS.get_or_init(Default::default).lock().unwrap();
+                    if let Some(job) = jobs.get_mut(&job_name_clone) {
+                        job.state = JobState::Succeeded;
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to upload batch output: {}", e);
+                    // Still mark as succeeded to allow the test to progress
+                    let mut jobs = GCP_BATCH_JOBS.get_or_init(Default::default).lock().unwrap();
+                    if let Some(job) = jobs.get_mut(&job_name_clone) {
+                        job.state = JobState::Succeeded;
+                    }
+                }
+            }
+        });
+
+        // Re-acquire lock for response generation
+        jobs = GCP_BATCH_JOBS.get_or_init(Default::default).lock().unwrap();
+        let job = jobs.get(&job_name).ok_or_else(|| {
+            Error::new(
+                format!("Batch prediction job not found: {}", job_name),
+                StatusCode::NOT_FOUND,
+            )
+        })?;
+
+        let response = json!({
+            "name": job.name,
+            "displayName": job.display_name,
+            "model": job.model,
+            "state": job.state.as_str(),
+            "createTime": job.create_time,
+        });
+
+        return Ok(Json(response));
+    }
+
+    // Normal state transitions
+    if now >= job.complete_at && !matches!(job.state, JobState::Succeeded) && job.output_generated {
+        // Upload is in progress or completed, keep as running or check if it's done
+        if !matches!(job.state, JobState::Succeeded) {
+            job.state = JobState::Running;
+        }
     } else if now >= job.complete_at - 1 && matches!(job.state, JobState::Pending) {
         // After 1 second, transition to running
         job.state = JobState::Running;
@@ -165,4 +240,290 @@ pub async fn get_batch_prediction_job(
     }
 
     Ok(Json(response))
+}
+
+/// Generate mock batch output from input JSONL
+fn generate_batch_output(input_content: &[u8]) -> String {
+    use crate::batch_response_generator::gcp::wrap_batch_response;
+    use serde_json::Value;
+
+    let input_str = String::from_utf8_lossy(input_content);
+    let mut output_lines = Vec::new();
+
+    for line in input_str.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        // Parse the input line (format: {"request": {...}})
+        let input: Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!("Failed to parse input line: {}: {}", e, line);
+                continue;
+            }
+        };
+
+        // Extract the request object
+        let request = input.get("request").unwrap_or(&input);
+
+        // Detect response type and generate appropriate parts
+        let parts = detect_and_generate_gcp_response(request);
+
+        // Wrap in full response structure
+        let response = wrap_batch_response(request, parts);
+
+        output_lines.push(serde_json::to_string(&response).unwrap());
+    }
+
+    output_lines.join("\n")
+}
+
+/// Detect the type of response needed and generate GCP Vertex parts
+fn detect_and_generate_gcp_response(request: &serde_json::Value) -> Vec<serde_json::Value> {
+    use crate::batch_response_generator::{
+        gcp::{generate_function_call_parts, generate_json_parts, generate_text_parts},
+        generate_json_object, generate_simple_text_from_request, generate_tool_args, ToolCallSpec,
+    };
+
+    // Check for JSON mode (generationConfig.responseMimeType)
+    if let Some(gen_config) = request.get("generationConfig") {
+        if let Some(mime_type) = gen_config.get("responseMimeType").and_then(|v| v.as_str()) {
+            if mime_type == "application/json" {
+                return generate_json_parts(&generate_json_object());
+            }
+        }
+    }
+
+    // Check for tool/function use
+    if let Some(tools) = request.get("tools").and_then(|v| v.as_array()) {
+        if !tools.is_empty() {
+            // Check toolConfig.functionCallingConfig.mode
+            let mode = request
+                .get("toolConfig")
+                .and_then(|tc| tc.get("functionCallingConfig"))
+                .and_then(|fcc| fcc.get("mode"))
+                .and_then(|m| m.as_str())
+                .unwrap_or("AUTO");
+
+            match mode {
+                "NONE" => {
+                    // No function calls allowed
+                    return generate_text_parts(&generate_simple_text_from_request(request));
+                }
+                "ANY" => {
+                    // Must use a function
+                    let tool_name = extract_first_tool_name(tools);
+                    let args = generate_tool_args(&tool_name);
+                    return generate_function_call_parts(&[ToolCallSpec {
+                        name: tool_name,
+                        args,
+                    }]);
+                }
+                "AUTO" | _ => {
+                    // Use heuristics to decide
+                    if should_use_functions_gcp(request, tools) {
+                        // Check for allowed function names (specific tools)
+                        if let Some(allowed_names) = request
+                            .get("toolConfig")
+                            .and_then(|tc| tc.get("functionCallingConfig"))
+                            .and_then(|fcc| fcc.get("allowedFunctionNames"))
+                            .and_then(|afn| afn.as_array())
+                        {
+                            if !allowed_names.is_empty() {
+                                // Use the first allowed tool
+                                let tool_name = allowed_names[0].as_str().unwrap_or("unknown");
+                                let args = generate_tool_args(tool_name);
+                                return generate_function_call_parts(&[ToolCallSpec {
+                                    name: tool_name.to_string(),
+                                    args,
+                                }]);
+                            }
+                        }
+
+                        // Check if multiple tools available (parallel calls)
+                        if tools.len() > 1 {
+                            let tool_specs: Vec<ToolCallSpec> = tools
+                                .iter()
+                                .take(2)
+                                .filter_map(|t| {
+                                    t.get("functionDeclarations")
+                                        .and_then(|fd| fd.as_array())
+                                        .and_then(|arr| arr.first())
+                                        .and_then(|decl| decl.get("name"))
+                                        .and_then(|n| n.as_str())
+                                })
+                                .map(|name| ToolCallSpec {
+                                    name: name.to_string(),
+                                    args: generate_tool_args(name),
+                                })
+                                .collect();
+
+                            if !tool_specs.is_empty() {
+                                return generate_function_call_parts(&tool_specs);
+                            }
+                        }
+
+                        // Single tool call
+                        let tool_name = extract_first_tool_name(tools);
+                        let args = generate_tool_args(&tool_name);
+                        return generate_function_call_parts(&[ToolCallSpec {
+                            name: tool_name,
+                            args,
+                        }]);
+                    }
+                }
+            }
+        }
+    }
+
+    // Default: simple text response
+    generate_text_parts(&generate_simple_text_from_request(request))
+}
+
+/// Extract the first tool name from GCP tools array
+fn extract_first_tool_name(tools: &[serde_json::Value]) -> String {
+    tools
+        .first()
+        .and_then(|t| t.get("functionDeclarations"))
+        .and_then(|fd| fd.as_array())
+        .and_then(|arr| arr.first())
+        .and_then(|decl| decl.get("name"))
+        .and_then(|n| n.as_str())
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+/// Heuristic to determine if functions should be used in AUTO mode
+fn should_use_functions_gcp(request: &serde_json::Value, tools: &[serde_json::Value]) -> bool {
+    // Check if this is an inference params test (should NOT use tools)
+    if let Some(labels) = request.get("labels") {
+        if let Some(test_type) = labels.get("test_type").and_then(|t| t.as_str()) {
+            if test_type == "batch_inference_params" {
+                return false; // Don't use tools for params tests
+            }
+        }
+    }
+
+    // Get the last user message from contents
+    let contents = request.get("contents").and_then(|c| c.as_array());
+    if contents.is_none() {
+        return false;
+    }
+
+    let last_user_content = contents
+        .and_then(|msgs| {
+            msgs.iter().rev().find(|msg| {
+                msg.get("role").and_then(|r| r.as_str()) == Some("user")
+            })
+        })
+        .and_then(|msg| msg.get("parts"))
+        .and_then(|parts| parts.as_array())
+        .and_then(|parts_arr| parts_arr.first())
+        .and_then(|part| part.get("text"))
+        .and_then(|t| t.as_str())
+        .unwrap_or("");
+
+    let content_lower = last_user_content.to_lowercase();
+
+    // Keywords suggesting function use
+    let function_keywords = [
+        "use the",
+        "call the",
+        "use both",
+        "call both",
+        "humidity",
+        "weather",
+    ];
+
+    for keyword in &function_keywords {
+        if content_lower.contains(keyword) {
+            return true;
+        }
+    }
+
+    // Check if any function names are mentioned (but not "temperature" since that's ambiguous)
+    for tool in tools {
+        if let Some(func_decls) = tool.get("functionDeclarations").and_then(|fd| fd.as_array()) {
+            for decl in func_decls {
+                if let Some(func_name) = decl.get("name").and_then(|n| n.as_str()) {
+                    // Don't match on "temperature" alone since it can be part of the question
+                    if func_name != "get_temperature" && content_lower.contains(func_name) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Generate and upload batch output to GCS
+async fn generate_and_upload_batch_output(
+    input_uri: &str,
+    output_uri_prefix: &str,
+) -> Result<(), anyhow::Error> {
+    // Read input file from GCS
+    let input_content = read_from_gcs(input_uri).await?;
+
+    // Generate mock responses
+    let output_content = generate_batch_output(&input_content);
+
+    // Upload to GCS
+    let output_path = format!("{}/predictions.jsonl", output_uri_prefix.trim_end_matches('/'));
+    upload_to_gcs(&output_path, output_content.as_bytes()).await?;
+
+    Ok(())
+}
+
+/// Read a file from GCS
+async fn read_from_gcs(gs_url: &str) -> Result<Vec<u8>, anyhow::Error> {
+    let store_and_path = make_gcp_object_store(gs_url).await?;
+    let result = store_and_path.store.get(&store_and_path.path).await?;
+    let bytes = result.bytes().await?;
+    Ok(bytes.to_vec())
+}
+
+/// Upload data to GCS
+async fn upload_to_gcs(gs_url: &str, data: &[u8]) -> Result<(), anyhow::Error> {
+    let store_and_path = make_gcp_object_store(gs_url).await?;
+    let bytes = Bytes::copy_from_slice(data);
+    store_and_path
+        .store
+        .put(&store_and_path.path, bytes.into())
+        .await?;
+    Ok(())
+}
+
+struct StoreAndPath {
+    store: Arc<dyn ObjectStore>,
+    path: object_store::path::Path,
+}
+
+/// Create a GCS object store from a gs:// URL
+/// This uses Application Default Credentials (ADC) - it will work if:
+/// - GOOGLE_APPLICATION_CREDENTIALS environment variable is set, or
+/// - gcloud CLI is authenticated, or
+/// - Running on GCP with a service account
+async fn make_gcp_object_store(gs_url: &str) -> Result<StoreAndPath, anyhow::Error> {
+    let bucket_and_path = gs_url
+        .strip_prefix("gs://")
+        .ok_or_else(|| anyhow::anyhow!("GCS url does not start with 'gs://': {}", gs_url))?;
+
+    let (bucket, path) = bucket_and_path
+        .split_once('/')
+        .ok_or_else(|| anyhow::anyhow!("GCS url does not contain a bucket name: {}", gs_url))?;
+
+    let key = object_store::path::Path::parse(path)?;
+
+    // GoogleCloudStorageBuilder will automatically use Application Default Credentials
+    // when no explicit credentials are provided
+    let builder = GoogleCloudStorageBuilder::default().with_bucket_name(bucket);
+    let store = builder.build()?;
+
+    Ok(StoreAndPath {
+        store: Arc::new(store),
+        path: key,
+    })
 }

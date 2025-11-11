@@ -17,6 +17,7 @@ mod groq;
 mod helpers;
 mod hyperbolic;
 mod mistral;
+mod mock_batch;
 mod openai;
 mod openrouter;
 mod reasoning;

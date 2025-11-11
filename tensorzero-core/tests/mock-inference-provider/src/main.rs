@@ -6,10 +6,10 @@
     clippy::unwrap_used
 )]
 
+mod batch_response_generator;
 mod error;
 mod fireworks;
 mod gcp_batch;
-mod gcs_mock;
 mod openai_batch;
 mod together;
 
@@ -216,11 +216,6 @@ fn make_router() -> axum::Router {
         .route(
             "/v1/projects/{project}/locations/{location}/batchPredictionJobs/{job_id}",
             axum::routing::get(gcp_batch::get_batch_prediction_job),
-        )
-        .route(
-            "/gcs/{bucket}/{*path}",
-            axum::routing::put(gcs_mock::upload_object)
-                .get(gcs_mock::download_object),
         )
         .route("/status", axum::routing::get(status_handler))
         .layer(TraceLayer::new_for_http())

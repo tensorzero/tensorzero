@@ -102,6 +102,9 @@ pub struct OpenAIProvider {
     include_encrypted_reasoning: bool,
     api_type: OpenAIAPIType,
     provider_tools: Vec<Value>,
+    #[cfg(feature = "e2e_tests")]
+    #[serde(skip)]
+    batch_api_base: Option<Url>,
 }
 
 impl OpenAIProvider {
@@ -138,7 +141,28 @@ impl OpenAIProvider {
             api_type,
 
             provider_tools,
+            #[cfg(feature = "e2e_tests")]
+            batch_api_base: None,
         })
+    }
+
+    #[cfg(feature = "e2e_tests")]
+    pub fn with_mock_batch_url(mut self, url: Url) -> Self {
+        self.batch_api_base = Some(url);
+        self
+    }
+
+    #[cfg(feature = "e2e_tests")]
+    fn get_batch_api_base(&self) -> &Url {
+        self.batch_api_base
+            .as_ref()
+            .or(self.api_base.as_ref())
+            .unwrap_or(&OPENAI_DEFAULT_BASE_URL)
+    }
+
+    #[cfg(not(feature = "e2e_tests"))]
+    fn get_batch_api_base(&self) -> &Url {
+        self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL)
     }
 
     pub fn model_name(&self) -> &str {
@@ -627,14 +651,13 @@ impl InferenceProvider for OpenAIProvider {
             &batch_requests,
             client,
             api_key,
-            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
+            self.get_batch_api_base(),
             "batch".to_string(),
         )
         .await?;
         let batch_request = OpenAIBatchRequest::new(&file_id);
         let raw_request = serde_json::to_string(&batch_request).map_err(|_| Error::new(ErrorDetails::Serialization { message: "Error serializing OpenAI batch request. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new".to_string() }))?;
-        let request_url =
-            get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let request_url = get_batch_url(self.get_batch_api_base())?;
         let mut request_builder = client.post(request_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
@@ -723,8 +746,7 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<PollBatchInferenceResponse, Error> {
         let batch_params = OpenAIBatchParams::from_ref(&batch_request.batch_params)?;
-        let mut request_url =
-            get_batch_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+        let mut request_url = get_batch_url(self.get_batch_api_base())?;
         request_url
             .path_segments_mut()
             .map_err(|()| {
@@ -1005,10 +1027,7 @@ impl OpenAIProvider {
         raw_request: String,
         raw_response: String,
     ) -> Result<ProviderBatchInferenceResponse, Error> {
-        let file_url = get_file_url(
-            self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
-            Some(file_id),
-        )?;
+        let file_url = get_file_url(self.get_batch_api_base(), Some(file_id))?;
         let api_key = self
             .credentials
             .get_api_key(credentials)

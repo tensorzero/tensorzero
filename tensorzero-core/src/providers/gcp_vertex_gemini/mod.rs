@@ -94,6 +94,9 @@ pub struct GCPVertexGeminiProvider {
     endpoint_id: Option<String>,
     model_or_endpoint_id: String,
     batch_config: Option<BatchConfig>,
+    #[cfg(feature = "e2e_tests")]
+    #[serde(skip)]
+    api_base: Option<Url>,
 }
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -264,13 +267,16 @@ pub async fn make_gcp_object_store(
         GCPVertexCredentials::WithFallback { default, fallback } => {
             // Try default first, fall back to fallback if it fails
             // We need to recursively call this function with each credential
-            match Box::pin(make_gcp_object_store(gs_url, default, dynamic_api_keys)).await {
+            let result = Box::pin(make_gcp_object_store(gs_url, default, dynamic_api_keys)).await;
+
+            match result {
                 Ok(store) => return Ok(store),
                 Err(e) => {
                     tracing::info!(
                         "Using fallback credential, as default credential for {} is unavailable for GCS: {e}",
                         PROVIDER_NAME
                     );
+
                     return Box::pin(make_gcp_object_store(gs_url, fallback, dynamic_api_keys))
                         .await;
                 }
@@ -505,6 +511,8 @@ impl GCPVertexGeminiProvider {
             model_id,
             endpoint_id,
             model_or_endpoint_id,
+            #[cfg(feature = "e2e_tests")]
+            api_base: None,
         })
     }
 
@@ -513,6 +521,7 @@ impl GCPVertexGeminiProvider {
         endpoint_id: Option<String>,
         location: String,
         project_id: String,
+        #[cfg(feature = "e2e_tests")] api_base: Option<Url>,
         api_key_location: Option<CredentialLocationWithFallback>,
         provider_types: &ProviderTypesConfig,
         default_credentials: &ProviderTypeDefaultCredentials,
@@ -523,6 +532,15 @@ impl GCPVertexGeminiProvider {
 
         let location_prefix = location_subdomain_prefix(&location);
 
+        #[cfg(feature = "e2e_tests")]
+        let api_v1_base_url = api_base.clone().unwrap_or_else(|| {
+            Url::parse(&format!(
+                "https://{location_prefix}aiplatform.googleapis.com/v1/"
+            ))
+            .expect("Failed to parse base URL - this should never happen")
+        });
+
+        #[cfg(not(feature = "e2e_tests"))]
         let api_v1_base_url = Url::parse(&format!(
             "https://{location_prefix}aiplatform.googleapis.com/v1/"
         ))
@@ -564,6 +582,8 @@ impl GCPVertexGeminiProvider {
             endpoint_id,
             model_or_endpoint_id,
             batch_config,
+            #[cfg(feature = "e2e_tests")]
+            api_base,
         })
     }
 
@@ -577,6 +597,11 @@ impl GCPVertexGeminiProvider {
 
     pub fn model_or_endpoint_id(&self) -> &str {
         &self.model_or_endpoint_id
+    }
+
+    #[cfg(feature = "e2e_tests")]
+    fn get_batch_api_base(&self) -> &Url {
+        self.api_base.as_ref().unwrap_or(&self.api_v1_base_url)
     }
 
     async fn collect_finished_batch(
@@ -1272,8 +1297,34 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             })
         })?;
 
+        #[cfg(feature = "e2e_tests")]
+        let batch_url = if let Some(api_base) = &self.api_base {
+            // Extract the path component from the original batch request URL
+            // e.g., "https://us-central1-aiplatform.googleapis.com/v1/projects/X/locations/Y/batchPredictionJobs"
+            // becomes "projects/X/locations/Y/batchPredictionJobs"
+            let path = batch_config
+                .batch_request_url
+                .strip_prefix("https://")
+                .and_then(|s| s.split_once('/'))
+                .map(|(_, path)| path.strip_prefix("v1/").unwrap_or(path))
+                .unwrap_or(&batch_config.batch_request_url);
+            api_base
+                .join(path)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to join batch URL: {e}"),
+                    })
+                })?
+                .to_string()
+        } else {
+            batch_config.batch_request_url.clone()
+        };
+
+        #[cfg(not(feature = "e2e_tests"))]
+        let batch_url = batch_config.batch_request_url.clone();
+
         let res = http_client
-            .post(batch_config.batch_request_url.clone())
+            .post(batch_url)
             .headers(auth_headers)
             .body(raw_request.clone())
             .header(http::header::CONTENT_TYPE, "application/json")
@@ -1377,16 +1428,17 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             })
         })?;
 
-        let job_poll_url = self
-            .api_v1_base_url
-            .join(&batch_params.job_url_suffix)
-            .map_err(|e| {
-                Error::new(ErrorDetails::InternalError {
-                    message: format!(
-                        "Failed to join batch job URL - this should never happen: {e}"
-                    ),
-                })
-            })?;
+        #[cfg(feature = "e2e_tests")]
+        let base_url = self.get_batch_api_base();
+
+        #[cfg(not(feature = "e2e_tests"))]
+        let base_url = &self.api_v1_base_url;
+
+        let job_poll_url = base_url.join(&batch_params.job_url_suffix).map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to join batch job URL - this should never happen: {e}"),
+            })
+        })?;
 
         let raw_request = job_poll_url.to_string();
 
