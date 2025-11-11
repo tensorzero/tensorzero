@@ -46,7 +46,7 @@ jobs:
         cd examples/production-deployment-k8s-helm
         kubectl create namespace tensorzero
         kubectl create secret generic tensorzero-secret -n tensorzero \
-            --from-literal=TENSORZERO_CLICKHOUSE_URL="http://default:tensorzero@clickhouse-clickhouse.clickhouse.svc.cluster.local:8123" \
+            --from-literal=TENSORZERO_CLICKHOUSE_URL="http://default:tensorzero@chi-clickhouse-clickhouse-0-0-0.clickhouse.svc.cluster.local:8123" \
             --from-literal=TENSORZERO_GATEWAY_URL="http://tensorzero-gateway.tensorzero.svc.cluster.local:3000" \
             --from-literal=OPENAI_API_KEY="fake-openai-api-key"
         helm upgrade --install tensorzero .  -f values.yaml -f helm-ci-overrides.yaml -n tensorzero
