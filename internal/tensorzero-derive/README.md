@@ -21,7 +21,7 @@ Usage:
 use tensorzero_derive::export_schema;
 
 #[derive(JsonSchema, Serialize, Deserialize)]
-#[cfg_attr(test, export_schema)]
+#[export_schema]
 pub struct NewType {
     pub field: String,
 }

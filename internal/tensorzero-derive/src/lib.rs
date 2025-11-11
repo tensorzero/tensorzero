@@ -263,13 +263,15 @@ pub fn export_schema(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #[cfg(test)]
         #[test]
         fn #test_name() {
-            use schemars::schema_for;
+            use schemars::generate::SchemaSettings;
             use std::fs;
             use std::path::{Path, PathBuf};
             use std::borrow::Cow;
 
             // Get the schema for this type
-            let schema = schema_for!(#name);
+            let settings = SchemaSettings::default().with_transform(schemars::transform::RemoveRefSiblings::default());
+            let generator = settings.into_generator();
+            let schema = generator.into_root_schema_for::<#name>();
 
             // Serialize to pretty JSON
             let json = serde_json::to_string_pretty(&schema)
