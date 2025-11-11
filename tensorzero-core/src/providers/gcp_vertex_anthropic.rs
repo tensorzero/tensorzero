@@ -28,8 +28,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs,
-    ProviderInferenceResponseStreamInner, Thought, Usage,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Thought, Usage,
 };
 use crate::inference::InferenceProvider;
 use crate::model::CredentialLocationWithFallback;
@@ -42,8 +41,9 @@ use crate::providers::gcp_vertex_gemini::location_subdomain_prefix;
 use crate::tool::{ToolCall, ToolChoice};
 
 use super::anthropic::{
-    prefill_json_chunk_response, prefill_json_response, AnthropicMessage, AnthropicMessageContent, AnthropicMessagesConfig, AnthropicRole, AnthropicStopReason,
-    AnthropicSystemBlock, AnthropicTool,
+    prefill_json_chunk_response, prefill_json_response, AnthropicMessage, AnthropicMessageContent,
+    AnthropicMessagesConfig, AnthropicRole, AnthropicStopReason, AnthropicSystemBlock,
+    AnthropicTool,
 };
 use super::gcp_vertex_gemini::{parse_shorthand_url, GCPVertexCredentials, ShorthandUrl};
 use super::helpers::{convert_stream_error, peek_first_chunk};
