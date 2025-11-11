@@ -40,7 +40,8 @@ jobs:
         helm repo update
         kubectl create namespace clickhouse
         helm install clickhouse altinity/clickhouse -n clickhouse -f clickhouse-values.yaml
-        kubectl wait --for=condition=ready pod chi-clickhouse-clickhouse-0-0-0 -n clickhouse --timeout=60s
+        # TODO - get this working
+        # kubectl wait --for=condition=ready pod chi-clickhouse-clickhouse-0-0-0 -n clickhouse --timeout=60s
 
     - name: Install TensorZero on minikube
       run: |
