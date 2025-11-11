@@ -1,0 +1,69 @@
+# Configuration file for E2E batch testing with mock inference providers
+# This config points all providers to the mock server running on localhost:3030
+
+[gateway]
+bind_address = "0.0.0.0:3000"
+debug = true
+
+[object_storage]
+type = "disabled"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                   MODELS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+# OpenAI model configured to use mock server
+[models."gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+api_base = "http://localhost:3030/openai/"
+
+# GCP Vertex Gemini model configured to use mock server
+[models."gemini-2.0-flash-001"]
+routing = ["gcp_vertex_gemini"]
+
+[models."gemini-2.0-flash-001".providers.gcp_vertex_gemini]
+type = "gcp_vertex_gemini"
+model_id = "gemini-2.0-flash-001"
+location = "us-central1"
+project_id = "test-project"
+credential_location = "none"
+api_base = "http://localhost:3030/v1/"
+
+# GCP Vertex Gemini batch configuration pointing to mock GCS and batch API
+[provider_types.gcp_vertex_gemini.batch]
+storage_type = "cloud_storage"
+input_uri_prefix = "gs://mock-bucket/input/"
+output_uri_prefix = "gs://mock-bucket/output/"
+# This will be overridden to point to mock server via provider URL override
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                 FUNCTIONS                                  │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.openai_batch]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "You are a helpful assistant."
+max_tokens = 100
+
+[functions.basic_test.variants.gcp_batch]
+type = "chat_completion"
+model = "gemini-2.0-flash-001"
+system_template = "You are a helpful assistant."
+max_tokens = 100
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.test_metric]
+type = "boolean"
+optimize = "max"
+level = "inference"
