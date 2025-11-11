@@ -15,15 +15,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const before = url.searchParams.get("before");
   const after = url.searchParams.get("after");
-  const pageSize = Number(url.searchParams.get("pageSize")) || 10;
-  if (pageSize > 100) {
-    throw data("Page size cannot exceed 100", { status: 400 });
+  const limit = Number(url.searchParams.get("limit")) || 10;
+  if (limit > 100) {
+    throw data("Limit cannot exceed 100", { status: 400 });
   }
   const databaseClient = await getNativeDatabaseClient();
 
   const [episodes, bounds] = await Promise.all([
     databaseClient.queryEpisodeTable(
-      pageSize,
+      limit,
       before || undefined,
       after || undefined,
     ),
@@ -32,13 +32,13 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   return {
     episodes,
-    pageSize,
+    limit,
     bounds,
   };
 }
 
 export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
-  const { episodes, pageSize, bounds } = loaderData;
+  const { episodes, limit, bounds } = loaderData;
   const navigate = useNavigate();
 
   const topEpisode = episodes.at(0);
@@ -46,7 +46,7 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 
   const handleNextPage = () => {
     if (bottomEpisode) {
-      navigate(`?before=${bottomEpisode.episode_id}&pageSize=${pageSize}`, {
+      navigate(`?before=${bottomEpisode.episode_id}&limit=${limit}`, {
         preventScrollReset: true,
       });
     }
@@ -54,7 +54,7 @@ export default function EpisodesPage({ loaderData }: Route.ComponentProps) {
 
   const handlePreviousPage = () => {
     if (topEpisode) {
-      navigate(`?after=${topEpisode.episode_id}&pageSize=${pageSize}`, {
+      navigate(`?after=${topEpisode.episode_id}&limit=${limit}`, {
         preventScrollReset: true,
       });
     }

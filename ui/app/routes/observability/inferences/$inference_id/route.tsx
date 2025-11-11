@@ -68,10 +68,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const newFeedbackId = url.searchParams.get("newFeedbackId");
   const beforeFeedback = url.searchParams.get("beforeFeedback");
   const afterFeedback = url.searchParams.get("afterFeedback");
-  const pageSize = Number(url.searchParams.get("pageSize")) || 10;
+  const limit = Number(url.searchParams.get("limit")) || 10;
 
-  if (pageSize > 100) {
-    throw data("Page size cannot exceed 100", { status: 400 });
+  if (limit > 100) {
+    throw data("Limit cannot exceed 100", { status: 400 });
   }
 
   // --- Define all promises, conditionally choosing the feedback promise ---
@@ -84,7 +84,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const demonstrationFeedbackPromise =
     dbClient.queryDemonstrationFeedbackByInferenceId({
       inference_id,
-      page_size: 1, // Only need to know if *any* exist
+      limit: 1, // Only need to know if *any* exist
     });
   const feedbackBoundsPromise = dbClient.queryFeedbackBoundsByTargetId({
     target_id: inference_id,
@@ -94,12 +94,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // update the feedback table as it is eventually consistent.
   // In this case, we poll for the feedback item until it is found but eventually time out and log a warning.
   const feedbackDataPromise = newFeedbackId
-    ? pollForFeedbackItem(inference_id, newFeedbackId, pageSize)
+    ? pollForFeedbackItem(inference_id, newFeedbackId, limit)
     : dbClient.queryFeedbackByTargetId({
         target_id: inference_id,
         before: beforeFeedback || undefined,
         after: afterFeedback || undefined,
-        page_size: pageSize,
+        limit,
       });
 
   // --- Execute all promises concurrently ---

@@ -18,17 +18,17 @@ import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.serv
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-  const pageSize = Number(url.searchParams.get("pageSize")) || 15;
+  const limit = Number(url.searchParams.get("limit")) || 15;
   const offset = Number(url.searchParams.get("offset")) || 0;
-  if (pageSize > 100) {
-    throw data("Page size cannot exceed 100", { status: 400 });
+  if (limit > 100) {
+    throw data("Limit cannot exceed 100", { status: 400 });
   }
   const datasetMetadata = await getDatasetMetadata({
-    limit: pageSize,
+    limit,
     offset,
   });
   const numberOfDatasets = await countDatasets();
-  return { counts: datasetMetadata, pageSize, offset, numberOfDatasets };
+  return { counts: datasetMetadata, limit, offset, numberOfDatasets };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -47,16 +47,16 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
-  const { counts, pageSize, offset, numberOfDatasets } = loaderData;
+  const { counts, limit, offset, numberOfDatasets } = loaderData;
   const navigate = useNavigate();
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + pageSize));
+    searchParams.set("offset", String(offset + limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - pageSize));
+    searchParams.set("offset", String(offset - limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   return (
@@ -69,7 +69,7 @@ export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset === 0}
-          disableNext={offset + pageSize >= numberOfDatasets}
+          disableNext={offset + limit >= numberOfDatasets}
         />
       </SectionLayout>
     </PageLayout>
