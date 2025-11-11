@@ -53,4 +53,4 @@ jobs:
     - name: Print kubectl logs
       if: always()
       run: |
-        kubectl logs -n tensorzero --timestamps=true --all-pods=true --all-containers=true
+        kubectl logs -n tensorzero --timestamps=true --all-pods=true --all-containers=true -l app.kubernetes.io/instance=tensorzero
