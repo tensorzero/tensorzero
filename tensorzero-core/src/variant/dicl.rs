@@ -1,3 +1,4 @@
+use chrono::Duration;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -50,9 +51,8 @@ use super::{
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct DiclConfig {
     weight: Option<f64>,
     embedding_model: Arc<str>,
@@ -333,6 +333,7 @@ impl Variant for DiclConfig {
         _templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
+        global_outbound_http_timeout: &Duration,
     ) -> Result<(), Error> {
         // TODO (#360): Add the clickhouse connection to this interface
         // Run a count() query on the DynamicInContextLearningExample table
@@ -359,7 +360,7 @@ impl Variant for DiclConfig {
             }))?;
 
         embedding_model
-            .validate(self.embedding_model())
+            .validate(self.embedding_model(), global_outbound_http_timeout)
             .map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!(
@@ -514,7 +515,7 @@ impl DiclConfig {
     ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata), Error> {
         // Serialize the input so that it can be embedded
         let serialized_input = serde_json::to_string(
-            &lazy_input_to_input_rejecting_incompatible(input.clone())?.into_stored_input()?,
+            &lazy_input_to_input_rejecting_incompatible(input.clone())?.into_stored_input(),
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -690,7 +691,7 @@ impl DiclConfig {
     }
 
     fn prepare_input_message(input: &ResolvedInput) -> Result<RequestMessage, Error> {
-        let content = vec![serde_json::to_string(&input.clone().into_stored_input()?)
+        let content = vec![serde_json::to_string(&input.clone().into_stored_input())
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -1103,7 +1104,7 @@ mod tests {
 
         // The content should contain the serialized Input as a Text ContentBlock
         let expected_serialized_input =
-            serde_json::to_string(&input_data.clone().into_stored_input().unwrap()).unwrap();
+            serde_json::to_string(&input_data.clone().into_stored_input()).unwrap();
         let expected_content = vec![ContentBlock::Text(Text {
             text: expected_serialized_input.clone(),
         })];

@@ -84,17 +84,16 @@ pub const PROVIDER_TYPE: &str = "openai";
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum OpenAIAPIType {
     #[default]
     ChatCompletions,
     Responses,
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct OpenAIProvider {
     model_name: String,
     api_base: Option<Url>,
@@ -345,8 +344,14 @@ impl WrappedProvider for OpenAIProvider {
             Box<dyn Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static>,
         >,
         start_time: Instant,
+        raw_request: &str,
     ) -> ProviderInferenceResponseStreamInner {
-        stream_openai(PROVIDER_TYPE.to_string(), event_source, start_time)
+        stream_openai(
+            PROVIDER_TYPE.to_string(),
+            event_source,
+            start_time,
+            raw_request,
+        )
     }
 }
 
@@ -541,6 +546,7 @@ impl InferenceProvider for OpenAIProvider {
                     model_provider.discard_unknown_chunks,
                     model_name,
                     provider_name,
+                    &raw_request,
                 )
                 .peekable();
                 Ok((stream, raw_request))
@@ -581,6 +587,7 @@ impl InferenceProvider for OpenAIProvider {
                     PROVIDER_TYPE.to_string(),
                     event_source.map_err(TensorZeroEventError::EventSource),
                     start_time,
+                    &raw_request,
                 )
                 .peekable();
                 Ok((stream, raw_request))
@@ -941,7 +948,9 @@ pub fn stream_openai(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let mut tool_call_ids = Vec::new();
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
@@ -953,7 +962,7 @@ pub fn stream_openai(
                             yield Err(e);
                         }
                         TensorZeroEventError::EventSource(e) => {
-                            yield Err(convert_stream_error(provider_type.clone(), e).await);
+                            yield Err(convert_stream_error(raw_request.clone(), provider_type.clone(), e).await);
                         }
                     }
                 }
@@ -968,7 +977,7 @@ pub fn stream_openai(
                                 message: format!(
                                     "Error parsing chunk. Error: {e}",
                                 ),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                                 provider_type: provider_type.clone(),
                             }));

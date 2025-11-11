@@ -1,22 +1,21 @@
 use super::{deserialize_delete, serialize_delete};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(transparent)]
 pub struct ExtraHeadersConfig {
     pub data: Vec<ExtraHeader>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 pub struct ExtraHeader {
     pub name: String,
     #[serde(flatten)]
     pub kind: ExtraHeaderKind,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
-#[derive(ts_rs::TS)]
 #[ts(export)]
 pub enum ExtraHeaderKind {
     Value(String),
@@ -30,7 +29,7 @@ pub enum ExtraHeaderKind {
 
 /// The 'InferenceExtraHeaders' options provided directly in an inference request
 /// These have not yet been filtered by variant name
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraHeaders {
     pub extra_headers: Vec<InferenceExtraHeader>,
@@ -55,14 +54,14 @@ impl UnfilteredInferenceExtraHeaders {
 }
 
 /// The result of filtering `InferenceExtraHeader` by variant name.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(transparent)]
 pub struct FilteredInferenceExtraHeaders {
     pub data: Vec<InferenceExtraHeader>,
 }
 
 /// Holds the config-level and inference-level extra headers options
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, ts_rs::TS)]
 pub struct FullExtraHeadersConfig {
     pub variant_extra_headers: Option<ExtraHeadersConfig>,
     pub inference_extra_headers: FilteredInferenceExtraHeaders,

@@ -35,26 +35,25 @@ use crate::inference::InferenceProvider;
 use crate::model::CredentialLocationWithFallback;
 use crate::model::{fully_qualified_name, ModelProvider};
 use crate::model_table::{GCPVertexAnthropicKind, ProviderType, ProviderTypeDefaultCredentials};
-use crate::providers::anthropic::{anthropic_to_tensorzero_stream_message, AnthropicStreamMessage};
-use crate::providers::anthropic::{
-    AnthropicMessage, AnthropicRole, AnthropicSystemBlock, AnthropicTool,
-};
-use crate::providers::anthropic::{AnthropicMessageContent, AnthropicMessagesConfig};
+use crate::providers::anthropic::handle_anthropic_error;
 use crate::providers::gcp_vertex_gemini::location_subdomain_prefix;
-use crate::tool::{ToolCall, ToolChoice};
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use super::anthropic::{prefill_json_chunk_response, prefill_json_response, AnthropicStopReason};
+use super::anthropic::{
+    prefill_json_chunk_response, prefill_json_response, AnthropicDocumentSource,
+    AnthropicMessageDelta, AnthropicStopReason,
+};
 use super::gcp_vertex_gemini::{parse_shorthand_url, GCPVertexCredentials, ShorthandUrl};
 use super::helpers::{convert_stream_error, peek_first_chunk};
+use crate::providers::anthropic::{AnthropicMessageContent, AnthropicMessagesConfig};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
 const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
 pub const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GCPVertexAnthropicProvider {
     model_id: String,
     request_url: String,
@@ -267,17 +266,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
 
             Ok(response_with_latency.try_into()?)
         } else {
-            let error_body: GCPVertexAnthropicError =
-                serde_json::from_str(&raw_response).map_err(|e| {
-                    Error::new(ErrorDetails::InferenceServer {
-                        message: format!("Error parsing JSON response: {e}: {raw_response}"),
-                        provider_type: PROVIDER_TYPE.to_string(),
-                        raw_request: Some(raw_request.clone()),
-                        raw_response: Some(raw_response.clone()),
-                    })
-                })?;
-
-            handle_anthropic_error(response_status, error_body.error)
+            handle_anthropic_error(response_status, raw_request, raw_response)
         }
     }
 
@@ -330,6 +319,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             model_provider,
             model_name,
             provider_name,
+            &raw_request,
         )
         .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
@@ -377,7 +367,9 @@ fn stream_anthropic(
     model_provider: &ModelProvider,
     model_name: &str,
     provider_name: &str,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
     let model_name = model_name.to_string();
     let provider_name = provider_name.to_string();
@@ -387,7 +379,7 @@ fn stream_anthropic(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -399,7 +391,7 @@ fn stream_anthropic(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: None,
                             }));
                         // Anthropic streaming API docs specify that this is the last message
@@ -723,18 +715,6 @@ fn prefill_json_message(messages: &mut Vec<AnthropicMessage>) {
     });
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct GCPVertexAnthropicError {
-    error: GCPVertexAnthropicErrorBody,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-struct GCPVertexAnthropicErrorBody {
-    r#type: Option<String>,
-    code: Option<u32>,
-    message: String,
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum GCPVertexAnthropicContentBlock {
@@ -892,31 +872,346 @@ impl<'a> TryFrom<GCPVertexAnthropicResponseWithMetadata<'a>> for ProviderInferen
     }
 }
 
-fn handle_anthropic_error(
-    response_code: StatusCode,
-    response_body: GCPVertexAnthropicErrorBody,
-) -> Result<ProviderInferenceResponse, Error> {
-    match response_code {
-        StatusCode::UNAUTHORIZED
-        | StatusCode::BAD_REQUEST
-        | StatusCode::PAYLOAD_TOO_LARGE
-        | StatusCode::TOO_MANY_REQUESTS => Err(ErrorDetails::InferenceClient {
-            raw_response: Some(serde_json::to_string(&response_body).unwrap_or_default()),
-            message: response_body.message,
-            status_code: Some(response_code),
+#[derive(Deserialize, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum GCPVertexAnthropicMessageBlock {
+    Text {
+        text: String,
+    },
+    TextDelta {
+        text: String,
+    },
+    ToolUse {
+        id: String,
+        name: String,
+        input: serde_json::Value,
+    },
+    InputJsonDelta {
+        partial_json: String,
+    },
+    ThinkingDelta {
+        thinking: String,
+    },
+    SignatureDelta {
+        signature: String,
+    },
+    Thinking {
+        thinking: String,
+        signature: String,
+    },
+    RedactedThinking {
+        data: String,
+    },
+}
+
+#[derive(Deserialize, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum GCPVertexAnthropicStreamMessage {
+    ContentBlockDelta {
+        delta: FlattenUnknown<'static, GCPVertexAnthropicMessageBlock>,
+        index: u32,
+    },
+    ContentBlockStart {
+        content_block: FlattenUnknown<'static, GCPVertexAnthropicMessageBlock>,
+        index: u32,
+    },
+    ContentBlockStop {
+        index: u32,
+    },
+    Error {
+        error: Value,
+    },
+    MessageDelta {
+        delta: FlattenUnknown<'static, AnthropicMessageDelta>,
+        usage: Value,
+    },
+    MessageStart {
+        message: Value,
+    },
+    MessageStop,
+    Ping,
+}
+
+/// This function converts an Anthropic stream message to a TensorZero stream message.
+/// It must keep track of the current tool ID and name in order to correctly handle ToolCallChunks (which we force to always contain the tool name and ID)
+/// Anthropic only sends the tool ID and name in the ToolUse chunk so we need to keep the most recent ones as mutable references so
+/// subsequent InputJSONDelta chunks can be initialized with this information as well.
+/// There is no need to do the same bookkeeping for TextDelta chunks since they come with an index (which we use as an ID for a text chunk).
+/// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
+fn anthropic_to_tensorzero_stream_message(
+    raw_message: String,
+    message: GCPVertexAnthropicStreamMessage,
+    message_latency: Duration,
+    current_tool_id: &mut Option<String>,
+    discard_unknown_chunks: bool,
+    model_name: &str,
+    provider_name: &str,
+) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
+    match message {
+        GCPVertexAnthropicStreamMessage::ContentBlockDelta {
+            delta: FlattenUnknown::Normal(delta),
+            index,
+        } => match delta {
+            GCPVertexAnthropicMessageBlock::TextDelta { text } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Text(TextChunk {
+                        text,
+                        id: index.to_string(),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            GCPVertexAnthropicMessageBlock::InputJsonDelta { partial_json } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    // Take the current tool name and ID and use them to create a ToolCallChunk
+                    // This is necessary because the ToolCallChunk must always contain the tool name and ID
+                    // even though Anthropic only sends the tool ID and name in the ToolUse chunk and not InputJSONDelta
+                    vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                        raw_name: None,
+                        id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
+                            message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
+                            provider_type: PROVIDER_TYPE.to_string(),
+                            raw_request: None,
+                            raw_response: None,
+                        }))?,
+                        raw_arguments: partial_json,
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            GCPVertexAnthropicMessageBlock::ThinkingDelta { thinking } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: Some(thinking),
+                        signature: None,
+                        id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            GCPVertexAnthropicMessageBlock::SignatureDelta { signature } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        signature: Some(signature),
+                        id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            _ => Err(ErrorDetails::InferenceServer {
+                message: "Unsupported content block type for ContentBlockDelta".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: None,
+            }
+            .into()),
+        },
+        GCPVertexAnthropicStreamMessage::ContentBlockStart {
+            content_block: FlattenUnknown::Normal(content_block),
+            index,
+        } => match content_block {
+            GCPVertexAnthropicMessageBlock::Text { text } => {
+                let text_chunk = ContentBlockChunk::Text(TextChunk {
+                    text,
+                    id: index.to_string(),
+                });
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![text_chunk],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            GCPVertexAnthropicMessageBlock::ToolUse { id, name, .. } => {
+                // This is a new tool call, update the ID for future chunks
+                *current_tool_id = Some(id.clone());
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::ToolCall(ToolCallChunk {
+                        id,
+                        raw_name: Some(name),
+                        // As far as I can tell this is always {} so we ignore
+                        raw_arguments: String::new(),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            GCPVertexAnthropicMessageBlock::Thinking {
+                thinking,
+                signature,
+            } => Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Thought(ThoughtChunk {
+                    text: Some(thinking),
+                    signature: Some(signature),
+                    id: index.to_string(),
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                })],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            ))),
+            GCPVertexAnthropicMessageBlock::RedactedThinking { data } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        signature: Some(data),
+                        id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            _ => Err(ErrorDetails::InferenceServer {
+                message: "Unsupported content block type for ContentBlockStart".to_string(),
+                provider_type: PROVIDER_TYPE.to_string(),
+                raw_request: None,
+                raw_response: None,
+            }
+            .into()),
+        },
+        GCPVertexAnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
+        GCPVertexAnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
+            message: error.to_string(),
             provider_type: PROVIDER_TYPE.to_string(),
             raw_request: None,
+            raw_response: None,
         }
         .into()),
-        // StatusCode::NOT_FOUND | StatusCode::FORBIDDEN | StatusCode::INTERNAL_SERVER_ERROR | 529: Overloaded
-        // These are all captured in _ since they have the same error behavior
-        _ => Err(ErrorDetails::InferenceServer {
-            raw_response: Some(serde_json::to_string(&response_body).unwrap_or_default()),
-            message: response_body.message,
-            provider_type: PROVIDER_TYPE.to_string(),
-            raw_request: None,
+        GCPVertexAnthropicStreamMessage::MessageDelta {
+            usage,
+            delta: FlattenUnknown::Normal(delta),
+        } => {
+            let usage = parse_usage_info(&usage);
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![],
+                Some(usage.into()),
+                raw_message,
+                message_latency,
+                delta.stop_reason.map(AnthropicStopReason::into),
+            )))
         }
-        .into()),
+        GCPVertexAnthropicStreamMessage::MessageStart { message } => {
+            if let Some(usage_info) = message.get("usage") {
+                let usage = parse_usage_info(usage_info);
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![],
+                    Some(usage.into()),
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            } else {
+                Ok(None)
+            }
+        }
+        GCPVertexAnthropicStreamMessage::MessageStop | GCPVertexAnthropicStreamMessage::Ping => {
+            Ok(None)
+        }
+        GCPVertexAnthropicStreamMessage::ContentBlockDelta {
+            delta: FlattenUnknown::Unknown(delta),
+            index,
+        } => {
+            if discard_unknown_chunks {
+                warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
+                return Ok(None);
+            }
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
+                    id: index.to_string(),
+                    data: delta.into_owned(),
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
+        }
+        GCPVertexAnthropicStreamMessage::ContentBlockStart {
+            content_block: FlattenUnknown::Unknown(content_block),
+            index,
+        } => {
+            if discard_unknown_chunks {
+                warn_discarded_unknown_chunk(PROVIDER_TYPE, &content_block.to_string());
+                return Ok(None);
+            }
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
+                    id: index.to_string(),
+                    data: content_block.into_owned(),
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
+        }
+        GCPVertexAnthropicStreamMessage::MessageDelta {
+            usage: _,
+            delta: FlattenUnknown::Unknown(delta),
+        } => {
+            if discard_unknown_chunks {
+                warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
+                return Ok(None);
+            }
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
+                    id: "message_delta".to_string(),
+                    data: delta.into_owned(),
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
+        }
+    }
+}
+
+fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropic {
+    let input_tokens = usage_info
+        .get("input_tokens")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as u32;
+    let output_tokens = usage_info
+        .get("output_tokens")
+        .and_then(Value::as_u64)
+        .unwrap_or(0) as u32;
+    GCPVertexAnthropic {
+        input_tokens,
+        output_tokens,
     }
 }
 
@@ -1659,94 +1954,6 @@ mod tests {
             ],
         }];
         assert_eq!(prepare_messages(messages.clone()).unwrap(), expected);
-    }
-
-    #[test]
-    fn test_handle_anthropic_error() {
-        let error_body = GCPVertexAnthropicErrorBody {
-            r#type: None,
-            code: None,
-            message: "test_message".to_string(),
-        };
-        let response_code = StatusCode::BAD_REQUEST;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
-                status_code: Some(response_code),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-            }
-        );
-        let response_code = StatusCode::UNAUTHORIZED;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
-                status_code: Some(response_code),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-            }
-        );
-        let response_code = StatusCode::TOO_MANY_REQUESTS;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceClient {
-                message: "test_message".to_string(),
-                status_code: Some(response_code),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-            }
-        );
-        let response_code = StatusCode::NOT_FOUND;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceServer {
-                message: "test_message".to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-                provider_type: PROVIDER_TYPE.to_string()
-            }
-        );
-        let response_code = StatusCode::INTERNAL_SERVER_ERROR;
-        let result = handle_anthropic_error(response_code, error_body.clone());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        assert_eq!(
-            *details,
-            ErrorDetails::InferenceServer {
-                message: "test_message".to_string(),
-                raw_request: None,
-                raw_response: Some(
-                    "{\"type\":null,\"code\":null,\"message\":\"test_message\"}".to_string()
-                ),
-                provider_type: PROVIDER_TYPE.to_string()
-            }
-        );
     }
 
     #[test]

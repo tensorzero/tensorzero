@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
+    EvaluatorStatsDict,
     TensorZeroGateway,
     TensorZeroInternalError,
 )
@@ -76,7 +77,7 @@ def test_sync_run_evaluation(
     assert len(results) == run_info["num_datapoints"]
 
     # Test summary stats
-    stats: Dict[str, Dict[str, float]] = job.summary_stats()
+    stats: Dict[str, EvaluatorStatsDict] = job.summary_stats()
     assert isinstance(stats, dict)
     assert len(stats) > 0  # Should have at least one evaluator
 
@@ -90,15 +91,19 @@ def test_sync_run_evaluation(
         assert isinstance(evaluator_stats, dict)
         assert "mean" in evaluator_stats
         assert "stderr" in evaluator_stats
+        assert "count" in evaluator_stats
         assert isinstance(evaluator_stats["mean"], (int, float))
         assert isinstance(evaluator_stats["stderr"], (int, float))
+        assert isinstance(evaluator_stats["count"], int)
         assert evaluator_stats["stderr"] >= 0  # Stderr is always non-negative
-        assert set(evaluator_stats.keys()) == {"mean", "stderr"}
+        assert evaluator_stats["count"] >= 0
+        assert set(evaluator_stats.keys()) == {"mean", "stderr", "count"}
 
     # Validate precise expected values based on dataset
     # Expected mean 0.50, stderr 0.20 for this dataset
     assert abs(stats["count_sports"]["mean"] - 0.50) < 0.005
     assert abs(stats["count_sports"]["stderr"] - 0.20) < 0.005
+    assert stats["count_sports"]["count"] == run_info["num_datapoints"]
     # Note: exact_match mean is not checked precisely as it's non-deterministic
 
 
@@ -177,7 +182,7 @@ async def test_async_run_evaluation(
     assert len(results) == run_info["num_datapoints"]
 
     # Test summary stats
-    stats: Dict[str, Dict[str, float]] = await job.summary_stats()
+    stats: Dict[str, EvaluatorStatsDict] = await job.summary_stats()
     assert isinstance(stats, dict)
     assert len(stats) > 0  # Should have at least one evaluator
 
@@ -191,10 +196,13 @@ async def test_async_run_evaluation(
         assert isinstance(evaluator_stats, dict)
         assert "mean" in evaluator_stats
         assert "stderr" in evaluator_stats
+        assert "count" in evaluator_stats
         assert isinstance(evaluator_stats["mean"], (int, float))
         assert isinstance(evaluator_stats["stderr"], (int, float))
+        assert isinstance(evaluator_stats["count"], int)
         assert evaluator_stats["stderr"] >= 0  # Stderr is always non-negative
-        assert set(evaluator_stats.keys()) == {"mean", "stderr"}
+        assert evaluator_stats["count"] >= 0
+        assert set(evaluator_stats.keys()) == {"mean", "stderr", "count"}
 
         # Validate reasonable ranges for evaluators
         if evaluator_name in ["exact_match", "topic_starts_with_f"]:
@@ -204,10 +212,12 @@ async def test_async_run_evaluation(
     # exact_match: Should be 0.00 ± 0.00
     assert abs(stats["exact_match"]["mean"] - 0.00) < 0.005
     assert abs(stats["exact_match"]["stderr"] - 0.00) < 0.005
+    assert stats["exact_match"]["count"] == 0
     # topic_starts_with_f: 3 out of 10 topics start with 'f' (fusarium, force, formamide)
     # Expected: 0.30 ± 0.14
     assert abs(stats["topic_starts_with_f"]["mean"] - 0.30) < 0.005
     assert abs(stats["topic_starts_with_f"]["stderr"] - 0.14) < 0.005
+    assert stats["topic_starts_with_f"]["count"] == 10
 
 
 @pytest.mark.asyncio

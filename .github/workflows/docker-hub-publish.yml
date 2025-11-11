@@ -95,6 +95,8 @@ jobs:
           retention-days: 1
 
   merge:
+    permissions:
+      actions: read
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:

@@ -9,7 +9,12 @@ use dataset::query_dataset;
 use evaluators::{evaluate_inference, EvaluateInferenceParams};
 use helpers::{get_cache_options, get_tool_params_args};
 use serde::{Deserialize, Serialize};
-use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
+
+// Public re-exports for external consumers
+pub use stats::{
+    mean, std_deviation, EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate,
+    EvaluatorStats,
+};
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
@@ -412,7 +417,7 @@ pub async fn run_evaluation_core_streaming(
         let datapoint_id = datapoint.id();
         let inference_cache = args.inference_cache;
         let abort_handle = join_set.spawn(async move {
-            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?));
+            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?)?);
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
                     clients: &clients_clone,
@@ -736,6 +741,7 @@ mod tests {
                 stats::EvaluatorStats {
                     mean: 0.4,
                     stderr: 0.1,
+                    count: 10,
                 },
             );
             stats.insert(
@@ -743,6 +749,7 @@ mod tests {
                 stats::EvaluatorStats {
                     mean: 0.3,
                     stderr: 0.1,
+                    count: 10,
                 },
             );
             stats.insert(
@@ -750,6 +757,7 @@ mod tests {
                 stats::EvaluatorStats {
                     mean: 0.1,
                     stderr: 0.05,
+                    count: 10,
                 },
             );
             stats
