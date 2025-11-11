@@ -849,6 +849,7 @@ jobs:
   check-job-statuses:
     permissions:
       actions: write
+      statuses: write
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
