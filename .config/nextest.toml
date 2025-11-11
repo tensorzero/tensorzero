@@ -115,7 +115,7 @@ slow-timeout = { period = "20s", terminate-after = 2 }
 # The proc-macro tests use `trybuild`, which runs compilation
 # for various crates as part of the test
 [[profile.default.overrides]]
-filter = 'test(tensorzero-derive)'
+filter = 'package(tensorzero-derive)'
 slow-timeout = { period = "20s", terminate-after = 2 }
 
 [[profile.default.overrides]]
@@ -159,7 +159,7 @@ slow-timeout = { period = "120s", terminate-after = 1 }
 # Settings for running unit tests
 filter = 'not binary(e2e)'
 retries = 0
-slow-timeout = { period = "10s", terminate-after = 1 }
+slow-timeout = { period = "10s", terminate-after = 2 }
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and (test(providers::aws_bedrock::) or test(providers::aws_sagemaker))'
