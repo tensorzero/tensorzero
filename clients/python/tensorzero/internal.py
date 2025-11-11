@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import List, Literal, Optional
 
-from tensorzero.types import ContentBlock, Tool
+from tensorzero.generated_types import ContentBlockChatOutput
+from tensorzero.types import Tool
 
 # Note: the auxiliary types below before the clients are never actually constructed by the client and should not be constructed directly.
 # They are part of the type checking interface only.
@@ -17,7 +18,7 @@ from tensorzero.types import ContentBlock, Tool
 @dataclass
 class OutputMessage:
     role: Literal["user", "assistant"]
-    content: List[ContentBlock]
+    content: List[ContentBlockChatOutput]
 
 
 @dataclass

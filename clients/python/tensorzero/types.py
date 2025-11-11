@@ -1,7 +1,6 @@
 import warnings
 from abc import ABC
 from dataclasses import dataclass, fields, is_dataclass
-from enum import Enum
 from json import JSONEncoder
 from typing import Any, Dict, List, Literal, Optional, Protocol, Union, cast
 from uuid import UUID
@@ -11,6 +10,13 @@ import uuid_utils
 from typing_extensions import NotRequired, TypedDict, deprecated
 
 from tensorzero.generated_types import (
+    ChatInferenceResponse,
+    ContentBlockChatOutput,
+    ContentBlockChatOutputText,
+    ContentBlockChatOutputThought,
+    ContentBlockChatOutputToolCall,
+    ContentBlockChatOutputUnknown,
+    FinishReason,
     InferenceFilter,
     InferenceFilterAnd,
     InferenceFilterBooleanMetric,
@@ -19,10 +25,13 @@ from tensorzero.generated_types import (
     InferenceFilterOr,
     InferenceFilterTag,
     InferenceFilterTime,
-    Usage,
-    FinishReason,
+    JsonInferenceOutput,
     System,
     UnsetType,
+    Usage,
+)
+from tensorzero.generated_types import (
+    ThoughtSummaryBlock as ThoughtSummaryBlockGenerated,
 )
 
 
@@ -31,6 +40,7 @@ class HasTypeField(Protocol):
     type: str
 
 
+# Input ContentBlock types (used for constructing messages)
 @dataclass
 class ContentBlock(ABC, HasTypeField):
     pass
@@ -45,6 +55,8 @@ class Template(ContentBlock):
 
 @dataclass
 class Text(ContentBlock):
+    """Input text content block with deprecation support for arguments field."""
+
     text: Optional[str] = None
     arguments: Optional[Any] = None
     type: str = "text"
@@ -117,6 +129,8 @@ class FileUrl(ContentBlock):
 
 @dataclass
 class ToolCall(ContentBlock):
+    """Input tool call content block for constructing messages."""
+
     id: str
     raw_arguments: str
     raw_name: str
@@ -146,6 +160,8 @@ class ThoughtSummaryBlock:
 
 @dataclass
 class Thought(ContentBlock):
+    """Input thought content block for constructing messages."""
+
     text: Optional[str] = None
     type: str = "thought"
     signature: Optional[str] = None
@@ -162,35 +178,11 @@ class ToolResult(ContentBlock):
 
 
 @dataclass
-class UnknownContentBlock(ContentBlock):
-    data: Any
-    model_provider_name: Optional[str] = None
-    type: str = "unknown"
-
-
-@dataclass
-class JsonInferenceOutput:
-    raw: Optional[str] = None
-    parsed: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class ChatInferenceResponse:
-    inference_id: UUID
-    episode_id: UUID
-    variant_name: str
-    content: List[ContentBlock]
-    usage: Usage
-    finish_reason: Optional[FinishReason] = None
-    original_response: Optional[str] = None
-
-
-@dataclass
 class JsonInferenceResponse:
     inference_id: UUID
     episode_id: UUID
     variant_name: str
-    output: JsonInferenceOutput
+    output: "JsonInferenceOutput"  # Imported from generated_types
     usage: Usage
     finish_reason: Optional[FinishReason] = None
     original_response: Optional[str] = None
@@ -220,10 +212,10 @@ InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
 def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
     if "content" in data and isinstance(data["content"], list):
         return ChatInferenceResponse(
-            inference_id=UUID(data["inference_id"]),
-            episode_id=UUID(data["episode_id"]),
+            inference_id=data["inference_id"],
+            episode_id=data["episode_id"],
             variant_name=data["variant_name"],
-            content=[parse_content_block(block) for block in data["content"]],  # type: ignore
+            content=[parse_content_block_output(block) for block in data["content"]],
             usage=Usage(**data["usage"]),
             finish_reason=data.get("finish_reason"),
             original_response=data.get("original_response"),
@@ -243,37 +235,50 @@ def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
         raise ValueError("Unable to determine response type")
 
 
-def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
+def parse_content_block_output(block: Dict[str, Any]) -> ContentBlockChatOutput:
+    """Parse output content blocks from inference responses using generated types."""
     block_type = block["type"]
     if block_type == "text":
-        return Text(text=block["text"], type=block_type)
+        return ContentBlockChatOutputText(text=block["text"])
     elif block_type == "tool_call":
-        return ToolCall(
-            arguments=block.get("arguments"),
+        return ContentBlockChatOutputToolCall(
             id=block["id"],
-            name=block.get("name"),
-            raw_arguments=block["raw_arguments"],
             raw_name=block["raw_name"],
-            type=block_type,
+            raw_arguments=block["raw_arguments"],
+            name=block.get("name"),
+            arguments=block.get("arguments"),
         )
     elif block_type == "thought":
+        # Note: The field is named field_internal_provider_type in the dataclass
+        # but _internal_provider_type in JSON
+        # Parse summary blocks if present
         summary_data = block.get("summary")
         summary = None
         if summary_data:
-            summary = [ThoughtSummaryBlock(text=s["text"]) for s in summary_data]
-        return Thought(
+            summary = [ThoughtSummaryBlockGenerated(text=s["text"]) for s in summary_data]
+        return ContentBlockChatOutputThought(
             text=block.get("text"),
             signature=block.get("signature"),
             summary=summary,
-            type=block_type,
+            field_internal_provider_type=block.get("_internal_provider_type"),
         )
     elif block_type == "unknown":
-        return UnknownContentBlock(
+        return ContentBlockChatOutputUnknown(
             data=block["data"],
             model_provider_name=block.get("model_provider_name"),
         )
     else:
         raise ValueError(f"Unknown content block type: {block}")
+
+
+# Deprecated: Use parse_content_block_output for parsing inference responses
+def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
+    """Parse input content blocks (deprecated for output parsing)."""
+    block_type = block["type"]
+    if block_type == "text":
+        return Text(text=block["text"], type=block_type)
+    else:
+        raise ValueError(f"Unknown input content block type: {block}")
 
 
 # Types for streaming inference responses

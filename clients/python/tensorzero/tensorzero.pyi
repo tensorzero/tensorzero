@@ -21,7 +21,6 @@ from typing_extensions import deprecated
 from tensorzero import (
     ChatDatapointInsert,
     ChatInferenceOutput,
-    ContentBlock,
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
     DynamicEvaluationRunResponse,  # DEPRECATED
     ExtraBody,
@@ -34,12 +33,15 @@ from tensorzero import (
     WorkflowEvaluationRunEpisodeResponse,
     WorkflowEvaluationRunResponse,
 )
+from tensorzero.generated_types import (
+    ContentBlockChatOutput,
+    JsonInferenceOutput,
+)
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 
 # TODO: clean these up.
 from tensorzero.types import (
     EvaluatorStatsDict,
-    JsonInferenceOutput,
     OrderBy,
 )
 
@@ -64,7 +66,7 @@ from .generated_types import (
 @final
 class ResolvedInputMessage:
     role: Literal["user", "assistant"]
-    content: List[ContentBlock]
+    content: List[ContentBlockChatOutput]
 
 @final
 class ResolvedInput:
