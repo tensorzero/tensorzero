@@ -92,5 +92,5 @@ fallback_variants = ["grok_4"] // [!code ++]
 ```
 
 The gateway will first sample among the `candidate_variants`.
-If all of them fail, it will continue to sample uniformly among the `fallback_variants`.
+If all candidates fail, the gateway attempts each variant in `fallback_variants` in order.
 See [Retries & Fallbacks](/gateway/guides/retries-fallbacks) for more information.
