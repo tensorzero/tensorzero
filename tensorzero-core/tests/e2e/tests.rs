@@ -7,6 +7,7 @@
 )]
 mod batch;
 mod best_of_n;
+mod built_in;
 mod cache;
 mod clickhouse;
 mod common;
