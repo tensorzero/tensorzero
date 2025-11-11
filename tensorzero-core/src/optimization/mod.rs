@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::Arc;
 
 use crate::config::Config;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -278,7 +279,7 @@ pub trait Optimizer {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
-        config: &Config,
+        config: Arc<Config>,
     ) -> Result<Self::Handle, Error>;
 }
 
@@ -291,7 +292,7 @@ impl Optimizer for OptimizerInfo {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
-        config: &Config,
+        config: Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         match &self.inner {
             OptimizerConfig::Dicl(optimizer_config) => optimizer_config
@@ -301,7 +302,7 @@ impl Optimizer for OptimizerInfo {
                     val_examples,
                     credentials,
                     clickhouse_connection_info,
-                    config,
+                    config.clone(),
                 )
                 .await
                 .map(OptimizationJobHandle::Dicl),
@@ -312,7 +313,7 @@ impl Optimizer for OptimizerInfo {
                     val_examples,
                     credentials,
                     clickhouse_connection_info,
-                    config,
+                    config.clone(),
                 )
                 .await
                 .map(OptimizationJobHandle::OpenAISFT),
@@ -323,7 +324,7 @@ impl Optimizer for OptimizerInfo {
                     val_examples,
                     credentials,
                     clickhouse_connection_info,
-                    config,
+                    config.clone(),
                 )
                 .await
                 .map(OptimizationJobHandle::OpenAIRFT),
@@ -334,7 +335,7 @@ impl Optimizer for OptimizerInfo {
                     val_examples,
                     credentials,
                     clickhouse_connection_info,
-                    config,
+                    config.clone(),
                 )
                 .await
                 .map(OptimizationJobHandle::FireworksSFT),
@@ -345,7 +346,7 @@ impl Optimizer for OptimizerInfo {
                     val_examples,
                     credentials,
                     clickhouse_connection_info,
-                    config,
+                    config.clone(),
                 )
                 .await
                 .map(OptimizationJobHandle::GCPVertexGeminiSFT),
@@ -356,7 +357,7 @@ impl Optimizer for OptimizerInfo {
                     val_examples,
                     credentials,
                     clickhouse_connection_info,
-                    config,
+                    config.clone(),
                 )
                 .await
                 .map(OptimizationJobHandle::TogetherSFT),

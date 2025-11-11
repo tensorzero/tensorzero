@@ -29,6 +29,8 @@ services:
       context: ../..
       dockerfile: gateway/Dockerfile
       target: gateway
+      args:
+        PROFILE: dev
     volumes:
       - ./config:/app/config:ro
     command: --config-file ${TENSORZERO_GATEWAY_CONFIG:-/app/config/tensorzero.e2e.toml}

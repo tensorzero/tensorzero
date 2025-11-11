@@ -120,7 +120,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             val_examples,
             &credentials,
             &clickhouse,
-            &config,
+            Arc::new(config),
         )
         .await
         .unwrap();

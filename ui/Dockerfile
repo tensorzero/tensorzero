@@ -1,6 +1,6 @@
 # ========== base ==========
 
-FROM node:23-bookworm-slim AS base
+FROM node:24.11.0-bookworm-slim AS base
 
 COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
 

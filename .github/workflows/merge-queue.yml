@@ -60,6 +60,7 @@ jobs:
   batch-tests:
     permissions:
       contents: read
+      actions: read
     if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
@@ -77,7 +78,7 @@ jobs:
     strategy:
       matrix:
         batch_writes: [true, false]
-    
+
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
@@ -136,7 +137,7 @@ jobs:
         # This prevents manual workflow runs from modifying the cache
         if: github.event_name == 'workflow_call' || github.event_name == 'schedule'
         run: |
-          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/upload-provider-proxy-cache.sh          
+          AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/upload-provider-proxy-cache.sh
 
 
   client-tests:
