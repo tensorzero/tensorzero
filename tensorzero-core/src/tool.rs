@@ -303,12 +303,22 @@ pub struct AllowedTools {
 }
 
 impl AllowedTools {
-    fn into_dynamic_allowed_tools(self) -> Option<Vec<String>> {
+    pub fn into_dynamic_allowed_tools(self) -> Option<Vec<String>> {
         #[expect(deprecated)]
         match self.choice {
             AllowedToolsChoice::FunctionDefault => None,
             AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::AllAllowedTools => {
                 Some(self.tools.into_iter().collect())
+            }
+        }
+    }
+
+    pub fn as_dynamic_allowed_tools(&self) -> Option<Vec<&str>> {
+        #[expect(deprecated)]
+        match self.choice {
+            AllowedToolsChoice::FunctionDefault => None,
+            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::AllAllowedTools => {
+                Some(self.tools.iter().map(|s| s.as_str()).collect())
             }
         }
     }
