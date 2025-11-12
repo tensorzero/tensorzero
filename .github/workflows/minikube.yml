@@ -69,7 +69,18 @@ jobs:
     
     - name: Ping the gateway
       run: |
-        curl http://localhost:3000/health
+        # TODO - add a 'startupProbe' to the gateway helm chart
+        count=0
+        max_attempts=40
+        while ! curl http://localhost:3000/health; do
+          echo "Waiting for gateway to be healthy..."
+          sleep 1
+          count=$((count + 1))
+          if [ $count -ge $max_attempts ]; then
+            echo "Gateway failed to become healthy after $max_attempts attempts"
+            exit 1
+          fi
+        done
 
     - name: Print pod statuses
       if: always()
