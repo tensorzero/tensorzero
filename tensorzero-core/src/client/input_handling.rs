@@ -57,8 +57,9 @@ fn resolved_input_message_content_to_client_input_message_content(
             let ObjectStorageFile { file, data } = *resolved;
             let mime_type = file.mime_type;
             let detail = file.detail;
+            let filename = file.filename;
 
-            let base64_file = Base64File::new(None, mime_type, data, detail)?;
+            let base64_file = Base64File::new(None, mime_type, data, detail, filename)?;
             ClientInputMessageContent::File(File::Base64(base64_file))
         }
         ResolvedInputMessageContent::Unknown(unknown) => {
@@ -129,6 +130,7 @@ mod tests {
                 mime_type: mime::IMAGE_JPEG,
                 storage_path: storage_path.clone(),
                 detail: None,
+                filename: None,
             },
             data: image_data.to_string(),
         }));

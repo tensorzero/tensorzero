@@ -264,6 +264,7 @@ impl StoredInputMessageContent {
                             mime_type: file.mime_type.clone(),
                             storage_path: file.storage_path.clone(),
                             detail: file.detail.clone(),
+                            filename: file.filename.clone(),
                         },
                         data,
                     },
@@ -336,6 +337,7 @@ impl<'de> Deserialize<'de> for StoredFile {
                 mime_type: legacy.file.mime_type,
                 storage_path: legacy.storage_path,
                 detail: None,
+                filename: None,
             }));
         }
 
@@ -668,6 +670,7 @@ mod tests {
                 path: object_store::path::Path::parse("test/image.png").unwrap(),
             },
             detail: None,
+            filename: None,
         });
 
         let json = serde_json::to_value(&stored_file).unwrap();
@@ -692,6 +695,7 @@ mod tests {
                 path: object_store::path::Path::parse("test/path.png").unwrap(),
             },
             detail: None,
+            filename: None,
         });
 
         let json = serde_json::to_value(&original).unwrap();

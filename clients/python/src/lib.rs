@@ -10,7 +10,7 @@
 /// and defines methods on them.
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
-use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs};
+use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs, EvaluationVariant};
 use futures::StreamExt;
 use pyo3::{
     exceptions::{PyDeprecationWarning, PyStopAsyncIteration, PyStopIteration, PyValueError},
@@ -539,6 +539,35 @@ impl BaseTensorZeroGateway {
         })
     }
 }
+
+/// Helper function to construct an EvaluationVariant from the optional variant_name and dynamic_variant_config parameters.
+/// Deserializes the dynamic_variant_config if provided and validates that exactly one of the two is provided.
+fn construct_evaluation_variant(
+    py: Python<'_>,
+    dynamic_variant_config: Option<&Bound<'_, PyDict>>,
+    variant_name: Option<String>,
+) -> PyResult<EvaluationVariant> {
+    // Deserialize dynamic_variant_config if provided
+    let dynamic_variant_config: Option<UninitializedVariantInfo> =
+        if let Some(config) = dynamic_variant_config {
+            Some(deserialize_from_pyobj(py, config)?)
+        } else {
+            None
+        };
+
+    match (dynamic_variant_config, variant_name) {
+        (Some(info), None) => Ok(EvaluationVariant::Info(Box::new(info))),
+        (None, Some(name)) => Ok(EvaluationVariant::Name(name)),
+        (None, None) => Err(PyValueError::new_err(
+            "Either 'variant_name' or 'dynamic_variant_config' must be provided.",
+        )),
+        (Some(_), Some(_)) => Err(PyValueError::new_err(
+            "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
+            When using a dynamic variant, provide only 'dynamic_variant_config'.",
+        )),
+    }
+}
+
 #[pymethods]
 impl TensorZeroGateway {
     #[classmethod]
@@ -1067,25 +1096,28 @@ impl TensorZeroGateway {
     ///
     /// * `evaluation_name` - User chosen name of the evaluation.
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
-    /// * `variant_name` - The name of the variant to evaluate
+    /// * `variant_name` - Optional name of the variant to evaluate (omit when using dynamic_variant_config)
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
+    /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
-                        variant_name,
+                        variant_name=None,
                         concurrency=1,
-                        inference_cache="on".to_string()
+                        inference_cache="on".to_string(),
+                        dynamic_variant_config=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency=1, inference_cache='on')"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None)"
     )]
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
         evaluation_name: String,
         dataset_name: String,
-        variant_name: String,
+        variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
+        dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
 
@@ -1102,6 +1134,9 @@ impl TensorZeroGateway {
                 &inference_cache.into_pyobject(this.py())?.into_any(),
             )?;
 
+        let variant =
+            construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
+
         let core_args = EvaluationCoreArgs {
             tensorzero_client: (*client).clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
@@ -1109,7 +1144,7 @@ impl TensorZeroGateway {
             evaluation_name,
             evaluation_run_id,
             dataset_name,
-            variant_name,
+            variant,
             concurrency,
             inference_cache: inference_cache_enum,
         };
@@ -1922,26 +1957,29 @@ impl AsyncTensorZeroGateway {
     ///
     /// * `evaluation_name` - User chosen name of the evaluation.
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
-    /// * `variant_name` - The name of the variant to evaluate
+    /// * `variant_name` - Optional name of the variant to evaluate (omit when using dynamic_variant_config)
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
+    /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
-                        variant_name,
+                        variant_name=None,
                         concurrency=1,
-                        inference_cache="on".to_string()
+                        inference_cache="on".to_string(),
+                        dynamic_variant_config=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency=1, inference_cache='on')"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None)"
     )]
-    fn experimental_run_evaluation(
-        this: PyRef<'_, Self>,
+    fn experimental_run_evaluation<'py>(
+        this: PyRef<'py, Self>,
         evaluation_name: String,
         dataset_name: String,
-        variant_name: String,
+        variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
-    ) -> PyResult<Bound<'_, PyAny>> {
+        dynamic_variant_config: Option<&Bound<'py, PyDict>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();
 
         let inference_cache_enum: tensorzero_core::cache::CacheEnabledMode =
@@ -1949,6 +1987,9 @@ impl AsyncTensorZeroGateway {
                 this.py(),
                 &inference_cache.into_pyobject(this.py())?.into_any(),
             )?;
+
+        let variant =
+            construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             // Get app state data
@@ -1965,7 +2006,7 @@ impl AsyncTensorZeroGateway {
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,
-                variant_name,
+                variant,
                 concurrency,
                 inference_cache: inference_cache_enum,
             };

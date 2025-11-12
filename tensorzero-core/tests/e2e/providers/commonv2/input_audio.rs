@@ -123,6 +123,7 @@ pub async fn test_base64_audio_inference_with_provider_and_store(
                                     "audio/mpeg".parse().unwrap(),
                                     audio_data.clone(),
                                     None,
+                                    None,
                                 )
                                 .expect("test data should be valid"),
                             )),

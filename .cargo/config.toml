@@ -4,6 +4,11 @@ rustflags = [
     "aws_sdk_unstable", # needed for aws-smithy-types + serde-(de)serialize
 ]
 
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"]  # for NAPI
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"]  # for NAPI
 
 [alias]
 test-unit = "nextest run --lib --bins"

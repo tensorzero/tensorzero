@@ -2173,6 +2173,7 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image.png").unwrap(),
         },
+        filename: None,
     });
 
     let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
@@ -2257,6 +2258,7 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/data.json").unwrap(),
         },
+        filename: None,
     });
 
     let json_datapoint = DatapointInsert::Json(JsonInferenceDatapointInsert {
@@ -2342,6 +2344,7 @@ async fn test_datapoint_with_mixed_file_types() {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image1.png").unwrap(),
         },
+        filename: None,
     });
 
     let stored_file2 = StoredFile(ObjectStoragePointer {
@@ -2352,6 +2355,7 @@ async fn test_datapoint_with_mixed_file_types() {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image2.jpg").unwrap(),
         },
+        filename: None,
     });
 
     let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {

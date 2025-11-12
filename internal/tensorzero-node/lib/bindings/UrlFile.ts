@@ -8,4 +8,5 @@ export type UrlFile = {
   url: string;
   mime_type: string | null;
   detail?: Detail;
+  filename?: string;
 };
