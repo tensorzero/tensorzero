@@ -38,14 +38,14 @@ pub fn generate_simple_text_from_request(request: &serde_json::Value) -> String 
 
     if let Some(messages) = extract_last_user_message_text(request) {
         let lower = messages.to_lowercase();
-        if lower.contains("name") {
-            return "I am Dr. Mehta, a helpful assistant.".to_string();
+        if lower.contains("capital city of japan") {
+            return "Tokyo is the capital city of Japan, known for its vibrant culture and history.".to_string();
         }
         if lower.contains("tokyo") {
             return "Tokyo is the capital city of Japan, known for its blend of traditional culture and modern technology.".to_string();
         }
-        if lower.contains("capital city of japan") {
-            return "Tokyo is the capital city of Japan, known for its vibrant culture and history.".to_string();
+        if lower.contains("name") {
+            return "I am Dr. Mehta, a helpful assistant.".to_string();
         }
         if lower.contains("animal") || lower.contains("image") {
             return "This is a cartoon crab, specifically Ferris the Rust mascot.".to_string();
