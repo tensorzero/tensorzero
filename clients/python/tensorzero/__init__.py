@@ -23,12 +23,15 @@ from .generated_types import (
     DatapointMetadataUpdate,
     DeleteDatapointsResponse,
     GetDatapointsResponse,
+    GetInferencesRequest,
+    GetInferencesResponse,
     Input,
     InputMessage,
     InputMessageContentTemplate,
     InputMessageContentText,
     JsonDatapointOutputUpdate,
     ListDatapointsRequest,
+    ListInferencesRequest,
     UpdateDatapointMetadataRequest,
     UpdateDatapointsResponse,
 )
@@ -181,8 +184,11 @@ __all__ = [
     "DiclOptimizationConfig",  # DEPRECATED
     "DICLOptimizationConfig",
     "GetDatapointsResponse",
+    "GetInferencesRequest",
+    "GetInferencesResponse",
     "JsonDatapointOutputUpdate",
     "ListDatapointsRequest",
+    "ListInferencesRequest",
     "UpdateDatapointsResponse",
     "DynamicEvaluationRunEpisodeResponse",  # DEPRECATED
     "DynamicEvaluationRunResponse",  # DEPRECATED
