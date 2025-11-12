@@ -27,7 +27,7 @@ jobs:
         uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          repository: ${{ github.repository.full_name }}
+          repository: ${{ github.repository }}
           issue-number: ${{ github.event.pull_request.number }}
           body: |
             ❌ Only public members of the `tensorzero` organization can use slash commands
