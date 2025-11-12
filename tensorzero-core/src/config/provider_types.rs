@@ -159,6 +159,7 @@ pub struct GCPProviderTypeConfig {
     #[serde(default)]
     pub batch: Option<GCPBatchConfigType>,
     #[cfg(feature = "e2e_tests")]
+    #[ts(skip)]
     pub batch_inference_api_base: Option<Url>,
     #[serde(default)]
     pub defaults: GCPDefaults,
@@ -315,6 +316,7 @@ pub struct OpenAIProviderTypeConfig {
     #[serde(default)]
     pub defaults: OpenAIDefaults,
     #[cfg(feature = "e2e_tests")]
+    #[ts(skip)]
     pub batch_inference_api_base: Option<Url>,
 }
 
