@@ -9,7 +9,8 @@ license.workspace = true
 workspace = true
 
 [features]
-e2e_tests = []
+e2e_tests = ["tensorzero/e2e_tests"]
+optimization_tests = ["e2e_tests"]
 
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
@@ -64,7 +65,7 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 [[test]]
 name = "optimization-live"
 path = "tests/live_tests.rs"
-required-features = ["e2e_tests"]
+required-features = ["optimization_tests"]
 
 [[test]]
 name = "optimization-mock"

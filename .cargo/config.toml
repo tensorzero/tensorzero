@@ -18,7 +18,7 @@ test-optimization = [
     "--package",
     "tensorzero-optimizers",
     "--features",
-    "e2e_tests",
+    "optimization_tests,e2e_tests",
     "--profile",
     "optimization",
 ]
