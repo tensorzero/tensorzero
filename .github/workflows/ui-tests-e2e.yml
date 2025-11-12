@@ -143,8 +143,8 @@ jobs:
           echo "S3_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> fixtures/.env
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000/custom/prefix" >> fixtures/.env
-          echo "TENSORZERO_GATEWAY_CONFIG=/app/config/tensorzero.base-path.toml" >> fixtures/.env
-          echo "TENSORZERO_UI_CONFIG_PATH=/app/config/tensorzero.base-path.toml" >> fixtures/.env
+          echo "TENSORZERO_GATEWAY_CONFIG=/app/config/base-path.toml" >> fixtures/.env
+          echo "TENSORZERO_UI_CONFIG_PATH=/app/config/base-path.toml" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
           export TENSORZERO_SKIP_LARGE_FIXTURES=1
