@@ -516,7 +516,7 @@ impl GCPVertexGeminiProvider {
         })
     }
 
-    #[expect(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         model_id: Option<String>,
         endpoint_id: Option<String>,

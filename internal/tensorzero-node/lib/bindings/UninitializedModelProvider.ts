@@ -56,6 +56,7 @@ export type UninitializedModelProvider = {
       location: string;
       project_id: string;
       credential_location: string | null;
+      api_base: string | null;
     }
   | {
       type: "google_ai_studio_gemini";
