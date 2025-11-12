@@ -153,9 +153,9 @@ fn validate_gepa_config<'a>(
             })
         })?;
 
-    // Check that the evaluation exists
+    // Check that the evaluation exists (fixed: should check evaluations, not metrics)
     if !tensorzero_config
-        .metrics
+        .evaluations
         .contains_key(&config.evaluation_name)
     {
         return Err(Error::new(ErrorDetails::Config {
@@ -164,6 +164,82 @@ fn validate_gepa_config<'a>(
                 config.evaluation_name
             ),
         }));
+    }
+
+    // Validate initial_variants if specified
+    if let Some(initial_variants) = &config.initial_variants {
+        let function_variants = function_config.variants();
+
+        // Check that all specified variants exist
+        for variant_name in initial_variants {
+            if !function_variants.contains_key(variant_name) {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "variant '{}' specified in initial_variants not found in function '{}'",
+                        variant_name, config.function_name
+                    ),
+                }));
+            }
+        }
+
+        // Ensure at least one variant exists after filtering
+        if initial_variants.is_empty() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "initial_variants is empty for function '{}'",
+                    config.function_name
+                ),
+            }));
+        }
+    }
+
+    // Validate that function's variants are ChatCompletion (GEPA requirement)
+    let function_variants = function_config.variants();
+
+    let variants_to_check: Vec<&String> = if let Some(initial_variants) = &config.initial_variants {
+        // Only check the specified variants
+        initial_variants.iter().collect()
+    } else {
+        // Check all variant names
+        function_variants.keys().collect()
+    };
+
+    for variant_name in variants_to_check {
+        if let Some(variant_info) = function_variants.get(variant_name) {
+            match &variant_info.inner {
+                VariantConfig::ChatCompletion(_) => {
+                    // Valid - ChatCompletion variant
+                }
+                _ => {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "variant '{}' in function '{}' is not a ChatCompletion variant. GEPA only supports ChatCompletion variants.",
+                            variant_name, config.function_name
+                        ),
+                    }));
+                }
+            }
+        }
+    }
+
+    // Validate tools referenced by function exist in config
+    let function_tool_names: Vec<String> = match &**function_config {
+        FunctionConfig::Chat(chat_config) => chat_config.tools.clone(),
+        FunctionConfig::Json(_) => {
+            // JSON functions have implicit tool for schema, which is always available
+            Vec::new()
+        }
+    };
+
+    for tool_name in &function_tool_names {
+        if !tensorzero_config.tools.contains_key(tool_name) {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "tool '{}' referenced by function '{}' not found in configuration",
+                    tool_name, config.function_name
+                ),
+            }));
+        }
     }
 
     Ok(function_config)
