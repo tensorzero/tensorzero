@@ -474,3 +474,13 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > This example shows how to optimize a TensorZero function using an arbitrary tool — here, DSPy.
 
 _& many more on the way!_
+
+## Blog Posts
+
+We write about LLM engineering on the **[TensorZero Blog](https://www.tensorzero.com/blog)**.
+Here are some of our favorite posts:
+
+- **[Bandits in your LLM Gateway: Improve LLM Applications Faster with Adaptive Experimentation (A/B Testing)](https://www.tensorzero.com/blog/bandits-in-your-llm-gateway/)**
+- **[Is OpenAI's Reinforcement Fine-Tuning (RFT) Worth It?](https://www.tensorzero.com/blog/is-openai-reinforcement-fine-tuning-rft-worth-it/)**
+- **[Distillation with Programmatic Data Curation: Smarter LLMs, 5-30x Cheaper Inference](https://www.tensorzero.com/blog/distillation-programmatic-data-curation-smarter-llms-5-30x-cheaper-inference/)**
+- **[From NER to Agents: Does Automated Prompt Engineering Scale to Complex Tasks?](https://www.tensorzero.com/blog/from-ner-to-agents-does-automated-prompt-engineering-scale-to-complex-tasks/)**

@@ -1,3 +1,8 @@
+//! HTTP endpoints for optimizer operations
+//!
+//! These endpoints handle launching and polling optimization jobs.
+
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
 use axum::{
@@ -6,31 +11,26 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-
 use rand::seq::SliceRandom;
-use serde::{Deserialize, Serialize};
 
-use crate::{
+use tensorzero_core::{
     config::Config,
     db::{
-        clickhouse::{
-            query_builder::{InferenceFilter, OrderBy},
-            ClickHouseConnectionInfo,
-        },
+        clickhouse::query_builder::{InferenceFilter, OrderBy},
+        clickhouse::ClickHouseConnectionInfo,
         inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams},
     },
     endpoints::{inference::InferenceCredentials, stored_inferences::render_samples},
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
-    optimization::{
-        JobHandle, OptimizationJobHandle, OptimizationJobInfo, Optimizer,
-        UninitializedOptimizerInfo,
-    },
+    optimization::{OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo},
     serde_util::deserialize_option_u64,
     stored_inference::RenderedSample,
     utils::gateway::{AppState, AppStateData, StructuredJson},
 };
+
+use crate::{JobHandle, Optimizer};
 
 #[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
 #[ts(export)]

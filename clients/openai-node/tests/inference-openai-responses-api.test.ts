@@ -416,7 +416,7 @@ describe("OpenAI Responses API", () => {
     const episodeId = uuidv7();
     const result = await client.chat.completions.create({
       messages,
-      model: "tensorzero::model_name::openai::responses::gpt-5-codex",
+      model: "tensorzero::model_name::openai::responses::gpt-4o-mini",
       // @ts-expect-error - custom TensorZero property
       "tensorzero::episode_id": episodeId,
     });

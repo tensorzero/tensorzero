@@ -6,6 +6,7 @@ mod azure;
 mod azure_ai_foundry;
 mod batch;
 pub mod common;
+pub mod commonv2;
 mod deepseek;
 mod embeddings;
 mod errors;

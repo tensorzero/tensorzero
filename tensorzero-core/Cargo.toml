@@ -104,7 +104,6 @@ aws-sdk-sagemakerruntime = { version = "1.91.0", features = [
 ], default-features = false }
 aws-smithy-runtime-api = "1.9.1"
 eventsource-stream = "0.2.3"
-scoped-tls = "1.0.1"
 opentelemetry_sdk = "0.31.0"
 opentelemetry = "0.31.0"
 tracing-opentelemetry = "0.32.0"
@@ -147,14 +146,17 @@ http-body = "1.0.1"
 tensorzero-auth = { path = "../internal/tensorzero-auth" }
 git2 = { workspace = true }
 tempfile = { version = "3.21.0" }
+schemars = { workspace = true, features = ["uuid1"] }
 
 [dev-dependencies]
 tempfile = "3.21.0"
 rand_distr = "0.5.1"
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
+tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 evaluations = { path = "../evaluations" }
 paste = "1.0.15"
 base64 = "0.22.1"
+tensorzero-derive = { path = "../internal/tensorzero-derive" }
 aws-credential-types = { version = "1.2.2", features = [
     "hardcoded-credentials",
 ] }

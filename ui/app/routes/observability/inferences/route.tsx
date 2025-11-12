@@ -19,16 +19,16 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const before = url.searchParams.get("before");
   const after = url.searchParams.get("after");
-  const pageSize = Number(url.searchParams.get("pageSize")) || 10;
-  if (pageSize > 100) {
-    throw data("Page size cannot exceed 100", { status: 400 });
+  const limit = Number(url.searchParams.get("limit")) || 10;
+  if (limit > 100) {
+    throw data("Limit cannot exceed 100", { status: 400 });
   }
 
   const [inferences, bounds, countsInfo] = await Promise.all([
     queryInferenceTable({
       before: before || undefined,
       after: after || undefined,
-      page_size: pageSize,
+      limit,
     }),
     queryInferenceTableBounds(),
     countInferencesByFunction(),
@@ -38,14 +38,14 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   return {
     inferences,
-    pageSize,
+    limit,
     bounds,
     totalInferences,
   };
 }
 
 export default function InferencesPage({ loaderData }: Route.ComponentProps) {
-  const { inferences, pageSize, bounds, totalInferences } = loaderData;
+  const { inferences, limit, bounds, totalInferences } = loaderData;
 
   const navigate = useNavigate();
 
@@ -54,7 +54,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   const handleNextPage = () => {
     if (bottomInference) {
-      navigate(`?before=${bottomInference.id}&pageSize=${pageSize}`, {
+      navigate(`?before=${bottomInference.id}&limit=${limit}`, {
         preventScrollReset: true,
       });
     }
@@ -62,7 +62,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
 
   const handlePreviousPage = () => {
     if (topInference) {
-      navigate(`?after=${topInference.id}&pageSize=${pageSize}`, {
+      navigate(`?after=${topInference.id}&limit=${limit}`, {
         preventScrollReset: true,
       });
     }

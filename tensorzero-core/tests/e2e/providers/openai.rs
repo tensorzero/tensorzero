@@ -140,6 +140,14 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let input_audio_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai".to_string(),
+        model_name: "gpt-4o-audio-preview".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
+
     let json_providers = vec![
         E2ETestProvider {
             supports_batch_inference: true,
@@ -272,6 +280,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers.clone(),
         pdf_inference: image_providers.clone(),
+        input_audio: input_audio_providers,
         shorthand_inference: shorthand_providers.clone(),
         credential_fallbacks,
     }

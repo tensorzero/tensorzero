@@ -48,9 +48,8 @@ use std::borrow::Cow;
 
 use futures::FutureExt;
 use mime::MediaType;
-use scoped_tls::scoped_thread_local;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use url::Url;
 
 use super::{ContentBlock, RequestMessage};
@@ -62,8 +61,7 @@ use crate::{
 use aws_smithy_types::base64;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-
-scoped_thread_local!(static SERIALIZE_FILE_DATA: ());
+use tensorzero_derive::export_schema;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -73,35 +71,29 @@ pub enum FileEncoding {
 }
 
 /// Detail level for input images (affects fidelity and token cost)
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
+#[export_schema]
 pub enum Detail {
     Low,
     High,
     Auto,
 }
 
-pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), Error> {
-    if mime_type.type_() != mime::IMAGE {
-        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
-            content_block_type: format!("file: {mime_type}"),
-            provider_type: provider_type.to_string(),
-        }));
-    }
-    Ok(())
-}
-
 /// A file already encoded as base64
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[ts(export)]
+#[export_schema]
 pub struct Base64File {
     // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
     #[ts(optional)]
+    #[schemars(with = "Option<String>")]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
+    #[schemars(with = "String")]
     pub mime_type: MediaType,
     // This field contains *unprefixed* base64-encoded data.
     // It's private and validated by the constructor.
@@ -254,22 +246,15 @@ impl Base64File {
     }
 }
 
-pub fn serialize_with_file_data<T: Serialize>(value: &T) -> Result<Value, Error> {
-    SERIALIZE_FILE_DATA.set(&(), || {
-        serde_json::to_value(value).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing value: {e}"),
-            })
-        })
-    })
-}
-
 /// A file that can be located at a URL
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 pub struct UrlFile {
+    #[schemars(with = "String")]
     pub url: Url,
     #[ts(type = "string | null")]
+    #[schemars(with = "Option<String>")]
     pub mime_type: Option<MediaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -279,13 +264,16 @@ pub struct UrlFile {
 /// A file stored in an object storage backend, without data.
 /// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 pub struct ObjectStoragePointer {
     #[serde(alias = "url")] // DEPRECATED (SEE IMPORTANT NOTE BELOW)
     #[ts(optional)]
+    #[schemars(with = "Option<String>")]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
+    #[schemars(with = "String")]
     pub mime_type: MediaType,
     pub storage_path: StoragePath,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -296,7 +284,8 @@ pub struct ObjectStoragePointer {
 /// A file stored in an object storage backend, with data.
 /// This struct can NOT be stored in the database.
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 pub struct ObjectStorageFile {
     #[serde(flatten)]
@@ -308,8 +297,9 @@ pub struct ObjectStorageFile {
 
 /// A file that we failed to read from object storage.
 /// This struct can NOT be stored in the database.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 pub struct ObjectStorageError {
     #[serde(flatten)]
     pub file: ObjectStoragePointer,
@@ -373,18 +363,24 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 }
 
 /// A file for an inference or a datapoint.
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(tag = "file_type", rename_all = "snake_case")]
 #[ts(export)]
+#[export_schema]
 // NOTE(shuyangli, 2025-10-21): we're manually implementing Serialize and Deserialize for a while until we're confident
 // that clients are sending us the correct tagged versions. Serialization always produces tagged format, but
 // deserialization accepts both tagged and untagged formats for backwards compatibility.
 // TODO(#4107): Remove this once we're confident that clients are sending us the tagged version.
 pub enum File {
-    Url(UrlFile),                               // a file URL
-    Base64(Base64File),                         // a base64-encoded file
+    #[schemars(title = "FileUrlFile")]
+    Url(UrlFile), // a file URL
+    #[schemars(title = "FileBase64")]
+    Base64(Base64File), // a base64-encoded file
+    #[schemars(title = "FileObjectStoragePointer")]
     ObjectStoragePointer(ObjectStoragePointer), // a pointer to an object storage file (metadata only)
-    ObjectStorage(ObjectStorageFile),           // a file from object storage (metadata + data)
+    #[schemars(title = "FileObjectStorage")]
+    ObjectStorage(ObjectStorageFile), // a file from object storage (metadata + data)
+    #[schemars(title = "FileObjectStorageError")]
     ObjectStorageError(ObjectStorageError), // a file we couldn't fetch from object storage (metadata + error)
 }
 
@@ -748,20 +744,54 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
 /// to provide to OpenAI (which doesn't accept mime types for file input)
 pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, Error> {
     Ok(match mime_type {
-        _ if mime_type == &mime::IMAGE_JPEG => Some("jpg"),
-        _ if mime_type == &mime::IMAGE_PNG => Some("png"),
-        _ if mime_type == &mime::IMAGE_GIF => Some("gif"),
-        _ if mime_type == &mime::APPLICATION_PDF => Some("pdf"),
+        _ if mime_type == "image/jpeg" => Some("jpg"),
+        _ if mime_type == "image/png" => Some("png"),
+        _ if mime_type == "image/gif" => Some("gif"),
+        _ if mime_type == "application/pdf" => Some("pdf"),
         _ if mime_type == "image/webp" => Some("webp"),
         _ if mime_type == "text/plain" => Some("txt"),
+        _ if mime_type == "audio/midi" => Some("mid"),
+        _ if mime_type == "audio/mpeg" || mime_type == "audio/mp3" => Some("mp3"),
+        _ if mime_type == "audio/m4a" || mime_type == "audio/mp4" => Some("m4a"),
+        _ if mime_type == "audio/ogg" => Some("ogg"),
+        _ if mime_type == "audio/x-flac" || mime_type == "audio/flac" => Some("flac"),
+        _ if mime_type == "audio/x-wav"
+            || mime_type == "audio/wav"
+            || mime_type == "audio/wave" =>
+        {
+            Some("wav")
+        }
+        _ if mime_type == "audio/amr" => Some("amr"),
+        _ if mime_type == "audio/aac" || mime_type == "audio/x-aac" => Some("aac"),
+        _ if mime_type == "audio/x-aiff" || mime_type == "audio/aiff" => Some("aiff"),
+        _ if mime_type == "audio/x-dsf" => Some("dsf"),
+        _ if mime_type == "audio/x-ape" => Some("ape"),
+        _ if mime_type == "audio/webm" => Some("webm"),
         _ => {
             let guess = mime_guess::get_mime_extensions_str(mime_type.as_ref())
                 .and_then(|types| types.last());
             if guess.is_some() {
-                tracing::warn!("Guessed file extension {guess:?} for mime-type {mime_type} - this may not be correct");
+                tracing::warn!("Guessed file extension `{guess:?}` for MIME type `{mime_type}`. This may not be correct.");
             }
             guess.copied()
         }
+    })
+}
+
+/// Converts audio MIME types to OpenAI's audio format strings.
+pub fn mime_type_to_audio_format(mime_type: &MediaType) -> Result<&'static str, Error> {
+    if mime_type.type_() != mime::AUDIO {
+        return Err(Error::new(ErrorDetails::InvalidMessage {
+            message: format!("Expected audio MIME type, got: {mime_type}"),
+        }));
+    }
+
+    mime_type_to_ext(mime_type)?.ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidMessage {
+            message: format!(
+                "Unsupported audio MIME type: {mime_type}. Supported types: audio/midi, audio/mpeg, audio/m4a, audio/mp4, audio/ogg, audio/x-flac, audio/x-wav, audio/amr, audio/aac, audio/x-aiff, audio/x-dsf, audio/x-ape. Please open a feature request if your provider supports another audio format: https://github.com/tensorzero/tensorzero/discussions/categories/feature-requests"
+            ),
+        })
     })
 }
 
@@ -919,6 +949,18 @@ mod tests {
         let inferred = infer::get(webp_bytes).expect("Should detect WebP");
         assert_eq!(inferred.mime_type(), "image/webp");
         assert_eq!(inferred.extension(), "webp");
+
+        // Test WAV detection (magic bytes: RIFF....WAVE)
+        let wav_bytes = b"RIFF\x00\x00\x00\x00WAVEfmt ";
+        let inferred = infer::get(wav_bytes).expect("Should detect WAV");
+        assert_eq!(inferred.mime_type(), "audio/x-wav");
+        assert_eq!(inferred.extension(), "wav");
+
+        // Test MP3 detection (magic bytes: FF FB or ID3)
+        let mp3_bytes = [0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00];
+        let inferred = infer::get(&mp3_bytes).expect("Should detect MP3");
+        assert_eq!(inferred.mime_type(), "audio/mpeg");
+        assert_eq!(inferred.extension(), "mp3");
 
         // Test that unknown bytes return None
         let unknown_bytes = [0x00, 0x01, 0x02, 0x03];

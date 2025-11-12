@@ -22,7 +22,7 @@ Once it has done so, it will use that variant for all subsequent inferences.
 
 <Tip>
 
-See the [Tutorial](/gateway/tutorial) to learn more about functions and variants in TensorZero.
+Learn more about adaptive A/B testing for LLMs in our blog post [Bandits in your LLM Gateway: Improve LLM Applications Faster with Adaptive Experimentation (A/B Testing)](https://www.tensorzero.com/blog/bandits-in-your-llm-gateway/).
 
 </Tip>
 
@@ -164,5 +164,7 @@ See the [Configuration Reference](/gateway/configuration-reference) for more det
 The `track_and_stop` algorithm has multiple parameters that can be customized.
 For example, you can trade off the speed of the experiment with the statistical confidence of the results.
 The default parameters are sensible for most use cases, but advanced users might want to customize them.
-
 See the [Configuration Reference](/gateway/configuration-reference) for more details.
+
+Two important parameters are `epsilon` and `delta`, which control a fundamental trade-off in experimentation: higher sensitivity and lower error rates require longer experiments.
+For a discussion on `epsilon` and `delta`, see our blog post [Bandits in your LLM Gateway: Improve LLM Applications Faster with Adaptive Experimentation (A/B Testing)](https://www.tensorzero.com/blog/bandits-in-your-llm-gateway/).

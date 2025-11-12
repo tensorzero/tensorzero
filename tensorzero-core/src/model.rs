@@ -1988,7 +1988,7 @@ impl ModelProvider {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
     Env(String),
@@ -2008,10 +2008,12 @@ pub enum CredentialLocation {
 #[serde(untagged)]
 pub enum CredentialLocationWithFallback {
     /// Single credential location (backward compatible)
-    Single(CredentialLocation),
+    Single(#[ts(type = "string")] CredentialLocation),
     /// Credential location with fallback
     WithFallback {
+        #[ts(type = "string")]
         default: CredentialLocation,
+        #[ts(type = "string")]
         fallback: CredentialLocation,
     },
 }
