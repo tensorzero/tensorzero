@@ -8,9 +8,19 @@ from uuid import UUID
 
 import httpx
 import uuid_utils
-from typing_extensions import NotRequired, TypedDict
+from typing_extensions import NotRequired, TypedDict, deprecated
 
-from tensorzero.generated_types import UnsetType
+from tensorzero.generated_types import (
+    InferenceFilter,
+    InferenceFilterAnd,
+    InferenceFilterBooleanMetric,
+    InferenceFilterFloatMetric,
+    InferenceFilterNot,
+    InferenceFilterOr,
+    InferenceFilterTag,
+    InferenceFilterTime,
+    UnsetType,
+)
 
 
 @dataclass
@@ -565,6 +575,8 @@ class TensorZeroTypeEncoder(JSONEncoder):
     def default(self, o: Any) -> Any:
         if isinstance(o, UUID) or isinstance(o, uuid_utils.UUID):
             return str(o)
+        elif hasattr(o, "to_dict"):
+            return o.to_dict()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
         elif is_dataclass(o) and not isinstance(o, type):
             # Convert dataclass to dict, but filter out UNSET fields
             result = {}
@@ -575,8 +587,6 @@ class TensorZeroTypeEncoder(JSONEncoder):
                     # Recursively handle nested dataclasses/lists/dicts
                     result[field.name] = self._convert_value(value)
             return result  # pyright: ignore[reportUnknownVariableType]
-        elif hasattr(o, "to_dict"):
-            return o.to_dict()
         else:
             super().default(o)
 
@@ -585,6 +595,8 @@ class TensorZeroTypeEncoder(JSONEncoder):
         if isinstance(value, UnsetType):
             # This shouldn't happen at top level, but handle it just in case
             return None
+        elif hasattr(value, "to_dict"):
+            return value.to_dict()  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType, reportAttributeAccessIssue]
         elif is_dataclass(value) and not isinstance(value, type):
             # Recursively convert nested dataclasses
             # Note: pyright can't infer types through dict operations when value is Any
@@ -609,64 +621,59 @@ ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"],
 
 
 # Types for the experimental list inferences API
-# These are serialized across the PyO3 boundary
-
-
-@dataclass
-class InferenceFilter(ABC, HasTypeField):
-    pass
 
 
 InferenceFilterTreeNode = InferenceFilter
-"""Deprecated; use InferenceFilter instead."""
+"""Deprecated: Use InferenceFilter instead."""
 
 
-@dataclass
-class FloatMetricFilter(InferenceFilter):
-    metric_name: str
-    value: float
-    comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
-    type: str = "float_metric"
+@deprecated("Deprecated; use InferenceFilterFloatMetric instead. This alias will be removed in a future version.")
+class FloatMetricFilter(InferenceFilterFloatMetric):
+    """Deprecated: Use InferenceFilterFloatMetric instead."""
+
+    pass
 
 
-@dataclass
-class BooleanMetricFilter(InferenceFilter):
-    metric_name: str
-    value: bool
-    type: str = "boolean_metric"
+@deprecated("Deprecated; use InferenceFilterBooleanMetric instead. This alias will be removed in a future version.")
+class BooleanMetricFilter(InferenceFilterBooleanMetric):
+    """Deprecated: Use InferenceFilterBooleanMetric instead."""
+
+    pass
 
 
-@dataclass
-class TagFilter(InferenceFilter):
-    key: str
-    value: str
-    comparison_operator: Literal["=", "!="]
-    type: str = "tag"
+@deprecated("Deprecated; use InferenceFilterTag instead. This alias will be removed in a future version.")
+class TagFilter(InferenceFilterTag):
+    """Deprecated: Use InferenceFilterTag instead."""
+
+    pass
 
 
-@dataclass
-class TimeFilter(InferenceFilter):
-    time: str  # RFC 3339 timestamp
-    comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
-    type: str = "time"
+@deprecated("Deprecated; use InferenceFilterTime instead. This alias will be removed in a future version.")
+class TimeFilter(InferenceFilterTime):
+    """Deprecated: Use InferenceFilterTime instead."""
+
+    pass
 
 
-@dataclass
-class AndFilter(InferenceFilter):
-    children: List[InferenceFilter]
-    type: str = "and"
+@deprecated("Deprecated; use InferenceFilterAnd instead. This alias will be removed in a future version.")
+class AndFilter(InferenceFilterAnd):
+    """Deprecated: Use InferenceFilterAnd instead."""
+
+    pass
 
 
-@dataclass
-class OrFilter(InferenceFilter):
-    children: List[InferenceFilter]
-    type: str = "or"
+@deprecated("Deprecated; use InferenceFilterOr instead. This alias will be removed in a future version.")
+class OrFilter(InferenceFilterOr):
+    """Deprecated: Use InferenceFilterOr instead."""
+
+    pass
 
 
-@dataclass
-class NotFilter(InferenceFilter):
-    child: InferenceFilter
-    type: str = "not"
+@deprecated("Deprecated; use InferenceFilterNot instead. This alias will be removed in a future version.")
+class NotFilter(InferenceFilterNot):
+    """Deprecated: Use InferenceFilterNot instead."""
+
+    pass
 
 
 @dataclass

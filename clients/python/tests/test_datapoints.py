@@ -1,3 +1,4 @@
+# pyright: reportDeprecated=false
 """
 Tests for datapoint and dataset handling functionality in the TensorZero client.
 
@@ -150,7 +151,7 @@ def test_sync_insert_delete_datapoints(sync_client: TensorZeroGateway):
     assert isinstance(datapoint_ids[3], UUID)
 
     # List datapoints filtering by function name
-    listed_datapoints = sync_client.list_datapoints(
+    listed_datapoints = sync_client.list_datapoints_legacy(
         dataset_name=dataset_name,
         function_name="basic_test",
     )
@@ -300,18 +301,18 @@ async def test_async_insert_delete_datapoints(
     assert datapoint.is_custom
 
     # List datapoints
-    listed_datapoints = await async_client.list_datapoints(
+    listed_datapoints = await async_client.list_datapoints_legacy(
         dataset_name=dataset_name,
     )
     assert len(listed_datapoints) == 4
     # Assert that there are 2 chat and 2 json datapoints
-    chat_datapoints = [dp for dp in listed_datapoints if isinstance(dp, ChatDatapoint)]
-    json_datapoints = [dp for dp in listed_datapoints if isinstance(dp, JsonDatapoint)]
+    chat_datapoints = [dp for dp in listed_datapoints if isinstance(dp, ChatDatapoint)]  # pyright: ignore[reportUnnecessaryIsInstance]
+    json_datapoints = [dp for dp in listed_datapoints if isinstance(dp, JsonDatapoint)]  # pyright: ignore[reportUnnecessaryIsInstance]
     assert len(chat_datapoints) == 2
     assert len(json_datapoints) == 2
 
     # List datapoints filtering by function name
-    listed_datapoints = await async_client.list_datapoints(
+    listed_datapoints = await async_client.list_datapoints_legacy(
         dataset_name=dataset_name,
         function_name="basic_test",
     )
@@ -328,7 +329,7 @@ async def test_async_insert_delete_datapoints(
 
 @pytest.mark.asyncio
 async def test_list_nonexistent_dataset(async_client: AsyncTensorZeroGateway):
-    res = await async_client.list_datapoints(dataset_name="nonexistent_dataset")
+    res = await async_client.list_datapoints_legacy(dataset_name="nonexistent_dataset")
     assert res == []
 
 
@@ -383,7 +384,7 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
     assert len(datapoint_ids) == 2
 
     # List the inserted datapoints
-    listed_datapoints = embedded_sync_client.list_datapoints(dataset_name=dataset_name)
+    listed_datapoints = embedded_sync_client.list_datapoints_legacy(dataset_name=dataset_name)
     assert len(listed_datapoints) == 2
 
     # Render the datapoints using experimental_render_samples
@@ -474,7 +475,7 @@ async def test_async_render_datapoints(
     assert len(datapoint_ids) == 2
 
     # List the inserted datapoints
-    listed_datapoints = await embedded_async_client.list_datapoints(dataset_name=dataset_name)
+    listed_datapoints = await embedded_async_client.list_datapoints_legacy(dataset_name=dataset_name)
     assert len(listed_datapoints) == 2
 
     # Render the datapoints using experimental_render_samples
@@ -563,7 +564,7 @@ def test_sync_render_filtered_datapoints(
     assert len(datapoint_ids) == 3
 
     # List only the basic_test datapoints
-    chat_datapoints = embedded_sync_client.list_datapoints(dataset_name=dataset_name, function_name="basic_test")
+    chat_datapoints = embedded_sync_client.list_datapoints_legacy(dataset_name=dataset_name, function_name="basic_test")
     assert len(chat_datapoints) == 2
 
     # Render only the chat datapoints
@@ -650,7 +651,7 @@ async def test_async_bulk_insert_datapoints_deprecated(
     ]
 
     # Test that the deprecated function still works
-    with pytest.warns(DeprecationWarning, match="Please use `create_datapoints_legacy` instead"):
+    with pytest.warns(DeprecationWarning, match="Please use `create_datapoints` instead"):
         datapoint_ids = await async_client.bulk_insert_datapoints(dataset_name=dataset_name, datapoints=datapoints)
 
     assert len(datapoint_ids) == 1
@@ -776,7 +777,7 @@ async def test_async_datapoints_with_name(async_client: AsyncTensorZeroGateway):
     assert json_datapoint.function_name == "json_success"
 
     # List all datapoints and verify names are preserved
-    all_datapoints = await async_client.list_datapoints(dataset_name=dataset_name)
+    all_datapoints = await async_client.list_datapoints_legacy(dataset_name=dataset_name)
     assert len(all_datapoints) == 2
     names = {dp.name for dp in all_datapoints}
     assert "morning_greeting" in names

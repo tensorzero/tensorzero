@@ -20,7 +20,7 @@ use pyo3::{
     IntoPyObjectExt,
 };
 use python_helpers::{
-    convert_response_to_python, parse_feedback_response, parse_inference_chunk,
+    convert_response_to_python_dataclass, parse_feedback_response, parse_inference_chunk,
     parse_inference_response, parse_tool, parse_workflow_evaluation_run_episode_response,
     parse_workflow_evaluation_run_response, python_uuid_to_uuid,
 };
@@ -63,10 +63,10 @@ use tensorzero_core::{
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
-    CreateDatapointsFromInferenceOutputSource, Datapoint, DynamicToolParams, FeedbackParams,
-    InferenceOutput, InferenceParams, InferenceStream, LaunchOptimizationParams,
-    ListDatapointsRequest, ListInferencesParams, OptimizationJobHandle, RenderedSample,
-    StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
+    Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
+    InferenceStream, LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams,
+    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
+    WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -1085,7 +1085,7 @@ impl TensorZeroGateway {
         let fut = client.create_datapoints(dataset_name, requests);
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        convert_response_to_python(
+        convert_response_to_python_dataclass(
             this.py(),
             response,
             "tensorzero",
@@ -1096,23 +1096,23 @@ impl TensorZeroGateway {
     /// Update one or more datapoints in a dataset.
     ///
     /// :param dataset_name: The name of the dataset containing the datapoints to update.
-    /// :param datapoints: A list of `UpdateDatapointRequest`` objects.
+    /// :param requests: A list of `UpdateDatapointRequest`` objects.
     /// :return: An `UpdateDatapointsResponse` object.
-    #[pyo3(signature = (*, dataset_name, datapoints))]
+    #[pyo3(signature = (*, dataset_name, requests))]
     fn update_datapoints(
         this: PyRef<'_, Self>,
         dataset_name: String,
-        datapoints: Vec<Bound<'_, PyAny>>,
+        requests: Vec<Bound<'_, PyAny>>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
-        let datapoints = datapoints
+        let requests = requests
             .iter()
             .map(|dp| deserialize_from_pyobj(this.py(), dp))
             .collect::<Result<Vec<_>, _>>()?;
-        let fut = client.update_datapoints(dataset_name, datapoints);
+        let fut = client.update_datapoints(dataset_name, requests);
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        convert_response_to_python(
+        convert_response_to_python_dataclass(
             this.py(),
             response,
             "tensorzero",
@@ -1138,29 +1138,34 @@ impl TensorZeroGateway {
         let fut = client.get_datapoints(ids);
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        convert_response_to_python(this.py(), response, "tensorzero", "GetDatapointsResponse")
+        convert_response_to_python_dataclass(
+            this.py(),
+            response,
+            "tensorzero",
+            "GetDatapointsResponse",
+        )
     }
 
     /// Update metadata for one or more datapoints.
     ///
     /// :param dataset_name: The name of the dataset containing the datapoints.
-    /// :param datapoints: A list of datapoint metadata update requests.
+    /// :param datapoints: A list of `UpdateDatapointMetadataRequest` objects.
     /// :return: An `UpdateDatapointsResponse` object containing the IDs of updated datapoints.
-    #[pyo3(signature = (*, dataset_name, datapoints))]
+    #[pyo3(signature = (*, dataset_name, requests))]
     fn update_datapoints_metadata(
         this: PyRef<'_, Self>,
         dataset_name: String,
-        datapoints: Vec<Bound<'_, PyAny>>,
+        requests: Vec<Bound<'_, PyAny>>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
-        let datapoints = datapoints
+        let requests = requests
             .iter()
             .map(|dp| deserialize_from_pyobj(this.py(), dp))
             .collect::<Result<Vec<_>, _>>()?;
-        let fut = client.update_datapoints_metadata(dataset_name, datapoints);
+        let fut = client.update_datapoints_metadata(dataset_name, requests);
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        convert_response_to_python(
+        convert_response_to_python_dataclass(
             this.py(),
             response,
             "tensorzero",
@@ -1191,7 +1196,7 @@ impl TensorZeroGateway {
         let fut = client.delete_datapoints(dataset_name, ids);
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        convert_response_to_python(
+        convert_response_to_python_dataclass(
             this.py(),
             response,
             "tensorzero",
@@ -1209,7 +1214,7 @@ impl TensorZeroGateway {
         let fut = client.delete_dataset(dataset_name);
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        convert_response_to_python(
+        convert_response_to_python_dataclass(
             this.py(),
             response,
             "tensorzero",
@@ -1235,22 +1240,19 @@ impl TensorZeroGateway {
         let client = this.as_super().client.clone();
         let params = deserialize_from_pyobj(this.py(), &params)?;
 
-        // TODO(shuyangli): can we parse this in a generic way?
-        let output_source = match output_source.as_deref() {
-            Some("none") => Some(CreateDatapointsFromInferenceOutputSource::None),
-            Some("inference") => Some(CreateDatapointsFromInferenceOutputSource::Inference),
-            Some("demonstration") => Some(CreateDatapointsFromInferenceOutputSource::Demonstration),
-            None => None,
-            Some(unknown_literal) => {
-                return Err(PyValueError::new_err(format!(
-                    "Invalid output source: {unknown_literal}"
-                )));
-            }
-        };
-        let fut = client.create_datapoints_from_inferences(dataset_name, params, output_source);
+        let output_source_enum = output_source
+            .map(|s| {
+                serde_json::from_value(serde_json::Value::String(s)).map_err(|e| {
+                    PyValueError::new_err(format!("Failed to parse output source: {e:?}"))
+                })
+            })
+            .transpose()?;
+
+        let fut =
+            client.create_datapoints_from_inferences(dataset_name, params, output_source_enum);
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        convert_response_to_python(
+        convert_response_to_python_dataclass(
             this.py(),
             response,
             "tensorzero",
@@ -1275,7 +1277,12 @@ impl TensorZeroGateway {
         let res = client.list_datapoints(dataset_name, request);
         let response =
             tokio_block_on_without_gil(this.py(), res).map_err(|e| convert_error(this.py(), e))?;
-        convert_response_to_python(this.py(), response, "tensorzero", "GetDatapointsResponse")
+        convert_response_to_python_dataclass(
+            this.py(),
+            response,
+            "tensorzero",
+            "GetDatapointsResponse",
+        )
     }
 
     /// Run a tensorzero Evaluation
@@ -2154,7 +2161,7 @@ impl AsyncTensorZeroGateway {
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.create_datapoints(dataset_name, requests).await;
             Python::attach(|py| match res {
-                Ok(response) => convert_response_to_python(
+                Ok(response) => convert_response_to_python_dataclass(
                     py,
                     response,
                     "tensorzero",
@@ -2168,7 +2175,7 @@ impl AsyncTensorZeroGateway {
     /// Update one or more datapoints in a dataset.
     ///
     /// :param dataset_name: The name of the dataset containing the datapoints to update.
-    /// :param datapoints: A list of `UpdateDatapointRequest` objects.
+    /// :param requests: A list of `UpdateDatapointRequest` objects.
     /// :return: An `UpdateDatapointsResponse` object.
     #[pyo3(signature = (*, dataset_name, requests))]
     fn update_datapoints<'a>(
@@ -2184,7 +2191,7 @@ impl AsyncTensorZeroGateway {
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.update_datapoints(dataset_name, requests).await;
             Python::attach(|py| match res {
-                Ok(response) => convert_response_to_python(
+                Ok(response) => convert_response_to_python_dataclass(
                     py,
                     response,
                     "tensorzero",
@@ -2212,9 +2219,12 @@ impl AsyncTensorZeroGateway {
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.get_datapoints(ids).await;
             Python::attach(|py| match res {
-                Ok(response) => {
-                    convert_response_to_python(py, response, "tensorzero", "GetDatapointsResponse")
-                }
+                Ok(response) => convert_response_to_python_dataclass(
+                    py,
+                    response,
+                    "tensorzero",
+                    "GetDatapointsResponse",
+                ),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2223,25 +2233,25 @@ impl AsyncTensorZeroGateway {
     /// Update metadata for one or more datapoints.
     ///
     /// :param dataset_name: The name of the dataset containing the datapoints.
-    /// :param datapoints: A list of datapoint metadata update requests.
+    /// :param requests: A list of `UpdateDatapointMetadataRequest` objects.
     /// :return: An `UpdateDatapointsResponse` object containing the IDs of updated datapoints.
-    #[pyo3(signature = (*, dataset_name, datapoints))]
+    #[pyo3(signature = (*, dataset_name, requests))]
     fn update_datapoints_metadata<'a>(
         this: PyRef<'a, Self>,
         dataset_name: String,
-        datapoints: Vec<Bound<'a, PyAny>>,
+        requests: Vec<Bound<'a, PyAny>>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
-        let datapoints = datapoints
+        let requests = requests
             .iter()
             .map(|dp| deserialize_from_pyobj(this.py(), dp))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
-                .update_datapoints_metadata(dataset_name, datapoints)
+                .update_datapoints_metadata(dataset_name, requests)
                 .await;
             Python::attach(|py| match res {
-                Ok(response) => convert_response_to_python(
+                Ok(response) => convert_response_to_python_dataclass(
                     py,
                     response,
                     "tensorzero",
@@ -2271,7 +2281,7 @@ impl AsyncTensorZeroGateway {
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.delete_datapoints(dataset_name, ids).await;
             Python::attach(|py| match res {
-                Ok(response) => convert_response_to_python(
+                Ok(response) => convert_response_to_python_dataclass(
                     py,
                     response,
                     "tensorzero",
@@ -2295,7 +2305,7 @@ impl AsyncTensorZeroGateway {
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.delete_dataset(dataset_name).await;
             Python::attach(|py| match res {
-                Ok(response) => convert_response_to_python(
+                Ok(response) => convert_response_to_python_dataclass(
                     py,
                     response,
                     "tensorzero",
@@ -2323,23 +2333,20 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
         let params = deserialize_from_pyobj(this.py(), &params)?;
-        let output_source = match output_source.as_deref() {
-            Some("none") => Some(CreateDatapointsFromInferenceOutputSource::None),
-            Some("inference") => Some(CreateDatapointsFromInferenceOutputSource::Inference),
-            Some("demonstration") => Some(CreateDatapointsFromInferenceOutputSource::Demonstration),
-            None => None,
-            Some(unknown_literal) => {
-                return Err(PyValueError::new_err(format!(
-                    "Invalid output source: {unknown_literal}"
-                )));
-            }
-        };
+        let output_source_enum = output_source
+            .map(|s| {
+                serde_json::from_value(serde_json::Value::String(s)).map_err(|e| {
+                    PyValueError::new_err(format!("Failed to parse output source: {e:?}"))
+                })
+            })
+            .transpose()?;
+
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
-                .create_datapoints_from_inferences(dataset_name, params, output_source)
+                .create_datapoints_from_inferences(dataset_name, params, output_source_enum)
                 .await;
             Python::attach(|py| match res {
-                Ok(response) => convert_response_to_python(
+                Ok(response) => convert_response_to_python_dataclass(
                     py,
                     response,
                     "tensorzero",
@@ -2367,9 +2374,12 @@ impl AsyncTensorZeroGateway {
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.list_datapoints(dataset_name, request).await;
             Python::attach(|py| match res {
-                Ok(response) => {
-                    convert_response_to_python(py, response, "tensorzero", "GetDatapointsResponse")
-                }
+                Ok(response) => convert_response_to_python_dataclass(
+                    py,
+                    response,
+                    "tensorzero",
+                    "GetDatapointsResponse",
+                ),
                 Err(e) => Err(convert_error(py, e)),
             })
         })

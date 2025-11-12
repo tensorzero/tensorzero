@@ -158,14 +158,14 @@ pub fn parse_tool(py: Python<'_>, key_vals: HashMap<String, Bound<'_, PyAny>>) -
 ///
 /// # Example
 /// ```ignore
-/// convert_response_to_python(
+/// convert_response_to_python_dataclass(
 ///     py,
 ///     update_response,
 ///     "tensorzero",
 ///     "UpdateDatapointsResponse"
 /// )
 /// ```
-pub fn convert_response_to_python<T: serde::Serialize>(
+pub fn convert_response_to_python_dataclass<T: serde::Serialize>(
     py: Python<'_>,
     response: T,
     python_module: &str,

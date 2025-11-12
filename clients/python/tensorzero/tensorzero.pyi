@@ -44,24 +44,15 @@ from tensorzero.types import (
 )
 
 # Generated types
+# NOTE(shuyangli): generated types should not be re-exported from the stub; they should be exported in __init__.py.
 from .generated_types import (
     CreateDatapointRequest,
     CreateDatapointsFromInferenceRequestParams,
     CreateDatapointsResponse,
     Datapoint,
-    DatapointChat,
-    DatapointJson,
-    DatapointMetadataUpdate,
     DeleteDatapointsResponse,
     GetDatapointsResponse,
     InferenceFilter,
-    InferenceFilterAnd,
-    InferenceFilterBooleanMetric,
-    InferenceFilterFloatMetric,
-    InferenceFilterNot,
-    InferenceFilterOr,
-    InferenceFilterTag,
-    InferenceFilterTime,
     ListDatapointsRequest,
     UpdateDatapointMetadataRequest,
     UpdateDatapointRequest,
@@ -894,12 +885,12 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
-    ) -> int:
+    ) -> DeleteDatapointsResponse:
         """
         Delete a dataset and all of its datapoints.
 
         :param dataset_name: The name of the dataset to delete.
-        :return: The number of deleted datapoints.
+        :return: A `DeleteDatapointsResponse` object.
         """
 
     def create_datapoints_from_inferences(
@@ -1372,13 +1363,13 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         dataset_name: str,
-        datapoints: Sequence[UpdateDatapointRequest],
+        requests: Sequence[UpdateDatapointRequest],
     ) -> UpdateDatapointsResponse:
         """
         Update one or more datapoints in a dataset.
 
         :param dataset_name: The name of the dataset containing the datapoints to update.
-        :param datapoints: A sequence of UpdateDatapointRequest objects.
+        :param requests: A sequence of UpdateDatapointRequest objects.
         :return: A `UpdateDatapointsResponse` object.
         """
 
@@ -1612,11 +1603,7 @@ __all__ = [
     "ChainOfThoughtConfig",
     "ChatCompletionConfig",
     "Config",
-    "Datapoint",
-    "DatapointChat",
-    "DatapointJson",
     "LegacyDatapoint",
-    "DatapointMetadataUpdate",
     "DICLConfig",
     "DICLOptimizationConfig",
     "EvaluationJobHandler",
@@ -1638,13 +1625,5 @@ __all__ = [
     "StoredInference",
     "TensorZeroGateway",
     "TogetherSFTConfig",
-    "InferenceFilter",
-    "InferenceFilterFloatMetric",
-    "InferenceFilterBooleanMetric",
-    "InferenceFilterTag",
-    "InferenceFilterTime",
-    "InferenceFilterAnd",
-    "InferenceFilterOr",
-    "InferenceFilterNot",
     "VariantsConfig",
 ]

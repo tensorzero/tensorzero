@@ -1,3 +1,4 @@
+# pyright: reportDeprecated=false
 import inspect
 import json
 import os

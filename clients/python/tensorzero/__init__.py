@@ -62,9 +62,9 @@ from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
-    AndFilter,
+    AndFilter,  # pyright: ignore[reportDeprecated]
     BaseTensorZeroError,
-    BooleanMetricFilter,
+    BooleanMetricFilter,  # pyright: ignore[reportDeprecated]
     ChatDatapointInsert,
     ChatInferenceResponse,
     ContentBlock,
@@ -76,22 +76,29 @@ from .types import (
     FileBase64,
     FileUrl,
     FinishReason,
-    FloatMetricFilter,
+    FloatMetricFilter,  # pyright: ignore[reportDeprecated]
     ImageBase64,
     ImageUrl,
     InferenceChunk,
+    InferenceFilterAnd,
+    InferenceFilterBooleanMetric,
+    InferenceFilterFloatMetric,
+    InferenceFilterNot,
+    InferenceFilterOr,
+    InferenceFilterTag,
+    InferenceFilterTime,
     InferenceInput,
     InferenceResponse,
     JsonDatapointInsert,
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
-    NotFilter,
+    NotFilter,  # pyright: ignore[reportDeprecated]
     OrderBy,
-    OrFilter,
+    OrFilter,  # pyright: ignore[reportDeprecated]
     RawText,
     System,
-    TagFilter,
+    TagFilter,  # pyright: ignore[reportDeprecated]
     Template,
     TensorZeroError,
     TensorZeroInternalError,
@@ -99,7 +106,7 @@ from .types import (
     TextChunk,
     Thought,
     ThoughtChunk,
-    TimeFilter,
+    TimeFilter,  # pyright: ignore[reportDeprecated]
     Tool,
     ToolCall,
     ToolCallChunk,
@@ -188,6 +195,13 @@ __all__ = [
     "FileUrl",
     "FinishReason",
     "FloatMetricFilter",
+    "InferenceFilterAnd",
+    "InferenceFilterBooleanMetric",
+    "InferenceFilterFloatMetric",
+    "InferenceFilterNot",
+    "InferenceFilterOr",
+    "InferenceFilterTag",
+    "InferenceFilterTime",
     "FunctionsConfig",
     "FunctionConfigChat",
     "FunctionConfigJson",

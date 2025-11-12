@@ -256,7 +256,7 @@ def test_sync_update_datapoints_metadata(sync_client: TensorZeroGateway):
     # Update metadata using v1 endpoint (returns list of UUIDs)
     response = sync_client.update_datapoints_metadata(
         dataset_name=dataset_name,
-        datapoints=[
+        requests=[
             UpdateDatapointMetadataRequest(id=str(original_id), metadata=DatapointMetadataUpdate(name="updated_name"))
         ],
     )
@@ -280,7 +280,7 @@ def test_sync_update_datapoints_metadata(sync_client: TensorZeroGateway):
     # Clear the name using v1 endpoint
     response = sync_client.update_datapoints_metadata(
         dataset_name=dataset_name,
-        datapoints=[UpdateDatapointMetadataRequest(id=str(original_id), metadata=DatapointMetadataUpdate(name=None))],
+        requests=[UpdateDatapointMetadataRequest(id=str(original_id), metadata=DatapointMetadataUpdate(name=None))],
     )
 
     # Wait for the metadata to be updated
@@ -324,7 +324,7 @@ async def test_async_update_datapoints_metadata(async_client: AsyncTensorZeroGat
     # Update metadata (returns list of UUIDs)
     response = await async_client.update_datapoints_metadata(
         dataset_name=dataset_name,
-        datapoints=[
+        requests=[
             UpdateDatapointMetadataRequest(id=str(original_id), metadata=DatapointMetadataUpdate(name="modified"))
         ],
     )
@@ -448,9 +448,8 @@ def test_sync_delete_entire_dataset(sync_client: TensorZeroGateway):
 
     # Delete entire dataset
     response = sync_client.delete_dataset(dataset_name=dataset_name)
-    num_deleted = response.num_deleted_datapoints
 
-    assert num_deleted == 10
+    assert response.num_deleted_datapoints == 10
 
     # Verify dataset is empty
     response = sync_client.list_datapoints(
@@ -533,7 +532,7 @@ def test_sync_create_datapoints_from_inferences(embedded_sync_client: TensorZero
     # Verify datapoints were created
     response = embedded_sync_client.list_datapoints(
         dataset_name=dataset_name,
-        limit=10,
+        request=ListDatapointsRequest(limit=10),
     )
     datapoints = response.datapoints
     assert len(datapoints) == 2
@@ -576,7 +575,7 @@ async def test_async_create_datapoints_from_inferences(embedded_async_client: As
     # Verify
     response = await embedded_async_client.list_datapoints(
         dataset_name=dataset_name,
-        limit=10,
+        request=ListDatapointsRequest(limit=10),
     )
     listed = response.datapoints
     assert len(listed) == 2
