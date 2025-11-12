@@ -96,6 +96,29 @@ pub async fn run_gepa_optimization(
     // Initialize the Pareto frontier with baseline or provided variants
     let pareto_frontier = initialize_pareto_frontier(config, function_config)?;
 
+    // Create validation dataset for Pareto filtering
+    let val_dataset_name = format!(
+        "{}_gepa_val_{}",
+        config.evaluation_name,
+        uuid::Uuid::now_v7()
+    );
+    tracing::info!(
+        "Creating validation dataset '{}' with {} examples",
+        val_dataset_name,
+        val_examples.len()
+    );
+
+    let _val_datapoint_ids = create_evaluation_dataset(
+        &tensorzero_config,
+        client,
+        clickhouse_connection_info,
+        &val_examples,
+        &val_dataset_name,
+    )
+    .await?;
+
+    tracing::info!("Validation dataset created successfully");
+
     // TODO: Evaluate initial variants on validation set and get val_scores
     // let val_scores = evaluate_variants(..., &val_examples, ...)?;
 

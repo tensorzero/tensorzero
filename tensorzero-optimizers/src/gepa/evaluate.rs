@@ -207,14 +207,6 @@ pub async fn consume_evaluation_stream(
     })
 }
 
-/// Create evaluation dataset from samples in ClickHouse
-/// Uses the existing dataset storage infrastructure
-///
-/// NOTE: This function is currently a stub. Dataset creation requires:
-/// 1. Converting RenderedSamples to DatapointInsert format (ChatInferenceDatapointInsert or JsonInferenceDatapointInsert)
-/// 2. Inserting into ClickHouse using the DatasetQueries trait
-/// 3. This is complex and will be implemented when needed for the full GEPA workflow
-#[expect(dead_code)]
 /// Create an evaluation dataset from rendered samples
 ///
 /// Uses the datasets v1 API to create datapoints in ClickHouse.
