@@ -190,7 +190,7 @@ macro_rules! generate_unified_mock_batch_tests {
                 if provider.supports_batch_inference {
                     test_parallel_tool_use_unified_mock_batch_with_provider(
                         &provider,
-                        "weather_helper_mock_batch",
+                        "weather_helper_parallel_mock_batch",
                     )
                     .await;
                     break;
@@ -480,14 +480,6 @@ pub async fn test_tool_use_unified_mock_batch_with_provider(
         "episode_ids": episode_ids,
         "inputs":
             [{
-               "system": {"assistant_name": "Dr. Mehta"},
-               "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
-                }
-            ]},
-            {
                 "system": {"assistant_name": "Dr. Mehta"},
                 "messages": [
                  {
@@ -495,7 +487,7 @@ pub async fn test_tool_use_unified_mock_batch_with_provider(
                      "content": "What is your name?"
                  }
              ]},
-             {
+            {
                 "system": { "assistant_name": "Dr. Mehta" },
                 "messages": [
                     {
@@ -504,6 +496,14 @@ pub async fn test_tool_use_unified_mock_batch_with_provider(
                     }
                 ]
             },
+             {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."
+                }
+            ]},
             {
                 "system": {"assistant_name": "Dr. Mehta"},
                 "messages": [
@@ -522,7 +522,29 @@ pub async fn test_tool_use_unified_mock_batch_with_provider(
                     ]}
         ],
         "variant_name": provider.variant_name,
-        "tags": [{"test_type": "unified_mock", "test_id": test_id.to_string()}]
+        "tool_choice": ["required", null, "none", null, {"specific": "self_destruct"}],
+        "additional_tools": [null, null, null, null, [{
+            "name": "self_destruct",
+            "description": "Do not call this function under any circumstances.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fast": {
+                        "type": "boolean",
+                        "description": "Whether to use a fast method to self-destruct."
+                    }
+                },
+                "required": ["fast"],
+                "additionalProperties": false
+            }
+        }]],
+        "tags": [
+            {"test_type": "required", "test_id": test_id.to_string()},
+            {"test_type": "auto_unused", "test_id": test_id.to_string()},
+            {"test_type": "none", "test_id": test_id.to_string()},
+            {"test_type": "auto_used", "test_id": test_id.to_string()},
+            {"test_type": "specific", "test_id": test_id.to_string()}
+        ]
     });
 
     // Step 1: Launch the batch
@@ -632,11 +654,12 @@ pub async fn test_parallel_tool_use_unified_mock_batch_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the weather in Tokyo and San Francisco? Use the `get_temperature` tool (call it twice)."
+                    "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
                 }
             ]
         }],
         "variant_name": provider.variant_name,
+        "parallel_tool_calls": [true],
         "tags": [{"test_type": "unified_mock", "test_id": test_id.to_string()}]
     });
 

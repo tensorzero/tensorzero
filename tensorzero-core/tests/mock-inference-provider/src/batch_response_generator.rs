@@ -23,7 +23,9 @@ pub fn generate_tool_args(tool_name: &str) -> Value {
         "get_humidity" => json!({
             "location": "Tokyo"
         }),
-        "self_destruct" => json!({}),
+        "self_destruct" => json!({
+            "fast": true
+        }),
         _ => json!({}),
     }
 }

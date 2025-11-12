@@ -311,14 +311,14 @@ fn detect_and_generate_gcp_response(request: &serde_json::Value) -> Vec<serde_js
                 .and_then(|tc| tc.get("functionCallingConfig"))
                 .and_then(|fcc| fcc.get("mode"))
                 .and_then(|m| m.as_str())
-                .unwrap_or("AUTO");
+                .unwrap_or("auto");
 
             match mode {
-                "NONE" => {
+                "none" => {
                     // No function calls allowed
                     return generate_text_parts(&generate_simple_text_from_request(request));
                 }
-                "ANY" => {
+                "any" => {
                     // Must use a function
                     let tool_name = extract_first_tool_name(tools);
                     let args = generate_tool_args(&tool_name);
