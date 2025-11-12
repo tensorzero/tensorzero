@@ -2294,7 +2294,8 @@ mod tests {
                 vec![],
                 AllowedTools {
                     tools: ["weather_tool".to_string()].into_iter().collect(),
-                    choice: AllowedToolsChoice::AllAllowedTools,
+                    #[expect(deprecated)]
+                    choice: AllowedToolsChoice::DynamicAllowedTools,
                 },
                 ToolChoice::Required,
                 Some(true),
@@ -2310,6 +2311,95 @@ mod tests {
                 .await
                 .is_ok(),
             "Should insert chat datapoint with tool_params successfully"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_insert_chat_datapoint_with_all_allowed_tools_executes_successfully() {
+        use crate::tool::{
+            AllowedTools, AllowedToolsChoice, ClientSideFunctionTool, Tool,
+            ToolCallConfigDatabaseInsert, ToolChoice,
+        };
+
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_with_external_data()
+            .withf(|external_data, query| {
+                // Verify the query is correct
+                assert!(query.contains("INSERT INTO ChatInferenceDatapoint"));
+
+                // Parse and verify the data includes all Migration 0041 columns
+                let actual_row_as_json: serde_json::Value =
+                    serde_json::from_str(&external_data.data).unwrap();
+
+                // Verify the new Migration 0041 columns are present with correct values
+                assert_eq!(
+                    actual_row_as_json["dynamic_tools"],
+                    json!([{"type": "client_side_function", "description": "Get temperature", "parameters": {"type": "object"}, "name": "get_temperature", "strict": true}])
+                );
+                assert_eq!(actual_row_as_json["dynamic_provider_tools"], json!([]));
+                assert_eq!(
+                    actual_row_as_json["allowed_tools"],
+                    json!({"tools": ["weather_tool"], "choice": "all_allowed_tools"})
+                );
+                assert_eq!(actual_row_as_json["tool_choice"], json!("required"));
+                assert_eq!(actual_row_as_json["parallel_tool_calls"], json!(true));
+
+                // Verify legacy tool_params field is also present
+                assert!(actual_row_as_json.get("tool_params").is_some());
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        written_rows: 1,
+                        read_rows: 0,
+                    },
+                })
+            });
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let datapoint = ChatInferenceDatapointInsert {
+            dataset_name: "test_dataset".to_string(),
+            function_name: "test_function".to_string(),
+            id: Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap(),
+            name: Some("test_with_tools".to_string()),
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![Tool::ClientSideFunction(ClientSideFunctionTool {
+                    name: "get_temperature".to_string(),
+                    description: "Get temperature".to_string(),
+                    parameters: json!({"type": "object"}),
+                    strict: true,
+                })],
+                vec![],
+                AllowedTools {
+                    tools: ["weather_tool".to_string()].into_iter().collect(),
+                    choice: AllowedToolsChoice::AllAllowedTools,
+                },
+                ToolChoice::Required,
+                Some(true),
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+        assert!(
+            conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
+                .await
+                .is_ok(),
+            "Should insert chat datapoint with AllAllowedTools successfully"
         );
     }
 

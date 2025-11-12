@@ -2868,7 +2868,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_tool_choice() {
+    fn test_from_tool_config() {
         let supports_any_model_name = "gemini-2.5-pro";
 
         // Test Auto mode
