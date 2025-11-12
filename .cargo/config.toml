@@ -15,7 +15,8 @@ test-unit = "nextest run --lib --bins"
 test-all = "nextest run --features e2e_tests"
 # Note - 'test-batch', 'test-e2e', and 'test-e2e-no-creds' must be kept in sync
 # Running all of them should cover all of our tests, and not miss any
-test-batch = ["nextest", "run", "--features", "e2e_tests", "--profile", "batch"]
+test-live-batch = ["nextest", "run", "--features", "e2e_tests", "--profile", "live-batch"]
+test-mock-batch = ["nextest", "run", "--features", "e2e_tests", "--profile", "mock-batch"]
 test-e2e = ["nextest", "run", "--features", "e2e_tests", "--profile", "e2e"]
 test-optimization = [
     "nextest",
@@ -66,6 +67,7 @@ test-feedback-load = [
 
 build-e2e = "build --bin gateway --features e2e_tests"
 run-e2e = "run --bin gateway --features e2e_tests -- --config-file tensorzero-core/tests/e2e/tensorzero.toml"
+run-e2e-mock-batch = "run --bin gateway --features e2e_tests -- --config-file tensorzero-core/tests/e2e/tensorzero.*toml"
 migrate-postgres = "run --bin gateway --features e2e_tests -- --run-postgres-migrations"
 watch-e2e = "watch -x run-e2e"
 

@@ -437,7 +437,7 @@ macro_rules! generate_batch_inference_tests {
     };
 }
 
-async fn check_clickhouse_batch_request_status(
+pub async fn check_clickhouse_batch_request_status(
     clickhouse: &ClickHouseConnectionInfo,
     batch_id: Uuid,
     provider: &E2ETestProvider,
@@ -473,7 +473,7 @@ async fn check_clickhouse_batch_request_status(
     assert_eq!(errors.len(), 0);
 }
 
-fn get_poll_batch_inference_url(query: PollPathParams) -> Url {
+pub fn get_poll_batch_inference_url(query: PollPathParams) -> Url {
     let mut url = get_gateway_endpoint("/batch_inference");
     match query {
         PollPathParams {
@@ -2211,7 +2211,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -2627,9 +2627,9 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-    system,
-    "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
-);
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
+    );
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();
@@ -4126,7 +4126,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
