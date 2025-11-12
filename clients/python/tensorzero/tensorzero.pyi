@@ -52,8 +52,10 @@ from .generated_types import (
     Datapoint,
     DeleteDatapointsResponse,
     GetDatapointsResponse,
+    GetInferencesResponse,
     InferenceFilter,
     ListDatapointsRequest,
+    ListInferencesRequest,
     UpdateDatapointMetadataRequest,
     UpdateDatapointRequest,
     UpdateDatapointsResponse,
@@ -911,6 +913,34 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `CreateDatapointsResponse` object.
         """
 
+    def get_inferences(
+        self,
+        *,
+        ids: List[str | UUID | uuid_utils.UUID],
+        function_name: Optional[str] = None,
+        output_source: str = "inference",
+    ) -> GetInferencesResponse:
+        """
+        Get specific inferences by their IDs.
+
+        :param ids: A list of inference IDs to retrieve.
+        :param function_name: Optional function name to filter by (improves query performance).
+        :param output_source: The source of the output ("inference" or "demonstration"). Default: "inference".
+        :return: A `GetInferencesResponse` object.
+        """
+
+    def list_inferences(
+        self,
+        *,
+        request: ListInferencesRequest,
+    ) -> GetInferencesResponse:
+        """
+        List inferences with optional filtering, pagination, and sorting.
+
+        :param request: A `ListInferencesRequest` object with filter parameters.
+        :return: A `GetInferencesResponse` object.
+        """
+
     def experimental_list_inferences(
         self,
         *,
@@ -1441,6 +1471,34 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
                              If not provided, by default we will use the original inference output as the datapoint's output
                              (equivalent to `inference`).
         :return: A `CreateDatapointsResponse` object.
+        """
+
+    async def get_inferences(
+        self,
+        *,
+        ids: List[str | UUID | uuid_utils.UUID],
+        function_name: Optional[str] = None,
+        output_source: str = "inference",
+    ) -> GetInferencesResponse:
+        """
+        Get specific inferences by their IDs.
+
+        :param ids: A list of inference IDs to retrieve.
+        :param function_name: Optional function name to filter by (improves query performance).
+        :param output_source: The source of the output ("inference" or "demonstration"). Default: "inference".
+        :return: A `GetInferencesResponse` object.
+        """
+
+    async def list_inferences(
+        self,
+        *,
+        request: ListInferencesRequest,
+    ) -> GetInferencesResponse:
+        """
+        List inferences with optional filtering, pagination, and sorting.
+
+        :param request: A `ListInferencesRequest` object with filter parameters.
+        :return: A `GetInferencesResponse` object.
         """
 
     async def experimental_list_inferences(
