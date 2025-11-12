@@ -160,7 +160,7 @@ Each object in the array must have two or three fields:
 - One of the following:
   - `value`: The value to insert at that location; it can be of any type including nested types
   - `delete = true`: Deletes the field at the specified location, if present.
-- Optional: `variant_name`\*or `model_provider_name`: If specified, the modification will only be applied to the specified variant or model provider. If neither is specified, the modification applies to all variants and providers.
+- Optional: `variant_name` or `model_provider_name`: If specified, the modification will only be applied to the specified variant or model provider. If neither is specified, the modification applies to all variants and providers.
 
 <Tip>
 
@@ -195,7 +195,7 @@ If TensorZero would normally send this request body to the provider...
       "value": true
     },
     {
-      // No variant_name or model_provider_name - applies to all variants and providers
+      // No `variant_name` or `model_provider_name` specified, so it applies to all variants and providers
       "pointer": "/safety_checks/no_agi",
       "value": {
         "bypass": "on"
@@ -243,7 +243,7 @@ Each object in the array must have two or three fields:
 
 - `name`: The name of the header to modify
 - `value`: The value to set the header to
-- Optional: `variant_name`\*or `model_provider_name`: If specified, the modification will only be applied to the specified variant or model provider. If neither is specified, the modification applies to all variants and providers.
+- Optional: `variant_name` or `model_provider_name`: If specified, the modification will only be applied to the specified variant or model provider. If neither is specified, the modification applies to all variants and providers.
 
 <Tip>
 
@@ -271,7 +271,7 @@ Safety-Checks: on
       "value": "off"
     },
     {
-      // No variant_name or model_provider_name - applies to all variants and providers
+      // No `variant_name` or `model_provider_name` specified, so it applies to all variants and providers
       "name": "Intelligence-Level",
       "value": "AGI"
     }
