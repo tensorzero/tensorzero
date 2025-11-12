@@ -33,7 +33,7 @@ services:
         PROFILE: dev
     volumes:
       - ./config:/app/config:ro
-    command: --config-file ${TENSORZERO_GATEWAY_CONFIG:-/app/config/tensorzero.e2e.toml}
+    command: --config-file ${TENSORZERO_GATEWAY_CONFIG:-'/app/config/tensorzero*.toml'}
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures

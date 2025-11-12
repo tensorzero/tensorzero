@@ -4,6 +4,7 @@ import { Input } from "~/components/ui/input";
 import { EditButton } from "../utils/EditButton";
 import { CancelButton } from "../utils/CancelButton";
 import { SaveButton } from "../utils/SaveButton";
+import { logger } from "~/utils/logger";
 
 /**
  * EditableChipProps extends ChipProps and adds EditableChip-specific props.
@@ -63,7 +64,7 @@ export default function EditableChip({
       setEditValue("");
     } catch (error) {
       // Error handling will be managed by the parent component
-      console.error("Failed to update value:", error);
+      logger.error("Failed to update value:", error);
     } finally {
       setIsLoading(false);
     }
