@@ -3,19 +3,11 @@
 <model_name>{{model}}</model_name>
 
 <message_templates>
-<system_template>
-{{system_template}}
-</system_template>
-{% if user_template %}
-<user_template>
-{{user_template}}
-</user_template>
-{% endif %}
-{% if assistant_template %}
-<assistant_template>
-{{assistant_template}}
-</assistant_template>
-{% endif %}
+{% for template_name, template_content in templates.items() %}
+<template name="{{template_name}}">
+{{template_content}}
+</template>
+{% endfor %}
 </message_templates>
 
 {% if system_schema or user_schema or assistant_schema %}

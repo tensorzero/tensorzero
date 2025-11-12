@@ -24,7 +24,7 @@ use tensorzero_core::{
 
 // Re-export public types and functions from sibling modules
 #[expect(unused_imports)]
-pub use super::analyze::{analyze_inferences, AnalysisReport, InferenceWithAnalysis};
+pub use super::analyze::{analyze_inferences, InferenceWithAnalysis};
 #[expect(unused_imports)]
 pub use super::evaluate::{create_evaluation_dataset, evaluate_variants, EvaluationResults};
 #[expect(unused_imports)]

@@ -95,18 +95,73 @@ fn get_hello_json_function() -> Arc<FunctionConfig> {
 
 /// Returns the `tensorzero::optimization::gepa::analyze` function configuration.
 ///
-/// This is a Chat function with tools that analyzes inference outputs and provides
+/// This is a Chat function that analyzes inference outputs and provides
 /// structured feedback for the GEPA optimization algorithm.
 ///
-/// The function has three tools:
+/// The function outputs XML in one of three formats:
 /// - report_error: For critical failures in the inference output
 /// - report_improvement: For suboptimal but technically correct outputs
 /// - report_optimal: For high-quality aspects worth preserving
+/// TODO: support new templates/schemas
 fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
-    // Load user schema from embedded JSON file
-    let user_schema_json: serde_json::Value = serde_json::from_str(include_str!(
-        "../optimization/gepa/config/functions/analyze/user_schema.json"
-    ))?;
+    // Define user schema inline
+    let user_schema_json = serde_json::json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "required": ["function_name", "model", "templates", "input", "output"],
+        "additionalProperties": false,
+        "properties": {
+            "function_name": {
+                "type": "string",
+                "description": "The name of the function you are analyzing"
+            },
+            "model": {
+                "type": "string",
+                "description": "The the name of the LLM used"
+            },
+            "templates": {
+                "type": "object",
+                "description": "Map of template names to their contents (e.g., 'system', 'user', 'assistant', or custom template names)",
+                "additionalProperties": {
+                    "type": "string"
+                }
+            },
+            "output_schema": {
+                "type": ["object", "null"],
+                "description": "Optional reference JSON schema for the function output (if function type is json)"
+            },
+            "system_schema": {
+                "type": ["object", "null"],
+                "description": "Optional JSON schema specifying any arguments for the reference system template"
+            },
+            "user_schema": {
+                "type": ["object", "null"],
+                "description": "Optional JSON schema specifying any arguments for the reference user template"
+            },
+            "assistant_schema": {
+                "type": ["object", "null"],
+                "description": "Optional JSON schema specifying any arguments for the reference assistant template"
+            },
+            "tools": {
+                "type": ["object", "null"],
+                "description": "Optional dictionary of tool names to tool schemas",
+                "additionalProperties": {
+                    "type": "object",
+                    "description": "Tool schema"
+                }
+            },
+            "input": {
+                "description": "The input messages leading up to the assistant's response"
+            },
+            "output": {
+                "description": "The assistant's response"
+            },
+            "tags": {
+                "type": ["object", "null"],
+                "description": "Tags associated with the inference"
+            }
+        }
+    });
     let user_schema = StaticJSONSchema::from_value(user_schema_json)?;
 
     let mut inner = HashMap::new();
@@ -120,16 +175,6 @@ fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
 
     let schemas = SchemaData { inner };
 
-    // TODO: Add tool support for built-in functions
-    // For now, GEPA analyze function uses empty tools - tools will be provided
-    // via internal_dynamic_variant_config when the actual GEPA implementation
-    // in tensorzero-optimizers is complete
-    //
-    // Tool definitions exist in:
-    // - ../optimization/gepa/config/tools/report_error.json
-    // - ../optimization/gepa/config/tools/report_improvement.json
-    // - ../optimization/gepa/config/tools/report_optimal.json
-
     Ok(Arc::new(FunctionConfig::Chat(FunctionConfigChat {
         variants: HashMap::new(),
         schemas,
@@ -137,7 +182,7 @@ fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
         tool_choice: ToolChoice::None,
         parallel_tool_calls: None,
         description: Some(
-            "Built-in GEPA analyze function - analyzes inference outputs and provides structured feedback for optimization".to_string(),
+            "Built-in GEPA analyze function - analyzes inference outputs and provides structured XML feedback for optimization".to_string(),
         ),
         all_explicit_templates_names: HashSet::new(),
         experimentation: ExperimentationConfig::default(),
@@ -148,11 +193,78 @@ fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
 ///
 /// This is a JSON function that generates improved prompt templates based on
 /// analysis feedback from the GEPA optimization algorithm.
+/// TODO: support new templates/schemas
 fn get_gepa_mutate_function() -> Result<Arc<FunctionConfig>, Error> {
-    // Load user schema from embedded JSON file
-    let user_schema_json: serde_json::Value = serde_json::from_str(include_str!(
-        "../optimization/gepa/config/functions/mutate/user_schema.json"
-    ))?;
+    // Define user schema inline
+    let user_schema_json = serde_json::json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "required": ["function_name", "model", "system_template", "analyses"],
+        "additionalProperties": false,
+        "properties": {
+            "function_name": {
+                "type": "string",
+                "description": "The name of the function you are improving"
+            },
+            "model": {
+                "type": "string",
+                "description": "The target model for the optimized templates"
+            },
+            "system_template": {
+                "type": "string",
+                "description": "The reference system template"
+            },
+            "user_template": {
+                "type": ["string", "null"],
+                "description": "Optional reference user template"
+            },
+            "assistant_template": {
+                "type": ["string", "null"],
+                "description": "Optional reference assistant template"
+            },
+            "output_schema": {
+                "type": ["object", "null"],
+                "description": "Optional reference JSON schema for the function output (if function type is json)"
+            },
+            "system_schema": {
+                "type": ["object", "null"],
+                "description": "Optional JSON schema specifying any arguments for the reference system template"
+            },
+            "user_schema": {
+                "type": ["object", "null"],
+                "description": "Optional JSON schema specifying any arguments for the reference user template"
+            },
+            "assistant_schema": {
+                "type": ["object", "null"],
+                "description": "Optional JSON schema specifying any arguments for the reference assistant template"
+            },
+            "tools": {
+                "type": ["object", "null"],
+                "description": "Optional dictionary of tool names to tool schemas",
+                "additionalProperties": {
+                    "type": "object",
+                    "description": "Tool schema"
+                }
+            },
+            "analyses": {
+                "type": "array",
+                "description": "Array of inference examples with their corresponding analyses/feedback",
+                "items": {
+                    "type": "object",
+                    "required": ["inference_output", "analysis"],
+                    "properties": {
+                        "inference_output": {
+                            "description": "The LLM inference output analyzed"
+                        },
+                        "analysis": {
+                            "type": "array",
+                            "description": "The analysis/feedback for this inference output (from gepa_generate_analysis: error report, improvement suggestion, or optimal pattern)"
+                        }
+                    }
+                }
+            }
+        }
+    });
     let user_schema = StaticJSONSchema::from_value(user_schema_json)?;
 
     let mut inner = HashMap::new();
@@ -166,10 +278,28 @@ fn get_gepa_mutate_function() -> Result<Arc<FunctionConfig>, Error> {
 
     let schemas = SchemaData { inner };
 
-    // Load output schema from embedded JSON file
-    let output_schema_json: serde_json::Value = serde_json::from_str(include_str!(
-        "../optimization/gepa/config/functions/mutate/output_schema.json"
-    ))?;
+    // Define output schema inline
+    // TODO: support new templates
+    let output_schema_json = serde_json::json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+            "system_template": {
+                "type": "string",
+                "description": "Your improved system template"
+            },
+            "user_template": {
+                "type": ["string", "null"],
+                "description": "Your improved user template. Only return if the user provides a reference user template"
+            },
+            "assistant_template": {
+                "type": ["string", "null"],
+                "description": "Your improved assistant template. Only return if the user provides a reference assistant template"
+            }
+        },
+        "required": ["system_template"],
+        "additionalProperties": false
+    });
     let output_schema = StaticJSONSchema::from_value(output_schema_json)?;
 
     let implicit_tool_call_config = create_implicit_tool_call_config(output_schema.clone());
@@ -258,7 +388,7 @@ mod tests {
     #[test]
     fn test_get_all_built_in_functions() {
         let functions = get_all_built_in_functions().unwrap();
-        assert_eq!(functions.len(), 2);
+        assert_eq!(functions.len(), 4);
         assert!(functions.contains_key("tensorzero::hello_chat"));
         assert!(functions.contains_key("tensorzero::hello_json"));
     }
