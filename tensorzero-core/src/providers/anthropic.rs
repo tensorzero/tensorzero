@@ -435,15 +435,18 @@ impl From<Role> for AnthropicRole {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-enum AnthropicToolChoice<'a> {
+pub(crate) enum AnthropicToolChoice<'a> {
     Auto {
+        #[serde(skip_serializing_if = "Option::is_none")]
         disable_parallel_tool_use: Option<bool>,
     },
     Any {
+        #[serde(skip_serializing_if = "Option::is_none")]
         disable_parallel_tool_use: Option<bool>,
     },
     Tool {
         name: &'a str,
+        #[serde(skip_serializing_if = "Option::is_none")]
         disable_parallel_tool_use: Option<bool>,
     },
 }
@@ -469,6 +472,35 @@ impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
             }),
             ToolChoice::None => Ok(AnthropicToolChoice::Auto {
                 disable_parallel_tool_use,
+            }),
+        }
+    }
+}
+
+// We also support conversion from just ToolChoice (without parallel tool call config)
+// This is used by GCP Vertex Anthropic which may not have the parallel_tool_calls field configured
+impl<'a> TryFrom<&'a ToolChoice> for AnthropicToolChoice<'a> {
+    type Error = Error;
+
+    fn try_from(tool_choice: &'a ToolChoice) -> Result<Self, Error> {
+        match tool_choice {
+            ToolChoice::Auto => Ok(AnthropicToolChoice::Auto {
+                disable_parallel_tool_use: None,
+            }),
+            ToolChoice::Required => Ok(AnthropicToolChoice::Any {
+                disable_parallel_tool_use: None,
+            }),
+            ToolChoice::Specific(name) => Ok(AnthropicToolChoice::Tool {
+                name,
+                disable_parallel_tool_use: None,
+            }),
+            // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
+            // for tool choice. Instead, we return Auto but the request construction will ensure
+            // that no tools are sent in the request payload. This achieves the same effect
+            // as explicitly telling the model not to use tools, since without any tools
+            // being provided, the model cannot make tool calls.
+            ToolChoice::None => Ok(AnthropicToolChoice::Auto {
+                disable_parallel_tool_use: None,
             }),
         }
     }
