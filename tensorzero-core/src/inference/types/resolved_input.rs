@@ -6,7 +6,9 @@ use futures::future::Shared;
 use futures::FutureExt;
 use mime::MediaType;
 use object_store::{PutMode, PutOptions};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::export_schema;
 use url::Url;
 
 use super::{
@@ -25,7 +27,7 @@ use crate::tool::{ToolCall, ToolResult};
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
-    resolved_content_block_to_python, resolved_input_message_content_to_python, serialize_to_dict,
+    resolved_content_block_to_python,
 };
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -129,18 +131,20 @@ pub enum LazyResolvedInputMessageContent {
 // for the Pyo3 'str' impl?
 #[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
 #[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
-#[derive(ts_rs::TS)]
+#[derive(ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 pub struct ResolvedInput {
     #[cfg_attr(
         any(feature = "pyo3", test),
         serde(skip_serializing_if = "Option::is_none")
     )]
     #[ts(optional)]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub system: Option<System>,
 
     #[cfg_attr(any(feature = "pyo3", test), serde(default))]
+    #[schemars(default)]
     pub messages: Vec<ResolvedInputMessage>,
 }
 
@@ -263,40 +267,15 @@ impl ResolvedInput {
     }
 }
 
-#[cfg(feature = "pyo3")]
-impl std::fmt::Display for ResolvedInput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
-        write!(f, "{json}")
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl ResolvedInput {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-
-    #[getter]
-    pub fn get_system<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(serialize_to_dict(py, self.system.clone())?.into_bound(py))
-    }
-
-    #[getter]
-    pub fn get_messages(&self) -> Vec<ResolvedInputMessage> {
-        self.messages.clone()
-    }
-}
 
 #[derive(Clone, Debug, PartialEq)]
 // TODO - should we remove the Serialize impl entirely, rather than rely on it
 // for the Pyo3 'str' impl?
 #[cfg_attr(any(feature = "pyo3", test), derive(Serialize))]
 #[cfg_attr(any(feature = "pyo3", test), serde(deny_unknown_fields))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
-#[derive(ts_rs::TS)]
+#[derive(ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 pub struct ResolvedInputMessage {
     pub role: Role,
     pub content: Vec<ResolvedInputMessageContent>,
@@ -326,37 +305,6 @@ impl ResolvedInputMessage {
     }
 }
 
-#[cfg(feature = "pyo3")]
-impl std::fmt::Display for ResolvedInputMessage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
-        write!(f, "{json}")
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl ResolvedInputMessage {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-
-    #[getter]
-    pub fn get_role(&self) -> String {
-        self.role.to_string()
-    }
-
-    #[getter]
-    pub fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
-        self.content
-            .iter()
-            .map(|content| {
-                resolved_input_message_content_to_python(py, content.clone())
-                    .map(|pyobj| pyobj.into_bound(py))
-            })
-            .collect()
-    }
-}
 
 #[derive(Clone, Debug, PartialEq)]
 // TODO - should we remove the Serialize impl entirely, rather than rely on it
@@ -366,8 +314,9 @@ impl ResolvedInputMessage {
     any(feature = "pyo3", test),
     serde(tag = "type", rename_all = "snake_case")
 )]
-#[derive(ts_rs::TS)]
+#[derive(ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ResolvedInputMessageContent {
     Text(Text),
     Template(Template),

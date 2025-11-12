@@ -6,8 +6,10 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tensorzero_derive::export_schema;
 
 use crate::error::{Error, ErrorDetails};
 use crate::model::UninitializedModelConfig;
@@ -155,8 +157,9 @@ impl std::fmt::Display for OptimizationJobInfoPyClass {
     }
 }
 
-#[derive(Debug, Serialize, PartialEq)]
-#[cfg_attr(feature = "pyo3", pyclass(str, eq))]
+#[derive(Debug, Serialize, PartialEq, JsonSchema)]
+#[schemars(rename_all = "snake_case")]
+#[export_schema]
 pub enum OptimizationJobStatus {
     Pending,
     Completed,
@@ -182,11 +185,11 @@ impl OptimizationJobInfoPyClass {
     }
 
     #[getter]
-    fn get_status(&self) -> OptimizationJobStatus {
+    fn get_status(&self) -> &str {
         match &self.0 {
-            OptimizationJobInfo::Pending { .. } => OptimizationJobStatus::Pending,
-            OptimizationJobInfo::Completed { .. } => OptimizationJobStatus::Completed,
-            OptimizationJobInfo::Failed { .. } => OptimizationJobStatus::Failed,
+            OptimizationJobInfo::Pending { .. } => "Pending",
+            OptimizationJobInfo::Completed { .. } => "Completed",
+            OptimizationJobInfo::Failed { .. } => "Failed",
         }
     }
 

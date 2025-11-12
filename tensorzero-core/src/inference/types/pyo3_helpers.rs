@@ -8,7 +8,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::endpoints::datasets::{Datapoint, StoredDatapoint};
+use crate::endpoints::datasets::StoredDatapoint;
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::ResolvedContentBlock;
 use crate::inference::types::{
@@ -370,27 +370,6 @@ pub fn deserialize_from_stored_sample<'a>(
             Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
         };
         Ok(StoredSampleItem::StoredInference(storage))
-    } else if obj.is_instance_of::<Datapoint>() {
-        // Extract wire type and convert to storage type
-        let wire: Datapoint = obj.extract()?;
-        match wire {
-            Datapoint::Chat(chat_wire) => {
-                let function_config = match config.get_function(&chat_wire.function_name) {
-                    Ok(f) => f,
-                    Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
-                };
-                let datapoint = match chat_wire.into_storage(&function_config, &config.tools) {
-                    Ok(d) => d,
-                    Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
-                };
-                Ok(StoredSampleItem::Datapoint(StoredDatapoint::Chat(
-                    datapoint,
-                )))
-            }
-            Datapoint::Json(json_wire) => Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
-                json_wire,
-            ))),
-        }
     } else {
         deserialize_from_pyobj(py, obj)
     }

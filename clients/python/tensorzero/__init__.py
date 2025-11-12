@@ -13,6 +13,7 @@ from .client import (
 
 # Generated dataclasses
 from .generated_types import (
+    ChatInferenceDatapoint,
     ChatInferenceResponse,
     ContentBlockChatOutput,
     ContentBlockChatOutputText,
@@ -24,6 +25,7 @@ from .generated_types import (
     CreateDatapointRequestJson,
     CreateDatapointsFromInferenceRequestParamsInferenceIds,
     CreateDatapointsResponse,
+    Datapoint,
     DatapointMetadataUpdate,
     DeleteDatapointsResponse,
     FinishReason,
@@ -43,9 +45,13 @@ from .generated_types import (
     InputMessageContentTemplate,
     InputMessageContentText,
     JsonDatapointOutputUpdate,
+    JsonInferenceDatapoint,
     JsonInferenceOutput,
     ListDatapointsRequest,
     ListInferencesRequest,
+    OptimizationJobStatus,
+    ResolvedInput,
+    ResolvedInputMessage,
     System,
     UpdateDatapointMetadataRequest,
     UpdateDatapointsResponse,
@@ -63,16 +69,12 @@ from .tensorzero import (
     FunctionConfigJson,
     FunctionsConfig,
     GCPVertexGeminiSFTConfig,
-    LegacyDatapoint,
     MixtureOfNConfig,
     OpenAIRFTConfig,
     OpenAISFTConfig,
     OptimizationJobHandle,
     OptimizationJobInfo,
-    OptimizationJobStatus,
     RenderedSample,
-    ResolvedInput,
-    ResolvedInputMessage,
     StoredInference,
     TogetherSFTConfig,
     VariantsConfig,
@@ -128,9 +130,10 @@ from .types import (
 
 # DEPRECATED: use RenderedSample instead
 RenderedStoredInference = RenderedSample
-# Type aliases to preserve backward compatibility with main
-ChatDatapoint = LegacyDatapoint.Chat
-JsonDatapoint = LegacyDatapoint.Json
+# Type aliases to preserve backward compatibility
+LegacyDatapoint = Datapoint
+ChatDatapoint = ChatInferenceDatapoint
+JsonDatapoint = JsonInferenceDatapoint
 
 
 # CAREFUL: deprecated
@@ -171,6 +174,7 @@ __all__ = [
     "ChatCompletionConfig",
     "ChatDatapoint",
     "ChatDatapointInsert",
+    "ChatInferenceDatapoint",
     "ChatInferenceResponse",
     "Config",
     "ContentBlock",
@@ -184,6 +188,7 @@ __all__ = [
     "CreateDatapointRequestJson",
     "CreateDatapointsFromInferenceRequestParamsInferenceIds",
     "CreateDatapointsResponse",
+    "Datapoint",
     "Input",
     "InputMessage",
     "InputMessageContentText",
@@ -240,6 +245,7 @@ __all__ = [
     "JsonDatapoint",
     "JsonDatapointInsert",
     "JsonDatapointOutputUpdate",
+    "JsonInferenceDatapoint",
     "JsonInferenceOutput",
     "JsonInferenceResponse",
     "ListDatapointsRequest",

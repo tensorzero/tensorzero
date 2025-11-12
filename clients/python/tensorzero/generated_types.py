@@ -365,6 +365,57 @@ OrderDirection = Literal["ascending", "descending"]
 
 
 @dataclass(kw_only=True)
+class ResolvedInputMessageContent1:
+    text: str
+    type: Literal["text"] = "text"
+
+
+@dataclass(kw_only=True)
+class ResolvedInputMessageContent2:
+    name: str
+    arguments: dict[str, Any]
+    type: Literal["template"] = "template"
+
+
+@dataclass(kw_only=True)
+class ResolvedInputMessageContent3(ToolCall):
+    type: Literal["tool_call"] = "tool_call"
+
+
+@dataclass(kw_only=True)
+class ResolvedInputMessageContent4:
+    name: str
+    result: str
+    id: str
+    type: Literal["tool_result"] = "tool_result"
+
+
+@dataclass(kw_only=True)
+class ResolvedInputMessageContent5:
+    value: str
+    type: Literal["raw_text"] = "raw_text"
+
+
+@dataclass(kw_only=True)
+class ResolvedInputMessageContent6(Thought):
+    type: Literal["thought"] = "thought"
+
+
+@dataclass(kw_only=True)
+class ResolvedInputMessageContent8:
+    data: Any
+    """
+    The underlying content block to be passed to the model provider.
+    """
+    type: Literal["unknown"] = "unknown"
+    model_provider_name: str | None = None
+    """
+    A fully-qualified name specifying when this content block should
+    be included in the model provider input.
+    """
+
+
+@dataclass(kw_only=True)
 class DatapointMetadataUpdate:
     name: str | None | UnsetType = UNSET
     """
@@ -446,6 +497,9 @@ class GetInferencesRequest:
     Including this improves query performance since `function_name` is the first column
     in the ClickHouse primary key.
     """
+
+
+OptimizationJobStatus = Literal["pending", "completed", "failed"]
 
 
 @dataclass(kw_only=True)
@@ -642,6 +696,23 @@ OrderBy = OrderBy1 | OrderBy2
 
 
 @dataclass(kw_only=True)
+class ResolvedInputMessageContent7(ObjectStorageFile):
+    type: Literal["file"] = "file"
+
+
+ResolvedInputMessageContent = (
+    ResolvedInputMessageContent1
+    | ResolvedInputMessageContent2
+    | ResolvedInputMessageContent3
+    | ResolvedInputMessageContent4
+    | ResolvedInputMessageContent5
+    | ResolvedInputMessageContent6
+    | ResolvedInputMessageContent7
+    | ResolvedInputMessageContent8
+)
+
+
+@dataclass(kw_only=True)
 class DynamicToolParams:
     allowed_tools: list[str] | None = None
     """
@@ -708,6 +779,18 @@ InputMessageContent = (
     | InputMessageContentFile
     | InputMessageContentUnknown
 )
+
+
+@dataclass(kw_only=True)
+class ResolvedInputMessage:
+    role: Role
+    content: list[ResolvedInputMessageContent]
+
+
+@dataclass(kw_only=True)
+class ResolvedInput:
+    system: System | None = None
+    messages: list[ResolvedInputMessage] | None = field(default_factory=lambda: [])
 
 
 @dataclass(kw_only=True)

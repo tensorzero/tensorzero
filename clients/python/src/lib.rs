@@ -28,21 +28,18 @@ use tensorzero_core::{
     config::{ConfigPyClass, FunctionsConfigPyClass, UninitializedVariantInfo},
     db::clickhouse::query_builder::OrderBy,
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
-    inference::types::{
-        pyo3_helpers::{
-            deserialize_from_pyobj, deserialize_from_rendered_sample,
-            deserialize_from_stored_sample, deserialize_optimization_config, serialize_to_dict,
-            tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class, JSON_DUMPS,
-            JSON_LOADS,
-        },
-        ResolvedInput, ResolvedInputMessage,
+    inference::types::pyo3_helpers::{
+        deserialize_from_pyobj, deserialize_from_rendered_sample,
+        deserialize_from_stored_sample, deserialize_optimization_config, serialize_to_dict,
+        tensorzero_core_error, tensorzero_core_error_class, tensorzero_error_class, JSON_DUMPS,
+        JSON_LOADS,
     },
     optimization::{
         dicl::UninitializedDiclOptimizationConfig, fireworks_sft::UninitializedFireworksSFTConfig,
         gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
         openai_rft::UninitializedOpenAIRFTConfig, openai_sft::UninitializedOpenAISFTConfig,
         together_sft::UninitializedTogetherSFTConfig, OptimizationJobInfoPyClass,
-        OptimizationJobStatus, UninitializedOptimizerInfo,
+        UninitializedOptimizerInfo,
     },
     tool::ProviderTool,
     variant::{
@@ -107,9 +104,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<UninitializedDiclOptimizationConfig>()?;
     m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
     m.add_class::<UninitializedTogetherSFTConfig>()?;
-    m.add_class::<Datapoint>()?;
-    m.add_class::<ResolvedInput>()?;
-    m.add_class::<ResolvedInputMessage>()?;
     m.add_class::<ConfigPyClass>()?;
     m.add_class::<FunctionsConfigPyClass>()?;
     m.add_class::<FunctionConfigChatPyClass>()?;
@@ -122,7 +116,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ChainOfThoughtConfigPyClass>()?;
     m.add_class::<OptimizationJobHandle>()?;
     m.add_class::<OptimizationJobInfoPyClass>()?;
-    m.add_class::<OptimizationJobStatus>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
@@ -1018,14 +1011,15 @@ impl TensorZeroGateway {
         this: PyRef<'py, Self>,
         dataset_name: String,
         datapoint_id: Bound<'py, PyAny>,
-    ) -> PyResult<Bound<'py, Datapoint>> {
+    ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         #[expect(deprecated)]
         let fut = client.get_datapoint(dataset_name, datapoint_id);
         let wire: Datapoint =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        wire.into_pyobject(this.py())
+        let py_obj = convert_response_to_python(this.py(), wire, "tensorzero.generated_types", "Datapoint")?;
+        Ok(py_obj.into_bound(this.py()))
     }
 
     /// DEPRECATED: Use `list_datapoints` instead.
@@ -1058,9 +1052,9 @@ impl TensorZeroGateway {
                 let py_datapoints = datapoints
                     .datapoints
                     .into_iter()
-                    .map(|x| x.into_pyobject(this.py()))
+                    .map(|x| convert_response_to_python(this.py(), x, "tensorzero.generated_types", "Datapoint"))
                     .collect::<Result<Vec<_>, _>>()?;
-                PyList::new(this.py(), py_datapoints)
+                PyList::new(this.py(), py_datapoints.into_iter().map(|x| x.into_bound(this.py())))
             }
             Err(e) => Err(convert_error(this.py(), e)),
         }
@@ -2167,7 +2161,10 @@ impl AsyncTensorZeroGateway {
             #[expect(deprecated)]
             let res = client.get_datapoint(dataset_name, datapoint_id).await;
             Python::attach(|py| match res {
-                Ok(wire) => Ok(wire.into_py_any(py)?),
+                Ok(wire) => {
+                    let py_obj = convert_response_to_python(py, wire, "tensorzero.generated_types", "Datapoint")?;
+                    Ok(py_obj.into_bound(py).unbind())
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2193,7 +2190,15 @@ impl AsyncTensorZeroGateway {
             };
             let res = client.list_datapoints(dataset_name, request).await;
             Python::attach(|py| match res {
-                Ok(response) => Ok(PyList::new(py, response.datapoints)?.unbind()),
+                Ok(response) => {
+                    let py_datapoints: Result<Vec<_>, _> = response
+                        .datapoints
+                        .into_iter()
+                        .map(|x| convert_response_to_python(py, x, "tensorzero.generated_types", "Datapoint"))
+                        .collect();
+                    let py_datapoints = py_datapoints?;
+                    Ok(PyList::new(py, py_datapoints.into_iter().map(|x| x.into_bound(py)))?.unbind())
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })
