@@ -252,6 +252,7 @@ class UrlFile:
     url: str
     mime_type: str | None = None
     detail: Detail | None = None
+    filename: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -260,6 +261,7 @@ class Base64File:
     data: str
     source_url: str | None = None
     detail: Detail | None = None
+    filename: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -501,6 +503,7 @@ class ObjectStoragePointer:
     storage_path: StoragePath
     source_url: str | None = None
     detail: Detail | None = None
+    filename: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -510,6 +513,7 @@ class ObjectStorageFile:
     data: str
     source_url: str | None = None
     detail: Detail | None = None
+    filename: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -518,6 +522,7 @@ class ObjectStorageError:
     storage_path: StoragePath
     source_url: str | None = None
     detail: Detail | None = None
+    filename: str | None = None
     error: str | None = None
 
 
@@ -594,6 +599,7 @@ class StoredInputMessageContentFile:
     type: Literal["file"] = "file"
     source_url: str | None = None
     detail: Detail | None = None
+    filename: str | None = None
 
 
 StoredInputMessageContent = (

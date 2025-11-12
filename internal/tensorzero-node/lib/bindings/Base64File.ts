@@ -9,4 +9,5 @@ export type Base64File = {
   mime_type: string;
   data: string;
   detail?: Detail;
+  filename?: string;
 };

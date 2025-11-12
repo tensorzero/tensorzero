@@ -491,6 +491,7 @@ mod tests {
                     url: Url::parse("https://example.com/image.png").unwrap(),
                     mime_type: None,
                     detail: None,
+                    filename: None,
                 }))],
             }],
         };
