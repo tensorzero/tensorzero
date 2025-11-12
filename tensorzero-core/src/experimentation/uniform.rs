@@ -90,7 +90,7 @@ impl UniformConfig {
                 if !function_variants.contains_key(variant_name) {
                     return Err(Error::new(ErrorDetails::Config {
                         message: format!(
-                            "uniform experimentation: candidate variant '{variant_name}' does not exist in function variants"
+                            "uniform experimentation: candidate variant `{variant_name}` does not exist in function variants"
                         ),
                     }));
                 }
@@ -517,7 +517,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("candidate variant 'INVALID' does not exist"));
+            .contains("candidate variant `INVALID` does not exist"));
     }
 
     #[test]
