@@ -13,7 +13,7 @@ on:
 # Otherwise, use the unique run id for the concurrency group, to prevent anything from getting cancelled
 # Note that the event will be 'merge_group' when general.yml calls this workflow via a 'workflow_call' event
 concurrency:
-  group: ${{ github.event_name == 'merge_group' && format('{0}-{1}', github.workflow, github.ref) || github.run_id }}
+  group: ${{ github.event_name == 'merge_group' && format('merge-queue-{0}-{1}', github.workflow, github.ref) || github.run_id }}
   cancel-in-progress: true
 
 env:
