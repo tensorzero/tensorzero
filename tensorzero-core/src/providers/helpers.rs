@@ -322,6 +322,14 @@ pub fn inject_extra_request_data(
                     }
                 }
             }
+            InferenceExtraBody::Always { pointer, kind } => match kind {
+                ExtraBodyReplacementKind::Value(value) => {
+                    write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
+                }
+                ExtraBodyReplacementKind::Delete => {
+                    delete_json_pointer(body, pointer)?;
+                }
+            },
         }
     }
 
@@ -438,6 +446,36 @@ pub fn inject_extra_request_data(
                         ExtraHeaderKind::Delete => {
                             headers.remove(name);
                         }
+                    }
+                }
+            }
+            InferenceExtraHeader::Always { name, kind } => {
+                let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Invalid header name `{name}`: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
+                match kind {
+                    ExtraHeaderKind::Value(value) => {
+                        headers.insert(
+                            name,
+                            http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(
+                                |e| {
+                                    Error::new(ErrorDetails::Serialization {
+                                        message: format!(
+                                            "Invalid header value `{value}`: {}",
+                                            DisplayOrDebugGateway::new(e)
+                                        ),
+                                    })
+                                },
+                            )?,
+                        );
+                    }
+                    ExtraHeaderKind::Delete => {
+                        headers.remove(name);
                     }
                 }
             }

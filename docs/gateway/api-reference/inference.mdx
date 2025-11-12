@@ -142,9 +142,9 @@ See [Episodes](/gateway/guides/episodes) for more information.
 The `extra_body` field allows you to modify the request body that TensorZero sends to a model provider.
 This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
 
-Each object in the array must have three fields:
+Each object in the array must have two or three fields:
 
-- `variant_name` or `model_provider_name`: The modification will only be applied to the specified variant or model provider
+- (Optional) `variant_name` **or** `model_provider_name`: If specified, the modification will only be applied to the specified variant or model provider. If **neither** is specified, the modification applies to **all variants and providers**.
 - `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
 - One of the following:
   - `value`: The value to insert at that location; it can be of any type including nested types
@@ -187,7 +187,7 @@ If TensorZero would normally send this request body to the provider...
       "value": true
     },
     {
-      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      // No variant_name or model_provider_name - applies to all variants and providers
       "pointer": "/safety_checks/no_agi",
       "value": {
         "bypass": "on"
@@ -197,7 +197,7 @@ If TensorZero would normally send this request body to the provider...
 }
 ```
 
-...overrides the request body (for `my_variant` only) to:
+...overrides the request body to:
 
 ```json
 {
@@ -222,9 +222,9 @@ If TensorZero would normally send this request body to the provider...
 The `extra_headers` field allows you to modify the request headers that TensorZero sends to a model provider.
 This advanced feature is an "escape hatch" that lets you use provider-specific functionality that TensorZero hasn't implemented yet.
 
-Each object in the array must have three fields:
+Each object in the array must have two or three fields:
 
-- `variant_name` or `model_provider_name`: The modification will only be applied to the specified variant or model provider
+- (Optional) `variant_name` **or** `model_provider_name`: If specified, the modification will only be applied to the specified variant or model provider. If **neither** is specified, the modification applies to **all variants and providers**.
 - `name`: The name of the header to modify
 - `value`: The value to set the header to
 
@@ -258,7 +258,7 @@ Safety-Checks: on
       "value": "off"
     },
     {
-      "variant_name": "my_variant", // or "model_provider_name": "my_model_provider"
+      // No variant_name or model_provider_name - applies to all variants and providers
       "name": "Intelligence-Level",
       "value": "AGI"
     }
@@ -266,7 +266,7 @@ Safety-Checks: on
 }
 ```
 
-...overrides the request headers to:
+...overrides the request headers (for `my_variant`) to:
 
 ```text
 Safety-Checks: off

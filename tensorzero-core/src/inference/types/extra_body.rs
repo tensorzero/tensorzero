@@ -84,6 +84,11 @@ pub enum InferenceExtraBody {
         #[serde(flatten)]
         kind: ExtraBodyReplacementKind,
     },
+    Always {
+        pointer: String,
+        #[serde(flatten)]
+        kind: ExtraBodyReplacementKind,
+    },
 }
 
 impl InferenceExtraBody {
@@ -93,6 +98,181 @@ impl InferenceExtraBody {
             InferenceExtraBody::Variant {
                 variant_name: v, ..
             } => v == variant_name,
+            InferenceExtraBody::Always { .. } => true,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_inference_extra_body_all_deserialize() {
+        let json = r#"{"pointer": "/test", "value": {"key": "value"}}"#;
+        let result: InferenceExtraBody = serde_json::from_str(json).unwrap();
+        match result {
+            InferenceExtraBody::Always { pointer, kind } => {
+                assert_eq!(pointer, "/test");
+                match kind {
+                    ExtraBodyReplacementKind::Value(v) => {
+                        assert_eq!(v, json!({"key": "value"}));
+                    }
+                    ExtraBodyReplacementKind::Delete => panic!("Expected Value kind"),
+                }
+            }
+            _ => panic!("Expected Always variant"),
+        }
+    }
+
+    #[test]
+    fn test_inference_extra_body_all_with_delete() {
+        let json = r#"{"pointer": "/test", "delete": true}"#;
+        let result: InferenceExtraBody = serde_json::from_str(json).unwrap();
+        match result {
+            InferenceExtraBody::Always { pointer, kind } => {
+                assert_eq!(pointer, "/test");
+                assert_eq!(kind, ExtraBodyReplacementKind::Delete);
+            }
+            _ => panic!("Expected Always variant"),
+        }
+    }
+
+    #[test]
+    fn test_should_apply_variant_all() {
+        let all_variant = InferenceExtraBody::Always {
+            pointer: "/test".to_string(),
+            kind: ExtraBodyReplacementKind::Value(json!({"key": "value"})),
+        };
+
+        // Always should apply to any variant
+        assert!(all_variant.should_apply_variant("variant1"));
+        assert!(all_variant.should_apply_variant("variant2"));
+        assert!(all_variant.should_apply_variant("any_variant"));
+    }
+
+    #[test]
+    fn test_should_apply_variant_provider() {
+        let provider_variant = InferenceExtraBody::Provider {
+            model_provider_name: "openai".to_string(),
+            pointer: "/test".to_string(),
+            kind: ExtraBodyReplacementKind::Value(json!(1)),
+        };
+
+        // Provider should apply to any variant
+        assert!(provider_variant.should_apply_variant("variant1"));
+        assert!(provider_variant.should_apply_variant("variant2"));
+    }
+
+    #[test]
+    fn test_should_apply_variant_variant_match() {
+        let variant = InferenceExtraBody::Variant {
+            variant_name: "variant1".to_string(),
+            pointer: "/test".to_string(),
+            kind: ExtraBodyReplacementKind::Value(json!(1)),
+        };
+
+        // Should apply to matching variant
+        assert!(variant.should_apply_variant("variant1"));
+    }
+
+    #[test]
+    fn test_should_apply_variant_variant_no_match() {
+        let variant = InferenceExtraBody::Variant {
+            variant_name: "variant1".to_string(),
+            pointer: "/test".to_string(),
+            kind: ExtraBodyReplacementKind::Value(json!(1)),
+        };
+
+        // Should NOT apply to non-matching variant
+        assert!(!variant.should_apply_variant("variant2"));
+    }
+
+    #[test]
+    fn test_filter_includes_all_variant() {
+        let unfiltered = UnfilteredInferenceExtraBody {
+            extra_body: vec![
+                InferenceExtraBody::Variant {
+                    variant_name: "variant1".to_string(),
+                    pointer: "/v1".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!(1)),
+                },
+                InferenceExtraBody::Always {
+                    pointer: "/all".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!(2)),
+                },
+                InferenceExtraBody::Variant {
+                    variant_name: "variant2".to_string(),
+                    pointer: "/v2".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!(3)),
+                },
+            ],
+        };
+
+        let filtered = unfiltered.filter("variant1");
+        assert_eq!(filtered.data.len(), 2); // variant1 + All
+
+        // Verify All is included
+        assert!(filtered
+            .data
+            .iter()
+            .any(|item| matches!(item, InferenceExtraBody::Always { .. })));
+    }
+
+    #[test]
+    fn test_filter_mixed_variants() {
+        let unfiltered = UnfilteredInferenceExtraBody {
+            extra_body: vec![
+                InferenceExtraBody::Provider {
+                    model_provider_name: "openai".to_string(),
+                    pointer: "/provider".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!("provider")),
+                },
+                InferenceExtraBody::Variant {
+                    variant_name: "variant1".to_string(),
+                    pointer: "/v1".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!("v1")),
+                },
+                InferenceExtraBody::Always {
+                    pointer: "/all".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!("all")),
+                },
+                InferenceExtraBody::Variant {
+                    variant_name: "variant2".to_string(),
+                    pointer: "/v2".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!("v2")),
+                },
+            ],
+        };
+
+        let filtered = unfiltered.filter("variant1");
+        // Should include: Provider, Variant(variant1), All
+        assert_eq!(filtered.data.len(), 3);
+
+        assert!(filtered
+            .data
+            .iter()
+            .any(|item| matches!(item, InferenceExtraBody::Provider { .. })));
+        assert!(filtered
+            .data
+            .iter()
+            .any(|item| matches!(item, InferenceExtraBody::Always { .. })));
+        assert!(filtered.data.iter().any(|item| match item {
+            InferenceExtraBody::Variant { variant_name, .. } => variant_name == "variant1",
+            _ => false,
+        }));
+    }
+
+    #[test]
+    fn test_inference_extra_body_all_roundtrip() {
+        let original = InferenceExtraBody::Always {
+            pointer: "/test".to_string(),
+            kind: ExtraBodyReplacementKind::Value(json!({"test": "data"})),
+        };
+
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: InferenceExtraBody = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
     }
 }

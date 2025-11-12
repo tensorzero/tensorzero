@@ -40,6 +40,8 @@ from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
+    AllExtraHeader,
+    AlwaysExtraBody,
     AndFilter,
     BaseTensorZeroError,
     BooleanMetricFilter,
@@ -50,6 +52,7 @@ from .types import (
     DynamicEvaluationRunResponse,  # DEPRECATED
     EvaluatorStatsDict,
     ExtraBody,
+    ExtraHeader,
     FeedbackResponse,
     FileBase64,
     FileUrl,
@@ -67,6 +70,8 @@ from .types import (
     NotFilter,
     OrderBy,
     OrFilter,
+    ProviderExtraBody,
+    ProviderExtraHeader,
     RawText,
     System,
     TagFilter,
@@ -86,6 +91,8 @@ from .types import (
     ToolResult,
     UnknownContentBlock,
     Usage,
+    VariantExtraBody,
+    VariantExtraHeader,
     WorkflowEvaluationRunEpisodeResponse,
     WorkflowEvaluationRunResponse,
 )
@@ -125,6 +132,8 @@ ChatInferenceOutput = t.List[ContentBlock]
 
 
 __all__ = [
+    "AlwaysExtraBody",
+    "AllExtraHeader",
     "AndFilter",
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
@@ -144,6 +153,7 @@ __all__ = [
     "WorkflowEvaluationRunEpisodeResponse",
     "WorkflowEvaluationRunResponse",
     "ExtraBody",
+    "ExtraHeader",
     "FeedbackResponse",
     "FileBase64",
     "FileUrl",
@@ -184,6 +194,8 @@ __all__ = [
     "OpenAIRFTConfig",
     "OptimizationConfig",
     "patch_openai_client",
+    "ProviderExtraBody",
+    "ProviderExtraHeader",
     "RawText",
     "RenderedStoredInference",  # DEPRECATED
     "RenderedSample",
@@ -207,6 +219,8 @@ __all__ = [
     "ToolResult",
     "UnknownContentBlock",
     "Usage",
+    "VariantExtraBody",
+    "VariantExtraHeader",
 ]
 
 T = t.TypeVar("T", bound=t.Any)

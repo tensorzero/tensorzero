@@ -369,7 +369,36 @@ class ProviderExtraBody(TypedDict):
     delete: NotRequired[bool]
 
 
-ExtraBody = Union[VariantExtraBody, ProviderExtraBody]
+class AlwaysExtraBody(TypedDict):
+    pointer: str
+    value: NotRequired[Any]
+    delete: NotRequired[bool]
+
+
+ExtraBody = Union[VariantExtraBody, ProviderExtraBody, AlwaysExtraBody]
+
+
+class VariantExtraHeader(TypedDict):
+    variant_name: str
+    name: str
+    value: NotRequired[str]
+    delete: NotRequired[bool]
+
+
+class ProviderExtraHeader(TypedDict):
+    model_provider_name: str
+    name: str
+    value: NotRequired[str]
+    delete: NotRequired[bool]
+
+
+class AllExtraHeader(TypedDict):
+    name: str
+    value: NotRequired[str]
+    delete: NotRequired[bool]
+
+
+ExtraHeader = Union[VariantExtraHeader, ProviderExtraHeader, AllExtraHeader]
 
 
 def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
