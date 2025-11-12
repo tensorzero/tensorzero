@@ -36,30 +36,74 @@ pub fn parse_feedback_response(py: Python<'_>, data: FeedbackResponse) -> PyResu
 }
 
 pub fn parse_inference_response(py: Python<'_>, data: InferenceResponse) -> PyResult<Py<PyAny>> {
-    convert_response_to_python(py, data, "tensorzero.types", "InferenceResponse")
+    let json_data = serialize_to_dict(py, data)?;
+    static PARSE_INFERENCE_RESPONSE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    // This should never actually fail, since we're just importing code defined in our own Python
+    // package. However, we still produce a Python error if it fails, rather than panicking
+    // and bringing down the entire Python process.
+    let parse_inference_response =
+        PARSE_INFERENCE_RESPONSE.get_or_try_init::<_, PyErr>(py, || {
+            let self_module = PyModule::import(py, "tensorzero.types")?;
+            Ok(self_module.getattr("parse_inference_response")?.unbind())
+        })?;
+    let python_parsed = parse_inference_response.call1(py, (json_data,))?;
+    Ok(python_parsed.into_any())
 }
 
 pub fn parse_inference_chunk(py: Python<'_>, chunk: InferenceResponseChunk) -> PyResult<Py<PyAny>> {
-    convert_response_to_python(py, chunk, "tensorzero.types", "InferenceChunk")
+    static PARSE_INFERENCE_CHUNK: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    // This should never actually fail, since we're just importing code defined in our own Python
+    // package. However, we still produce a Python error if it fails, rather than panicking
+    // and bringing down the entire Python process.
+    let parse_inference_chunk = PARSE_INFERENCE_CHUNK.get_or_try_init::<_, PyErr>(py, || {
+        let self_module = PyModule::import(py, "tensorzero.types")?;
+        Ok(self_module.getattr("parse_inference_chunk")?.unbind())
+    })?;
+
+    let json_data = serialize_to_dict(py, chunk)?;
+    let python_parsed = parse_inference_chunk.call1(py, (json_data,))?;
+    Ok(python_parsed.into_any())
 }
 
 pub fn parse_workflow_evaluation_run_response(
     py: Python<'_>,
     data: WorkflowEvaluationRunResponse,
 ) -> PyResult<Py<PyAny>> {
-    convert_response_to_python(py, data, "tensorzero.types", "WorkflowEvaluationRunResponse")
+    static PARSE_WORKFLOW_EVALUATION_RUN_RESPONSE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
+    // This should never actually fail, since we're just importing code defined in our own Python
+    // package. However, we still produce a Python error if it fails, rather than panicking
+    // and bringing down the entire Python process.
+    let parse_workflow_evaluation_run_response = PARSE_WORKFLOW_EVALUATION_RUN_RESPONSE
+        .get_or_try_init::<_, PyErr>(py, || {
+            let self_module = PyModule::import(py, "tensorzero.types")?;
+            Ok(self_module
+                .getattr("parse_workflow_evaluation_run_response")?
+                .unbind())
+        })?;
+    let json_data = serialize_to_dict(py, data)?;
+    let python_parsed = parse_workflow_evaluation_run_response.call1(py, (json_data,))?;
+    Ok(python_parsed.into_any())
 }
 
 pub fn parse_workflow_evaluation_run_episode_response(
     py: Python<'_>,
     data: WorkflowEvaluationRunEpisodeResponse,
 ) -> PyResult<Py<PyAny>> {
-    convert_response_to_python(
-        py,
-        data,
-        "tensorzero.types",
-        "WorkflowEvaluationRunEpisodeResponse",
-    )
+    static PARSE_WORKFLOW_EVALUATION_RUN_EPISODE_RESPONSE: PyOnceLock<Py<PyAny>> =
+        PyOnceLock::new();
+    // This should never actually fail, since we're just importing code defined in our own Python
+    // package. However, we still produce a Python error if it fails, rather than panicking
+    // and bringing down the entire Python process.
+    let parse_workflow_evaluation_run_episode_response =
+        PARSE_WORKFLOW_EVALUATION_RUN_EPISODE_RESPONSE.get_or_try_init::<_, PyErr>(py, || {
+            let self_module = PyModule::import(py, "tensorzero.types")?;
+            Ok(self_module
+                .getattr("parse_workflow_evaluation_run_episode_response")?
+                .unbind())
+        })?;
+    let json_data = serialize_to_dict(py, data)?;
+    let python_parsed = parse_workflow_evaluation_run_episode_response.call1(py, (json_data,))?;
+    Ok(python_parsed.into_any())
 }
 
 pub fn python_uuid_to_uuid(param_name: &str, val: Bound<'_, PyAny>) -> PyResult<Uuid> {
@@ -105,7 +149,6 @@ pub fn parse_tool(py: Python<'_>, key_vals: HashMap<String, Bound<'_, PyAny>>) -
 ///
 /// This helper automatically handles type conversions (e.g., UUID → string)
 /// via serde serialization, and dacite handles nested dataclass construction.
-/// It configures dacite with type_hooks to handle UUID conversion from strings.
 ///
 /// # Arguments
 /// * `py` - Python interpreter
@@ -135,29 +178,14 @@ pub fn convert_response_to_python_dataclass<T: serde::Serialize>(
     let module = PyModule::import(py, python_module)?;
     let data_class = module.getattr(python_class)?;
 
-    // Import UUID class for type_hooks
-    let uuid_module = PyModule::import(py, "uuid")?;
-    let uuid_class = uuid_module.getattr("UUID")?;
-
     // Use dacite.from_dict to construct the dataclass, so that it can handle nested dataclass construction.
     let dacite = PyModule::import(py, "dacite")?;
     let from_dict = dacite.getattr("from_dict")?;
-    let config_class = dacite.getattr("Config")?;
 
-    // Create type_hooks dict: {UUID: UUID} to convert str -> UUID
-    let type_hooks = PyDict::new(py);
-    type_hooks.set_item(&uuid_class, &uuid_class)?;
-
-    // Create dacite.Config with type_hooks
-    let config_kwargs = PyDict::new(py);
-    config_kwargs.set_item("type_hooks", type_hooks)?;
-    let config = config_class.call((), Some(&config_kwargs))?;
-
-    // Call dacite.from_dict(data_class=TargetClass, data=dict, config=config)
+    // Call dacite.from_dict(data_class=TargetClass, data=dict)
     let kwargs = PyDict::new(py);
     kwargs.set_item("data_class", data_class)?;
     kwargs.set_item("data", dict)?;
-    kwargs.set_item("config", config)?;
 
     from_dict.call((), Some(&kwargs)).map(Bound::unbind)
 }

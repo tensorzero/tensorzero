@@ -208,8 +208,77 @@ class EvaluatorStatsDict(TypedDict):
 
 InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
 
-# Note: parse_inference_response, parse_content_block_output, and parse_content_block
-# have been removed. These are now handled by dacite in Rust via convert_response_to_python.
+
+def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
+    if "content" in data and isinstance(data["content"], list):
+        return ChatInferenceResponse(
+            inference_id=data["inference_id"],
+            episode_id=data["episode_id"],
+            variant_name=data["variant_name"],
+            content=[parse_content_block_output(block) for block in data["content"]],
+            usage=Usage(**data["usage"]),
+            finish_reason=data.get("finish_reason"),
+            original_response=data.get("original_response"),
+        )
+    elif "output" in data and isinstance(data["output"], dict):
+        output = cast(Dict[str, Any], data["output"])
+        return JsonInferenceResponse(
+            inference_id=UUID(data["inference_id"]),
+            episode_id=UUID(data["episode_id"]),
+            variant_name=data["variant_name"],
+            output=JsonInferenceOutput(**output),
+            usage=Usage(**data["usage"]),
+            finish_reason=data.get("finish_reason"),
+            original_response=data.get("original_response"),
+        )
+    else:
+        raise ValueError("Unable to determine response type")
+
+
+def parse_content_block_output(block: Dict[str, Any]) -> ContentBlockChatOutput:
+    """Parse output content blocks from inference responses using generated types."""
+    block_type = block["type"]
+    if block_type == "text":
+        return ContentBlockChatOutputText(text=block["text"])
+    elif block_type == "tool_call":
+        return ContentBlockChatOutputToolCall(
+            id=block["id"],
+            raw_name=block["raw_name"],
+            raw_arguments=block["raw_arguments"],
+            name=block.get("name"),
+            arguments=block.get("arguments"),
+        )
+    elif block_type == "thought":
+        # Note: The field is named field_internal_provider_type in the dataclass
+        # but _internal_provider_type in JSON
+        # Parse summary blocks if present
+        summary_data = block.get("summary")
+        summary = None
+        if summary_data:
+            summary = [ThoughtSummaryBlockGenerated(text=s["text"]) for s in summary_data]
+        return ContentBlockChatOutputThought(
+            text=block.get("text"),
+            signature=block.get("signature"),
+            summary=summary,
+            field_internal_provider_type=block.get("_internal_provider_type"),
+        )
+    elif block_type == "unknown":
+        return ContentBlockChatOutputUnknown(
+            data=block["data"],
+            model_provider_name=block.get("model_provider_name"),
+        )
+    else:
+        raise ValueError(f"Unknown content block type: {block}")
+
+
+# Deprecated: Use parse_content_block_output for parsing inference responses
+def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
+    """Parse input content blocks (deprecated for output parsing)."""
+    block_type = block["type"]
+    if block_type == "text":
+        return Text(text=block["text"], type=block_type)
+    else:
+        raise ValueError(f"Unknown input content block type: {block}")
 
 
 # Types for streaming inference responses
@@ -296,8 +365,56 @@ class ProviderExtraBody(TypedDict):
 
 ExtraBody = Union[VariantExtraBody, ProviderExtraBody]
 
-# Note: parse_inference_chunk and parse_content_block_chunk have been removed.
-# These are now handled by dacite in Rust via convert_response_to_python.
+
+def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
+    if "content" in chunk:
+        return ChatChunk(
+            inference_id=UUID(chunk["inference_id"]),
+            episode_id=UUID(chunk["episode_id"]),
+            variant_name=chunk["variant_name"],
+            content=[parse_content_block_chunk(block) for block in chunk["content"]],
+            usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
+            finish_reason=chunk.get("finish_reason"),
+        )
+    elif "raw" in chunk:
+        return JsonChunk(
+            inference_id=UUID(chunk["inference_id"]),
+            episode_id=UUID(chunk["episode_id"]),
+            variant_name=chunk["variant_name"],
+            raw=chunk["raw"],
+            usage=Usage(**chunk["usage"]) if "usage" in chunk else None,
+            finish_reason=chunk.get("finish_reason"),
+        )
+    else:
+        raise ValueError(f"Unable to determine response type: {chunk}")
+
+
+def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
+    block_type = block["type"]
+    if block_type == "text":
+        return TextChunk(id=block["id"], text=block["text"])
+    elif block_type == "tool_call":
+        return ToolCallChunk(
+            id=block["id"],
+            raw_arguments=block["raw_arguments"],
+            raw_name=block["raw_name"],
+        )
+    elif block_type == "thought":
+        return ThoughtChunk(
+            id=block["id"],
+            text=block.get("text"),
+            signature=block.get("signature"),
+            summary_id=block.get("summary_id"),
+            summary_text=block.get("summary_text"),
+        )
+    elif block_type == "unknown":
+        return UnknownChunk(
+            id=block["id"],
+            data=block["data"],
+        )
+
+    else:
+        raise ValueError(f"Unknown content block type: {block}")
 
 
 # Types for feedback
@@ -343,21 +460,43 @@ class WorkflowEvaluationRunResponse:
     run_id: UUID
 
 
+def parse_workflow_evaluation_run_response(
+    data: Dict[str, Any],
+) -> WorkflowEvaluationRunResponse:
+    return WorkflowEvaluationRunResponse(run_id=UUID(data["run_id"]))
+
+
 @dataclass
 class WorkflowEvaluationRunEpisodeResponse:
     episode_id: UUID
+
+
+def parse_workflow_evaluation_run_episode_response(
+    data: Dict[str, Any],
+) -> WorkflowEvaluationRunEpisodeResponse:
+    return WorkflowEvaluationRunEpisodeResponse(episode_id=UUID(data["episode_id"]))
 
 
 # DEPRECATED: Use WorkflowEvaluationRunResponse instead
 DynamicEvaluationRunResponse = WorkflowEvaluationRunResponse
 
 
+# DEPRECATED: Use parse_workflow_evaluation_run_response instead
+def parse_dynamic_evaluation_run_response(
+    data: Dict[str, Any],
+) -> WorkflowEvaluationRunResponse:
+    return parse_workflow_evaluation_run_response(data)
+
+
 # DEPRECATED: Use WorkflowEvaluationRunEpisodeResponse instead
 DynamicEvaluationRunEpisodeResponse = WorkflowEvaluationRunEpisodeResponse
 
-# Note: parse_workflow_evaluation_run_response, parse_workflow_evaluation_run_episode_response,
-# and their deprecated aliases have been removed. These are now handled by dacite in Rust
-# via convert_response_to_python.
+
+# DEPRECATED: Use parse_workflow_evaluation_run_episode_response instead
+def parse_dynamic_evaluation_run_episode_response(
+    data: Dict[str, Any],
+) -> WorkflowEvaluationRunEpisodeResponse:
+    return parse_workflow_evaluation_run_episode_response(data)
 
 
 @dataclass
