@@ -1219,8 +1219,8 @@ impl UninitializedProviderConfig {
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexGemini(
-                GCPVertexGeminiProvider::new(
+            } => {
+                let provider = GCPVertexGeminiProvider::new(
                     model_id,
                     endpoint_id,
                     location,
@@ -1229,8 +1229,10 @@ impl UninitializedProviderConfig {
                     provider_types,
                     provider_type_default_credentials,
                 )
-                .await?,
-            ),
+                .await?;
+
+                ProviderConfig::GCPVertexGemini(provider)
+            }
             UninitializedProviderConfig::GoogleAIStudioGemini {
                 model_name,
                 api_key_location,
@@ -1286,19 +1288,29 @@ impl UninitializedProviderConfig {
                 api_type,
                 include_encrypted_reasoning,
                 provider_tools,
-            } => ProviderConfig::OpenAI(OpenAIProvider::new(
-                model_name,
-                api_base,
-                OpenAIKind
-                    .get_defaulted_credential(
-                        api_key_location.as_ref(),
-                        provider_type_default_credentials,
-                    )
-                    .await?,
-                api_type,
-                include_encrypted_reasoning,
-                provider_tools,
-            )?),
+            } => {
+                // This should only be used when we are mocking batch inferences, otherwise defer to the API base set
+                #[cfg(feature = "e2e_tests")]
+                let api_base = provider_types
+                    .openai
+                    .batch_inference_api_base
+                    .clone()
+                    .or(api_base);
+
+                ProviderConfig::OpenAI(OpenAIProvider::new(
+                    model_name,
+                    api_base,
+                    OpenAIKind
+                        .get_defaulted_credential(
+                            api_key_location.as_ref(),
+                            provider_type_default_credentials,
+                        )
+                        .await?,
+                    api_type,
+                    include_encrypted_reasoning,
+                    provider_tools,
+                )?)
+            }
             UninitializedProviderConfig::OpenRouter {
                 model_name,
                 api_key_location,

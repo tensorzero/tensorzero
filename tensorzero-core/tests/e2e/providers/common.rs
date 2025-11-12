@@ -1584,8 +1584,9 @@ pub async fn test_image_inference_with_provider_s3_compatible(
     toml: &str,
     prefix: &str,
 ) -> (tensorzero::Client, String, StoragePath) {
-    let expected_key =
-        format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
+    let expected_key = format!(
+        "{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+    );
 
     // Check that object is deleted
     let path = object_store::path::Path::parse(&expected_key).unwrap();
@@ -3265,7 +3266,6 @@ pub async fn check_simple_image_inference_response(
     is_batch: bool,
     should_be_cached: bool,
 ) {
-    let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -3320,7 +3320,7 @@ pub async fn check_simple_image_inference_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
+    assert_eq!(function_name, "basic_test");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -3435,15 +3435,10 @@ pub async fn check_simple_image_inference_response(
 
     if !is_batch {
         // Check the InferenceTag Table
-        let result = select_inference_tags_clickhouse(
-            &clickhouse,
-            hardcoded_function_name,
-            "foo",
-            "bar",
-            inference_id,
-        )
-        .await
-        .unwrap();
+        let result =
+            select_inference_tags_clickhouse(&clickhouse, "basic_test", "foo", "bar", inference_id)
+                .await
+                .unwrap();
         let id = result.get("inference_id").unwrap().as_str().unwrap();
         let id = Uuid::parse_str(id).unwrap();
         assert_eq!(id, inference_id);
@@ -8444,8 +8439,10 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    }
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -9701,7 +9698,6 @@ pub async fn check_parallel_tool_use_inference_response(
     is_batch: bool,
     parallel_param: Value,
 ) {
-    let hardcoded_function_name = "weather_helper_parallel";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -9805,7 +9801,7 @@ pub async fn check_parallel_tool_use_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
+    assert_eq!(function_name, "weather_helper_parallel");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -10848,8 +10844,10 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    }
 
     if let Some(output_schema) = &output_schema {
         let retrieved_output_schema = result.get("output_schema").unwrap().as_str().unwrap();
