@@ -4232,11 +4232,6 @@ You can connect to PostgreSQL by setting the `TENSORZERO_POSTGRES_URL` environme
 
 Defines the maximum number of connections in the PostgreSQL connection pool.
 
-```toml title="tensorzero.toml"
-[postgres]
-connection_pool_size = 50
-```
-
 ### `enabled`
 
 - **Type:** boolean
@@ -4248,11 +4243,6 @@ If `false`, the gateway will not use PostgreSQL even if the `TENSORZERO_POSTGRES
 If omitted, the gateway will connect to PostgreSQL if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable PostgreSQL with a warning.
 
 If you have features that require PostgreSQL (rate limiting or Track-and-Stop experimentation) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
-
-```toml title="tensorzero.toml"
-[postgres]
-enabled = true  # Require PostgreSQL connection
-```
 
 ## `[rate_limiting]`
 
