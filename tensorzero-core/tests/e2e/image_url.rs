@@ -168,6 +168,7 @@ async fn test_image_url_with_fetch_true() {
                             url: image_url.clone(),
                             mime_type: None,
                             detail: None,
+                            filename: None,
                         })),
                     ],
                 }],
@@ -245,6 +246,7 @@ async fn test_image_url_with_fetch_false() {
                             url: image_url.clone(),
                             mime_type: None,
                             detail: None,
+                            filename: None,
                         })),
                     ],
                 }],
@@ -300,8 +302,14 @@ async fn test_base64_image_with_fetch_true() {
                             text: "Describe this image briefly.".to_string(),
                         }),
                         ClientInputMessageContent::File(File::Base64(
-                            Base64File::new(None, mime::IMAGE_PNG, IMAGE_BASE64.to_string(), None)
-                                .expect("test data should be valid"),
+                            Base64File::new(
+                                None,
+                                mime::IMAGE_PNG,
+                                IMAGE_BASE64.to_string(),
+                                None,
+                                None,
+                            )
+                            .expect("test data should be valid"),
                         )),
                     ],
                 }],
@@ -374,8 +382,14 @@ async fn test_base64_image_with_fetch_false() {
                             text: "Describe this image briefly.".to_string(),
                         }),
                         ClientInputMessageContent::File(File::Base64(
-                            Base64File::new(None, mime::IMAGE_PNG, IMAGE_BASE64.to_string(), None)
-                                .expect("test data should be valid"),
+                            Base64File::new(
+                                None,
+                                mime::IMAGE_PNG,
+                                IMAGE_BASE64.to_string(),
+                                None,
+                                None,
+                            )
+                            .expect("test data should be valid"),
                         )),
                     ],
                 }],
@@ -453,6 +467,7 @@ async fn test_wikipedia_image_url_with_fetch_true() {
                             url: wikipedia_url.clone(),
                             mime_type: None,
                             detail: None,
+                            filename: None,
                         })),
                     ],
                 }],
@@ -528,6 +543,7 @@ async fn test_wikipedia_image_url_with_fetch_false() {
                             url: wikipedia_url.clone(),
                             mime_type: None,
                             detail: None,
+                            filename: None,
                         })),
                     ],
                 }],
@@ -605,6 +621,7 @@ async fn test_image_url_403_error() {
                             url: image_url.clone(),
                             mime_type: None,
                             detail: None,
+                            filename: None,
                         })),
                     ],
                 }],

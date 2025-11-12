@@ -234,6 +234,7 @@ impl ResolvedInput {
                             resolved.file.mime_type.clone(),
                             resolved.data.clone(),
                             resolved.file.detail.clone(),
+                            resolved.file.filename.clone(),
                         ) {
                             Ok(file) => file,
                             Err(e) => {

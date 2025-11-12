@@ -1684,6 +1684,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                                 url: image_url.clone(),
                                 mime_type: None,
                                 detail: Some(Detail::Low),
+                                filename: None,
                             })),
                         ],
                     }],
@@ -1747,6 +1748,7 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                                     None,
                                     mime::APPLICATION_PDF,
                                     pdf_data.clone(),
+                                    None,
                                     None,
                                 )
                                 .expect("test data should be valid"),
@@ -1813,6 +1815,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                             mime::IMAGE_PNG,
                             image_data.clone(),
                             Some(Detail::Low),
+                            None,
                         )
                         .expect("test data should be valid"),
                     )),
@@ -1872,7 +1875,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
     params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64(
-        Base64File::new(None, mime::IMAGE_PNG, updated_base64, None)
+        Base64File::new(None, mime::IMAGE_PNG, updated_base64, None, None)
             .expect("test data should be valid"),
     ));
 
@@ -2704,6 +2707,7 @@ pub async fn check_base64_pdf_response(
                     mime_type: mime::APPLICATION_PDF,
                     storage_path: expected_storage_path.clone(),
                     detail: None,
+                    filename: None,
                 },)))
             ]
         },]
@@ -2857,6 +2861,7 @@ pub async fn check_base64_image_response(
                     mime_type: mime::IMAGE_PNG,
                     storage_path: expected_storage_path.clone(),
                     detail: Some(Detail::Low),
+                    filename: None,
                 },)))
             ]
         },]
@@ -3008,6 +3013,7 @@ pub async fn check_url_image_response(
                             path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
                         },
                         detail: Some(Detail::Low),
+                        filename: None,
                     },
                 )))]
             },

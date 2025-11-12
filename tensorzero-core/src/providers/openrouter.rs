@@ -759,15 +759,22 @@ async fn prepare_openrouter_file_content_block(
             },
         })
     } else {
-        let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
-            Error::new(ErrorDetails::InvalidMessage {
-                message: format!("Mime type {} has no filetype suffix", file.mime_type),
-            })
-        })?;
+        let filename = if let Some(ref user_filename) = file.filename {
+            // Use the user-provided filename if available
+            Cow::Owned(user_filename.clone())
+        } else {
+            // Otherwise, generate a filename with the appropriate extension
+            let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+                Error::new(ErrorDetails::InvalidMessage {
+                    message: format!("Mime type {} has no filetype suffix", file.mime_type),
+                })
+            })?;
+            Cow::Owned(format!("input.{suffix}"))
+        };
         Ok(OpenRouterContentBlock::File {
             file: OpenRouterFile {
                 file_data: Some(Cow::Owned(base64_url)),
-                filename: Some(Cow::Owned(format!("input.{suffix}"))),
+                filename: Some(filename),
             },
         })
     }
