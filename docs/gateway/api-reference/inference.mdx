@@ -144,11 +144,11 @@ This advanced feature is an "escape hatch" that lets you use provider-specific f
 
 Each object in the array must have two or three fields:
 
-- (Optional) `variant_name` **or** `model_provider_name`: If specified, the modification will only be applied to the specified variant or model provider. If **neither** is specified, the modification applies to **all variants and providers**.
 - `pointer`: A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) string specifying where to modify the request body
 - One of the following:
   - `value`: The value to insert at that location; it can be of any type including nested types
   - `delete = true`: Deletes the field at the specified location, if present.
+- Optional: `variant_name`\*or `model_provider_name`: If specified, the modification will only be applied to the specified variant or model provider. If neither is specified, the modification applies to all variants and providers.
 
 <Tip>
 
@@ -224,9 +224,9 @@ This advanced feature is an "escape hatch" that lets you use provider-specific f
 
 Each object in the array must have two or three fields:
 
-- (Optional) `variant_name` **or** `model_provider_name`: If specified, the modification will only be applied to the specified variant or model provider. If **neither** is specified, the modification applies to **all variants and providers**.
 - `name`: The name of the header to modify
 - `value`: The value to set the header to
+- Optional: `variant_name`\*or `model_provider_name`: If specified, the modification will only be applied to the specified variant or model provider. If neither is specified, the modification applies to all variants and providers.
 
 <Tip>
 
