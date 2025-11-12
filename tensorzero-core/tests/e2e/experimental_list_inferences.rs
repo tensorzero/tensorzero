@@ -1,3 +1,4 @@
+#![expect(deprecated)]
 /// E2E tests for the legacy experimental_list_inferences client method.
 /// TODO: fully deprecate and remove when v1 list_inferences is fully released.
 use chrono::DateTime;

@@ -159,7 +159,7 @@ pub enum InferenceFilter {
 
 /// Request to list inferences with pagination and filters.
 /// Used by the `POST /v1/inferences/list_inferences` endpoint.
-#[derive(Debug, Deserialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 pub struct ListInferencesRequest {
     /// Optional function name to filter inferences by.
@@ -197,11 +197,17 @@ pub struct ListInferencesRequest {
 
 /// Request to get specific inferences by their IDs.
 /// Used by the `POST /v1/inferences/get_inferences` endpoint.
-#[derive(Debug, Deserialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct GetInferencesRequest {
     /// The IDs of the inferences to retrieve. Required.
     pub ids: Vec<Uuid>,
+
+    /// Optional function name to filter by.
+    /// Including this improves query performance since `function_name` is the first column
+    /// in the ClickHouse primary key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function_name: Option<String>,
 
     /// Source of the inference output.
     /// Determines whether to return the original inference output or demonstration feedback
@@ -210,7 +216,7 @@ pub struct GetInferencesRequest {
 }
 
 /// Response containing the requested inferences.
-#[derive(Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct GetInferencesResponse {
     /// The retrieved inferences.

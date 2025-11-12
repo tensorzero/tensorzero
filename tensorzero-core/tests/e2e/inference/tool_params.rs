@@ -135,19 +135,19 @@ async fn test_inference_full_tool_params_round_trip() {
         &json!(false)
     );
 
-    // Step 3: Retrieve via list_inferences API (wire format with DynamicToolParams)
+    // Step 3: Retrieve via get_inferences API (wire format with DynamicToolParams)
     let client = make_embedded_gateway().await;
-    let stored_inferences = client
-        .experimental_list_inferences(tensorzero::ListInferencesParams {
-            function_name: Some("weather_helper"),
-            ids: Some(&[inference_id]),
-            ..Default::default()
-        })
+    let response = client
+        .get_inferences(
+            vec![inference_id],
+            None,
+            tensorzero::InferenceOutputSource::Inference,
+        )
         .await
         .unwrap();
 
-    assert_eq!(stored_inferences.len(), 1);
-    let tensorzero::StoredInference::Chat(stored_inference) = &stored_inferences[0] else {
+    assert_eq!(response.inferences.len(), 1);
+    let tensorzero::StoredInference::Chat(stored_inference) = &response.inferences[0] else {
         panic!("Expected Chat inference");
     };
 
@@ -225,16 +225,16 @@ async fn test_inference_only_static_tools() {
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
-    let stored_inferences = client
-        .experimental_list_inferences(tensorzero::ListInferencesParams {
-            function_name: Some("weather_helper"),
-            ids: Some(&[inference_id]),
-            ..Default::default()
-        })
+    let response = client
+        .get_inferences(
+            vec![inference_id],
+            None,
+            tensorzero::InferenceOutputSource::Inference,
+        )
         .await
         .unwrap();
 
-    let tensorzero::StoredInference::Chat(stored_inference) = &stored_inferences[0] else {
+    let tensorzero::StoredInference::Chat(stored_inference) = &response.inferences[0] else {
         panic!("Expected Chat inference");
     };
 
@@ -315,16 +315,16 @@ async fn test_inference_only_dynamic_tools() {
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
-    let stored_inferences = client
-        .experimental_list_inferences(tensorzero::ListInferencesParams {
-            function_name: Some("weather_helper"),
-            ids: Some(&[inference_id]),
-            ..Default::default()
-        })
+    let response = client
+        .get_inferences(
+            vec![inference_id],
+            None,
+            tensorzero::InferenceOutputSource::Inference,
+        )
         .await
         .unwrap();
 
-    let tensorzero::StoredInference::Chat(stored_inference) = &stored_inferences[0] else {
+    let tensorzero::StoredInference::Chat(stored_inference) = &response.inferences[0] else {
         panic!("Expected Chat inference");
     };
 
@@ -457,16 +457,16 @@ async fn test_provider_tools_not_persisted() {
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
-    let stored_inferences = client
-        .experimental_list_inferences(tensorzero::ListInferencesParams {
-            function_name: Some("weather_helper"),
-            ids: Some(&[inference_id]),
-            ..Default::default()
-        })
+    let response = client
+        .get_inferences(
+            vec![inference_id],
+            None,
+            tensorzero::InferenceOutputSource::Inference,
+        )
         .await
         .unwrap();
 
-    let tensorzero::StoredInference::Chat(stored_inference) = &stored_inferences[0] else {
+    let tensorzero::StoredInference::Chat(stored_inference) = &response.inferences[0] else {
         panic!("Expected Chat inference");
     };
 
@@ -543,16 +543,16 @@ async fn test_tool_strict_flag_preserved() {
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
-    let stored_inferences = client
-        .experimental_list_inferences(tensorzero::ListInferencesParams {
-            function_name: Some("weather_helper"),
-            ids: Some(&[inference_id]),
-            ..Default::default()
-        })
+    let response = client
+        .get_inferences(
+            vec![inference_id],
+            None,
+            tensorzero::InferenceOutputSource::Inference,
+        )
         .await
         .unwrap();
 
-    let tensorzero::StoredInference::Chat(stored_inference) = &stored_inferences[0] else {
+    let tensorzero::StoredInference::Chat(stored_inference) = &response.inferences[0] else {
         panic!("Expected Chat inference");
     };
 
@@ -639,16 +639,16 @@ async fn test_allowed_tools_restriction() {
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
-    let stored_inferences = client
-        .experimental_list_inferences(tensorzero::ListInferencesParams {
-            function_name: Some("weather_helper_parallel"),
-            ids: Some(&[inference_id]),
-            ..Default::default()
-        })
+    let response = client
+        .get_inferences(
+            vec![inference_id],
+            None,
+            tensorzero::InferenceOutputSource::Inference,
+        )
         .await
         .unwrap();
 
-    let tensorzero::StoredInference::Chat(stored_inference) = &stored_inferences[0] else {
+    let tensorzero::StoredInference::Chat(stored_inference) = &response.inferences[0] else {
         panic!("Expected Chat inference");
     };
 
