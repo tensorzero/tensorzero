@@ -30,7 +30,7 @@ services:
       target: provider-proxy
     ports:
       - "3003:3003"
-    user: "${UID:-1000}:${GID:-1000}"
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
     volumes:
       # Mount cache directory for downloading cache files separately
       - ../../../ci/provider-proxy-cache:/app/ci/provider-proxy-cache

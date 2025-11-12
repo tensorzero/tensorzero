@@ -114,7 +114,7 @@ jobs:
 
       - name: Run live tests container via Docker Compose
         run: |
-          UID=$(id -u) GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --rm -e TENSORZERO_CI=1 live-tests
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --rm -e TENSORZERO_CI=1 live-tests
 
       - name: Print live tests logs
         if: always()
