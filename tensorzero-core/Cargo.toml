@@ -19,18 +19,6 @@ name = "e2e"
 path = "tests/e2e/tests.rs"
 required-features = ["e2e_tests"]
 
-# Runs live optimizations tests (which start actual SFT jobs and poll them)
-[[test]]
-name = "optimization-live"
-path = "tests/optimization/live_tests.rs"
-required-features = ["optimization_tests"]
-
-# Runs mock optimizations tests (which use a mock-inference-provider server)
-[[test]]
-name = "optimization-mock"
-path = "tests/optimization/mock_tests.rs"
-required-features = ["e2e_tests"]
-
 [lints]
 workspace = true
 
@@ -152,8 +140,6 @@ schemars = { workspace = true, features = ["uuid1"] }
 tempfile = "3.21.0"
 rand_distr = "0.5.1"
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
-tensorzero-optimizers = { path = "../tensorzero-optimizers" }
-evaluations = { path = "../evaluations" }
 paste = "1.0.15"
 base64 = "0.22.1"
 tensorzero-derive = { path = "../internal/tensorzero-derive" }

@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
 
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -84,6 +84,10 @@ jobs:
       - name: Start Docker services (mock-inference-provider + dependencies)
         run: |
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait clickhouse postgres gateway-clickhouse-migrations gateway-postgres-migrations minio mock-inference-provider
+
+      - name: Set up TENSORZERO_CLICKHOUSE_URL for batch tests
+        run: |
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch the gateway for batch tests
         run: |

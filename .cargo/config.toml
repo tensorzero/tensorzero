@@ -21,6 +21,8 @@ test-e2e = ["nextest", "run", "--features", "e2e_tests", "--profile", "e2e"]
 test-optimization = [
     "nextest",
     "run",
+    "--package",
+    "tensorzero-optimizers",
     "--features",
     "optimization_tests,e2e_tests",
     "--profile",
@@ -29,6 +31,8 @@ test-optimization = [
 test-optimization-mock = [
     "nextest",
     "run",
+    "--package",
+    "tensorzero-optimizers",
     "--features",
     "e2e_tests",
     "--profile",
