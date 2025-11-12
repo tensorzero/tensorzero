@@ -998,9 +998,6 @@ pub enum UninitializedProviderConfig {
         project_id: String,
         #[cfg_attr(test, ts(type = "string | null"))]
         credential_location: Option<CredentialLocationWithFallback>,
-        #[cfg(feature = "e2e_tests")]
-        #[ts(skip)]
-        api_base: Option<Url>,
     },
     #[strum(serialize = "google_ai_studio_gemini")]
     #[serde(rename = "google_ai_studio_gemini")]
@@ -1222,16 +1219,12 @@ impl UninitializedProviderConfig {
                 location,
                 project_id,
                 credential_location: api_key_location,
-                #[cfg(feature = "e2e_tests")]
-                api_base,
             } => {
                 let provider = GCPVertexGeminiProvider::new(
                     model_id,
                     endpoint_id,
                     location,
                     project_id,
-                    #[cfg(feature = "e2e_tests")]
-                    api_base,
                     api_key_location,
                     provider_types,
                     provider_type_default_credentials,

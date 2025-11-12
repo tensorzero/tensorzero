@@ -94,8 +94,6 @@ pub struct GCPVertexGeminiProvider {
     endpoint_id: Option<String>,
     model_or_endpoint_id: String,
     batch_config: Option<BatchConfig>,
-    #[serde(skip)]
-    batch_inference_api_base: Option<Url>,
 }
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -510,7 +508,6 @@ impl GCPVertexGeminiProvider {
             model_id,
             endpoint_id,
             model_or_endpoint_id,
-            batch_inference_api_base: None,
         })
     }
 
@@ -520,7 +517,6 @@ impl GCPVertexGeminiProvider {
         endpoint_id: Option<String>,
         location: String,
         project_id: String,
-        batch_inference_api_base: Option<Url>, // Only set this in e2e_tests mode when mocking batch inference
         api_key_location: Option<CredentialLocationWithFallback>,
         provider_types: &ProviderTypesConfig,
         default_credentials: &ProviderTypeDefaultCredentials,
@@ -531,17 +527,14 @@ impl GCPVertexGeminiProvider {
 
         let location_prefix = location_subdomain_prefix(&location);
 
-        let api_v1_base_url = match batch_inference_api_base.clone() {
-            Some(base) => base,
-            None => Url::parse(&format!(
-                "https://{location_prefix}aiplatform.googleapis.com/v1/"
-            ))
-            .map_err(|e| {
-                Error::new(ErrorDetails::InternalError {
-                    message: format!("Failed to parse base URL - this should never happen: {e}"),
-                })
-            })?,
-        };
+        let api_v1_base_url = Url::parse(&format!(
+            "https://{location_prefix}aiplatform.googleapis.com/v1/"
+        ))
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to parse base URL - this should never happen: {e}"),
+            })
+        })?;
 
         let (model_or_endpoint_id, request_url, streaming_request_url) = match (&model_id, &endpoint_id) {
             (Some(model_id), None) => (model_id.clone(), format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent"),
@@ -554,14 +547,33 @@ impl GCPVertexGeminiProvider {
         let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
 
         let batch_config = match &provider_types.gcp_vertex_gemini {
-            GCPProviderTypeConfig { batch: Some(GCPBatchConfigType::CloudStorage(GCPBatchConfigCloudStorage {
-                input_uri_prefix,
-                output_uri_prefix,
-            })), .. } => {
+            GCPProviderTypeConfig {
+                batch:
+                    Some(GCPBatchConfigType::CloudStorage(GCPBatchConfigCloudStorage {
+                        input_uri_prefix,
+                        output_uri_prefix,
+                    })),
+                ..
+            } => {
+                #[cfg(feature = "e2e_tests")]
+                let batch_request_url = if let Some(api_base) =
+                    &provider_types.gcp_vertex_gemini.batch_inference_api_base
+                {
+                    format!(
+                        "{}/v1/projects/{project_id}/locations/{location}/batchPredictionJobs",
+                        api_base.as_str().trim_end_matches('/')
+                    )
+                } else {
+                    format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs")
+                };
+
+                #[cfg(not(feature = "e2e_tests"))]
+                let batch_request_url = format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs");
+
                 Some(BatchConfig {
                     input_uri_prefix: input_uri_prefix.clone(),
                     output_uri_prefix: output_uri_prefix.clone(),
-                    batch_request_url: format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs"),
+                    batch_request_url,
                 })
             }
             _ => None,
@@ -576,7 +588,6 @@ impl GCPVertexGeminiProvider {
             endpoint_id,
             model_or_endpoint_id,
             batch_config,
-            batch_inference_api_base,
         })
     }
 
@@ -590,13 +601,6 @@ impl GCPVertexGeminiProvider {
 
     pub fn model_or_endpoint_id(&self) -> &str {
         &self.model_or_endpoint_id
-    }
-
-    #[cfg(feature = "e2e_tests")]
-    fn get_batch_api_base(&self) -> &Url {
-        self.batch_inference_api_base
-            .as_ref()
-            .unwrap_or(&self.api_v1_base_url)
     }
 
     async fn collect_finished_batch(
@@ -1292,34 +1296,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             })
         })?;
 
-        #[cfg(feature = "e2e_tests")]
-        let batch_url = if let Some(api_base) = &self.batch_inference_api_base {
-            // Extract the path component from the original batch request URL
-            // e.g., "https://us-central1-aiplatform.googleapis.com/v1/projects/X/locations/Y/batchPredictionJobs"
-            // becomes "projects/X/locations/Y/batchPredictionJobs"
-            let path = batch_config
-                .batch_request_url
-                .strip_prefix("https://")
-                .and_then(|s| s.split_once('/'))
-                .map(|(_, path)| path.strip_prefix("v1/").unwrap_or(path))
-                .unwrap_or(&batch_config.batch_request_url);
-            api_base
-                .join(path)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to join batch URL: {e}"),
-                    })
-                })?
-                .to_string()
-        } else {
-            batch_config.batch_request_url.clone()
-        };
-
-        #[cfg(not(feature = "e2e_tests"))]
-        let batch_url = batch_config.batch_request_url.clone();
-
         let res = http_client
-            .post(batch_url)
+            .post(&batch_config.batch_request_url)
             .headers(auth_headers)
             .body(raw_request.clone())
             .header(http::header::CONTENT_TYPE, "application/json")
@@ -1423,17 +1401,16 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             })
         })?;
 
-        #[cfg(feature = "e2e_tests")]
-        let base_url = self.get_batch_api_base();
-
-        #[cfg(not(feature = "e2e_tests"))]
-        let base_url = &self.api_v1_base_url;
-
-        let job_poll_url = base_url.join(&batch_params.job_url_suffix).map_err(|e| {
-            Error::new(ErrorDetails::InternalError {
-                message: format!("Failed to join batch job URL - this should never happen: {e}"),
-            })
-        })?;
+        let job_poll_url = self
+            .api_v1_base_url
+            .join(&batch_params.job_url_suffix)
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!(
+                        "Failed to join batch job URL - this should never happen: {e}"
+                    ),
+                })
+            })?;
 
         let raw_request = job_poll_url.to_string();
 

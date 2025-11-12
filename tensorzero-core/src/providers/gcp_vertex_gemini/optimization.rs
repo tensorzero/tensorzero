@@ -205,8 +205,6 @@ pub fn convert_to_optimizer_status(
                     location,
                     project_id,
                     credential_location,
-                    #[cfg(feature = "e2e_tests")]
-                    api_base: None,
                 },
                 extra_headers: None,
                 extra_body: None,
