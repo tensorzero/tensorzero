@@ -1993,7 +1993,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -2202,7 +2202,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -2715,7 +2715,7 @@ pub async fn check_base64_pdf_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -2868,7 +2868,7 @@ pub async fn check_base64_image_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -3020,7 +3020,7 @@ pub async fn check_url_image_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -3187,7 +3187,7 @@ pub async fn check_simple_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -3389,7 +3389,7 @@ pub async fn check_simple_image_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -3754,7 +3754,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -4027,7 +4027,7 @@ pub async fn check_inference_params_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -4284,7 +4284,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -4556,7 +4556,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -4901,7 +4901,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -5171,7 +5171,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -5478,7 +5478,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -5776,7 +5776,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -6122,7 +6122,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -6406,7 +6406,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -6694,7 +6694,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -7030,7 +7030,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -7437,7 +7437,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -7640,7 +7640,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert!(function_name.starts_with("basic_test"));
+    assert_eq!(function_name, "basic_test");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -7720,7 +7720,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -8075,7 +8075,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -8357,7 +8357,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -8659,7 +8659,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -9124,7 +9124,7 @@ pub async fn check_dynamic_tool_use_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -9472,7 +9472,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -9827,7 +9827,7 @@ pub async fn check_parallel_tool_use_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -10268,7 +10268,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -10506,7 +10506,7 @@ pub async fn check_json_mode_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -10768,7 +10768,7 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -11060,7 +11060,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -11383,7 +11383,7 @@ async fn check_short_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -11712,7 +11712,7 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -12045,7 +12045,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -12252,7 +12252,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, &provider.model_name);
+    assert_eq!(model_name, provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);

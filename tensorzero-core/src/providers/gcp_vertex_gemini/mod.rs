@@ -273,7 +273,6 @@ pub async fn make_gcp_object_store(
                         "Using fallback credential, as default credential for {} is unavailable for GCS: {e}",
                         PROVIDER_NAME
                     );
-
                     return Box::pin(make_gcp_object_store(gs_url, fallback, dynamic_api_keys))
                         .await;
                 }
@@ -557,7 +556,6 @@ impl GCPVertexGeminiProvider {
                 message: format!("Failed to parse base URL - this should never happen: {e}"),
             })
         })?;
-
         let (model_or_endpoint_id, request_url, streaming_request_url) = match (&model_id, &endpoint_id) {
             (Some(model_id), None) => (model_id.clone(), format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:generateContent"),
                                                format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_id}:streamGenerateContent?alt=sse")),
@@ -1319,7 +1317,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         })?;
 
         let res = http_client
-            .post(&batch_config.batch_request_url)
+            .post(batch_config.batch_request_url.clone())
             .headers(auth_headers)
             .body(raw_request.clone())
             .header(http::header::CONTENT_TYPE, "application/json")
