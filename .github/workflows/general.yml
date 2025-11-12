@@ -878,7 +878,7 @@ jobs:
         run: exit 1
       - name: Create commit status 'check-all-general-jobs-passed'
         run: |
-          gh api repos/${{ github.repository }}/statuses/${{ github.sha }} \
+          gh api repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha || github.sha }} \
             -f context=check-all-general-jobs-passed \
             -f state=success \
             -f target_url=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
