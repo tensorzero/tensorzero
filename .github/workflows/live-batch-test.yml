@@ -1,4 +1,4 @@
-name: Batch tests
+name: Live Batch Tests (Daily)
 
 env:
   ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -31,6 +31,8 @@ env:
 on:
   workflow_dispatch:
   workflow_call:
+  schedule:
+    - cron: "0 0 * * *" # Runs daily at midnight UTC
 
 permissions:
   contents: read
