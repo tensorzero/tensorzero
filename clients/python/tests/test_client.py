@@ -59,8 +59,8 @@ from tensorzero import (
     ToolResult,
 )
 from tensorzero.types import (
-    AllExtraHeader,
     AlwaysExtraBody,
+    AlwaysExtraHeader,
     ChatChunk,
     JsonChunk,
     ProviderExtraBody,
@@ -2495,7 +2495,7 @@ def test_all_extra_body(sync_client: TensorZeroGateway):
 
 
 def test_all_extra_header(sync_client: TensorZeroGateway):
-    """Test that AllExtraHeader applies to all variants."""
+    """Test that AlwaysExtraHeader applies to all variants."""
     with pytest.raises(TensorZeroError) as exc_info:
         sync_client.inference(
             function_name="basic_test",
@@ -2505,7 +2505,7 @@ def test_all_extra_header(sync_client: TensorZeroGateway):
                 "messages": [{"role": "user", "content": "Write me a haiku"}],
             },
             extra_headers=[
-                AllExtraHeader(
+                AlwaysExtraHeader(
                     name="Authorization",
                     value="fake_auth_token",
                 )

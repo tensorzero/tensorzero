@@ -392,13 +392,13 @@ class ProviderExtraHeader(TypedDict):
     delete: NotRequired[bool]
 
 
-class AllExtraHeader(TypedDict):
+class AlwaysExtraHeader(TypedDict):
     name: str
     value: NotRequired[str]
     delete: NotRequired[bool]
 
 
-ExtraHeader = Union[VariantExtraHeader, ProviderExtraHeader, AllExtraHeader]
+ExtraHeader = Union[VariantExtraHeader, ProviderExtraHeader, AlwaysExtraHeader]
 
 
 def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:

@@ -40,8 +40,8 @@ from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
-    AllExtraHeader,
     AlwaysExtraBody,
+    AlwaysExtraHeader,
     AndFilter,
     BaseTensorZeroError,
     BooleanMetricFilter,
@@ -133,7 +133,7 @@ ChatInferenceOutput = t.List[ContentBlock]
 
 __all__ = [
     "AlwaysExtraBody",
-    "AllExtraHeader",
+    "AlwaysExtraHeader",
     "AndFilter",
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
