@@ -30,10 +30,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
-  const pageSize = parseInt(searchParams.get("pageSize") || "100");
+  const limit = parseInt(searchParams.get("limit") || "100");
 
-  if (pageSize > 10000) {
-    throw data("Page size cannot exceed 10,000", { status: 400 });
+  if (limit > 10000) {
+    throw data("Limit cannot exceed 10,000", { status: 400 });
   }
 
   if (!isPostgresAvailable()) {
@@ -41,18 +41,18 @@ export async function loader({ request }: Route.LoaderArgs) {
       postgresAvailable: false,
       apiKeys: [],
       offset: 0,
-      pageSize: 0,
+      limit: 0,
     };
   }
 
   const postgresClient = await getPostgresClient();
-  const apiKeys = await postgresClient.listApiKeys(pageSize, offset);
+  const apiKeys = await postgresClient.listApiKeys(limit, offset);
 
   return {
     postgresAvailable: true,
     apiKeys,
     offset,
-    pageSize,
+    limit,
   };
 }
 
@@ -112,7 +112,7 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function AuthPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const { postgresAvailable, apiKeys, offset, pageSize } = loaderData;
+  const { postgresAvailable, apiKeys, offset, limit } = loaderData;
   const [generateModalIsOpen, setGenerateModalIsOpen] = useState(false);
   const [modalKey, setModalKey] = useState(0);
 
@@ -122,13 +122,13 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + pageSize));
+    searchParams.set("offset", String(offset + limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(Math.max(0, offset - pageSize)));
+    searchParams.set("offset", String(Math.max(0, offset - limit)));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -143,7 +143,7 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
     if (offset > 0) {
       const searchParams = new URLSearchParams(window.location.search);
       searchParams.set("offset", "0");
-      searchParams.set("pageSize", String(pageSize));
+      searchParams.set("limit", String(limit));
       navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
     }
   };
@@ -158,7 +158,7 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset <= 0}
-          disableNext={apiKeys.length < pageSize}
+          disableNext={apiKeys.length < limit}
         />
       </SectionLayout>
       <GenerateApiKeyModal

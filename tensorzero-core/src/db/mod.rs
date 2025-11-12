@@ -47,7 +47,7 @@ pub trait SelectQueries {
 
     async fn query_episode_table(
         &self,
-        page_size: u32,
+        limit: u32,
         before: Option<Uuid>,
         after: Option<Uuid>,
     ) -> Result<Vec<EpisodeByIdRow>, Error>;

@@ -30,13 +30,12 @@ use tensorzero_core::{
         Text,
     },
     model_table::ProviderTypeDefaultCredentials,
-    optimization::{
-        JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
-    },
+    optimization::{OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerInfo},
     stored_inference::StoredOutput,
     tool::{DynamicToolParams, InferenceResponseToolCall, Tool, ToolCall, ToolChoice, ToolResult},
     variant::JsonMode,
 };
+use tensorzero_optimizers::{JobHandle, Optimizer};
 
 pub mod dicl;
 pub mod evaluations;
@@ -494,6 +493,7 @@ fn generate_image_example() -> RenderedSample {
                                 ).unwrap(),
                             },
                             detail: None,
+                            filename: None,
                         },
                         data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
                     })),
@@ -519,6 +519,7 @@ fn generate_image_example() -> RenderedSample {
                                 ).unwrap(),
                             },
                             detail: None,
+                            filename: None,
                         },
                     ))),
                 ],

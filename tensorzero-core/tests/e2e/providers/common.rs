@@ -119,6 +119,7 @@ pub struct E2ETestProviders {
 
     pub image_inference: Vec<E2ETestProvider>,
     pub pdf_inference: Vec<E2ETestProvider>,
+    pub input_audio: Vec<E2ETestProvider>,
 
     pub shorthand_inference: Vec<E2ETestProvider>,
     pub embeddings: Vec<EmbeddingTestProvider>,
@@ -532,6 +533,13 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_audio_inference_store_filesystem() {
+            let providers = $func().await.input_audio;
+            for provider in providers {
+                $crate::providers::commonv2::input_audio::test_audio_inference_with_provider_filesystem(provider).await;
+            }
+        }
 
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
@@ -752,9 +760,22 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 type = "chat_completion"
 model = "anthropic::claude-sonnet-4-5-20250929"
 
+[functions.pdf_test.variants.gcp-vertex-sonnet]
+type = "chat_completion"
+model = "claude-sonnet-4-5-gcp-vertex"
+
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
+
+[models.claude-sonnet-4-5-gcp-vertex]
+routing = ["gcp_vertex_anthropic"]
+
+[models.claude-sonnet-4-5-gcp-vertex.providers.gcp_vertex_anthropic]
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "tensorzero-public"
 
 [models."responses-gpt-4o-mini-2024-07-18"]
 routing = ["openai"]
@@ -1663,6 +1684,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                                 url: image_url.clone(),
                                 mime_type: None,
                                 detail: Some(Detail::Low),
+                                filename: None,
                             })),
                         ],
                     }],
@@ -1726,6 +1748,7 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                                     None,
                                     mime::APPLICATION_PDF,
                                     pdf_data.clone(),
+                                    None,
                                     None,
                                 )
                                 .expect("test data should be valid"),
@@ -1792,6 +1815,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                             mime::IMAGE_PNG,
                             image_data.clone(),
                             Some(Detail::Low),
+                            None,
                         )
                         .expect("test data should be valid"),
                     )),
@@ -1851,7 +1875,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
     params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64(
-        Base64File::new(None, mime::IMAGE_PNG, updated_base64, None)
+        Base64File::new(None, mime::IMAGE_PNG, updated_base64, None, None)
             .expect("test data should be valid"),
     ));
 
@@ -2683,6 +2707,7 @@ pub async fn check_base64_pdf_response(
                     mime_type: mime::APPLICATION_PDF,
                     storage_path: expected_storage_path.clone(),
                     detail: None,
+                    filename: None,
                 },)))
             ]
         },]
@@ -2836,6 +2861,7 @@ pub async fn check_base64_image_response(
                     mime_type: mime::IMAGE_PNG,
                     storage_path: expected_storage_path.clone(),
                     detail: Some(Detail::Low),
+                    filename: None,
                 },)))
             ]
         },]
@@ -2987,6 +3013,7 @@ pub async fn check_url_image_response(
                             path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
                         },
                         detail: Some(Detail::Low),
+                        filename: None,
                     },
                 )))]
             },

@@ -561,6 +561,7 @@ mod tests {
                 mime_type: mime::IMAGE_PNG,
                 storage_path: storage_path.clone(),
                 detail: None,
+                filename: None,
             });
 
             let input = Input {
@@ -634,6 +635,7 @@ mod tests {
                     None,
                     mime::IMAGE_PNG,
                     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
+                    None,
                     None,
                 )
                 .expect("test data should be valid"),

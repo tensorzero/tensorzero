@@ -139,6 +139,14 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let input_audio_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai".to_string(),
+        model_name: "gpt-4o-audio-preview".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
+
     let json_providers = vec![
         E2ETestProvider {
             supports_batch_inference: true,
@@ -271,6 +279,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers.clone(),
         pdf_inference: image_providers.clone(),
+        input_audio: input_audio_providers,
         shorthand_inference: shorthand_providers.clone(),
         credential_fallbacks,
     }
@@ -1950,6 +1959,7 @@ pub async fn test_start_batch_inference_write_file() {
                         url: "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png".parse().unwrap(),
                         mime_type: None,
                         detail: None,
+                        filename: None,
                     }))],
                 }],
             }],
@@ -2056,6 +2066,7 @@ async fn test_forward_image_url() {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
                     mime_type: Some(mime::IMAGE_PNG),
                     detail: None,
+                    filename: None,
                 })),
                 ],
             }],
@@ -2134,6 +2145,7 @@ async fn test_forward_file_url() {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
                     mime_type: Some(mime::APPLICATION_PDF),
                     detail: None,
+                    filename: None,
                 })),
                 ],
             }],
@@ -3081,4 +3093,140 @@ async fn test_responses_api_shorthand() {
     assert!(result.get("ttft_ms").unwrap().is_null());
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
+}
+
+#[tokio::test]
+async fn test_file_custom_filename_sent_to_openai() {
+    // Test that custom filename is sent to OpenAI API
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config = format!(
+        r#"
+    [object_storage]
+    type = "filesystem"
+    path = "{}"
+
+    [gateway]
+    fetch_and_encode_input_files_before_inference = false
+    "#,
+        temp_dir.path().to_string_lossy()
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
+
+    let response = client
+        .inference(ClientInferenceParams {
+            model_name: Some("openai::gpt-4o-mini".to_string()),
+            input: ClientInput {
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![
+                        ClientInputMessageContent::Text(TextKind::Text {
+                            text: "Describe the contents of the PDF".to_string(),
+                        }),
+                        ClientInputMessageContent::File(File::Url(UrlFile {
+                            url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
+                            mime_type: Some(mime::APPLICATION_PDF),
+                            detail: None,
+                            filename: Some("custom.pdf".to_string()),
+                        })),
+                    ],
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    // Sleep for 1 second to allow writing to ClickHouse
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let clickhouse = get_clickhouse().await;
+
+    let model_inference = select_model_inference_clickhouse(&clickhouse, response.inference_id())
+        .await
+        .unwrap();
+
+    let raw_request = model_inference
+        .get("raw_request")
+        .unwrap()
+        .as_str()
+        .unwrap();
+
+    // Verify that the custom filename is present in the raw request
+    assert!(
+        raw_request.contains("\"filename\":\"custom.pdf\""),
+        "Expected custom filename 'custom.pdf' in raw_request, got: {raw_request}"
+    );
+}
+
+#[tokio::test]
+async fn test_file_fallback_filename_sent_to_openai() {
+    // Test that fallback filename "input.pdf" is used when no custom filename provided
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config = format!(
+        r#"
+    [object_storage]
+    type = "filesystem"
+    path = "{}"
+
+    [gateway]
+    fetch_and_encode_input_files_before_inference = false
+    "#,
+        temp_dir.path().to_string_lossy()
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
+
+    let response = client
+        .inference(ClientInferenceParams {
+            model_name: Some("openai::gpt-4o-mini".to_string()),
+            input: ClientInput {
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![
+                        ClientInputMessageContent::Text(TextKind::Text {
+                            text: "Describe the contents of the PDF".to_string(),
+                        }),
+                        ClientInputMessageContent::File(File::Url(UrlFile {
+                            url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
+                            mime_type: Some(mime::APPLICATION_PDF),
+                            detail: None,
+                            filename: None,
+                        })),
+                    ],
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    // Sleep for 1 second to allow writing to ClickHouse
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let clickhouse = get_clickhouse().await;
+
+    let model_inference = select_model_inference_clickhouse(&clickhouse, response.inference_id())
+        .await
+        .unwrap();
+
+    let raw_request = model_inference
+        .get("raw_request")
+        .unwrap()
+        .as_str()
+        .unwrap();
+
+    // Verify that the fallback filename "input.pdf" is present in the raw request
+    assert!(
+        raw_request.contains("\"filename\":\"input.pdf\""),
+        "Expected fallback filename 'input.pdf' in raw_request, got: {raw_request}"
+    );
 }

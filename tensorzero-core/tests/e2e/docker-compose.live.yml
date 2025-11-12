@@ -30,6 +30,7 @@ services:
       target: provider-proxy
     ports:
       - "3003:3003"
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
     volumes:
       # Mount cache directory for downloading cache files separately
       - ../../../ci/provider-proxy-cache:/app/ci/provider-proxy-cache
@@ -76,6 +77,7 @@ services:
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AZURE_OPENAI_API_BASE: ${AZURE_OPENAI_API_BASE:-}
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_EASTUS2_API_KEY: ${AZURE_OPENAI_EASTUS2_API_KEY:-}
       AZURE_OPENAI_DEPLOYMENT_ID: ${AZURE_OPENAI_DEPLOYMENT_ID:-}
       AZURE_AI_FOUNDRY_API_KEY: ${AZURE_AI_FOUNDRY_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
@@ -192,6 +194,7 @@ services:
       AWS_REGION: ${AWS_REGION:-us-east-1}
       AZURE_OPENAI_API_BASE: ${AZURE_OPENAI_API_BASE:-}
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_EASTUS2_API_KEY: ${AZURE_OPENAI_EASTUS2_API_KEY:-}
       AZURE_OPENAI_DEPLOYMENT_ID: ${AZURE_OPENAI_DEPLOYMENT_ID:-}
       AZURE_AI_FOUNDRY_API_KEY: ${AZURE_AI_FOUNDRY_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}

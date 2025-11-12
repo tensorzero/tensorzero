@@ -168,6 +168,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers,
         pdf_inference: pdf_providers,
+        input_audio: vec![],
         shorthand_inference: shorthand_providers.clone(),
         credential_fallbacks,
     }
@@ -1063,6 +1064,7 @@ async fn test_forward_image_url() {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
                     mime_type: Some(mime::IMAGE_PNG),
                     detail: None,
+                    filename: None,
                 })),
                 ],
             }],
@@ -1141,6 +1143,7 @@ async fn test_forward_file_url() {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
                     mime_type: Some(mime::APPLICATION_PDF),
                     detail: None,
+                    filename: None,
                 })),
                 ],
             }],

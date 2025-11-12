@@ -1,0 +1,98 @@
+---
+title: How to configure models & providers
+sidebarTitle: Configure models & providers
+description: Learn how to configure models and model providers to access LLMs with TensorZero.
+---
+
+- A **model** specifies a particular LLM (e.g. GPT-5 or your fine-tuned Llama 3).
+- A **model provider** specifies how you can access a given model (e.g. GPT-5 is available through both OpenAI and Azure).
+
+You can call models directly using the inference endpoint or use them with [functions and variants](/gateway/configure-functions-and-variants) in TensorZero.
+
+## Configure a model & model provider
+
+A model has an arbitrary name and a list of providers.
+Each provider has an arbitrary name, a type, and other fields that depend on the provider type.
+
+The skeleton of a model and provider configuration looks like this:
+
+```toml title="tensorzero.toml" "my_model_name" "my_provider_name" /"([.][.][.])"/
+[models.my_model_name]
+routing = ["my_provider_name"]
+
+[models.my_model_name.providers.my_provider_name]
+type = "..."  # e.g. "openai"
+# ... other fields depend on the provider type ...
+```
+
+TensorZero supports proprietary models (e.g. OpenAI, Anthropic), inference services (e.g. Fireworks AI, Together AI), and self-hosted LLMs (e.g. vLLM), including your own fine-tuned models on each of these.
+
+<Tip>
+
+See [Integrations](/integrations/model-providers/) for a complete list of supported providers and the [Configuration Reference](/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for all available configuration parameters.
+
+</Tip>
+
+### Example: GPT-5 + OpenAI
+
+Let's configure a provider for GPT-5 from OpenAI.
+We'll call our model `my_gpt_5` and our provider `my_openai_provider` with type `openai`.
+The only required field for the `openai` provider is `model_name`.
+
+```toml title="tensorzero.toml" ins="my_gpt_5" ins="my_openai_provider" ins="openai" ins="model_name = "gpt-5""
+[models.my_gpt_5]
+routing = ["my_openai_provider"]
+
+[models.my_gpt_5.providers.my_openai_provider]
+type = "openai"
+model_name = "gpt-5"
+```
+
+You can now reference the model `my_gpt_5` when calling the inference endpoint or when configuring functions and variants.
+
+## Configure multiple providers for fallback & routing
+
+You can configure multiple providers for the same model to enable automatic fallbacks.
+The gateway will try each provider in the `routing` field in order until one succeeds.
+This helps mitigate provider downtime and rate limiting.
+
+For example, you might configure both OpenAI and Azure as providers for GPT-5:
+
+```toml title="tensorzero.toml" mark="routing = ["my_openai_provider", "my_azure_provider"]"
+[models.my_gpt_5]
+routing = ["my_openai_provider", "my_azure_provider"]
+
+[models.my_gpt_5.providers.my_openai_provider]
+type = "openai"
+model_name = "gpt-5"
+
+[models.my_gpt_5.providers.my_azure_provider]
+type = "azure"
+deployment_id = "gpt-5"
+endpoint = "https://your-resource.openai.azure.com"
+```
+
+<Tip>
+
+See [Retries & Fallbacks](/gateway/guides/retries-fallbacks/) for more details on configuring robust routing strategies.
+
+</Tip>
+
+## Use short-hand model names
+
+If you don't need advanced functionality like fallback routing or custom credentials, you can use shorthand model names directly in your variant configuration.
+
+TensorZero supports shorthand names like:
+
+- `openai::gpt-5`
+- `anthropic::claude-3-5-haiku-20241022`
+- `google::gemini-2.0-flash-exp`
+
+You can use these directly in a variant's `model` field without defining a separate model configuration block.
+
+```toml title="tensorzero.toml" mark="model = "openai::gpt-5""
+[functions.my_function.variants.my_variant]
+type = "chat_completion"
+model = "openai::gpt-5"
+# ...
+```
