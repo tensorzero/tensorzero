@@ -4,6 +4,11 @@ rustflags = [
     "aws_sdk_unstable", # needed for aws-smithy-types + serde-(de)serialize
 ]
 
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"]  # for NAPI
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"]  # for NAPI
 
 [alias]
 test-unit = "nextest run --lib --bins"
@@ -15,6 +20,8 @@ test-e2e = ["nextest", "run", "--features", "e2e_tests", "--profile", "e2e"]
 test-optimization = [
     "nextest",
     "run",
+    "--package",
+    "tensorzero-optimizers",
     "--features",
     "optimization_tests,e2e_tests",
     "--profile",
@@ -23,6 +30,8 @@ test-optimization = [
 test-optimization-mock = [
     "nextest",
     "run",
+    "--package",
+    "tensorzero-optimizers",
     "--features",
     "e2e_tests",
     "--profile",
