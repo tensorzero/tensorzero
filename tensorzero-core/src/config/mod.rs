@@ -1758,6 +1758,7 @@ impl PathWithContents {
 #[derive(ts_rs::TS)]
 #[ts(export)]
 pub struct PostgresConfig {
+    pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,
 }
@@ -1769,6 +1770,7 @@ fn default_connection_pool_size() -> u32 {
 impl Default for PostgresConfig {
     fn default() -> Self {
         Self {
+            enabled: None,
             connection_pool_size: 20,
         }
     }
