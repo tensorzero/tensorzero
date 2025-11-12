@@ -1068,7 +1068,8 @@ async def test_async_extra_headers_param(async_openai_client):
         extra_body={
             "tensorzero::extra_headers": [
                 {
-                    "model_provider_name": "tensorzero::model_name::dummy::echo_injected_data::provider_name::dummy",
+                    "model_name": "dummy::echo_injected_data",
+                    "provider_name": "dummy",
                     "name": "x-my-extra-header",
                     "value": "my-extra-header-value",
                 },
@@ -1114,7 +1115,8 @@ async def test_async_extra_body_param(async_openai_client):
         extra_body={
             "tensorzero::extra_body": [
                 {
-                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "model_name": "dummy::echo_extra_info",
+                    "provider_name": "dummy",
                     "pointer": "/thinking",
                     "value": {
                         "type": "enabled",
@@ -1131,7 +1133,8 @@ async def test_async_extra_body_param(async_openai_client):
         "extra_body": {
             "inference_extra_body": [
                 {
-                    "model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+                    "model_name": "dummy::echo_extra_info",
+                    "provider_name": "dummy",
                     "pointer": "/thinking",
                     "value": {"type": "enabled", "budget_tokens": 1024},
                 }

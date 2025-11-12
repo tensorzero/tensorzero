@@ -90,6 +90,13 @@ pub enum InferenceExtraBody {
         #[serde(flatten)]
         kind: ExtraBodyReplacementKind,
     },
+    ModelProvider {
+        model_name: String,
+        provider_name: String,
+        pointer: String,
+        #[serde(flatten)]
+        kind: ExtraBodyReplacementKind,
+    },
     Always {
         pointer: String,
         #[serde(flatten)]
@@ -104,6 +111,7 @@ impl InferenceExtraBody {
             InferenceExtraBody::Variant {
                 variant_name: v, ..
             } => v == variant_name,
+            InferenceExtraBody::ModelProvider { .. } => true,
             InferenceExtraBody::Always { .. } => true,
         }
     }
@@ -273,6 +281,112 @@ mod tests {
     #[test]
     fn test_inference_extra_body_all_roundtrip() {
         let original = InferenceExtraBody::Always {
+            pointer: "/test".to_string(),
+            kind: ExtraBodyReplacementKind::Value(json!({"test": "data"})),
+        };
+
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: InferenceExtraBody = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn test_inference_extra_body_model_provider_deserialize() {
+        let json = r#"{"model_name": "gpt-4o", "provider_name": "openai", "pointer": "/test", "value": {"key": "value"}}"#;
+        let result: InferenceExtraBody = serde_json::from_str(json).unwrap();
+        match result {
+            InferenceExtraBody::ModelProvider {
+                model_name,
+                provider_name,
+                pointer,
+                kind,
+            } => {
+                assert_eq!(model_name, "gpt-4o");
+                assert_eq!(provider_name, "openai");
+                assert_eq!(pointer, "/test");
+                match kind {
+                    ExtraBodyReplacementKind::Value(v) => {
+                        assert_eq!(v, json!({"key": "value"}));
+                    }
+                    ExtraBodyReplacementKind::Delete => panic!("Expected Value kind"),
+                }
+            }
+            _ => panic!("Expected ModelProvider variant"),
+        }
+    }
+
+    #[test]
+    fn test_inference_extra_body_model_provider_with_delete() {
+        let json = r#"{"model_name": "gpt-4o", "provider_name": "openai", "pointer": "/test", "delete": true}"#;
+        let result: InferenceExtraBody = serde_json::from_str(json).unwrap();
+        match result {
+            InferenceExtraBody::ModelProvider {
+                model_name,
+                provider_name,
+                pointer,
+                kind,
+            } => {
+                assert_eq!(model_name, "gpt-4o");
+                assert_eq!(provider_name, "openai");
+                assert_eq!(pointer, "/test");
+                assert_eq!(kind, ExtraBodyReplacementKind::Delete);
+            }
+            _ => panic!("Expected ModelProvider variant"),
+        }
+    }
+
+    #[test]
+    fn test_should_apply_variant_model_provider() {
+        let model_provider_variant = InferenceExtraBody::ModelProvider {
+            model_name: "gpt-4o".to_string(),
+            provider_name: "openai".to_string(),
+            pointer: "/test".to_string(),
+            kind: ExtraBodyReplacementKind::Value(json!(1)),
+        };
+
+        // ModelProvider should apply to any variant
+        assert!(model_provider_variant.should_apply_variant("variant1"));
+        assert!(model_provider_variant.should_apply_variant("variant2"));
+    }
+
+    #[test]
+    fn test_filter_includes_model_provider() {
+        let unfiltered = UnfilteredInferenceExtraBody {
+            extra_body: vec![
+                InferenceExtraBody::Variant {
+                    variant_name: "variant1".to_string(),
+                    pointer: "/v1".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!(1)),
+                },
+                InferenceExtraBody::ModelProvider {
+                    model_name: "gpt-4o".to_string(),
+                    provider_name: "openai".to_string(),
+                    pointer: "/mp".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!(2)),
+                },
+                InferenceExtraBody::Variant {
+                    variant_name: "variant2".to_string(),
+                    pointer: "/v2".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!(3)),
+                },
+            ],
+        };
+
+        let filtered = unfiltered.filter("variant1");
+        assert_eq!(filtered.data.len(), 2); // variant1 + ModelProvider
+
+        // Verify ModelProvider is included
+        assert!(filtered
+            .data
+            .iter()
+            .any(|item| matches!(item, InferenceExtraBody::ModelProvider { .. })));
+    }
+
+    #[test]
+    fn test_inference_extra_body_model_provider_roundtrip() {
+        let original = InferenceExtraBody::ModelProvider {
+            model_name: "gpt-4o".to_string(),
+            provider_name: "openai".to_string(),
             pointer: "/test".to_string(),
             kind: ExtraBodyReplacementKind::Value(json!({"test": "data"})),
         };

@@ -542,7 +542,8 @@ func TestBasicInference(t *testing.T) {
 		req.WithExtraFields(map[string]any{
 			"tensorzero::extra_headers": []map[string]any{
 				{
-					"model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+					"model_name":      "dummy::echo_extra_info",
+					"provider_name":   "dummy",
 					"name":                "x-my-extra-header",
 					"value":               "my-extra-header-value",
 				},
@@ -567,7 +568,8 @@ func TestBasicInference(t *testing.T) {
 			"extra_headers": map[string]interface{}{
 				"inference_extra_headers": []interface{}{
 					map[string]interface{}{
-						"model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+						"model_name":      "dummy::echo_extra_info",
+					"provider_name":   "dummy",
 						"name":                "x-my-extra-header",
 						"value":               "my-extra-header-value",
 					},
@@ -592,7 +594,8 @@ func TestBasicInference(t *testing.T) {
 		req.WithExtraFields(map[string]any{
 			"tensorzero::extra_body": []map[string]any{
 				{
-					"model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+					"model_name":      "dummy::echo_extra_info",
+					"provider_name":   "dummy",
 					"pointer":             "/thinking",
 					"value": map[string]any{
 						"type":          "enabled",
@@ -617,7 +620,8 @@ func TestBasicInference(t *testing.T) {
 			"extra_body": map[string]interface{}{
 				"inference_extra_body": []interface{}{
 					map[string]interface{}{
-						"model_provider_name": "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+						"model_name":      "dummy::echo_extra_info",
+					"provider_name":   "dummy",
 						"pointer":             "/thinking",
 						"value": map[string]interface{}{
 							"type":          "enabled",

@@ -88,6 +88,13 @@ pub enum InferenceExtraHeader {
         #[serde(flatten)]
         kind: ExtraHeaderKind,
     },
+    ModelProvider {
+        model_name: String,
+        provider_name: String,
+        name: String,
+        #[serde(flatten)]
+        kind: ExtraHeaderKind,
+    },
     Always {
         name: String,
         #[serde(flatten)]
@@ -102,6 +109,7 @@ impl InferenceExtraHeader {
             InferenceExtraHeader::Variant {
                 variant_name: v, ..
             } => v == variant_name,
+            InferenceExtraHeader::ModelProvider { .. } => true,
             InferenceExtraHeader::Always { .. } => true,
         }
     }
@@ -270,6 +278,112 @@ mod tests {
     #[test]
     fn test_inference_extra_header_all_roundtrip() {
         let original = InferenceExtraHeader::Always {
+            name: "X-Test-Header".to_string(),
+            kind: ExtraHeaderKind::Value("test-value".to_string()),
+        };
+
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: InferenceExtraHeader = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn test_inference_extra_header_model_provider_deserialize() {
+        let json = r#"{"model_name": "gpt-4o", "provider_name": "openai", "name": "X-Custom-Header", "value": "custom-value"}"#;
+        let result: InferenceExtraHeader = serde_json::from_str(json).unwrap();
+        match result {
+            InferenceExtraHeader::ModelProvider {
+                model_name,
+                provider_name,
+                name,
+                kind,
+            } => {
+                assert_eq!(model_name, "gpt-4o");
+                assert_eq!(provider_name, "openai");
+                assert_eq!(name, "X-Custom-Header");
+                match kind {
+                    ExtraHeaderKind::Value(v) => {
+                        assert_eq!(v, "custom-value");
+                    }
+                    ExtraHeaderKind::Delete => panic!("Expected Value kind"),
+                }
+            }
+            _ => panic!("Expected ModelProvider variant"),
+        }
+    }
+
+    #[test]
+    fn test_inference_extra_header_model_provider_with_delete() {
+        let json = r#"{"model_name": "gpt-4o", "provider_name": "openai", "name": "X-Custom-Header", "delete": true}"#;
+        let result: InferenceExtraHeader = serde_json::from_str(json).unwrap();
+        match result {
+            InferenceExtraHeader::ModelProvider {
+                model_name,
+                provider_name,
+                name,
+                kind,
+            } => {
+                assert_eq!(model_name, "gpt-4o");
+                assert_eq!(provider_name, "openai");
+                assert_eq!(name, "X-Custom-Header");
+                assert_eq!(kind, ExtraHeaderKind::Delete);
+            }
+            _ => panic!("Expected ModelProvider variant"),
+        }
+    }
+
+    #[test]
+    fn test_should_apply_variant_model_provider() {
+        let model_provider_variant = InferenceExtraHeader::ModelProvider {
+            model_name: "gpt-4o".to_string(),
+            provider_name: "openai".to_string(),
+            name: "X-Custom-Header".to_string(),
+            kind: ExtraHeaderKind::Value("value".to_string()),
+        };
+
+        // ModelProvider should apply to any variant
+        assert!(model_provider_variant.should_apply_variant("variant1"));
+        assert!(model_provider_variant.should_apply_variant("variant2"));
+    }
+
+    #[test]
+    fn test_filter_includes_model_provider() {
+        let unfiltered = UnfilteredInferenceExtraHeaders {
+            extra_headers: vec![
+                InferenceExtraHeader::Variant {
+                    variant_name: "variant1".to_string(),
+                    name: "X-V1".to_string(),
+                    kind: ExtraHeaderKind::Value("v1".to_string()),
+                },
+                InferenceExtraHeader::ModelProvider {
+                    model_name: "gpt-4o".to_string(),
+                    provider_name: "openai".to_string(),
+                    name: "X-MP".to_string(),
+                    kind: ExtraHeaderKind::Value("mp".to_string()),
+                },
+                InferenceExtraHeader::Variant {
+                    variant_name: "variant2".to_string(),
+                    name: "X-V2".to_string(),
+                    kind: ExtraHeaderKind::Value("v2".to_string()),
+                },
+            ],
+        };
+
+        let filtered = unfiltered.filter("variant1");
+        assert_eq!(filtered.data.len(), 2); // variant1 + ModelProvider
+
+        // Verify ModelProvider is included
+        assert!(filtered
+            .data
+            .iter()
+            .any(|item| matches!(item, InferenceExtraHeader::ModelProvider { .. })));
+    }
+
+    #[test]
+    fn test_inference_extra_header_model_provider_roundtrip() {
+        let original = InferenceExtraHeader::ModelProvider {
+            model_name: "gpt-4o".to_string(),
+            provider_name: "openai".to_string(),
             name: "X-Test-Header".to_string(),
             kind: ExtraHeaderKind::Value("test-value".to_string()),
         };

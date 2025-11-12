@@ -63,7 +63,7 @@ from tensorzero.types import (
     AlwaysExtraHeader,
     ChatChunk,
     JsonChunk,
-    ProviderExtraBody,
+    ModelProviderExtraBody,
     Template,
     Thought,
     ToolCallChunk,
@@ -2428,18 +2428,21 @@ def test_extra_body_types(sync_client: TensorZeroGateway):
                 pointer="/response_format",
                 value={"type": "json_object"},
             ),
-            ProviderExtraBody(
-                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+            ModelProviderExtraBody(
+                model_name="gpt-4o-mini-2024-07-18",
+                provider_name="openai",
                 pointer="/stop",
                 value="Potato",
             ),
-            ProviderExtraBody(
-                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+            ModelProviderExtraBody(
+                model_name="gpt-4o-mini-2024-07-18",
+                provider_name="openai",
                 pointer="/should_be_deleted_provider",
                 value=2,
             ),
-            ProviderExtraBody(
-                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+            ModelProviderExtraBody(
+                model_name="gpt-4o-mini-2024-07-18",
+                provider_name="openai",
                 pointer="/should_be_deleted_provider",
                 delete=True,
             ),

@@ -1528,6 +1528,12 @@ fn validate_provider_filter(provider_name: &str, models: &ModelTable) -> Result<
 
     // Check if it's a fully qualified name first
     if provider_name.starts_with("tensorzero::model_name::") {
+        tracing::warn!(
+            "Using fully qualified format '{}' for model_provider_name is deprecated. \
+             Please use separate 'model_name' and 'provider_name' fields instead.",
+            provider_name
+        );
+
         // Parse the fully qualified name: tensorzero::model_name::{model}::provider_name::{provider}
         let parts: Vec<&str> = provider_name.split("::").collect();
         if parts.len() == 5
@@ -1578,6 +1584,32 @@ fn validate_provider_filter(provider_name: &str, models: &ModelTable) -> Result<
     })
 }
 
+/// Validate that model_provider filter references a valid model and provider
+fn validate_model_provider_filter(
+    model_name: &str,
+    provider_name: &str,
+    models: &ModelTable,
+) -> Result<(), Error> {
+    // Check if the model exists in the table
+    if let Some(model_config) = models.table.get(model_name) {
+        // Check if the provider exists in that model
+        if !model_config.providers.contains_key(provider_name) {
+            return Err(ErrorDetails::InvalidInferenceTarget {
+                message: format!(
+                    "Invalid model_provider filter: provider '{provider_name}' not found in model '{model_name}'",
+                ),
+            }
+            .into());
+        }
+        Ok(())
+    } else {
+        Err(ErrorDetails::InvalidInferenceTarget {
+            message: format!("Invalid model_provider filter: model '{model_name}' does not exist",),
+        }
+        .into())
+    }
+}
+
 /// Validate all filters in extra_body and extra_headers
 fn validate_inference_filters(
     extra_body: &UnfilteredInferenceExtraBody,
@@ -1599,6 +1631,13 @@ fn validate_inference_filters(
             } => {
                 validate_provider_filter(model_provider_name, models)?;
             }
+            InferenceExtraBody::ModelProvider {
+                model_name,
+                provider_name,
+                ..
+            } => {
+                validate_model_provider_filter(model_name, provider_name, models)?;
+            }
             InferenceExtraBody::Always { .. } => {
                 // Always variant has no filter to validate
             }
@@ -1618,6 +1657,13 @@ fn validate_inference_filters(
                 ..
             } => {
                 validate_provider_filter(model_provider_name, models)?;
+            }
+            InferenceExtraHeader::ModelProvider {
+                model_name,
+                provider_name,
+                ..
+            } => {
+                validate_model_provider_filter(model_name, provider_name, models)?;
             }
             InferenceExtraHeader::Always { .. } => {
                 // Always variant has no filter to validate

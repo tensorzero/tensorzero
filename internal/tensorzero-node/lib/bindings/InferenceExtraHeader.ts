@@ -6,4 +6,8 @@ export type InferenceExtraHeader =
       | "delete"
     ))
   | ({ variant_name: string; name: string } & ({ value: string } | "delete"))
+  | ({ model_name: string; provider_name: string; name: string } & (
+      | { value: string }
+      | "delete"
+    ))
   | ({ name: string } & ({ value: string } | "delete"));
