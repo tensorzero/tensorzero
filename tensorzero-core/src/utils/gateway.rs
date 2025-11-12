@@ -243,7 +243,7 @@ impl GatewayHandle {
             && matches!(postgres_connection_info, PostgresConnectionInfo::Disabled)
         {
             return Err(Error::new(ErrorDetails::Config {
-                message: "Rate limiting is configured but PostgreSQL is disabled. Rate limiting requires PostgreSQL to be configured. Please set the TENSORZERO_POSTGRES_URL environment variable and ensure `gateway.postgres.enabled` is not set to false, or disable rate limiting.".to_string(),
+                message: "Rate limiting is configured but PostgreSQL is disabled. Rate limiting requires PostgreSQL to be configured. Please set the `TENSORZERO_POSTGRES_URL` environment variable and ensure `gateway.postgres.enabled` is not set to false, or disable rate limiting.".to_string(),
             }));
         }
 
@@ -340,6 +340,37 @@ pub async fn setup_clickhouse(
     Ok(clickhouse_connection_info)
 }
 
+async fn create_postgres_connection(
+    postgres_url: &str,
+    connection_pool_size: u32,
+) -> Result<PostgresConnectionInfo, Error> {
+    // TODO - decide how we should handle apply `connection_pool_size` to two pools
+    // Hopefully, sqlx does a stable release before we actually start using `alpha_pool`
+    let pool = PgPoolOptions::new()
+        .max_connections(connection_pool_size)
+        .connect(postgres_url)
+        .await
+        .map_err(|err| {
+            Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: err.to_string(),
+            })
+        })?;
+
+    let alpha_pool = sqlx_alpha::postgres::PgPoolOptions::new()
+        .max_connections(connection_pool_size)
+        .connect(postgres_url)
+        .await
+        .map_err(|err| {
+            Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: err.to_string(),
+            })
+        })?;
+
+    let connection_info = PostgresConnectionInfo::new_with_pool(pool, Some(alpha_pool));
+    connection_info.check_migrations().await?;
+    Ok(connection_info)
+}
+
 pub async fn setup_postgres(
     config: &Config,
     postgres_url: Option<String>,
@@ -355,72 +386,24 @@ pub async fn setup_postgres(
         // Postgres enabled but no URL
         (Some(true), None) => {
             return Err(ErrorDetails::AppState {
-                message: "Missing environment variable TENSORZERO_POSTGRES_URL".to_string(),
+                message: "Missing environment variable `TENSORZERO_POSTGRES_URL`.".to_string(),
             }
             .into())
         }
         // Postgres enabled and URL provided
         (Some(true), Some(postgres_url)) => {
-            // TODO - decide how we should handle apply `connection_pool_size` to two pools
-            // Hopefully, sqlx does a stable release before we actually start using `alpha_pool`
-            let pool = PgPoolOptions::new()
-                .max_connections(config.postgres.connection_pool_size)
-                .connect(postgres_url)
-                .await
-                .map_err(|err| {
-                    Error::new(ErrorDetails::PostgresConnectionInitialization {
-                        message: err.to_string(),
-                    })
-                })?;
-
-            let alpha_pool = sqlx_alpha::postgres::PgPoolOptions::new()
-                .max_connections(config.postgres.connection_pool_size)
-                .connect(postgres_url)
-                .await
-                .map_err(|err| {
-                    Error::new(ErrorDetails::PostgresConnectionInitialization {
-                        message: err.to_string(),
-                    })
-                })?;
-
-            let connection_info = PostgresConnectionInfo::new_with_pool(pool, Some(alpha_pool));
-            connection_info.check_migrations().await?;
-            connection_info
+            create_postgres_connection(postgres_url, config.postgres.connection_pool_size).await?
         }
         // Postgres default and no URL
         (None, None) => {
-            tracing::warn!(
+            tracing::debug!(
                 "Disabling Postgres: `gateway.postgres.enabled` is not explicitly specified in config and `TENSORZERO_POSTGRES_URL` is not set."
             );
             PostgresConnectionInfo::Disabled
         }
         // Postgres default and URL provided
         (None, Some(postgres_url)) => {
-            // TODO - decide how we should handle apply `connection_pool_size` to two pools
-            // Hopefully, sqlx does a stable release before we actually start using `alpha_pool`
-            let pool = PgPoolOptions::new()
-                .max_connections(config.postgres.connection_pool_size)
-                .connect(postgres_url)
-                .await
-                .map_err(|err| {
-                    Error::new(ErrorDetails::PostgresConnectionInitialization {
-                        message: err.to_string(),
-                    })
-                })?;
-
-            let alpha_pool = sqlx_alpha::postgres::PgPoolOptions::new()
-                .max_connections(config.postgres.connection_pool_size)
-                .connect(postgres_url)
-                .await
-                .map_err(|err| {
-                    Error::new(ErrorDetails::PostgresConnectionInitialization {
-                        message: err.to_string(),
-                    })
-                })?;
-
-            let connection_info = PostgresConnectionInfo::new_with_pool(pool, Some(alpha_pool));
-            connection_info.check_migrations().await?;
-            connection_info
+            create_postgres_connection(postgres_url, config.postgres.connection_pool_size).await?
         }
     };
 
@@ -765,8 +748,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_setup_postgres_default_no_url() {
-        let logs_contain = crate::utils::testing::capture_logs();
-
         // Default postgres config (enabled: None) and no URL
         let config = Box::leak(Box::new(Config {
             postgres: PostgresConfig {
@@ -780,9 +761,6 @@ mod tests {
         assert!(matches!(
             postgres_connection_info,
             PostgresConnectionInfo::Disabled
-        ));
-        assert!(logs_contain(
-            "Disabling Postgres: `gateway.postgres.enabled` is not explicitly specified in config and `TENSORZERO_POSTGRES_URL` is not set."
         ));
     }
 
@@ -800,7 +778,7 @@ mod tests {
         let err = setup_postgres(config, None).await.unwrap_err();
         assert!(err
             .to_string()
-            .contains("Missing environment variable TENSORZERO_POSTGRES_URL"));
+            .contains("Missing environment variable `TENSORZERO_POSTGRES_URL`."));
     }
 
     #[tokio::test]
