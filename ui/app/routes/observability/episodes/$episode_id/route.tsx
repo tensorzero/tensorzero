@@ -26,7 +26,6 @@ import {
   SectionHeader,
 } from "~/components/layout/PageLayout";
 import { addHumanFeedback } from "~/utils/tensorzero.server";
-import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
@@ -203,10 +202,10 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const { toast } = useToast();
   useEffect(() => {
     if (newFeedbackId) {
-      toast({
-        title: "Feedback Added",
-      });
+      const { dismiss } = toast.success({ title: "Feedback Added" });
+      return () => dismiss({ immediate: true });
     }
+    return;
   }, [newFeedbackId, toast]);
   // These are swapped because the table is sorted in descending order
   const disablePreviousFeedbackPage =
@@ -303,7 +302,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           />
         </SectionLayout>
       </SectionsGroup>
-      <Toaster />
     </PageLayout>
   );
 }
