@@ -113,29 +113,10 @@ In the example below, the gateway will sample `gpt_4o_mini` 70% of the time and 
 If both of those variants fail, the gateway will try the fallback variants sequentially.
 
 ```toml
-[functions.extract_data]
-type = "chat"
-
 [functions.extract_data.experimentation]
 type = "static_weights"
 candidate_variants = {"gpt_4o_mini" = 0.7, "claude_3_5_haiku" = 0.3}
 fallback_variants = ["gemini_1_5_flash_8b", "grok_2"]
-
-[functions.extract_data.variants.gpt_4o_mini]
-type = "chat_completion"
-model = "openai::gpt-4o-mini-2024-07-18"
-
-[functions.extract_data.variants.claude_3_5_haiku]
-type = "chat_completion"
-model = "anthropic::claude-3-5-haiku-20241022"
-
-[functions.extract_data.variants.gemini_1_5_flash_8b]
-type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-1.5-flash-8b"
-
-[functions.extract_data.variants.grok_2]
-type = "chat_completion"
-model = "xai::grok-2-1212"
 ```
 
 See [Run static A/B tests](/experimentation/run-static-ab-tests) and [Run adaptive A/B tests](/experimentation/run-adaptive-ab-tests) for more details.
