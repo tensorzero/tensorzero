@@ -21,6 +21,17 @@ jobs:
           echo "ACTOR_MEMBER=$MEMBER" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+      - name: Leave a comment if permission check fails
+        if: ${{ steps.check-permission.outputs.ACTOR_MEMBER != '1' }}
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository.full_name }}
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            ❌ Only public members of the `tensorzero` organization can use slash commands
+
       - name: Slash Command Dispatch
         if: ${{ steps.check-permission.outputs.ACTOR_MEMBER == '1' }}
         uses: peter-evans/slash-command-dispatch@13bc09769d122a64f75aa5037256f6f2d78be8c4
@@ -32,3 +43,4 @@ jobs:
             check-fork
           # Use our custom permission check above, since `peter-evans/slash-command-dispatch` doesn't handle organizations
           permission: none
+
