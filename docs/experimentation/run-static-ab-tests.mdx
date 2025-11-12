@@ -3,81 +3,94 @@ title: Run static A/B tests
 description: Learn how to use experimentation to test and iterate on your LLM applications with confidence.
 ---
 
+You can configure the TensorZero Gateway to distribute inference requests between different variants (prompts, models, etc.) of a function (a "task" or "agent").
+Variants enable you to experiment with different models, prompts, parameters, inference strategies, and more.
+
 <Tip>
 
 We recommend [running adaptive A/B tests](/experimentation/run-adaptive-ab-tests) if you have a metric you can optimize for.
 
 </Tip>
 
-The TensorZero Gateway provides built-in support for experimentation (A/B testing) through variants.
-Each [TensorZero function](/gateway/configure-functions-and-variants) can have multiple variants, and the gateway will sample between them based on their weights.
+## Configure multiple variants
 
-Variants enable you to experiment with different models (e.g. GPT-4o vs Claude), prompts (e.g. different templates), parameters (e.g. different temperatures), inference strategies (e.g. dynamic in-context learning), and more.
+If you specify multiple variants for a function, by default the gateway will sample between them with equal probability (uniform sampling).
 
-During an episode, multiple calls to the same function will receive the same variant (unless fallbacks are necessary).
-This ensures consistency in multi-step LLM workflows.
-Formally, this consistent variant assignment acts as a randomized controlled experiment, providing the statistical foundation needed to make causal inferences about which configurations perform best.
-
-You can use the feedback collected about an inference or episode to compare how different variants perform in a principled way.
-You can visualize the performance of different variants over time using the TensorZero UI.
-
-## Examples
-
-### Simple A/B Testing
-
-Let's say you want to experiment with different models for a function that drafts an email.
-
-Let's create a function with two variants: GPT-4o Mini and Claude 3.5 Haiku.
-In a production setting, you'd likely want to set up prompt templates, inference parameters, and more.
+For example, if you call the `draft_email` function below, the gateway will sample between the two variants at each inference with equal probability.
 
 ```toml
 [functions.draft_email]
 type = "chat"
 
-[functions.draft_email.variants.gpt_4o_mini]
+[functions.draft_email.variants.gpt_5_mini]
 type = "chat_completion"
-model = "openai::gpt-4o-mini"
+model = "openai::gpt-5-mini"
 
-[functions.draft_email.variants.claude_3_5_haiku]
+[functions.draft_email.variants.claude_haiku_4_5]
 type = "chat_completion"
-model = "anthropic::claude-3.5-haiku"
+model = "anthropic::claude-haiku-4-5"
 ```
 
-With the configuration above, the gateway will sample between the the variants with equal probability.
+During an episode, multiple inference requests to the same function will receive the same variant (unless fallbacks are necessary).
+This consistent variant assignment acts as a randomized controlled experiment, providing the statistical foundation needed to make causal inferences about which configurations perform best.
 
-### Variant Weights
+## Configure sampling weights for variants
 
-You can also set variant weights to control the probability of each variant being chosen.
+You can configure weights for variants to control the probability of each variant being sampled.
+This is particularly useful for canary tests where you want to gradually roll out a new variant to a small percentage of users.
 
 ```toml
 [functions.draft_email]
 type = "chat"
 
-[functions.draft_email.variants.gpt_4o_mini]
+[functions.draft_email.variants.gpt_5_mini]
 type = "chat_completion"
-model = "openai::gpt-4o-mini"
-weight = 0.9
+model = "openai::gpt-5-mini"
 
-[functions.draft_email.variants.claude_3_5_haiku]
+[functions.draft_email.variants.claude_haiku_4_5]
 type = "chat_completion"
-model = "anthropic::claude-3.5-haiku"
-weight = 0.1
+model = "anthropic::claude-haiku-4-5"
+
+[functions.draft_email.experimentation] // [!code ++:3]
+type = "static_weights"
+candidate_variants = {"gpt_5_mini" = 0.9, "claude_haiku_4_5" = 0.1}
 ```
 
-With the configuration above, the gateway will sample `gpt_4o_mini` 90% of the time and `claude_3_5_haiku` 10% of the time.
+In this example, 90% of episodes will be sampled from the `gpt_5_mini` variant and 10% will be sampled from the `claude_haiku_4_5` variant.
 
 <Tip>
 
-The weights don't need to add up to 1.
-The gateway will normalize them so that they do, and sample the variants accordingly.
-For example, if a variant has weight 3 and another has weight 2, the first variant will be sampled 3/5 of the time and the second variant will be sampled 2/5 of the time.
+If the weights don't add up to 1, TensorZero will automatically normalize them and sample the variants accordingly.
+For example, if a variant has weight 5 and another has weight 1, the first variant will be sampled 5/6 of the time (≈ 83.3%) and the second variant will be sampled 1/6 of the time (≈ 16.7%).
 
 </Tip>
 
-If you don't specify weights for your variants, the gateway will sample between them uniformly.
+## Configure fallback-only variants
 
-If you set a variant's weight to zero, it will never be sampled.
-You can only use zero-weighted variants by explicitly pinning them at inference time using `variant_name`.
+You can configure variants that are only used as fallbacks with `fallback_variants`.
 
-If you mix variants with positive and unspecified weights, the gateway will sample the positive weighted variants first, and only use the unspecified weighted variants as fallbacks.
-See [Retries & Fallbacks](/gateway/guides/retries-fallbacks/) for more details.
+```toml
+[functions.draft_email]
+type = "chat"
+
+[functions.draft_email.variants.gpt_5_mini]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+
+[functions.draft_email.variants.claude_haiku_4_5]
+type = "chat_completion"
+model = "anthropic::claude-haiku-4-5"
+
+[functions.draft_email.variants.grok_4] // [!code ++:3]
+type = "chat_completion"
+model = "xai::grok-4-0709"
+
+[functions.draft_email.experimentation]
+type = "static_weights"
+candidate_variants = {"gpt_5_mini" = 0.9, "claude_haiku_4_5" = 0.1}
+fallback_variants = ["grok_4"] // [!code ++]
+```
+
+The gateway will first sample among the `candidate_variants`.
+If all candidates fail, the gateway attempts each variant in `fallback_variants` in order.
+See [Retries & Fallbacks](/gateway/guides/retries-fallbacks) for more information.
