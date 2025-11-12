@@ -80,8 +80,10 @@ async fn test_datapoint_full_tool_params_round_trip() {
             tool: json!({"foo": "bar"}),
         }],
         AllowedTools {
-            tools: vec![get_temp_tool.name.clone(), custom_tool.name.clone()],
-            choice: AllowedToolsChoice::DynamicAllowedTools,
+            tools: [get_temp_tool.name.clone(), custom_tool.name.clone()]
+                .into_iter()
+                .collect(),
+            choice: AllowedToolsChoice::AllAllowedTools,
         },
         ToolChoice::Specific("get_temperature".to_string()),
         Some(false),
@@ -213,8 +215,8 @@ async fn test_datapoint_update_tool_params() {
         vec![Tool::ClientSideFunction(get_temp_tool.clone())],
         vec![],
         AllowedTools {
-            tools: vec![get_temp_tool.name.clone()],
-            choice: AllowedToolsChoice::DynamicAllowedTools,
+            tools: [get_temp_tool.name.clone()].into_iter().collect(),
+            choice: AllowedToolsChoice::AllAllowedTools,
         },
         ToolChoice::Auto,
         Some(false),
@@ -414,8 +416,8 @@ async fn test_list_datapoints_with_tool_params() {
             vec![],
             vec![],
             AllowedTools {
-                tools: vec![base_tool.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                tools: [base_tool.name.clone()].into_iter().collect(),
+                choice: AllowedToolsChoice::AllAllowedTools,
             },
             ToolChoice::Auto,
             None,
@@ -448,8 +450,10 @@ async fn test_list_datapoints_with_tool_params() {
             vec![Tool::ClientSideFunction(custom_tool_1.clone())],
             vec![],
             AllowedTools {
-                tools: vec![base_tool.name.clone(), custom_tool_1.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                tools: [base_tool.name.clone(), custom_tool_1.name.clone()]
+                    .into_iter()
+                    .collect(),
+                choice: AllowedToolsChoice::AllAllowedTools,
             },
             ToolChoice::Required,
             Some(false),
@@ -482,8 +486,8 @@ async fn test_list_datapoints_with_tool_params() {
             vec![Tool::ClientSideFunction(custom_tool_2.clone())],
             vec![],
             AllowedTools {
-                tools: vec![custom_tool_2.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                tools: [custom_tool_2.name.clone()].into_iter().collect(),
+                choice: AllowedToolsChoice::AllAllowedTools,
             },
             ToolChoice::None,
             Some(true),
@@ -602,7 +606,7 @@ async fn test_datapoint_only_static_tools() {
             vec![],
             vec![],
             AllowedTools {
-                tools: vec![static_tool.name.clone()],
+                tools: [static_tool.name.clone()].into_iter().collect(),
                 choice: AllowedToolsChoice::FunctionDefault,
             },
             ToolChoice::Auto,
@@ -703,8 +707,10 @@ async fn test_datapoint_only_dynamic_tools() {
             vec![Tool::ClientSideFunction(dynamic_tool.clone())],
             vec![],
             AllowedTools {
-                tools: vec![static_tool.name.clone(), dynamic_tool.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                tools: [static_tool.name.clone(), dynamic_tool.name.clone()]
+                    .into_iter()
+                    .collect(),
+                choice: AllowedToolsChoice::AllAllowedTools,
             },
             ToolChoice::Auto,
             None,
@@ -795,8 +801,8 @@ async fn test_datapoint_tool_params_three_states() {
             vec![Tool::ClientSideFunction(tool.clone())],
             vec![],
             AllowedTools {
-                tools: vec![tool.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                tools: [tool.name.clone()].into_iter().collect(),
+                choice: AllowedToolsChoice::AllAllowedTools,
             },
             ToolChoice::Auto,
             None,

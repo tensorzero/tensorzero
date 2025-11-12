@@ -121,8 +121,8 @@ mod tests {
             })],
             vec![],
             AllowedTools {
-                tools: vec![], // Explicitly empty (no static tools)
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                tools: HashSet::new(), // Explicitly empty (no static tools)
+                choice: AllowedToolsChoice::AllAllowedTools,
             },
             ToolChoice::Specific("tool_1".to_string()),
             None,
@@ -161,8 +161,8 @@ mod tests {
             vec![], // Empty - tool_1 is static
             vec![],
             AllowedTools {
-                tools: vec!["tool_1".to_string()],
-                choice: AllowedToolsChoice::DynamicAllowedTools, // Explicit list
+                tools: ["tool_1".to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::AllAllowedTools, // Explicit list
             },
             ToolChoice::Required,
             None,

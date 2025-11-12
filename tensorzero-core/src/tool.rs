@@ -298,16 +298,18 @@ pub struct DynamicImplicitToolConfig {
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct AllowedTools {
-    pub tools: Vec<String>,
+    pub tools: HashSet<String>,
     pub choice: AllowedToolsChoice,
 }
 
 impl AllowedTools {
     fn into_dynamic_allowed_tools(self) -> Option<Vec<String>> {
+        #[expect(deprecated)]
         match self.choice {
             AllowedToolsChoice::FunctionDefault => None,
-            AllowedToolsChoice::DynamicAllowedTools => Some(self.tools),
-            AllowedToolsChoice::AllAllowedTools => Some(self.tools),
+            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::AllAllowedTools => {
+                Some(self.tools.into_iter().collect())
+            }
         }
     }
 }
@@ -417,60 +419,54 @@ impl ToolCallConfig {
         } = args;
         // If `allowed_tools` is not provided, use the function's configured tools.
         // This means we allow all tools for the function.
-        let mut allowed_tools = match dynamic_allowed_tools {
+        let allowed_tools = match dynamic_allowed_tools {
             Some(allowed_tools) => AllowedTools {
-                tools: allowed_tools,
+                tools: allowed_tools.into_iter().collect(),
                 choice: AllowedToolsChoice::AllAllowedTools,
             },
             None => AllowedTools {
-                tools: function_tools.to_vec(),
+                tools: function_tools.iter().cloned().collect(),
                 choice: AllowedToolsChoice::FunctionDefault,
             },
         };
 
-        // Make a set for all names in additional tools
+        // Build set of all available tool names (static + dynamic)
         let additional_tool_names: HashSet<&str> = dynamic_additional_tools
             .as_ref()
             .map(|tools| tools.iter().map(Tool::name).collect())
             .unwrap_or_default();
 
-        // Get each tool from the static tool config.
-        // If a tool name is in allowed_tools but not in static_tools, check if it's a dynamic tool.
-        // If it's neither static nor dynamic, throw an error.
-        let static_tools_available: Vec<ToolConfig> = allowed_tools
-            .tools
-            .iter()
-            .filter_map(|tool_name| {
-                if let Some(static_tool) = static_tools.get(tool_name) {
-                    // Found in static tools, add it
-                    Some(Ok(ToolConfig::Static(static_tool.clone())))
-                } else if additional_tool_names.contains(tool_name.as_str()) {
-                    // Found in dynamic tools, skip it (will be added in the next loop)
-                    None
-                } else {
-                    // Not found in either static or dynamic tools
-                    Some(Err(Error::new(ErrorDetails::ToolNotFound {
-                        name: tool_name.clone(),
-                    })))
-                }
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let all_available_tool_names: HashSet<String> = static_tools
+            .keys()
+            .cloned()
+            .chain(additional_tool_names.iter().map(|&s| s.to_string()))
+            .collect();
 
-        let mut dynamic_tools_available = vec![];
-        if let Some(additional_tools) = dynamic_additional_tools {
-            for tool in additional_tools {
-                let name = tool.name().to_string();
-
-                // Add the tool to dynamic_tools_available so its definition is sent to the provider
-                dynamic_tools_available.push(ToolConfig::Dynamic(tool.into_dynamic_tool_config()));
-
-                // Only add to allowed_tools in FunctionDefault mode (when allowed_tools was not explicitly set)
-                // In AllAllowedTools mode, the user explicitly set allowed_tools, so we respect that list exactly
-                if matches!(allowed_tools.choice, AllowedToolsChoice::FunctionDefault) {
-                    allowed_tools.tools.push(name);
-                }
+        // Validate that all tools in allowed_tools exist in the union of static + dynamic tools
+        for tool_name in &allowed_tools.tools {
+            if !all_available_tool_names.contains(tool_name) {
+                return Err(Error::new(ErrorDetails::ToolNotFound {
+                    name: tool_name.clone(),
+                }));
             }
         }
+
+        // Get all static tools from function_tools
+        let static_tools_available: Vec<ToolConfig> = function_tools
+            .iter()
+            .filter_map(|tool_name| {
+                static_tools
+                    .get(tool_name)
+                    .map(|static_tool| ToolConfig::Static(static_tool.clone()))
+            })
+            .collect();
+
+        // Get all dynamic tools
+        let dynamic_tools_available: Vec<ToolConfig> = dynamic_additional_tools
+            .into_iter()
+            .flatten()
+            .map(|tool| ToolConfig::Dynamic(tool.into_dynamic_tool_config()))
+            .collect();
 
         let mut tool_display_names = HashSet::new();
 
@@ -535,6 +531,26 @@ impl ToolCallConfig {
         self.static_tools_available
             .iter()
             .chain(self.dynamic_tools_available.iter())
+    }
+
+    /// Returns an iterator over tools that respects the allowed_tools list.
+    /// - For FunctionDefault and DynamicAllowedTools: returns all tools (same as tools_available)
+    /// - For AllAllowedTools: filters to only tools in the allowed_tools list
+    pub fn strict_tools_available(&self) -> Box<dyn Iterator<Item = &ToolConfig> + '_> {
+        #[expect(deprecated)]
+        match self.allowed_tools.choice {
+            AllowedToolsChoice::FunctionDefault | AllowedToolsChoice::DynamicAllowedTools => {
+                // Return all tools (lenient mode)
+                Box::new(self.tools_available())
+            }
+            AllowedToolsChoice::AllAllowedTools => {
+                // Filter to only allowed tools (strict mode)
+                Box::new(
+                    self.tools_available()
+                        .filter(|tool| self.allowed_tools.tools.contains(tool.name())),
+                )
+            }
+        }
     }
 
     pub fn any_tools_available(&self) -> bool {
@@ -1082,6 +1098,7 @@ impl ToolCallConfigDatabaseInsert {
         let function_config = config.get_function(function_name)?;
 
         // Get the list of tool names from allowed_tools based on whether they were dynamically set
+        #[expect(deprecated)]
         let tool_names = match self.allowed_tools.choice {
             AllowedToolsChoice::FunctionDefault => {
                 // Use the function's configured tool names
@@ -1090,9 +1107,9 @@ impl ToolCallConfigDatabaseInsert {
                     .map(str::to_string)
                     .collect::<Vec<_>>()
             }
-            AllowedToolsChoice::DynamicAllowedTools => {
+            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::AllAllowedTools => {
                 // Use the dynamically specified tool names
-                self.allowed_tools.tools.clone()
+                self.allowed_tools.tools.iter().cloned().collect::<Vec<_>>()
             }
         };
 
@@ -1884,6 +1901,13 @@ mod tests {
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 2);
+
+        // strict_tools_available should return all tools (FunctionDefault mode)
+        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert!(matches!(
+            tool_call_config.allowed_tools.choice,
+            AllowedToolsChoice::FunctionDefault
+        ));
         assert_eq!(tool_call_config.tool_choice, ToolChoice::Auto);
         assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
         let tools: Vec<_> = tool_call_config.tools_available().collect();
@@ -1954,7 +1978,7 @@ mod tests {
         );
 
         // We pass an empty list of allowed tools and then configure a new tool
-        // This should remove all configured tools and add the new tool
+        // All function tools are still included, plus the dynamic tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
             additional_tools: Some(vec![ClientSideFunctionTool {
@@ -1974,13 +1998,20 @@ mod tests {
         ))
         .unwrap()
         .unwrap();
-        assert_eq!(tool_call_config.tools_available().count(), 1);
-        let first_tool = tool_call_config.tools_available().next().unwrap();
-        assert_eq!(first_tool.name(), "establish_campground");
-        assert!(!first_tool.strict());
+        // Should have all function tools (get_temperature, query_articles) + dynamic tool (establish_campground)
+        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert!(tool_call_config
+            .tools_available()
+            .any(|t| t.name() == "get_temperature"));
+        assert!(tool_call_config
+            .tools_available()
+            .any(|t| t.name() == "query_articles"));
+        assert!(tool_call_config
+            .tools_available()
+            .any(|t| t.name() == "establish_campground"));
 
         // We pass a list of a single allowed tool and then configure a new tool
-        // This should remove the other configured tools and add the new tool
+        // All function tools are still included, plus the dynamic tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
             additional_tools: Some(vec![ClientSideFunctionTool {
@@ -2001,16 +2032,21 @@ mod tests {
         ))
         .unwrap()
         .unwrap();
-        assert_eq!(tool_call_config.tools_available().count(), 2);
-        // The following code depends on an implementation detail for this ordering,
-        // might break if we change the order
-        let tools: Vec<_> = tool_call_config.tools_available().collect();
-        assert_eq!(tools[0].name(), "get_temperature");
-        assert_eq!(tools[1].name(), "establish_campground");
+        // Should have all function tools + dynamic tool
+        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert!(tool_call_config
+            .tools_available()
+            .any(|t| t.name() == "get_temperature"));
+        assert!(tool_call_config
+            .tools_available()
+            .any(|t| t.name() == "query_articles"));
+        assert!(tool_call_config
+            .tools_available()
+            .any(|t| t.name() == "establish_campground"));
         assert_eq!(tool_call_config.parallel_tool_calls, Some(false));
 
         // We pass a list of no allowed tools and then configure a new tool
-        // This should remove all configured tools and add the new tool
+        // All function tools are still included, plus the dynamic tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
             additional_tools: Some(vec![ClientSideFunctionTool {
@@ -2031,15 +2067,16 @@ mod tests {
         ))
         .unwrap()
         .unwrap();
-        assert_eq!(tool_call_config.tools_available().count(), 1);
-        let first_tool = tool_call_config.tools_available().next().unwrap();
-        assert_eq!(first_tool.name(), "establish_campground");
+        // Should have all function tools + dynamic tool
+        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert!(tool_call_config
+            .tools_available()
+            .any(|t| t.name() == "establish_campground"));
         assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
         assert_eq!(
             tool_call_config.tool_choice,
             ToolChoice::Specific("establish_campground".to_string())
         );
-        assert!(!first_tool.strict());
     }
 
     #[tokio::test]
@@ -2379,17 +2416,31 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        // Should have both static and dynamic tools
-        assert_eq!(tool_call_config.tools_available().count(), 2);
+        // Should have all function tools plus dynamic tools
+        // function_tools: get_temperature, query_articles
+        // dynamic tools: establish_campground
+        assert_eq!(tool_call_config.tools_available().count(), 3);
 
-        // Verify the static tool is included
+        // Verify the static tools are included
         assert!(tool_call_config
             .tools_available()
             .any(|t| t.name() == "get_temperature"));
+        assert!(tool_call_config
+            .tools_available()
+            .any(|t| t.name() == "query_articles"));
 
         // Verify the dynamic tool is included
         assert!(tool_call_config
             .tools_available()
+            .any(|t| t.name() == "establish_campground"));
+
+        // strict_tools_available should filter to only allowed_tools (AllAllowedTools mode)
+        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert!(tool_call_config
+            .strict_tools_available()
+            .any(|t| t.name() == "get_temperature"));
+        assert!(tool_call_config
+            .strict_tools_available()
             .any(|t| t.name() == "establish_campground"));
     }
 
@@ -2453,22 +2504,36 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        // Both tool definitions should be available (sent to provider)
-        assert_eq!(tool_call_config.tools_available().count(), 2);
+        // All tool definitions should be available (sent to provider)
+        // function_tools: get_temperature, query_articles
+        // dynamic tools: establish_campground
+        assert_eq!(tool_call_config.tools_available().count(), 3);
         assert!(tool_call_config
             .tools_available()
             .any(|t| t.name() == "get_temperature"));
+        assert!(tool_call_config
+            .tools_available()
+            .any(|t| t.name() == "query_articles"));
         assert!(tool_call_config
             .tools_available()
             .any(|t| t.name() == "establish_campground"));
 
         // But only get_temperature should be in allowed_tools
         assert_eq!(tool_call_config.allowed_tools.tools.len(), 1);
-        assert_eq!(tool_call_config.allowed_tools.tools[0], "get_temperature");
+        assert!(tool_call_config
+            .allowed_tools
+            .tools
+            .contains("get_temperature"));
         assert!(matches!(
             tool_call_config.allowed_tools.choice,
             AllowedToolsChoice::AllAllowedTools
         ));
+
+        // strict_tools_available should filter to only allowed_tools (AllAllowedTools mode)
+        assert_eq!(tool_call_config.strict_tools_available().count(), 1);
+        assert!(tool_call_config
+            .strict_tools_available()
+            .any(|t| t.name() == "get_temperature"));
     }
 
     // Helper struct to test deserialization with flattening
@@ -2516,7 +2581,10 @@ mod tests {
         assert_eq!(tool_info.dynamic_tools.len(), 1);
         assert_eq!(tool_info.dynamic_tools[0].name(), "ragged_tool");
         assert_eq!(tool_info.dynamic_provider_tools.len(), 0);
-        assert_eq!(tool_info.allowed_tools.tools, vec!["ragged_tool"]);
+        assert_eq!(
+            tool_info.allowed_tools.tools,
+            ["ragged_tool".to_string()].into_iter().collect()
+        );
         assert_eq!(
             tool_info.tool_choice,
             ToolChoice::Specific("ragged_tool".to_string())

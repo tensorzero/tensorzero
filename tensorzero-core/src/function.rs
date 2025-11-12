@@ -421,10 +421,11 @@ impl FunctionConfig {
             .. // TODO: Ideally we can say all but private fields must be destructured here.
         } = db_insert;
 
+        #[expect(deprecated)]
         let allowed_tools = match allowed_tools.choice {
             AllowedToolsChoice::FunctionDefault => None,
             AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::AllAllowedTools => {
-                Some(allowed_tools.tools)
+                Some(allowed_tools.tools.into_iter().collect())
             }
         };
 
@@ -2466,17 +2467,20 @@ mod tests {
                 vec![], // No dynamic tools - these are static from function config
                 vec![],
                 AllowedTools {
-                    tools: vec!["tool1".to_string(), "tool2".to_string()],
-                    choice: AllowedToolsChoice::DynamicAllowedTools, // Explicit list
+                    tools: ["tool1".to_string(), "tool2".to_string()]
+                        .into_iter()
+                        .collect(),
+                    choice: AllowedToolsChoice::AllAllowedTools, // Explicit list
                 },
                 ToolChoice::Required,
                 Some(false),
             );
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-            assert_eq!(
-                result.allowed_tools,
-                Some(vec!["tool1".to_string(), "tool2".to_string()])
-            );
+            // Check allowed_tools contains both tools (order doesn't matter due to HashSet)
+            let allowed = result.allowed_tools.unwrap();
+            assert_eq!(allowed.len(), 2);
+            assert!(allowed.contains(&"tool1".to_string()));
+            assert!(allowed.contains(&"tool2".to_string()));
             assert_eq!(result.additional_tools, None);
 
             // Test 2: Only dynamic tools (none match function config)
@@ -2489,7 +2493,7 @@ mod tests {
                 ],
                 vec![],
                 AllowedTools {
-                    tools: vec![], // Empty, will use function's defaults (static1)
+                    tools: HashSet::new(), // Empty, will use function's defaults (static1)
                     choice: AllowedToolsChoice::FunctionDefault, // Use function defaults
                 },
                 ToolChoice::None,
@@ -2517,17 +2521,18 @@ mod tests {
                 ],
                 vec![],
                 AllowedTools {
-                    tools: vec!["a".to_string(), "b".to_string()], // Only static tools
-                    choice: AllowedToolsChoice::DynamicAllowedTools,
+                    tools: ["a".to_string(), "b".to_string()].into_iter().collect(), // Only static tools
+                    choice: AllowedToolsChoice::AllAllowedTools,
                 },
                 ToolChoice::Auto,
                 None,
             );
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-            assert_eq!(
-                result.allowed_tools,
-                Some(vec!["a".to_string(), "b".to_string()])
-            );
+            // Check allowed_tools contains both "a" and "b" (order doesn't matter due to HashSet)
+            let allowed = result.allowed_tools.unwrap();
+            assert_eq!(allowed.len(), 2);
+            assert!(allowed.contains(&"a".to_string()));
+            assert!(allowed.contains(&"b".to_string()));
             let additional = result.additional_tools.unwrap();
             assert_eq!(additional.len(), 2);
             assert_eq!(additional[0].name, "x");
@@ -2541,7 +2546,7 @@ mod tests {
                 vec![],
                 vec![],
                 AllowedTools {
-                    tools: vec![],
+                    tools: HashSet::new(),
                     choice: AllowedToolsChoice::FunctionDefault,
                 },
                 ToolChoice::None,
@@ -2561,7 +2566,7 @@ mod tests {
                 ],
                 vec![],
                 AllowedTools {
-                    tools: vec![], // Function has no defaults
+                    tools: HashSet::new(), // Function has no defaults
                     choice: AllowedToolsChoice::FunctionDefault,
                 },
                 ToolChoice::Auto,
@@ -2588,8 +2593,8 @@ mod tests {
                     vec![], // Empty - tool1 is static
                     vec![],
                     AllowedTools {
-                        tools: vec!["tool1".to_string()],
-                        choice: AllowedToolsChoice::DynamicAllowedTools,
+                        tools: ["tool1".to_string()].into_iter().collect(),
+                        choice: AllowedToolsChoice::AllAllowedTools,
                     },
                     choice.clone(),
                     None,
@@ -2604,8 +2609,8 @@ mod tests {
                     vec![], // Empty - tool1 is static
                     vec![],
                     AllowedTools {
-                        tools: vec!["tool1".to_string()],
-                        choice: AllowedToolsChoice::DynamicAllowedTools,
+                        tools: ["tool1".to_string()].into_iter().collect(),
+                        choice: AllowedToolsChoice::AllAllowedTools,
                     },
                     ToolChoice::Auto,
                     ptc,
@@ -2619,8 +2624,8 @@ mod tests {
                 vec![], // Empty - tool1 is static
                 vec![], // Empty provider tools
                 AllowedTools {
-                    tools: vec!["tool1".to_string()],
-                    choice: AllowedToolsChoice::DynamicAllowedTools,
+                    tools: ["tool1".to_string()].into_iter().collect(),
+                    choice: AllowedToolsChoice::AllAllowedTools,
                 },
                 ToolChoice::Auto,
                 None,
@@ -2647,7 +2652,7 @@ mod tests {
                 vec![Tool::ClientSideFunction(tool.clone())],
                 vec![],
                 AllowedTools {
-                    tools: vec![], // Function has no defaults
+                    tools: HashSet::new(), // Function has no defaults
                     choice: AllowedToolsChoice::FunctionDefault,
                 },
                 ToolChoice::Auto,

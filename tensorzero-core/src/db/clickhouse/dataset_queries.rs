@@ -2293,8 +2293,8 @@ mod tests {
                 })],
                 vec![],
                 AllowedTools {
-                    tools: vec!["weather_tool".to_string()],
-                    choice: AllowedToolsChoice::DynamicAllowedTools,
+                    tools: ["weather_tool".to_string()].into_iter().collect(),
+                    choice: AllowedToolsChoice::AllAllowedTools,
                 },
                 ToolChoice::Required,
                 Some(true),

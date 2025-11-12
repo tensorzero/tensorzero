@@ -3,7 +3,7 @@
 /// correctly.
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use tensorzero::{GetDatapointParams, StoredDatapoint};
 use uuid::Uuid;
@@ -746,7 +746,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
             vec![],
             vec![],
             AllowedTools {
-                tools: vec![],
+                tools: HashSet::new(),
                 choice: AllowedToolsChoice::FunctionDefault,
             },
             ToolChoice::Auto,
