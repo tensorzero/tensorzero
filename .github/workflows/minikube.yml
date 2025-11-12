@@ -12,12 +12,14 @@ jobs:
     - name: Download gateway container
       uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
       with:
-        pattern: build-gateway-container
+        pattern: build-*-container
         merge-multiple: true
-    - name: Load gateway container
+    - name: Load gateway and ui containers
       run: |
         docker load < gateway-container.tar
+        docker load < ui-container.tar
         minikube image load gateway-container.tar
+        minikube image load ui-container.tar
 
     - name: Create helm overrides file
       run: |
@@ -27,6 +29,12 @@ jobs:
           image:
             repository: tensorzero/gateway
             # We load this from the build-gateway-container job
+            tag: sha-${{ github.sha }}
+            pullPolicy: Never
+        ui:
+          image:
+            repository: tensorzero/ui
+            # We load this from the build-ui-container job
             tag: sha-${{ github.sha }}
             pullPolicy: Never
         EOF

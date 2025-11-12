@@ -843,7 +843,7 @@ jobs:
     secrets: inherit
 
   minikube:
-    needs: [build-gateway-container]
+    needs: [build-gateway-container, build-ui-container]
     permissions:
       contents: read
     uses: ./.github/workflows/minikube.yml
