@@ -4225,6 +4225,18 @@ The `[postgres]` section defines the configuration for PostgreSQL connectivity.
 PostgreSQL is required for certain TensorZero features including [rate limiting](/operations/enforce-custom-rate-limits/) and [Track-and-Stop experimentation](/experimentation/run-adaptive-ab-tests/).
 You can connect to PostgreSQL by setting the `TENSORZERO_POSTGRES_URL` environment variable.
 
+### `connection_pool_size`
+
+- **Type:** integer
+- **Required:** no (default: `20`)
+
+Defines the maximum number of connections in the PostgreSQL connection pool.
+
+```toml title="tensorzero.toml"
+[postgres]
+connection_pool_size = 50
+```
+
 ### `enabled`
 
 - **Type:** boolean
@@ -4240,18 +4252,6 @@ If you have features that require PostgreSQL (rate limiting or Track-and-Stop ex
 ```toml title="tensorzero.toml"
 [postgres]
 enabled = true  # Require PostgreSQL connection
-```
-
-### `connection_pool_size`
-
-- **Type:** integer
-- **Required:** no (default: `20`)
-
-Defines the maximum number of connections in the PostgreSQL connection pool.
-
-```toml title="tensorzero.toml"
-[postgres]
-connection_pool_size = 50
 ```
 
 ## `[rate_limiting]`
