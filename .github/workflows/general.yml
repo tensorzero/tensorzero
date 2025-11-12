@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.ref == 'refs/heads/main' && github.run_id || format('{0}-{1}', github.workflow, github.ref) }}
+  group: ${{ github.ref == 'refs/heads/main' && github.run_id || format('general-{0}-{1}', github.workflow, github.ref) }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
@@ -229,6 +229,43 @@ jobs:
 
       - name: Check tensorzero-node bindings are properly exported
         run: pnpm --filter=tensorzero-node run check-exports
+
+  check-python-schemas:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "24.11.0"
+
+      - name: Install pnpm
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Install uv
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Generate Python schemas
+        run: pnpm generate-python-schemas
+
+      - name: Check for git diff after generating schemas
+        id: git_diff_check
+        run: git diff --exit-code
 
   build-windows:
     permissions:
@@ -853,6 +890,7 @@ jobs:
         check-latest-docker-compose,
         check-python-client-build,
         check-node-bindings,
+        check-python-schemas,
         build-windows,
         build-ui-container,
         build-gateway-container,

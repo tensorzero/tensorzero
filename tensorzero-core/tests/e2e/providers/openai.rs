@@ -42,6 +42,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
+crate::generate_unified_mock_batch_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
     let credentials = match std::env::var("OPENAI_API_KEY") {

@@ -14,6 +14,7 @@ use super::common::ModelTestProvider;
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
+crate::generate_unified_mock_batch_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
     // TODO - fine-tune a better model and add it back to our tests
