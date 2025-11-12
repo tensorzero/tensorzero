@@ -38,9 +38,9 @@ use crate::inference::types::{
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::InferenceProvider;
 use crate::model::{fully_qualified_name, Credential, ModelProvider};
-use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
+use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_jsonschema_for_gcp_vertex_gemini;
 use super::helpers::{convert_stream_error, inject_extra_request_data_and_send};
@@ -931,7 +931,9 @@ fn prepare_tools<'a>(
                     .map(GeminiFunctionDeclaration::from_tool_config)
                     .collect(),
             }]);
-            let tool_config_converted = Some(GoogleAIStudioGeminiToolConfig::from_tool_config(tool_config));
+            let tool_config_converted = Some(GoogleAIStudioGeminiToolConfig::from_tool_config(
+                tool_config,
+            ));
             (tools, tool_config_converted)
         }
         None => (None, None),

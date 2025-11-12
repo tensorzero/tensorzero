@@ -559,17 +559,19 @@ pub(super) fn prepare_groq_tools<'a>(
     Option<Vec<GroqTool<'a>>>,
     Option<GroqToolChoice<'a>>,
     Option<bool>,
+    Option<Vec<&'a str>>,
 ) {
     match &request.tool_config {
-        None => (None, None, None),
+        None => (None, None, None, None),
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None, None);
+                return (None, None, None, None);
             }
             let tools = Some(tool_config.tools_available().map(Into::into).collect());
             let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
-            (tools, tool_choice, parallel_tool_calls)
+            let allowed_tools = tool_config.allowed_tools.as_dynamic_allowed_tools();
+            (tools, tool_choice, parallel_tool_calls, allowed_tools)
         }
     }
 }
@@ -918,6 +920,8 @@ struct GroqRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_tools: Option<Vec<&'a str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
@@ -987,10 +991,7 @@ impl<'a> GroqRequest<'a> {
         };
         let mut messages = prepare_groq_messages(request).await?;
 
-        let (tools, tool_choice, mut parallel_tool_calls) = prepare_groq_tools(request);
-        if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
-            parallel_tool_calls = None;
-        }
+        let (tools, tool_choice, parallel_tool_calls, allowed_tools) = prepare_groq_tools(request);
 
         if model.to_lowercase().starts_with("o1-mini") {
             if let Some(GroqRequestMessage::System(_)) = messages.first() {
@@ -1020,6 +1021,7 @@ impl<'a> GroqRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
+            allowed_tools,
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None,
             service_tier: None, // handled below
@@ -1711,6 +1713,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
+            allowed_tools: None,
             stop: None,
             reasoning_effort: None,
             service_tier: None,
@@ -1810,6 +1813,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
+            allowed_tools: None,
             stop: None,
             reasoning_effort: None,
             service_tier: None,
@@ -1879,6 +1883,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
+            allowed_tools: None,
             stop: None,
             reasoning_effort: None,
             service_tier: None,
@@ -1938,6 +1943,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
+            allowed_tools: None,
             stop: None,
             reasoning_effort: None,
             service_tier: None,
@@ -1980,7 +1986,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls, allowed_tools) =
+            prepare_groq_tools(&request_with_tools);
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -1994,6 +2001,7 @@ mod tests {
         );
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
+        assert!(allowed_tools.is_none());
         let tool_config = ToolCallConfig {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
@@ -2022,10 +2030,74 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request_without_tools);
+        let (tools, tool_choice, parallel_tool_calls, allowed_tools) =
+            prepare_groq_tools(&request_without_tools);
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());
+        assert!(allowed_tools.is_none());
+    }
+
+    #[test]
+    fn test_prepare_groq_tools_with_allowed_tools() {
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+
+        // Test with allowed_tools specified
+        let tool_config = ToolCallConfig {
+            static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: Some(false),
+            allowed_tools: AllowedTools {
+                tools: vec![WEATHER_TOOL.name().to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::AllAllowedTools,
+            },
+        };
+
+        let request = ModelInferenceRequest {
+            inference_id: uuid::Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::On,
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, parallel_tool_calls, allowed_tools) = prepare_groq_tools(&request);
+
+        // Verify tools are returned
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 2);
+
+        // Verify tool_choice
+        let tool_choice = tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            GroqToolChoice::String(GroqToolChoiceString::Auto)
+        );
+
+        // Verify parallel_tool_calls
+        let parallel_tool_calls = parallel_tool_calls.unwrap();
+        assert!(!parallel_tool_calls);
+
+        // Verify allowed_tools contains only the weather tool
+        let allowed_tools = allowed_tools.unwrap();
+        assert_eq!(allowed_tools.len(), 1);
+        assert_eq!(allowed_tools[0], WEATHER_TOOL.name());
     }
 
     #[tokio::test]
