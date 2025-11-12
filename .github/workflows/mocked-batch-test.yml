@@ -87,7 +87,7 @@ jobs:
 
       - name: Launch the gateway for batch tests
         run: |
-          cargo run-e2e > batch_logs.txt 2>&1 &
+          cargo run-e2e-mock-batch > batch_logs.txt 2>&1 &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
             echo "Waiting for gateway to be healthy..."
@@ -96,7 +96,7 @@ jobs:
 
       - name: Run mocked batch tests
         run: |
-          cargo test-batch --no-fail-fast
+          cargo test-mock-batch --no-fail-fast
 
       - name: Print batch logs
         if: always()

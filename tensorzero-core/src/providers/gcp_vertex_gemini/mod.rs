@@ -526,6 +526,29 @@ impl GCPVertexGeminiProvider {
 
         let location_prefix = location_subdomain_prefix(&location);
 
+        #[cfg(feature = "e2e_tests")]
+        let api_v1_base_url = if let Some(api_base) =
+            &provider_types.gcp_vertex_gemini.batch_inference_api_base
+        {
+            Url::parse(&format!("{}/v1/", api_base.as_str().trim_end_matches('/'))).map_err(
+                |e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to parse batch_inference_api_base URL: {e}"),
+                    })
+                },
+            )?
+        } else {
+            Url::parse(&format!(
+                "https://{location_prefix}aiplatform.googleapis.com/v1/"
+            ))
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Failed to parse base URL - this should never happen: {e}"),
+                })
+            })?
+        };
+
+        #[cfg(not(feature = "e2e_tests"))]
         let api_v1_base_url = Url::parse(&format!(
             "https://{location_prefix}aiplatform.googleapis.com/v1/"
         ))

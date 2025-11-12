@@ -2838,7 +2838,7 @@ type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
-json_mode = "on"
+json_mode = "strict"
 max_tokens = 100
 
 [functions.dynamic_json.variants.openai-responses]

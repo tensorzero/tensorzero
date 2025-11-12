@@ -255,12 +255,21 @@ fn generate_batch_output(input_content: &str) -> String {
             }
         };
 
+        // DEBUG: Print the body to see the response_format
+        let body = input.get("body");
+        if let Some(body_val) = body {
+            if let Some(response_format) = body_val.get("response_format") {
+                tracing::warn!(
+                    "OpenAI batch response_format: {}",
+                    serde_json::to_string_pretty(response_format).unwrap_or_default()
+                );
+            }
+        }
+
         let custom_id = input
             .get("custom_id")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
-
-        let body = input.get("body");
 
         // Detect response type and generate appropriate message
         let (message, finish_reason) = detect_and_generate_response(body);

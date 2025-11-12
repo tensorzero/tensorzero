@@ -132,11 +132,8 @@ macro_rules! generate_unified_mock_batch_tests {
             let providers = all_providers.simple_inference;
             for provider in providers {
                 if provider.supports_batch_inference {
-                    test_simple_image_unified_mock_batch_with_provider(
-                        &provider,
-                        "basic_test_mock_batch",
-                    )
-                    .await;
+                    test_simple_image_unified_mock_batch_with_provider(&provider, "basic_test")
+                        .await;
                     break;
                 }
             }
@@ -149,11 +146,8 @@ macro_rules! generate_unified_mock_batch_tests {
             let providers = all_providers.json_mode_inference;
             for provider in providers {
                 if provider.supports_batch_inference {
-                    test_json_mode_unified_mock_batch_with_provider(
-                        &provider,
-                        "json_success_mock_batch",
-                    )
-                    .await;
+                    test_json_mode_unified_mock_batch_with_provider(&provider, "json_success")
+                        .await;
                     break;
                 }
             }
@@ -166,11 +160,8 @@ macro_rules! generate_unified_mock_batch_tests {
             let providers = all_providers.tool_use_inference;
             for provider in providers {
                 if provider.supports_batch_inference {
-                    test_tool_use_unified_mock_batch_with_provider(
-                        &provider,
-                        "weather_helper_mock_batch",
-                    )
-                    .await;
+                    test_tool_use_unified_mock_batch_with_provider(&provider, "weather_helper")
+                        .await;
                     break;
                 }
             }
@@ -185,7 +176,7 @@ macro_rules! generate_unified_mock_batch_tests {
                 if provider.supports_batch_inference {
                     test_parallel_tool_use_unified_mock_batch_with_provider(
                         &provider,
-                        "weather_helper_parallel_mock_batch",
+                        "weather_helper_parallel",
                     )
                     .await;
                     break;
@@ -200,11 +191,8 @@ macro_rules! generate_unified_mock_batch_tests {
             let providers = all_providers.inference_params_inference;
             for provider in providers {
                 if provider.supports_batch_inference {
-                    test_inference_params_unified_mock_batch_with_provider(
-                        &provider,
-                        "basic_test_mock_batch",
-                    )
-                    .await;
+                    test_inference_params_unified_mock_batch_with_provider(&provider, "basic_test")
+                        .await;
                     break;
                 }
             }
@@ -219,7 +207,7 @@ macro_rules! generate_unified_mock_batch_tests {
                 if provider.supports_batch_inference {
                     test_multi_turn_tool_use_unified_mock_batch_with_provider(
                         &provider,
-                        "weather_helper_mock_batch",
+                        "weather_helper",
                     )
                     .await;
                     break;
@@ -236,7 +224,7 @@ macro_rules! generate_unified_mock_batch_tests {
                 if provider.supports_batch_inference {
                     test_multi_turn_parallel_tool_use_unified_mock_batch_with_provider(
                         &provider,
-                        "weather_helper_parallel_mock_batch",
+                        "weather_helper_parallel",
                     )
                     .await;
                     break;
@@ -251,11 +239,8 @@ macro_rules! generate_unified_mock_batch_tests {
             let providers = all_providers.dynamic_tool_use_inference;
             for provider in providers {
                 if provider.supports_batch_inference {
-                    test_dynamic_tool_use_unified_mock_batch_with_provider(
-                        &provider,
-                        "basic_test_mock_batch",
-                    )
-                    .await;
+                    test_dynamic_tool_use_unified_mock_batch_with_provider(&provider, "basic_test")
+                        .await;
                     break;
                 }
             }
@@ -270,7 +255,7 @@ macro_rules! generate_unified_mock_batch_tests {
                 if provider.supports_batch_inference {
                     test_dynamic_json_mode_unified_mock_batch_with_provider(
                         &provider,
-                        "dynamic_json_mock_batch",
+                        "dynamic_json",
                     )
                     .await;
                     break;
@@ -285,11 +270,8 @@ macro_rules! generate_unified_mock_batch_tests {
             let providers = all_providers.tool_use_inference;
             for provider in providers {
                 if provider.supports_batch_inference {
-                    test_allowed_tools_unified_mock_batch_with_provider(
-                        &provider,
-                        "basic_test_mock_batch",
-                    )
-                    .await;
+                    test_allowed_tools_unified_mock_batch_with_provider(&provider, "basic_test")
+                        .await;
                     break;
                 }
             }
