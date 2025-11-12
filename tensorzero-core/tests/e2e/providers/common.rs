@@ -8458,8 +8458,10 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    }
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)

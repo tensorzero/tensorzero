@@ -158,23 +158,17 @@ fn extract_tool_results(request: &Value) -> Option<ToolResults> {
 }
 
 fn extract_tool_results_from_openai(messages: &[Value]) -> Option<ToolResults> {
-    let last_user = messages
-        .iter()
-        .rev()
-        .find(|msg| msg.get("role").and_then(|r| r.as_str()) == Some("user"))?;
-
-    let content_array = last_user.get("content").and_then(|c| c.as_array())?;
     let mut results = Vec::new();
-    for part in content_array {
-        if part.get("type").and_then(|t| t.as_str()) == Some("tool_result") {
-            let name = part
-                .get("name")
-                .and_then(|n| n.as_str())
-                .unwrap_or("tool")
-                .to_string();
-            let result_value = part.get("result").cloned().unwrap_or(Value::Null);
-            let value_string = value_to_string(&result_value);
-            results.push((name, value_string));
+
+    // Check for OpenAI format: role="tool" messages
+    for msg in messages.iter().rev() {
+        if msg.get("role").and_then(|r| r.as_str()) == Some("tool") {
+            // OpenAI format: {"role": "tool", "content": "result", "tool_call_id": "123"}
+            let content = msg.get("content").and_then(|c| c.as_str()).unwrap_or("");
+            // Try to find the tool name from the corresponding tool call
+            let tool_call_id = msg.get("tool_call_id").and_then(|id| id.as_str());
+            let name = find_tool_name_by_id(messages, tool_call_id).unwrap_or_else(|| "tool".to_string());
+            results.push((name, content.to_string()));
         }
     }
 
@@ -184,6 +178,30 @@ fn extract_tool_results_from_openai(messages: &[Value]) -> Option<ToolResults> {
 
     let location = extract_location_from_openai_messages(messages);
     Some((results, location))
+}
+
+fn find_tool_name_by_id(messages: &[Value], tool_call_id: Option<&str>) -> Option<String> {
+    let tool_call_id = tool_call_id?;
+
+    for msg in messages.iter().rev() {
+        if msg.get("role").and_then(|r| r.as_str()) != Some("assistant") {
+            continue;
+        }
+
+        if let Some(tool_calls) = msg.get("tool_calls").and_then(|tc| tc.as_array()) {
+            for call in tool_calls {
+                if call.get("id").and_then(|id| id.as_str()) == Some(tool_call_id) {
+                    if let Some(function) = call.get("function") {
+                        if let Some(name) = function.get("name").and_then(|n| n.as_str()) {
+                            return Some(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 fn extract_location_from_openai_messages(messages: &[Value]) -> Option<String> {
@@ -226,7 +244,7 @@ fn extract_tool_results_from_gcp(contents: &[Value]) -> Option<ToolResults> {
     let parts = last_user.get("parts").and_then(|p| p.as_array())?;
     let mut results = Vec::new();
     for part in parts {
-        if let Some(function_response) = part.get("functionResponse") {
+        if let Some(function_response) = part.get("function_response") {
             let name = function_response
                 .get("name")
                 .and_then(|n| n.as_str())

@@ -824,7 +824,7 @@ pub async fn test_multi_turn_tool_use_unified_mock_batch_with_provider(
                             "type": "tool_call",
                             "id": "123456789",
                             "name": "get_temperature",
-                            "arguments": "{\"location\": \"Tokyo\"}"
+                            "arguments": "{\"location\":\"Tokyo\",\"units\":\"celsius\"}"
                         }
                     ]
                 },
