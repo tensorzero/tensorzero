@@ -31,18 +31,16 @@ use crate::{
         batch::{check_clickhouse_batch_request_status, get_poll_batch_inference_url},
         common::{
             check_dynamic_json_mode_inference_response, check_dynamic_tool_use_inference_response,
-            check_inference_params_response, check_json_mode_inference_response_with_function_name,
+            check_inference_params_response, check_json_mode_inference_response,
             check_multi_turn_parallel_tool_use_inference_response,
-            check_parallel_tool_use_inference_response_with_function_name,
-            check_simple_image_inference_response_with_function_name,
+            check_parallel_tool_use_inference_response, check_simple_image_inference_response,
             check_tool_use_multi_turn_inference_response,
             check_tool_use_tool_choice_allowed_tools_inference_response,
-            check_tool_use_tool_choice_auto_unused_inference_response_with_function_name,
-            check_tool_use_tool_choice_auto_used_inference_response_with_function_name,
-            check_tool_use_tool_choice_none_inference_response_with_function_name,
-            check_tool_use_tool_choice_required_inference_response_with_function_name,
-            check_tool_use_tool_choice_specific_inference_response_with_function_name,
-            E2ETestProvider,
+            check_tool_use_tool_choice_auto_unused_inference_response,
+            check_tool_use_tool_choice_auto_used_inference_response,
+            check_tool_use_tool_choice_none_inference_response,
+            check_tool_use_tool_choice_required_inference_response,
+            check_tool_use_tool_choice_specific_inference_response, E2ETestProvider,
         },
     },
 };
@@ -368,15 +366,8 @@ pub async fn test_simple_image_unified_mock_batch_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_simple_image_inference_response_with_function_name(
-        inferences_json[0].clone(),
-        None,
-        provider,
-        true,
-        false,
-        function_name,
-    )
-    .await;
+    check_simple_image_inference_response(inferences_json[0].clone(), None, provider, true, false)
+        .await;
 
     // Step 4: Verify ClickHouse storage
     let clickhouse = get_clickhouse().await;
@@ -443,14 +434,7 @@ pub async fn test_json_mode_unified_mock_batch_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_json_mode_inference_response_with_function_name(
-        inferences_json[0].clone(),
-        provider,
-        None,
-        true,
-        function_name,
-    )
-    .await;
+    check_json_mode_inference_response(inferences_json[0].clone(), provider, None, true).await;
 
     let clickhouse = get_clickhouse().await;
     check_clickhouse_batch_request_status(&clickhouse, batch_id, provider, "completed").await;
@@ -577,52 +561,47 @@ pub async fn test_tool_use_unified_mock_batch_with_provider(
     assert_eq!(inferences_json.len(), 5);
 
     // Check tool choice required (should use tool)
-    check_tool_use_tool_choice_required_inference_response_with_function_name(
+    check_tool_use_tool_choice_required_inference_response(
         inferences_json[0].clone(),
         provider,
         None,
         true,
-        function_name,
     )
     .await;
 
     // Check tool choice auto unused (should not use tool)
-    check_tool_use_tool_choice_auto_unused_inference_response_with_function_name(
+    check_tool_use_tool_choice_auto_unused_inference_response(
         inferences_json[1].clone(),
         provider,
         None,
         true,
-        function_name,
     )
     .await;
 
     // Check tool choice none (should not use tool)
-    check_tool_use_tool_choice_none_inference_response_with_function_name(
+    check_tool_use_tool_choice_none_inference_response(
         inferences_json[2].clone(),
         provider,
         None,
         true,
-        function_name,
     )
     .await;
 
     // Check tool choice auto used (should use tool)
-    check_tool_use_tool_choice_auto_used_inference_response_with_function_name(
+    check_tool_use_tool_choice_auto_used_inference_response(
         inferences_json[3].clone(),
         provider,
         None,
         true,
-        function_name,
     )
     .await;
 
     // Check tool choice specific (should use specific tool)
-    check_tool_use_tool_choice_specific_inference_response_with_function_name(
+    check_tool_use_tool_choice_specific_inference_response(
         inferences_json[4].clone(),
         provider,
         None,
         true,
-        function_name,
     )
     .await;
 
@@ -699,13 +678,12 @@ pub async fn test_parallel_tool_use_unified_mock_batch_with_provider(
     let inferences_json = response_json.get("inferences").unwrap().as_array().unwrap();
     assert_eq!(inferences_json.len(), 1);
 
-    check_parallel_tool_use_inference_response_with_function_name(
+    check_parallel_tool_use_inference_response(
         inferences_json[0].clone(),
         provider,
         None,
         true,
         true.into(),
-        function_name,
     )
     .await;
 
