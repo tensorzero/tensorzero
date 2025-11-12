@@ -67,8 +67,10 @@ pub(crate) fn sample_uniform(
 #[ts(export)]
 pub struct UniformConfig {
     #[serde(default)]
+    #[ts(optional)]
     candidate_variants: Option<Vec<String>>,
     #[serde(default)]
+    #[ts(optional)]
     fallback_variants: Option<Vec<String>>,
 }
 
