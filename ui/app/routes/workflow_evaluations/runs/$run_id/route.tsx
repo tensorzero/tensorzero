@@ -32,7 +32,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const run_id = params.run_id;
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
-  const pageSize = parseInt(searchParams.get("pageSize") || "15");
+  const limit = parseInt(searchParams.get("limit") || "15");
   const [
     workflowEvaluationRuns,
     workflowEvaluationRunEpisodes,
@@ -40,11 +40,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     statistics,
   ] = await Promise.all([
     getWorkflowEvaluationRuns(5, 0, run_id),
-    getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
-      pageSize,
-      offset,
-      run_id,
-    ),
+    getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(limit, offset, run_id),
     countWorkflowEvaluationRunEpisodes(run_id),
     getWorkflowEvaluationRunStatisticsByMetricName(run_id),
   ]);
@@ -60,7 +56,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     statistics,
     count,
     offset,
-    pageSize,
+    limit,
   };
 }
 
@@ -74,17 +70,17 @@ export default function WorkflowEvaluationRunSummaryPage({
     statistics,
     count,
     offset,
-    pageSize,
+    limit,
   } = loaderData;
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + pageSize));
+    searchParams.set("offset", String(offset + limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - pageSize));
+    searchParams.set("offset", String(offset - limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -101,7 +97,7 @@ export default function WorkflowEvaluationRunSummaryPage({
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset <= 0}
-          disableNext={offset + pageSize >= count}
+          disableNext={offset + limit >= count}
         />
       </SectionLayout>
     </PageLayout>

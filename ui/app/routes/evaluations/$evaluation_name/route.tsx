@@ -27,7 +27,6 @@ import {
   type EvaluationErrorDisplayInfo,
 } from "./EvaluationErrorInfo";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
-import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { logger } from "~/utils/logger";
@@ -67,7 +66,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     : [];
 
   const offset = parseInt(searchParams.get("offset") || "0");
-  const pageSize = parseInt(searchParams.get("pageSize") || "15");
+  const limit = parseInt(searchParams.get("limit") || "15");
 
   const evaluator_names = Object.keys(evaluationConfig.evaluators);
 
@@ -94,7 +93,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           metric_names,
           selected_evaluation_run_ids_array,
           newFeedbackId,
-          pageSize,
+          limit,
           offset,
         )
       : getEvaluationResults(
@@ -102,7 +101,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           function_type,
           metric_names,
           selected_evaluation_run_ids_array,
-          pageSize,
+          limit,
           offset,
         );
   } else {
@@ -189,7 +188,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     evaluation_statistics,
     has_selected_runs: selected_evaluation_run_ids_array.length > 0,
     offset,
-    pageSize,
+    limit,
     total_datapoints,
     evaluator_names,
     any_evaluation_is_running,
@@ -266,7 +265,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     evaluation_statistics,
     has_selected_runs,
     offset,
-    pageSize,
+    limit,
     total_datapoints,
     evaluator_names,
     any_evaluation_is_running,
@@ -296,12 +295,12 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   const function_name = evaluation_config.function_name;
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + pageSize));
+    searchParams.set("offset", String(offset + limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - pageSize));
+    searchParams.set("offset", String(offset - limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -315,10 +314,10 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
   // Handle feedback toast
   useEffect(() => {
     if (newFeedbackId) {
-      toast({
-        title: "Feedback Added",
-      });
+      const { dismiss } = toast.success({ title: "Feedback Added" });
+      return () => dismiss({ immediate: true });
     }
+    return;
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
   // Handle fetcher response for bulk add to dataset
@@ -336,10 +335,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     const selectedData = Array.from(selectedRows.values());
 
     if (selectedData.length === 0) {
-      toast({
-        title: "No rows selected",
-        variant: "destructive",
-      });
+      toast.error({ title: "No rows selected" });
       return;
     }
 
@@ -406,7 +402,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             onPreviousPage={handlePreviousPage}
             onNextPage={handleNextPage}
             disablePrevious={offset <= 0}
-            disableNext={offset + pageSize >= total_datapoints}
+            disableNext={offset + limit >= total_datapoints}
           />
           {!has_selected_runs && (
             <div className="mt-4 text-center text-gray-500">
@@ -415,7 +411,6 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
           )}
         </SectionLayout>
       </SectionsGroup>
-      <Toaster />
     </PageLayout>
   );
 }

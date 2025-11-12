@@ -43,10 +43,7 @@ const VariantEditorWrapper = ({
 
       <VariantEditor
         variantInfo={info}
-        confirmVariantInfo={(newInfo) => {
-          setInfo(newInfo);
-          console.log("Updated info:", newInfo);
-        }}
+        confirmVariantInfo={(newInfo) => setInfo(newInfo)}
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
         variantName="example-variant"

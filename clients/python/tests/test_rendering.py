@@ -191,7 +191,7 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
     assert not tool.strict
     assert rendered_samples[0].allowed_tools is None
     assert rendered_samples[0].parallel_tool_calls is False
-    assert rendered_samples[0].provider_tools is None
+    assert rendered_samples[0].provider_tools == []
     json_inference = rendered_samples[1]
     assert json_inference.function_name == "json_success"
     assert json_inference.episode_id is not None
@@ -231,7 +231,7 @@ Example Response:
     assert json_inference.allowed_tools is None
     assert json_inference.additional_tools is None
     assert json_inference.parallel_tool_calls is None
-    assert json_inference.provider_tools is None
+    assert json_inference.provider_tools == []
     assert json_inference.output_schema == {
         "type": "object",
         "properties": {"answer": {"type": "string"}},
@@ -560,7 +560,7 @@ async def test_async_render_samples_success(
     assert not tool.strict
     assert rendered_samples[0].allowed_tools is None
     assert rendered_samples[0].parallel_tool_calls is False
-    assert rendered_samples[0].provider_tools is None
+    assert rendered_samples[0].provider_tools == []
     assert rendered_samples[0].output_schema is None
 
     json_inference = rendered_samples[1]
@@ -602,7 +602,7 @@ Example Response:
     assert json_inference.allowed_tools is None
     assert json_inference.additional_tools is None
     assert json_inference.parallel_tool_calls is None
-    assert json_inference.provider_tools is None
+    assert json_inference.provider_tools == []
     assert json_inference.output_schema == {
         "type": "object",
         "properties": {"answer": {"type": "string"}},

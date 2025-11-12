@@ -103,6 +103,14 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let input_audio_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "openrouter".to_string(),
+        model_name: "openai/gpt-4o-audio-preview".into(),
+        model_provider_name: "openrouter".into(),
+        credentials: HashMap::new(),
+    }];
+
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "openrouter".to_string(),
         model_info: HashMap::from([("model_name".to_string(), "openai/gpt-4o-mini".to_string())]),
@@ -127,6 +135,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_inference: json_providers.clone(),
         image_inference: vec![],
         pdf_inference: vec![],
+        input_audio: input_audio_providers,
         shorthand_inference: shorthand_providers,
         json_mode_off_inference: vec![],
         credential_fallbacks,

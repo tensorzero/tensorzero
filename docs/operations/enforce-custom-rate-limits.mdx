@@ -59,9 +59,11 @@ Each rate limiting rule can optionally have a _scope_.
 The scope restricts the rule to certain requests only.
 If you don't specify a scope, the rule will apply to all requests.
 
+You can scope rate limiting rules by tags or by API key public ID.
+
 #### By tags
 
-At the moment, only scoping by user-defined `tags` are supported.
+You can scope rate limits using user-defined `tags`.
 You can limit the scope to a specific value, to each individual value (`tensorzero::each`), or to every value collectively (`tensorzero::total`).
 
 For example, the following rule would only apply to inference requests with the tag `user_id` set to `intern`:
@@ -118,7 +120,57 @@ scope = [
 
 <Warning>
 
-The rule above does _not_ apply to requests that do not specify any `user_id` value.
+The rule above won't apply to requests that do not specify a `user_id` tag.
+
+</Warning>
+
+#### By API keys
+
+You can scope rate limits using API keys when authentication is enabled.
+This allows you to enforce different rate limits for different API keys, which is useful for implementing tiered access or preventing individual keys from consuming too many resources.
+
+You can limit the scope to each individual API key (`tensorzero::each`) or to a specific API key by providing its 12-character public ID.
+
+For example, the following rule would apply to each API key individually (i.e. each API key gets its own limit):
+
+```toml title="tensorzero.toml"
+[[rate_limiting.rules]]
+# ...
+scope = [
+    { api_key_public_id = "tensorzero::each" },
+]
+#...
+```
+
+You can also target a specific API key by providing its 12-character public ID:
+
+```toml title="tensorzero.toml"
+[[rate_limiting.rules]]
+# ...
+scope = [
+    { api_key_public_id = "xxxxxxxxxxxx" },
+]
+#...
+```
+
+<Tip>
+
+TensorZero API keys have the following format:
+
+`sk-t0-xxxxxxxxxxxx-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy`
+
+The `xxxxxxxxxxxx` portion is the 12-character public ID that you can use in rate limiting rules.
+The remaining portion of the key is secret and should be kept secure.
+
+</Tip>
+
+Unlike tag scopes, API key public ID scopes do not support `tensorzero::total`.
+Only `tensorzero::each` and concrete 12-character public IDs are supported.
+
+<Warning>
+
+Rules with `api_key_public_id` scope won't apply to unauthenticated requests.
+Learn how to [set up auth for TensorZero](/operations/set-up-auth-for-tensorzero).
 
 </Warning>
 

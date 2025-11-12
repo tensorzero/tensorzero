@@ -8,4 +8,5 @@ export type Base64FileMetadata = {
   source_url?: string;
   mime_type: string;
   detail?: Detail;
+  filename?: string;
 };

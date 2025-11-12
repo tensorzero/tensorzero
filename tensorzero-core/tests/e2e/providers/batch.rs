@@ -11,6 +11,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage};
+use tensorzero_core::tool::Tool;
 use tensorzero_core::{
     db::clickhouse::{
         test_helpers::select_batch_model_inferences_clickhouse, ClickHouseConnectionInfo, TableName,
@@ -437,7 +438,7 @@ macro_rules! generate_batch_inference_tests {
     };
 }
 
-async fn check_clickhouse_batch_request_status(
+pub async fn check_clickhouse_batch_request_status(
     clickhouse: &ClickHouseConnectionInfo,
     batch_id: Uuid,
     provider: &E2ETestProvider,
@@ -473,7 +474,7 @@ async fn check_clickhouse_batch_request_status(
     assert_eq!(errors.len(), 0);
 }
 
-fn get_poll_batch_inference_url(query: PollPathParams) -> Url {
+pub fn get_poll_batch_inference_url(query: PollPathParams) -> Url {
     let mut url = get_gateway_endpoint("/batch_inference");
     match query {
         PollPathParams {
@@ -1755,17 +1756,23 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
 
         // Verify new Migration 0041 columns (decomposed tool call storage format)
         // Verify dynamic_tools column (should be empty for static tools)
-        let dynamic_tools_str = result.get("dynamic_tools").unwrap().as_str().unwrap();
-        let dynamic_tools: Vec<Value> = serde_json::from_str(dynamic_tools_str).unwrap();
+        let dynamic_tools = result.get("dynamic_tools").unwrap().as_array().unwrap();
+        if i < 4 {
+            assert!(dynamic_tools.is_empty());
+        } else {
+            assert_eq!(dynamic_tools.len(), 1);
+            let tool: Tool =
+                serde_json::from_str(dynamic_tools.first().unwrap().as_str().unwrap()).unwrap();
+            let Tool::ClientSideFunction(tool) = tool;
+            assert_eq!(tool.name, "self_destruct");
+        }
 
         // Verify dynamic_provider_tools column (should be empty)
-        let dynamic_provider_tools_str = result
+        let dynamic_provider_tools = result
             .get("dynamic_provider_tools")
             .unwrap()
-            .as_str()
+            .as_array()
             .unwrap();
-        let dynamic_provider_tools: Vec<Value> =
-            serde_json::from_str(dynamic_provider_tools_str).unwrap();
         assert!(
             dynamic_provider_tools.is_empty(),
             "dynamic_provider_tools should be empty"
@@ -1781,7 +1788,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
             0 | 1 => "auto",
             2 => "required",
             3 => "none",
-            4 => "specific",
+            4 => "{\"specific\":\"self_destruct\"}",
             _ => panic!("Unexpected index: {i}"),
         };
         assert_eq!(
@@ -1795,22 +1802,6 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
             parallel_tool_calls.is_none() || parallel_tool_calls.unwrap().is_null(),
             "parallel_tool_calls should be null"
         );
-
-        // For inference #4, verify dynamic tool was stored
-        if i == 4 {
-            assert_eq!(
-                dynamic_tools.len(),
-                1,
-                "Inference #4 should have 1 dynamic tool"
-            );
-            let tool = &dynamic_tools[0];
-            assert_eq!(tool["name"], "self_destruct");
-        } else {
-            assert!(
-                dynamic_tools.is_empty(),
-                "Inference #{i} should have no dynamic tools"
-            );
-        }
 
         let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
         let inference_params: Value = serde_json::from_str(inference_params).unwrap();
@@ -2271,7 +2262,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -2687,9 +2678,9 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
 
     let system = result.get("system").unwrap().as_str().unwrap();
     assert_eq!(
-    system,
-    "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
-);
+        system,
+        "You are a helpful and friendly assistant named Dr. Mehta.\n\nPeople will ask you questions about the weather.\n\nIf asked about the weather, just respond with two tool calls. Use BOTH the \"get_temperature\" and \"get_humidity\" tools.\n\nIf provided with a tool result, use it to respond to the user (e.g. \"The weather in New York is 55 degrees Fahrenheit with 50% humidity.\")."
+    );
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();
@@ -4186,7 +4177,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);

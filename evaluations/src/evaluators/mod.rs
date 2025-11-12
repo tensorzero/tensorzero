@@ -30,6 +30,7 @@ pub struct EvaluateInferenceParams {
     pub clients: Arc<Clients>,
     pub evaluation_run_id: Uuid,
     pub inference_cache: CacheEnabledMode,
+    pub send_feedback: bool,
 }
 
 /// Evaluates the inference response for the given datapoint using all the evaluators specified in the evaluation config.
@@ -51,6 +52,7 @@ pub(crate) async fn evaluate_inference(
         clients,
         evaluation_run_id,
         inference_cache,
+        send_feedback,
     } = params;
     let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
     info!(
@@ -120,29 +122,33 @@ pub(crate) async fn evaluate_inference(
                                 );
                             }
                             tags.extend(result.tags());
-                            match clients
-                                .tensorzero_client
-                                .feedback(FeedbackParams {
-                                    metric_name: get_evaluator_metric_name(
-                                        &evaluation_name,
-                                        &evaluator_name,
-                                    ),
-                                    value: value.clone(),
-                                    inference_id: Some(inference_response.inference_id()),
-                                    dryrun: Some(false),
-                                    episode_id: None,
-                                    internal: true,
-                                    tags,
-                                })
-                                .await
-                            {
-                                #[expect(clippy::ignored_unit_patterns)]
-                                Ok(_) => {
-                                    debug!(evaluator_name = %evaluator_name, "Feedback sent successfully");
-                                },
-                                Err(e) => {
-                                    error!(evaluator_name = %evaluator_name, error = %e, "Failed to send feedback");
-                                    return (evaluator_name, Err(e));
+                            // Only send feedback when send_feedback is true
+                            // Dynamic variants have send_feedback=false and skip feedback persistence
+                            if send_feedback {
+                                match clients
+                                    .tensorzero_client
+                                    .feedback(FeedbackParams {
+                                        metric_name: get_evaluator_metric_name(
+                                            &evaluation_name,
+                                            &evaluator_name,
+                                        ),
+                                        value: value.clone(),
+                                        inference_id: Some(inference_response.inference_id()),
+                                        dryrun: Some(false),
+                                        episode_id: None,
+                                        internal: true,
+                                        tags,
+                                    })
+                                    .await
+                                {
+                                    #[expect(clippy::ignored_unit_patterns)]
+                                    Ok(_) => {
+                                        debug!(evaluator_name = %evaluator_name, "Feedback sent successfully");
+                                    },
+                                    Err(e) => {
+                                        error!(evaluator_name = %evaluator_name, error = %e, "Failed to send feedback");
+                                        return (evaluator_name, Err(e));
+                                    }
                                 }
                             }
                         } else {

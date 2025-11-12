@@ -1,11 +1,13 @@
 use chrono::{DateTime, Utc};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 use crate::db::inferences::InferenceOutputSource;
 use crate::stored_inference::StoredInference;
 
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 pub struct FloatMetricFilter {
     pub metric_name: String,
@@ -13,7 +15,7 @@ pub struct FloatMetricFilter {
     pub comparison_operator: FloatComparisonOperator,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 pub struct BooleanMetricFilter {
     pub metric_name: String,
@@ -21,7 +23,7 @@ pub struct BooleanMetricFilter {
 }
 
 /// Filter by tag key-value pair.
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 pub struct TagFilter {
     pub key: String,
@@ -30,16 +32,17 @@ pub struct TagFilter {
 }
 
 /// Filter by timestamp.
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 pub struct TimeFilter {
     #[ts(type = "Date")]
+    #[schemars(with = "String")]
     pub time: DateTime<Utc>,
     pub comparison_operator: TimeComparisonOperator,
 }
 
 /// Comparison operators for float metrics.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 pub enum FloatComparisonOperator {
     #[serde(rename = "<")]
@@ -57,7 +60,7 @@ pub enum FloatComparisonOperator {
 }
 
 /// Comparison operators for timestamps.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 pub enum TimeComparisonOperator {
     #[serde(rename = "<")]
@@ -75,7 +78,7 @@ pub enum TimeComparisonOperator {
 }
 
 /// Comparison operators for tag filters.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 pub enum TagComparisonOperator {
     #[serde(rename = "=")]
@@ -120,29 +123,37 @@ pub struct OrderBy {
 }
 
 /// Filters for querying inferences.
-#[derive(Debug, Clone, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[export_schema]
 pub enum InferenceFilter {
     /// Filter by the value of a float metric
+    #[schemars(title = "InferenceFilterFloatMetric")]
     FloatMetric(FloatMetricFilter),
 
     /// Filter by the value of a boolean metric
+    #[schemars(title = "InferenceFilterBooleanMetric")]
     BooleanMetric(BooleanMetricFilter),
 
     /// Filter by tag key-value pair
+    #[schemars(title = "InferenceFilterTag")]
     Tag(TagFilter),
 
     /// Filter by the timestamp of an inference.
+    #[schemars(title = "InferenceFilterTime")]
     Time(TimeFilter),
 
     /// Logical AND of multiple filters
+    #[schemars(title = "InferenceFilterAnd")]
     And { children: Vec<InferenceFilter> },
 
     /// Logical OR of multiple filters
+    #[schemars(title = "InferenceFilterOr")]
     Or { children: Vec<InferenceFilter> },
 
     /// Logical NOT of a filter
+    #[schemars(title = "InferenceFilterNot")]
     Not { child: Box<InferenceFilter> },
 }
 

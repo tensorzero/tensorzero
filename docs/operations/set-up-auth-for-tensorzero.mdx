@@ -62,7 +62,7 @@ You can deploy all the requirements using the Docker Compose file below:
 
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:24.12-alpine
+    image: clickhouse:24.12-alpine
     environment:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -325,3 +325,41 @@ You can customize this behavior in the configuration:
 enabled = true # boolean
 ttl_ms = 60_000 # one minute
 ```
+
+### Set up rate limiting by API key
+
+Once you have authentication enabled, you can apply rate limits on a per-API-key basis using the `api_key_public_id` scope in your rate limiting rules.
+This allows you to enforce different usage limits for different API keys, which is useful for implementing tiered access or preventing individual keys from consuming too many resources.
+
+<Tip>
+
+TensorZero API keys have the following format:
+
+`sk-t0-xxxxxxxxxxxx-yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy`
+
+The `xxxxxxxxxxxx` portion is the 12-character public ID that you can use in rate limiting rules.
+The remaining portion of the key is secret and should be kept secure.
+
+</Tip>
+
+For example, you can limit each API key to 100 model inferences per hour, but allow a specific API key to make 1000 inferences:
+
+```toml
+# Each API key can make up to 100 model inferences per hour
+[[rate_limiting.rules]]
+priority = 0
+model_inferences_per_hour = 100
+scope = [
+    { api_key_public_id = "tensorzero::each" }
+]
+
+# But override the limit for a specific API key
+[[rate_limiting.rules]]
+priority = 1
+model_inferences_per_hour = 1000
+scope = [
+    { api_key_public_id = "xxxxxxxxxxxx" }
+]
+```
+
+See [Enforce custom rate limits](/operations/enforce-custom-rate-limits) for more details on configuring rate limits with API keys.

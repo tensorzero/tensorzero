@@ -159,6 +159,25 @@ This is recommended to ensure that TensorZero and the model providers see identi
 If set to `false`, TensorZero will forward the input file URLs directly to the model provider (when supported) and fetch them for observability in parallel with inference.
 This can be more efficient, but may result in different content being observed if the URL content changes between when the provider fetches it and when TensorZero fetches it for observability.
 
+### `global_outbound_http_timeout_ms`
+
+- **Type:** integer
+- **Required:** no (default: `300000` = 5 minutes)
+
+Sets the global timeout in milliseconds for all outbound HTTP requests made by TensorZero to external services such as model providers and APIs.
+
+By default, all HTTP requests will timeout after 5 minutes (300,000 ms).
+This timeout is intentionally set high to accommodate slow model responses, but you can customize it based on your requirements.
+
+The `global_outbound_http_timeout_ms` acts as an upper bound for all more specific timeout configurations in your system.
+Any variant-level timeouts (e.g., `timeouts.non_streaming.total_ms`, `timeouts.streaming.ttft_ms`), provider-level timeouts, or embedding model timeouts must be less than or equal to this global timeout.
+
+<Warning>
+
+Setting this value too low may cause legitimate requests to timeout before receiving a response from the model provider.
+
+</Warning>
+
 ### `observability.async_writes`
 
 - **Type:** boolean
@@ -1285,21 +1304,24 @@ model_name = "gpt-4o-mini-2024-07-18"
 
 ##### `provider_tools`
 
-- **Type:** string or object
-- **Required:** no (default: `env::OPENAI_API_KEY` unless otherwise set in `provider_types.openai.defaults.api_key_location`)
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
 
-Defines the location of the API key for the OpenAI provider.
+Defines provider-specific built-in tools that are available for this model provider.
+These are tools that run server-side on the provider's infrastructure (e.g., OpenAI's web search tool).
 
-Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+Each object in the array should contain the provider-specific tool configuration as defined by the provider's API.
+For example, OpenAI's Responses API supports a `web_search` tool that enables the model to search the web for information.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+This field can be set statically in the configuration file or dynamically at inference time via the `provider_tools` parameter in the `/inference` endpoint or `tensorzero::provider_tools` in the OpenAI-compatible endpoint.
+See the [Inference API Reference](/gateway/api-reference/inference/#provider_tools) for more details on dynamic usage.
 
 ```toml title="tensorzero.toml"
 [models.gpt-5-mini-responses-web-search.providers.openai]
 # ...
 type = "openai"
 api_type = "responses"
-provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+provider_tools = [{type = "web_search"}]  # Enable OpenAI's built-in web search tool
 # ...
 ```
 
@@ -2696,7 +2718,8 @@ routing = ["openai", "azure"]
 Then:
 
 - `model = "gpt-4o"` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/gateway/guides/retries-fallbacks/) for details.
-- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model, ignoring the `gpt-4o` model defined above.
+- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model using the Chat Completions API, ignoring the `gpt-4o` model defined above.
+- `model = "openai::responses::gpt-5-codex"` calls the OpenAI Responses API directly for the `gpt-5-codex` model. See [OpenAI Responses API](/gateway/call-the-openai-responses-api/) for details.
 
 ##### `presence_penalty`
 
@@ -2766,6 +2789,35 @@ Defines the seed to use for the variant.
 # ...
 seed = 42
 ```
+
+##### `service_tier`
+
+- **Type:** string
+- **Required:** no (default: `"auto"`)
+
+Controls the priority and latency characteristics of inference requests.
+
+The supported values are:
+
+- `auto`: Let the provider automatically select the appropriate service tier (default).
+- `default`: Use the provider's standard service tier.
+- `priority`: Use a higher-priority service tier with lower latency (may have higher costs).
+- `flex`: Use a lower-priority service tier optimized for cost efficiency (may have higher latency).
+
+<Warning>
+
+Only some model providers support this parameter.
+TensorZero will warn and ignore it if unsupported.
+
+</Warning>
+
+##### `stop_sequences`
+
+- **Type:** array of strings
+- **Required:** no (default: `null`)
+
+Defines a list of sequences where the model will stop generating further tokens.
+When the model encounters any of these sequences in its output, it will immediately stop generation.
 
 ##### `system_template`
 
@@ -3483,7 +3535,8 @@ routing = ["openai", "azure"]
 Then:
 
 - `model = "gpt-4o"` calls the `gpt-4o` model in your configuration, which supports fallback from `openai` to `azure`. See [Retries & Fallbacks](/gateway/guides/retries-fallbacks/) for details.
-- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model, ignoring the `gpt-4o` model defined above.
+- `model = "openai::gpt-4o"` calls the OpenAI API directly for the `gpt-4o` model using the Chat Completions API, ignoring the `gpt-4o` model defined above.
+- `model = "openai::responses::gpt-5-codex"` calls the OpenAI Responses API directly for the `gpt-5-codex` model. See [OpenAI Responses API](/gateway/call-the-openai-responses-api/) for details.
 
 ##### `retries`
 
@@ -4267,7 +4320,7 @@ always = true
 - **Required:** no (default: `[]`)
 
 Defines the scope to which the rate limit applies.
-Scopes allow you to apply rate limits to specific subsets of requests based on tags.
+Scopes allow you to apply rate limits to specific subsets of requests based on tags or API keys.
 
 The following scopes are supported:
 
@@ -4277,6 +4330,11 @@ The following scopes are supported:
     - `tensorzero::each`: Apply the limit separately to each unique value of the tag.
     - `tensorzero::total`: Apply the limit to the aggregate of all requests with this tag, regardless of the tag's value.
     - Any other string: Apply the limit only when the tag has this specific value.
+
+- API Key Public ID (requires authentication to be enabled):
+  - `api_key_public_id` (string): The API key public ID to match against. This can be:
+    - `tensorzero::each`: Apply the limit separately to each API key.
+    - A specific 12-character public ID: Apply the limit only to requests authenticated with this API key.
 
 For example:
 
@@ -4295,5 +4353,21 @@ priority = 1
 model_inferences_per_minute = 5
 scope = [
     { tag_key = "user_id", tag_value = "ceo" }
+]
+
+# Each API key can make a maximum of 100 model inferences per hour
+[[rate_limiting.rules]]
+priority = 0
+model_inferences_per_hour = 100
+scope = [
+    { api_key_public_id = "tensorzero::each" }
+]
+
+# But override the limit for a specific API key
+[[rate_limiting.rules]]
+priority = 1
+model_inferences_per_hour = 1000
+scope = [
+    { api_key_public_id = "xxxxxxxxxxxx" }
 ]
 ```

@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 pub use crate::db::clickhouse::query_builder::{
@@ -13,21 +15,25 @@ use crate::serde_util::deserialize_double_option;
 use crate::tool::DynamicToolParams;
 
 /// Request to update one or more datapoints in a dataset.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
+#[export_schema]
 pub struct UpdateDatapointsRequest {
     /// The datapoints to update.
     pub datapoints: Vec<UpdateDatapointRequest>,
 }
 
 /// A tagged request to update a single datapoint in a dataset.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
+#[export_schema]
 pub enum UpdateDatapointRequest {
     /// Request to update a chat datapoint.
+    #[schemars(title = "UpdateChatDatapointRequest")]
     Chat(UpdateChatDatapointRequest),
     /// Request to update a JSON datapoint.
+    #[schemars(title = "UpdateJsonDatapointRequest")]
     Json(UpdateJsonDatapointRequest),
 }
 
@@ -38,8 +44,10 @@ pub enum UpdateDatapointRequest {
 /// - If the field has a value, it will be set to the provided value.
 ///
 /// In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
-#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export, optional_fields)]
+#[export_schema]
+#[schemars(title = "UpdateChatDatapointRequestInternal")]
 pub struct UpdateChatDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -55,6 +63,7 @@ pub struct UpdateChatDatapointRequest {
 
     /// Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
     pub tool_params: Option<Option<DynamicToolParams>>,
 
     /// Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
@@ -74,8 +83,10 @@ pub struct UpdateChatDatapointRequest {
 /// - If the field has a value, it will be set to the provided value.
 ///
 /// In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
-#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export, optional_fields)]
+#[export_schema]
+#[schemars(title = "UpdateJsonDatapointRequestInternal")]
 pub struct UpdateJsonDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -88,6 +99,7 @@ pub struct UpdateJsonDatapointRequest {
     /// This will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will
     /// also be stored, because we allow invalid outputs in datapoints by design.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
     pub output: Option<Option<JsonDatapointOutputUpdate>>,
 
     /// The output schema of the JSON datapoint. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
@@ -108,25 +120,29 @@ pub struct UpdateJsonDatapointRequest {
 /// A request to update the output of a JSON datapoint.
 /// We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
 /// for users to run evals against them.
-#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export)]
+#[export_schema]
 pub struct JsonDatapointOutputUpdate {
     /// The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
     pub raw: String,
 }
 
 /// A request to update the metadata of a datapoint.
-#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export, optional_fields)]
+#[export_schema]
 pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
     pub name: Option<Option<String>>,
 }
 
 /// A response to a request to update one or more datapoints in a dataset.
-#[derive(Debug, Serialize, Deserialize, Clone, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export)]
+#[export_schema]
 pub struct UpdateDatapointsResponse {
     /// The IDs of the datapoints that were updated.
     /// These are newly generated IDs for UpdateDatapoint requests, and they are the same IDs for UpdateDatapointMetadata requests.
@@ -135,16 +151,18 @@ pub struct UpdateDatapointsResponse {
 
 /// Request to update metadata for one or more datapoints in a dataset.
 /// Used by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
+#[export_schema]
 pub struct UpdateDatapointsMetadataRequest {
     /// The datapoints to update metadata for.
     pub datapoints: Vec<UpdateDatapointMetadataRequest>,
 }
 
 /// A request to update the metadata of a single datapoint.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export, optional_fields)]
+#[export_schema]
 pub struct UpdateDatapointMetadataRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -155,8 +173,9 @@ pub struct UpdateDatapointMetadataRequest {
 
 /// Request to list datapoints from a dataset with pagination and filters.
 /// Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
-#[derive(Debug, Default, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Default, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export, optional_fields)]
+#[export_schema]
 pub struct ListDatapointsRequest {
     /// Optional function name to filter datapoints by.
     /// If provided, only datapoints from this function will be returned.
@@ -182,7 +201,8 @@ pub struct ListDatapointsRequest {
 
 /// Request to get specific datapoints by their IDs.
 /// Used by the `POST /v1/datasets/get_datapoints` endpoint.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 pub struct GetDatapointsRequest {
     /// The IDs of the datapoints to retrieve. Required.
@@ -190,7 +210,8 @@ pub struct GetDatapointsRequest {
 }
 
 /// Response containing the requested datapoints.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 pub struct GetDatapointsResponse {
     /// The retrieved datapoints.
@@ -201,7 +222,8 @@ pub struct GetDatapointsResponse {
 /// - `None`: Do not include any output in the datapoint.
 /// - `Inference`: Include the original inference output in the datapoint.
 /// - `Demonstration`: Include the latest demonstration feedback as output in the datapoint.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum CreateDatapointsFromInferenceOutputSource {
@@ -228,17 +250,20 @@ pub struct CreateDatapointsFromInferenceRequest {
 
 /// Parameters for creating datapoints from inferences.
 /// Can specify either a list of inference IDs or a query to find inferences.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[export_schema]
 pub enum CreateDatapointsFromInferenceRequestParams {
     /// Create datapoints from specific inference IDs.
+    #[schemars(title = "CreateDatapointsFromInferenceRequestParamsInferenceIds")]
     InferenceIds {
         /// The inference IDs to create datapoints from.
         inference_ids: Vec<Uuid>,
     },
 
     /// Create datapoints from an inference query.
+    #[schemars(title = "CreateDatapointsFromInferenceRequestParamsInferenceQuery")]
     InferenceQuery {
         /// The function name to filter inferences by.
         function_name: String,
@@ -254,8 +279,9 @@ pub enum CreateDatapointsFromInferenceRequestParams {
 }
 
 /// Response from creating datapoints.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 pub struct CreateDatapointsResponse {
     /// The IDs of the newly-generated datapoints.
     pub ids: Vec<Uuid>,
@@ -263,27 +289,32 @@ pub struct CreateDatapointsResponse {
 
 /// Request to create datapoints manually.
 /// Used by the `POST /v1/datasets/{dataset_id}/datapoints` endpoint.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 pub struct CreateDatapointsRequest {
     /// The datapoints to create.
     pub datapoints: Vec<CreateDatapointRequest>,
 }
 
 /// A tagged request to create a single datapoint.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
+#[export_schema]
 #[ts(export, tag = "type", rename_all = "snake_case")]
 pub enum CreateDatapointRequest {
     /// Request to create a chat datapoint.
+    #[schemars(title = "CreateDatapointRequestChat")]
     Chat(CreateChatDatapointRequest),
     /// Request to create a JSON datapoint.
+    #[schemars(title = "CreateDatapointRequestJson")]
     Json(CreateJsonDatapointRequest),
 }
 
 /// A request to create a chat datapoint.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export, optional_fields)]
 pub struct CreateChatDatapointRequest {
     /// The function name for this datapoint. Required.
@@ -315,7 +346,8 @@ pub struct CreateChatDatapointRequest {
 }
 
 /// A request to create a JSON datapoint.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export, optional_fields)]
 pub struct CreateJsonDatapointRequest {
     /// The function name for this datapoint. Required.
@@ -348,7 +380,8 @@ pub struct CreateJsonDatapointRequest {
 }
 
 /// Request to delete datapoints from a dataset.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 pub struct DeleteDatapointsRequest {
     /// The IDs of the datapoints to delete.
@@ -356,7 +389,8 @@ pub struct DeleteDatapointsRequest {
 }
 
 /// Response containing the number of deleted datapoints.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 pub struct DeleteDatapointsResponse {
     /// The number of deleted datapoints.

@@ -60,14 +60,14 @@ fn build_params_map(
     id_column: &str,
     id_value: Uuid,
     pagination_params: Vec<(&str, String)>,
-    page_size: u32,
+    limit: u32,
 ) -> HashMap<String, String> {
     let mut params_map: HashMap<String, String> = pagination_params
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
         .collect();
     params_map.insert(id_column.to_string(), id_value.to_string());
-    params_map.insert("page_size".to_string(), page_size.to_string());
+    params_map.insert("limit".to_string(), limit.to_string());
     params_map
 }
 
@@ -77,12 +77,12 @@ fn build_feedback_query(
     id_value: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
-    page_size: u32,
+    limit: u32,
 ) -> (String, HashMap<String, String>) {
     let (where_clause, params) = build_pagination_clause(before, after, config.id_column);
     let order_clause = if after.is_some() { "ASC" } else { "DESC" };
 
-    let params_map = build_params_map(config.id_column, id_value, params, page_size);
+    let params_map = build_params_map(config.id_column, id_value, params, limit);
 
     let columns_str = config.columns.join(", ");
     let id_param = format!("{{{id_column}:UUID}}", id_column = config.id_column);
@@ -100,7 +100,7 @@ fn build_feedback_query(
                 FROM {table_name}
                 WHERE {id_column} = {id_param} {where_clause}
                 ORDER BY toUInt128(id) {order_clause}
-                LIMIT {{page_size:UInt32}}
+                LIMIT {{limit:UInt32}}
             )
             ORDER BY toUInt128(id) DESC
             FORMAT JSONEachRow
@@ -121,7 +121,7 @@ fn build_feedback_query(
             FROM {table_name}
             WHERE {id_column} = {id_param} {where_clause}
             ORDER BY toUInt128(id) {order_clause}
-            LIMIT {{page_size:UInt32}}
+            LIMIT {{limit:UInt32}}
             FORMAT JSONEachRow
             ",
             columns_str = columns_str,
@@ -140,14 +140,14 @@ pub(crate) fn build_boolean_metrics_query(
     target_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
-    page_size: u32,
+    limit: u32,
 ) -> (String, HashMap<String, String>) {
     build_feedback_query(
         &FeedbackTableConfig::BOOLEAN_METRICS,
         target_id,
         before,
         after,
-        page_size,
+        limit,
     )
 }
 
@@ -155,14 +155,14 @@ pub(crate) fn build_float_metrics_query(
     target_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
-    page_size: u32,
+    limit: u32,
 ) -> (String, HashMap<String, String>) {
     build_feedback_query(
         &FeedbackTableConfig::FLOAT_METRICS,
         target_id,
         before,
         after,
-        page_size,
+        limit,
     )
 }
 
@@ -170,14 +170,14 @@ pub(crate) fn build_comment_feedback_query(
     target_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
-    page_size: u32,
+    limit: u32,
 ) -> (String, HashMap<String, String>) {
     build_feedback_query(
         &FeedbackTableConfig::COMMENT_FEEDBACK,
         target_id,
         before,
         after,
-        page_size,
+        limit,
     )
 }
 
@@ -185,14 +185,14 @@ pub(crate) fn build_demonstration_feedback_query(
     inference_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
-    page_size: u32,
+    limit: u32,
 ) -> (String, HashMap<String, String>) {
     build_feedback_query(
         &FeedbackTableConfig::DEMONSTRATION_FEEDBACK,
         inference_id,
         before,
         after,
-        page_size,
+        limit,
     )
 }
 
@@ -284,10 +284,9 @@ impl ClickHouseConnectionInfo {
         target_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: u32,
+        limit: u32,
     ) -> Result<Vec<BooleanMetricFeedbackRow>, Error> {
-        let (query, params_owned) =
-            build_boolean_metrics_query(target_id, before, after, page_size);
+        let (query, params_owned) = build_boolean_metrics_query(target_id, before, after, limit);
         execute_feedback_query(self, query, params_owned).await
     }
 
@@ -296,9 +295,9 @@ impl ClickHouseConnectionInfo {
         target_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: u32,
+        limit: u32,
     ) -> Result<Vec<FloatMetricFeedbackRow>, Error> {
-        let (query, params_owned) = build_float_metrics_query(target_id, before, after, page_size);
+        let (query, params_owned) = build_float_metrics_query(target_id, before, after, limit);
         execute_feedback_query(self, query, params_owned).await
     }
 
@@ -307,10 +306,9 @@ impl ClickHouseConnectionInfo {
         target_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: u32,
+        limit: u32,
     ) -> Result<Vec<CommentFeedbackRow>, Error> {
-        let (query, params_owned) =
-            build_comment_feedback_query(target_id, before, after, page_size);
+        let (query, params_owned) = build_comment_feedback_query(target_id, before, after, limit);
         execute_feedback_query(self, query, params_owned).await
     }
 
@@ -665,7 +663,7 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
         target_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<FeedbackRow>, Error> {
         if before.is_some() && after.is_some() {
             return Err(Error::new(crate::error::ErrorDetails::InvalidRequest {
@@ -674,18 +672,18 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
             }));
         }
 
-        let page_size = page_size.unwrap_or(100).min(100);
+        let limit = limit.unwrap_or(100).min(100);
 
         // Query all 4 feedback tables in parallel
         let (boolean_metrics, float_metrics, comment_feedback, demonstration_feedback) = tokio::join!(
-            self.query_boolean_metrics_by_target_id(target_id, before, after, page_size),
-            self.query_float_metrics_by_target_id(target_id, before, after, page_size),
-            self.query_comment_feedback_by_target_id(target_id, before, after, page_size),
+            self.query_boolean_metrics_by_target_id(target_id, before, after, limit),
+            self.query_float_metrics_by_target_id(target_id, before, after, limit),
+            self.query_comment_feedback_by_target_id(target_id, before, after, limit),
             self.query_demonstration_feedback_by_inference_id(
                 target_id,
                 before,
                 after,
-                Some(page_size)
+                Some(limit)
             )
         );
 
@@ -720,11 +718,11 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
         // Apply pagination
         let result = if after.is_some() {
             // If 'after' is specified, take earliest elements (reverse order from sorted)
-            let start = all_feedback.len().saturating_sub(page_size as usize);
+            let start = all_feedback.len().saturating_sub(limit as usize);
             all_feedback.drain(start..).collect()
         } else {
             // If 'before' is specified or no pagination params, take latest elements
-            all_feedback.truncate(page_size as usize);
+            all_feedback.truncate(limit as usize);
             all_feedback
         };
 
@@ -799,11 +797,11 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
         inference_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error> {
-        let page_size = page_size.unwrap_or(100).min(100);
+        let limit = limit.unwrap_or(100).min(100);
         let (query, params_owned) =
-            build_demonstration_feedback_query(inference_id, before, after, page_size);
+            build_demonstration_feedback_query(inference_id, before, after, limit);
 
         let query_params: HashMap<&str, &str> = params_owned
             .iter()
@@ -879,10 +877,10 @@ mod tests {
         assert_query_contains(&query, &format!("FROM {table_name}"));
         assert_query_contains(&query, &format!("WHERE {id_column} = {{{id_column}:UUID}}"));
         assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
-        assert_query_contains(&query, "LIMIT {page_size:UInt32}");
+        assert_query_contains(&query, "LIMIT {limit:UInt32}");
         assert_query_does_not_contain(&query, "AND toUInt128(id)");
         assert_eq!(params.get(id_column), Some(&id.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"100".to_string()));
+        assert_eq!(params.get("limit"), Some(&"100".to_string()));
         assert!(!params.contains_key("before"));
         assert!(!params.contains_key("after"));
     }
@@ -903,7 +901,7 @@ mod tests {
         assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
         assert_eq!(params.get(id_column), Some(&id.to_string()));
         assert_eq!(params.get("before"), Some(&before.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"50".to_string()));
+        assert_eq!(params.get("limit"), Some(&"50".to_string()));
     }
 
     fn test_feedback_query_after_pagination(
@@ -923,14 +921,11 @@ mod tests {
             &query,
             "AND toUInt128(id) > toUInt128(toUUID({after:UUID}))",
         );
-        assert_query_contains(
-            &query,
-            "ORDER BY toUInt128(id) ASC LIMIT {page_size:UInt32} )",
-        );
+        assert_query_contains(&query, "ORDER BY toUInt128(id) ASC LIMIT {limit:UInt32} )");
         assert_query_contains(&query, ") ORDER BY toUInt128(id) DESC");
         assert_eq!(params.get(id_column), Some(&id.to_string()));
         assert_eq!(params.get("after"), Some(&after.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"25".to_string()));
+        assert_eq!(params.get("limit"), Some(&"25".to_string()));
     }
 
     fn test_bounds_query(table_name: &str, id_column: &str) {
@@ -1130,7 +1125,7 @@ mod tests {
                 assert_query_contains(query, "FORMAT JSONEachRow");
 
                 assert_eq!(parameters.get("target_id"), Some(&target_id.to_string().as_str()));
-                assert_eq!(parameters.get("page_size"), Some(&"100"));
+                assert_eq!(parameters.get("limit"), Some(&"100"));
 
                 true
             })
@@ -1169,7 +1164,7 @@ mod tests {
                 assert_query_contains(query, "FORMAT JSONEachRow");
 
                 assert_eq!(parameters.get("target_id"), Some(&target_id.to_string().as_str()));
-                assert_eq!(parameters.get("page_size"), Some(&"100"));
+                assert_eq!(parameters.get("limit"), Some(&"100"));
 
                 true
             })
@@ -1208,7 +1203,7 @@ mod tests {
                 assert_query_contains(query, "FORMAT JSONEachRow");
 
                 assert_eq!(parameters.get("target_id"), Some(&target_id.to_string().as_str()));
-                assert_eq!(parameters.get("page_size"), Some(&"100"));
+                assert_eq!(parameters.get("limit"), Some(&"100"));
 
                 true
             })
@@ -1251,7 +1246,7 @@ mod tests {
                 assert_query_contains(query, "FORMAT JSONEachRow");
 
                 assert_eq!(parameters.get("inference_id"), Some(&inference_id.to_string().as_str()));
-                assert_eq!(parameters.get("page_size"), Some(&"100"));
+                assert_eq!(parameters.get("limit"), Some(&"100"));
 
                 true
             })

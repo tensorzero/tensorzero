@@ -24,6 +24,9 @@ tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 tower-http = { workspace = true }
 anyhow.workspace = true
+uuid = { workspace = true }
+object_store = { workspace = true }
+bytes = "1.10.1"
 
 [dev-dependencies]
 eventsource-stream = "0.2.3"

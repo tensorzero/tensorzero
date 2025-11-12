@@ -4,5 +4,5 @@ export type QueryFeedbackByTargetIdParams = {
   target_id: string;
   before?: string;
   after?: string;
-  page_size?: number;
+  limit?: number;
 };

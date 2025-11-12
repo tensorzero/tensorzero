@@ -120,6 +120,7 @@ pub struct E2ETestProviders {
 
     pub image_inference: Vec<E2ETestProvider>,
     pub pdf_inference: Vec<E2ETestProvider>,
+    pub input_audio: Vec<E2ETestProvider>,
 
     pub shorthand_inference: Vec<E2ETestProvider>,
     pub embeddings: Vec<EmbeddingTestProvider>,
@@ -533,6 +534,13 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_audio_inference_store_filesystem() {
+            let providers = $func().await.input_audio;
+            for provider in providers {
+                $crate::providers::commonv2::input_audio::test_audio_inference_with_provider_filesystem(provider).await;
+            }
+        }
 
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
@@ -753,9 +761,22 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 type = "chat_completion"
 model = "anthropic::claude-sonnet-4-5-20250929"
 
+[functions.pdf_test.variants.gcp-vertex-sonnet]
+type = "chat_completion"
+model = "claude-sonnet-4-5-gcp-vertex"
+
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
+
+[models.claude-sonnet-4-5-gcp-vertex]
+routing = ["gcp_vertex_anthropic"]
+
+[models.claude-sonnet-4-5-gcp-vertex.providers.gcp_vertex_anthropic]
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "tensorzero-public"
 
 [models."responses-gpt-4o-mini-2024-07-18"]
 routing = ["openai"]
@@ -1563,8 +1584,9 @@ pub async fn test_image_inference_with_provider_s3_compatible(
     toml: &str,
     prefix: &str,
 ) -> (tensorzero::Client, String, StoragePath) {
-    let expected_key =
-        format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
+    let expected_key = format!(
+        "{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+    );
 
     // Check that object is deleted
     let path = object_store::path::Path::parse(&expected_key).unwrap();
@@ -1664,6 +1686,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                                 url: image_url.clone(),
                                 mime_type: None,
                                 detail: Some(Detail::Low),
+                                filename: None,
                             })),
                         ],
                     }],
@@ -1727,6 +1750,7 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                                     None,
                                     mime::APPLICATION_PDF,
                                     pdf_data.clone(),
+                                    None,
                                     None,
                                 )
                                 .expect("test data should be valid"),
@@ -1793,6 +1817,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                             mime::IMAGE_PNG,
                             image_data.clone(),
                             Some(Detail::Low),
+                            None,
                         )
                         .expect("test data should be valid"),
                     )),
@@ -1852,7 +1877,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
     params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64(
-        Base64File::new(None, mime::IMAGE_PNG, updated_base64, None)
+        Base64File::new(None, mime::IMAGE_PNG, updated_base64, None, None)
             .expect("test data should be valid"),
     ));
 
@@ -2684,6 +2709,7 @@ pub async fn check_base64_pdf_response(
                     mime_type: mime::APPLICATION_PDF,
                     storage_path: expected_storage_path.clone(),
                     detail: None,
+                    filename: None,
                 },)))
             ]
         },]
@@ -2837,6 +2863,7 @@ pub async fn check_base64_image_response(
                     mime_type: mime::IMAGE_PNG,
                     storage_path: expected_storage_path.clone(),
                     detail: Some(Detail::Low),
+                    filename: None,
                 },)))
             ]
         },]
@@ -2988,6 +3015,7 @@ pub async fn check_url_image_response(
                             path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
                         },
                         detail: Some(Detail::Low),
+                        filename: None,
                     },
                 )))]
             },
@@ -3238,7 +3266,6 @@ pub async fn check_simple_image_inference_response(
     is_batch: bool,
     should_be_cached: bool,
 ) {
-    let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -3293,7 +3320,7 @@ pub async fn check_simple_image_inference_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
+    assert_eq!(function_name, "basic_test");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -3303,6 +3330,9 @@ pub async fn check_simple_image_inference_response(
     if let Some(episode_id) = episode_id {
         assert_eq!(retrieved_episode_id, episode_id);
     }
+    let tags = result.get("tags").unwrap();
+    // All callers set this tag so this tests that tags are propagated to the ultimate sink of the inference data
+    tags.get("test_type").unwrap();
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -3405,15 +3435,10 @@ pub async fn check_simple_image_inference_response(
 
     if !is_batch {
         // Check the InferenceTag Table
-        let result = select_inference_tags_clickhouse(
-            &clickhouse,
-            hardcoded_function_name,
-            "foo",
-            "bar",
-            inference_id,
-        )
-        .await
-        .unwrap();
+        let result =
+            select_inference_tags_clickhouse(&clickhouse, "basic_test", "foo", "bar", inference_id)
+                .await
+                .unwrap();
         let id = result.get("inference_id").unwrap().as_str().unwrap();
         let id = Uuid::parse_str(id).unwrap();
         assert_eq!(id, inference_id);
@@ -8414,8 +8439,10 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    }
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -9671,7 +9698,6 @@ pub async fn check_parallel_tool_use_inference_response(
     is_batch: bool,
     parallel_param: Value,
 ) {
-    let hardcoded_function_name = "weather_helper_parallel";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -9775,7 +9801,7 @@ pub async fn check_parallel_tool_use_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
+    assert_eq!(function_name, "weather_helper_parallel");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -10818,8 +10844,10 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    }
 
     if let Some(output_schema) = &output_schema {
         let retrieved_output_schema = result.get("output_schema").unwrap().as_str().unwrap();

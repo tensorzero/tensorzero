@@ -5,10 +5,8 @@ use tensorzero_core::inference::types::{
     ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
     StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
 };
-use tensorzero_core::optimization::dicl::{
-    dicl_examples_exist, insert_dicl_examples_with_batching,
-};
 use tensorzero_core::stored_inference::RenderedSample;
+use tensorzero_optimizers::dicl::{dicl_examples_exist, insert_dicl_examples_with_batching};
 use uuid::Uuid;
 
 fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {

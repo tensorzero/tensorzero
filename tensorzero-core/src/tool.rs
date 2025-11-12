@@ -6,9 +6,11 @@ use std::{
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
+use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -57,7 +59,7 @@ use strum::AsRefStr;
 /// Notably, provider tools (like OpenAI websearch) are not part of this enum
 /// as there's not really anything we can do besides experiment with them.
 /// They are a separate type `ProviderTool`.
-#[derive(ts_rs::TS, AsRefStr, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, AsRefStr, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -145,9 +147,10 @@ impl Tool {
 /// and return the result on the next turn (a ToolCallResult).
 /// Notably, we assume there is a JSON schema `parameters` that specifies the
 /// set of arguments that the tool will accept.
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
+#[export_schema]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ClientSideFunctionTool {
     pub description: String,
@@ -197,11 +200,13 @@ impl ClientSideFunctionTool {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(untagged)]
+#[export_schema]
 pub enum ProviderToolScope {
     #[default]
     Unscoped,
+    #[schemars(title = "ProviderToolScopeModelProvider")]
     ModelProvider {
         model_name: String,
         model_provider_name: String,
@@ -220,7 +225,7 @@ impl ProviderToolScope {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -677,17 +682,28 @@ where
                 }
             }
 
-            // If no tool fields present, return None
-            if values.is_empty() {
-                return Ok(None);
-            }
-
             // Determine format based on which fields are present
             // Since `dynamic_provider_tools` and `dynamic_tools` are going to return arrays
             // and `tool_params` will be a string regardles of format, the distinguishing factor for new data
             // is if `allowed_tools` is set (it always should be)
             let has_full_fields =
                 values.contains_key("allowed_tools") || values.contains_key("tool_choice");
+
+            // If we're NOT in full format mode, filter out empty arrays for dynamic_tools and dynamic_provider_tools
+            // This handles the case where ClickHouse returns default values (empty arrays) for these columns
+            // when they weren't explicitly set (i.e., legacy data or data without tools)
+            if !has_full_fields {
+                values.retain(|key, value| {
+                    !(value.is_array()
+                        && value.as_array().is_some_and(|arr| arr.is_empty())
+                        && (key == "dynamic_tools" || key == "dynamic_provider_tools"))
+                });
+            }
+
+            // If no tool fields present, return None
+            if values.is_empty() {
+                return Ok(None);
+            }
 
             if has_full_fields {
                 // Full format: require ALL full format fields
@@ -1185,11 +1201,11 @@ pub struct LegacyToolCallConfigDatabaseInsert {
 /// ```
 ///
 /// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
 #[ts(optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[export_schema]
 pub struct DynamicToolParams {
     /// A subset of static tools configured for the function that the inference is allowed to use. Optional.
     /// If not provided, all static tools are allowed.
@@ -1279,9 +1295,10 @@ where
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[export_schema]
 pub struct ToolCall {
     pub id: String,
     pub name: String,
@@ -1319,9 +1336,10 @@ impl ToolCall {
 /// `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
 /// Typically tool calls come from previous inferences and are therefore outputs of TensorZero (`InferenceResponseToolCall`)
 /// but they may also be constructed client side or through the OpenAI endpoint `ToolCall` so we support both via this wrapper.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(untagged)]
+#[export_schema]
 pub enum ToolCallWrapper {
     ToolCall(ToolCall), // the format we store in the database
     InferenceResponseToolCall(InferenceResponseToolCall), // the format we send on an inference response
@@ -1348,9 +1366,10 @@ impl TryFrom<ToolCallWrapper> for ToolCall {
 /// This includes some synactic sugar (parsing / validation of the tool arguments)
 /// in the `arguments` field and the name in the `name` field.
 /// We support looping this back through the TensorZero inference API via the ToolCallWrapper
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[export_schema]
 pub struct InferenceResponseToolCall {
     /// A Tool Call ID to match up with tool call responses. See #4058.
     pub id: String,
@@ -1436,9 +1455,10 @@ impl ToolCallConfig {
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
+#[export_schema]
 pub struct ToolResult {
     pub name: String,
     pub result: String,
@@ -1476,16 +1496,18 @@ impl ToolResult {
 /// and even specify which tool to be used.
 ///
 /// This enum is used to denote this tool choice.
-#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
+#[export_schema]
 pub enum ToolChoice {
     None,
     #[default]
     Auto,
     Required,
-    // Forces the LLM to call a specific tool. The String is the name of the tool.
+    /// Forces the LLM to call a specific tool. The String is the name of the tool.
+    #[schemars(title = "ToolChoiceSpecific")]
     Specific(String),
 }
 
@@ -2837,5 +2859,94 @@ mod tests {
         let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
         assert_eq!(result.baz, "test");
         assert!(result.tool_info.is_some());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_legacy_empty_arrays_filtered() {
+        // Test that empty dynamic_tools and dynamic_provider_tools arrays are filtered out
+        // when NOT in full format mode (i.e., legacy data without allowed_tools/tool_choice)
+        // This handles the case where ClickHouse returns default values (empty arrays) for these columns
+        // when they weren't explicitly set
+        let json = json!({
+            "baz": "legacy_value",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "tool_params": {
+                "tools_available": [
+                    {
+                        "name": "get_temperature",
+                        "description": "Get temperature",
+                        "parameters": {"type": "object"},
+                        "strict": true
+                    }
+                ],
+                "tool_choice": "auto"
+            }
+        });
+
+        // This should deserialize successfully with tool_info:
+        // 1. We're NOT in full format mode (no allowed_tools/tool_choice fields)
+        // 2. Empty arrays for dynamic_tools and dynamic_provider_tools get filtered out
+        // 3. After filtering, only tool_params remains, which is legacy format
+        // 4. tool_params with tools_available is valid in legacy format
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+        assert_eq!(result.baz, "legacy_value");
+        assert!(
+            result.tool_info.is_some(),
+            "tool_info should be Some with valid tool_params"
+        );
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_full_format_empty_arrays_kept() {
+        // Test that empty dynamic_tools and dynamic_provider_tools arrays are KEPT
+        // when in full format mode (i.e., has allowed_tools and tool_choice fields)
+        // In full format, empty arrays are valid and should not be filtered out
+        let json = json!({
+            "baz": "full_format_value",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        // This should deserialize to Some because:
+        // 1. We ARE in full format mode (has allowed_tools and tool_choice)
+        // 2. Empty arrays are valid in full format and should not be filtered
+        // 3. The presence of allowed_tools/tool_choice indicates this is valid full format data
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+        assert_eq!(result.baz, "full_format_value");
+        assert!(
+            result.tool_info.is_some(),
+            "tool_info should be Some in full format mode even with empty arrays"
+        );
+
+        let tool_info = result.tool_info.unwrap();
+        assert_eq!(tool_info.tool_choice, ToolChoice::Auto);
+        assert_eq!(tool_info.dynamic_tools.len(), 0);
+        assert_eq!(tool_info.dynamic_provider_tools.len(), 0);
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_legacy_only_empty_arrays() {
+        // Test that when ONLY empty dynamic_tools and dynamic_provider_tools arrays are present
+        // (no tool_params, no allowed_tools/tool_choice), they get filtered out and we get None
+        // This handles the case where ClickHouse returns default empty arrays but no actual tool data
+        let json = json!({
+            "baz": "only_empty_arrays",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": []
+        });
+
+        // This should deserialize to None because:
+        // 1. We're NOT in full format mode (no allowed_tools/tool_choice)
+        // 2. Empty arrays for dynamic_tools and dynamic_provider_tools get filtered out
+        // 3. After filtering, values is empty
+        // 4. Empty values results in None
+        assert_deserialize_to_none(json, "only_empty_arrays");
     }
 }

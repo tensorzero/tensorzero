@@ -29,11 +29,11 @@ RUN curl -L --proto '=https' --tlsv1.2 -sSf \
 
 WORKDIR /app
 
-# Copy the entire project
-COPY . .
-
 # Install cargo-nextest using binstall
 RUN cargo binstall -y cargo-nextest --secure
+
+# Copy the entire project
+COPY . .
 
 # Fetch all dependencies first (including dev-dependencies needed by trybuild)
 RUN cargo fetch --locked
@@ -47,6 +47,9 @@ FROM base AS test-env
 
 WORKDIR /app
 
+# Install cargo-nextest in this stage too (for running tests)
+RUN cargo binstall -y cargo-nextest --secure
+
 # Copy workspace structure but exclude target directory
 COPY . ./
 RUN rm -rf target
@@ -59,11 +62,8 @@ COPY --from=builder /app/tests.tar.zst /app/tests.tar.zst
 COPY --from=builder /usr/local/cargo/registry /usr/local/cargo/registry
 COPY --from=builder /usr/local/cargo/git /usr/local/cargo/git
 
-# Install cargo-nextest in this stage too (for running tests)
-RUN cargo binstall -y cargo-nextest --secure
-
 # Set CI environment variable
 ENV CI=true
 
 # Set the entrypoint to run tests from archive with absolute config file path and e2e profile
-CMD ["cargo", "nextest", "run", "--no-fail-fast", "--archive-file", "tests.tar.zst", "--workspace-remap", "/app", "--config-file", "/app/.config/nextest.toml", "--profile", "e2e"]
+CMD ["cargo", "nextest", "run", "--no-fail-fast", "--archive-file", "tests.tar.zst", "--workspace-remap", "/app", "--config-file", "/app/.config/nextest.toml", "--profile", "e2e", "-j", "32"]

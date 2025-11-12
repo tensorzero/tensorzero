@@ -152,6 +152,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: vec![],
         pdf_inference: vec![],
+        input_audio: vec![],
         shorthand_inference: shorthand_providers,
         credential_fallbacks,
     }

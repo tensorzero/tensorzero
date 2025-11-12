@@ -131,10 +131,11 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         episode_id = inference.episode_id
         assert isinstance(episode_id, UUID)
         # Test individual tool param fields
-        assert inference.allowed_tools is None
-        assert inference.additional_tools is None
+        assert inference.allowed_tools is None or len(inference.allowed_tools) == 0
+        assert inference.additional_tools is None or len(inference.additional_tools) == 0
         assert inference.parallel_tool_calls is None
-        assert inference.provider_tools is None
+        assert isinstance(inference.provider_tools, list)
+        assert len(inference.provider_tools) == 0
         assert len(inference.dispreferred_outputs) == 0
 
     # ORDER BY timestamp ASC is applied - verify timestamps are in ascending order
@@ -213,10 +214,11 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
         episode_id = inference.episode_id
         assert isinstance(episode_id, UUID)
         # Test individual tool param fields
-        assert inference.allowed_tools == ["think", "search_wikipedia", "load_wikipedia_page", "answer_question"]
+        # Changed behavior: None when using function defaults
+        assert inference.allowed_tools is None
         assert inference.additional_tools is None
         assert inference.parallel_tool_calls is True
-        assert inference.provider_tools is None
+        assert inference.provider_tools is None or len(inference.provider_tools) == 0
 
 
 def test_demonstration_output_source(embedded_sync_client: TensorZeroGateway):
@@ -574,10 +576,10 @@ async def test_simple_query_chat_function_async(
         assert isinstance(inference.inference_id, UUID)
         assert isinstance(inference.episode_id, UUID)
         # Test individual tool param fields
-        assert inference.allowed_tools is None
-        assert inference.additional_tools is None
+        assert inference.allowed_tools is None or len(inference.allowed_tools) == 0
+        assert inference.additional_tools is None or len(inference.additional_tools) == 0
         assert inference.parallel_tool_calls is None
-        assert inference.provider_tools is None
+        assert inference.provider_tools is None or len(inference.provider_tools) == 0
 
     # ORDER BY timestamp ASC is applied - verify timestamps are in ascending order
     timestamps = [inference.timestamp for inference in inferences]

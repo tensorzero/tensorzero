@@ -221,7 +221,7 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
                     "--add-host=host.docker.internal:host-gateway",
                     "-v",
                     &format!("{s3_fixtures_path}:/s3-fixtures"),
-                    "clickhouse/clickhouse-server:25.4-alpine",
+                    "clickhouse:25.4",
                     "clickhouse-client",
                     "--host",
                     host,

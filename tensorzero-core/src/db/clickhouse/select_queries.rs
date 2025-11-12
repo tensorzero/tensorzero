@@ -166,7 +166,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
 
     async fn query_episode_table(
         &self,
-        page_size: u32,
+        limit: u32,
         before: Option<Uuid>,
         after: Option<Uuid>,
     ) -> Result<Vec<EpisodeByIdRow>, Error> {
@@ -193,10 +193,10 @@ impl SelectQueries for ClickHouseConnectionInfo {
         // Clickhouse will not optimize queries with either GROUP BY or FINAL
         // when reading the primary key with a LIMIT
         // https://clickhouse.com/docs/sql-reference/statements/select/order-by#optimization-of-data-reading
-        // So, we select the last page_size_overestimate episodes in descending order
+        // So, we select the last limit_overestimate episodes in descending order
         // Then we group by episode_id_uint and count the number of inferences
-        // Finally, we order by episode_id_uint correctly and limit the result to page_size
-        let page_size_overestimate = 5 * page_size;
+        // Finally, we order by episode_id_uint correctly and limit the result to limit
+        let limit_overestimate = 5 * limit;
 
         let query = if is_after {
             format!(
@@ -205,7 +205,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     FROM EpisodeById
                     WHERE {where_clause}
                     ORDER BY episode_id_uint ASC
-                    LIMIT {page_size_overestimate}
+                    LIMIT {limit_overestimate}
                 )
                 SELECT
                     episode_id,
@@ -225,7 +225,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     WHERE episode_id_uint IN (SELECT episode_id_uint FROM potentially_duplicated_episode_ids)
                     GROUP BY episode_id_uint
                     ORDER BY episode_id_uint ASC
-                    LIMIT {page_size}
+                    LIMIT {limit}
                 )
                 ORDER BY episode_id_uint DESC
                 FORMAT JSONEachRow
@@ -239,7 +239,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     FROM EpisodeById
                     WHERE {where_clause}
                     ORDER BY episode_id_uint DESC
-                    LIMIT {page_size_overestimate}
+                    LIMIT {limit_overestimate}
                 )
                 SELECT
                     uint_to_uuid(episode_id_uint) as episode_id,
@@ -251,7 +251,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 WHERE episode_id_uint IN (SELECT episode_id_uint FROM potentially_duplicated_episode_ids)
                 GROUP BY episode_id_uint
                 ORDER BY episode_id_uint DESC
-                LIMIT {page_size}
+                LIMIT {limit}
                 FORMAT JSONEachRow
                 "
             )
