@@ -1,33 +1,34 @@
-name: Batch tests
+name: Mocked Batch Tests (for Merge Queue)
 
+# Fake credentials - gateway validates presence but doesn't use them in mock mode
 env:
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  ANTHROPIC_API_KEY: "fake_anthropic_key"
+  AWS_ACCESS_KEY_ID: "fake_aws_access_key"
   AWS_REGION: "us-east-1"
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }}
-  AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
-  AZURE_OPENAI_EASTUS2_API_KEY: ${{ secrets.AZURE_OPENAI_EASTUS2_API_KEY }}
-  AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }}
-  DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-  FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
-  FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
+  AWS_SECRET_ACCESS_KEY: "fake_aws_secret_key"
+  AZURE_OPENAI_API_BASE: "https://fake.openai.azure.com"
+  AZURE_OPENAI_API_KEY: "fake_azure_openai_key"
+  AZURE_OPENAI_DEPLOYMENT_ID: "fake_deployment_id"
+  DEEPSEEK_API_KEY: "fake_deepseek_key"
+  FIREWORKS_API_KEY: "fake_fireworks_key"
+  FIREWORKS_ACCOUNT_ID: "fake_fireworks_account"
   FORCE_COLOR: 1
   GCP_VERTEX_CREDENTIALS_PATH: ${{ github.workspace }}/gcp_jwt_key.json
   GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp_jwt_key.json
-  GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
-  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-  HYPERBOLIC_API_KEY: ${{secrets.HYPERBOLIC_API_KEY}}
-  MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
-  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-  SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
-  TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
-  TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
-  VLLM_API_KEY: ${{ secrets.VLLM_API_KEY }}
-  VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
+  GOOGLE_AI_STUDIO_API_KEY: "fake_google_ai_studio_key"
+  GROQ_API_KEY: "fake_groq_key"
+  HYPERBOLIC_API_KEY: "fake_hyperbolic_key"
+  MISTRAL_API_KEY: "fake_mistral_key"
+  OPENAI_API_KEY: "fake_openai_key"
+  OPENROUTER_API_KEY: "fake_openrouter_key"
+  SGLANG_API_KEY: "fake_sglang_key"
+  TGI_API_KEY: "fake_tgi_key"
+  TOGETHER_API_KEY: "fake_together_key"
+  VLLM_API_KEY: "fake_vllm_key"
+  VLLM_API_BASE: "http://fake-vllm-endpoint:8000"
   VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
-  XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+  XAI_API_KEY: "fake_xai_key"
+  TENSORZERO_USE_MOCK_INFERENCE_PROVIDER: 1
 
 on:
   workflow_dispatch:
@@ -38,11 +39,11 @@ permissions:
   actions: read
 
 jobs:
-  batch-tests:
+  mocked-batch-tests:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
 
-    timeout-minutes: 60
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -70,37 +71,36 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Wake up ClickHouse cloud (for batch tests)
-        run: |
-          curl "${{ secrets.CLICKHOUSE_CLOUD_URL }}" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
-
       - name: Install cargo-nextest
         uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
           tool: cargo-nextest
 
-      - name: Write GCP JWT key to file
+      - name: Write GCP JWT key to file (for GCS access)
         env:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
+      - name: Start Docker services (mock-inference-provider + dependencies)
+        run: |
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait clickhouse postgres gateway-clickhouse-migrations gateway-postgres-migrations minio mock-inference-provider
+
       - name: Set up TENSORZERO_CLICKHOUSE_URL for batch tests
         run: |
-          echo "TENSORZERO_CLICKHOUSE_URL=${{ secrets.CLICKHOUSE_CLOUD_URL }}" >> $GITHUB_ENV
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
       - name: Launch the gateway for batch tests
         run: |
-          curl "${{ secrets.CLICKHOUSE_CLOUD_URL }}" --retry 4 --retry-all-errors --data-binary 'SHOW DATABASES'
-          cargo run-e2e > batch_logs.txt 2>&1 &
+          cargo run-e2e-mock-batch > batch_logs.txt 2>&1 &
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
             echo "Waiting for gateway to be healthy..."
             sleep 1
           done
 
-      - name: Run batch tests
+      - name: Run mocked batch tests
         run: |
-          cargo test-batch --no-fail-fast
+          cargo test-mock-batch --no-fail-fast
 
       - name: Print batch logs
         if: always()

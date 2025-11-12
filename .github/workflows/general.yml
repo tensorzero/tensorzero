@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.ref == 'refs/heads/main' && github.run_id || format('{0}-{1}', github.workflow, github.ref) }}
+  group: ${{ github.ref == 'refs/heads/main' && github.run_id || format('general-{0}-{1}', github.workflow, github.ref) }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
