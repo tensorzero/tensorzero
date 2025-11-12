@@ -1777,9 +1777,8 @@ impl<'a> From<&'a ClientSideFunctionTool> for GCPVertexGeminiSFTTool<'a> {
 // which will cause us to fall back to Auto
 const MODELS_NOT_SUPPORTING_ANY_MODE: &[&str] = &[];
 
-impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
-    fn from(input: (&'a ToolChoice, &'a str)) -> Self {
-        let (tool_choice, model_name) = input;
+impl<'a> GCPVertexGeminiToolConfig<'a> {
+    fn from_tool_config(tool_choice: &'a ToolChoice, model_name: &'a str) -> Self {
         match tool_choice {
             ToolChoice::None => GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
@@ -2055,7 +2054,10 @@ fn prepare_tools<'a>(
                     .map(GCPVertexGeminiFunctionDeclaration::from)
                     .collect(),
             )]);
-            let tool_config = Some((&tool_config.tool_choice, model_name).into());
+            let tool_config = Some(GCPVertexGeminiToolConfig::from_tool_config(
+                &tool_config.tool_choice,
+                model_name,
+            ));
             (tools, tool_config)
         }
         None => (None, None),
@@ -2861,7 +2863,8 @@ mod tests {
     fn test_from_tool_choice() {
         let tool_choice = ToolChoice::Auto;
         let supports_any_model_name = "gemini-2.5-pro";
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_choice, supports_any_model_name);
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -2874,7 +2877,8 @@ mod tests {
 
         // The Pro model supports Any mode
         let tool_choice = ToolChoice::Required;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_choice, supports_any_model_name);
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -2887,7 +2891,8 @@ mod tests {
 
         // The Pro model supports Any mode with allowed function names
         let tool_choice = ToolChoice::Specific("get_temperature".to_string());
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_choice, supports_any_model_name);
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -2899,7 +2904,8 @@ mod tests {
         );
 
         let tool_choice = ToolChoice::None;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_choice, supports_any_model_name);
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {

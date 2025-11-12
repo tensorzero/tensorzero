@@ -791,7 +791,11 @@ impl<'a> AnthropicRequestBody<'a> {
             if matches!(c.tool_choice, ToolChoice::None) {
                 None
             } else {
-                Some(c.tools_available().map(Into::into).collect::<Vec<_>>())
+                Some(
+                    c.strict_tools_available()
+                        .map(Into::into)
+                        .collect::<Vec<_>>(),
+                )
             }
         });
 
