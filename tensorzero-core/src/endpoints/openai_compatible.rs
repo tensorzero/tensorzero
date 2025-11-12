@@ -961,8 +961,8 @@ struct OpenAICompatibleImageUrl {
 #[derive(Deserialize, Debug)]
 struct OpenAICompatibleFile {
     file_data: String,
-    // TODO (#4478): collect and store filename
-    // filename: String,
+    #[serde(default)]
+    filename: Option<String>,
     // OpenAI supports file_id with their files API
     // We do not so we require these two fields
 }
@@ -1059,15 +1059,15 @@ fn convert_openai_message_content(
                         if image_url.url.scheme() == "data" {
                             let image_url_str = image_url.url.to_string();
                             let (mime_type, data) = parse_base64_file_data_url(&image_url_str)?;
-                            let base64_file = Base64File::new(None, mime_type, data.to_string(), image_url.detail)?;
+                            let base64_file = Base64File::new(None, mime_type, data.to_string(), image_url.detail, None)?;
                             InputMessageContent::File(File::Base64(base64_file))
                         } else {
-                            InputMessageContent::File(File::Url(UrlFile { url: image_url.url, mime_type: image_url.mime_type, detail: image_url.detail }))
+                            InputMessageContent::File(File::Url(UrlFile { url: image_url.url, mime_type: image_url.mime_type, detail: image_url.detail, filename: None }))
                         }
                     }
                     Ok(OpenAICompatibleContentBlock::File { file }) => {
                         let (mime_type, data) = parse_base64_file_data_url(&file.file_data)?;
-                        let base64_file = Base64File::new(None, mime_type, data.to_string(), None)?;
+                        let base64_file = Base64File::new(None, mime_type, data.to_string(), None, file.filename)?;
                         InputMessageContent::File(File::Base64(base64_file))
                     }
                     Ok(OpenAICompatibleContentBlock::InputAudio { input_audio }) => {
@@ -1133,7 +1133,7 @@ fn convert_openai_message_content(
                         };
 
                         // Create Base64File with the inferred MIME type and original base64 data
-                        let base64_file = Base64File::new(None, mime_type, input_audio.data, None)?;
+                        let base64_file = Base64File::new(None, mime_type, input_audio.data, None, None)?;
                         InputMessageContent::File(File::Base64(base64_file))
                     }
                     Err(e) => {
@@ -3018,5 +3018,106 @@ mod tests {
         });
         let result: Result<OpenAICompatibleContentBlock, _> = serde_json::from_value(json_invalid);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_openai_file_with_custom_filename() {
+        // Test deserialization with custom filename
+        let json = json!({
+            "type": "file",
+            "file": {
+                "file_data": "data:text/plain;base64,SGVsbG8h",
+                "filename": "my_config.txt"
+            }
+        });
+        let block: OpenAICompatibleContentBlock = serde_json::from_value(json).unwrap();
+        match block {
+            OpenAICompatibleContentBlock::File { file } => {
+                assert_eq!(file.filename, Some("my_config.txt".to_string()));
+                assert_eq!(file.file_data, "data:text/plain;base64,SGVsbG8h");
+            }
+            _ => panic!("Expected File variant"),
+        }
+
+        // Test deserialization without filename (should be None)
+        let json_no_filename = json!({
+            "type": "file",
+            "file": {
+                "file_data": "data:application/pdf;base64,JVBERi0xLjQ="
+            }
+        });
+        let block: OpenAICompatibleContentBlock = serde_json::from_value(json_no_filename).unwrap();
+        match block {
+            OpenAICompatibleContentBlock::File { file } => {
+                assert_eq!(file.filename, None);
+                assert_eq!(file.file_data, "data:application/pdf;base64,JVBERi0xLjQ=");
+            }
+            _ => panic!("Expected File variant"),
+        }
+    }
+
+    #[test]
+    fn test_filename_propagated_through_openai_to_tensorzero_conversion() {
+        // Test that filename flows from OpenAI API format to TensorZero Input type
+        let messages = vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+            content: json!([
+                {
+                    "type": "text",
+                    "text": "Please analyze this file"
+                },
+                {
+                    "type": "file",
+                    "file": {
+                        "file_data": "data:text/plain;base64,SGVsbG8h",
+                        "filename": "important_data.txt"
+                    }
+                }
+            ]),
+        })];
+
+        let input: Input = messages.try_into().unwrap();
+
+        assert_eq!(input.messages.len(), 1);
+        assert_eq!(input.messages[0].role, Role::User);
+        assert_eq!(input.messages[0].content.len(), 2);
+
+        // Check text content
+        match &input.messages[0].content[0] {
+            InputMessageContent::Text(text) => {
+                assert_eq!(text.text, "Please analyze this file");
+            }
+            _ => panic!("Expected Text content"),
+        }
+
+        // Check file content with filename
+        match &input.messages[0].content[1] {
+            InputMessageContent::File(File::Base64(base64_file)) => {
+                assert_eq!(base64_file.filename, Some("important_data.txt".to_string()));
+                assert_eq!(base64_file.mime_type, mime::TEXT_PLAIN);
+            }
+            _ => panic!("Expected Base64File with filename"),
+        }
+
+        // Test without filename
+        let messages_no_filename =
+            vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                content: json!([
+                    {
+                        "type": "file",
+                        "file": {
+                            "file_data": "data:application/pdf;base64,JVBERi0xLjQ="
+                        }
+                    }
+                ]),
+            })];
+
+        let input_no_filename: Input = messages_no_filename.try_into().unwrap();
+        match &input_no_filename.messages[0].content[0] {
+            InputMessageContent::File(File::Base64(base64_file)) => {
+                assert_eq!(base64_file.filename, None);
+                assert_eq!(base64_file.mime_type, mime::APPLICATION_PDF);
+            }
+            _ => panic!("Expected Base64File without filename"),
+        }
     }
 }

@@ -101,6 +101,9 @@ pub struct Base64File {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub detail: Option<Detail>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub filename: Option<String>,
 }
 
 /// Implement a custom deserializer for Base64File to show a deprecation warning for the `url` field
@@ -117,6 +120,8 @@ impl<'de> Deserialize<'de> for Base64File {
             data: String,
             #[serde(default)]
             detail: Option<Detail>,
+            #[serde(default)]
+            filename: Option<String>,
         }
 
         let value = serde_json::Value::deserialize(deserializer)?;
@@ -137,6 +142,7 @@ impl<'de> Deserialize<'de> for Base64File {
             helper.mime_type,
             helper.data,
             helper.detail,
+            helper.filename,
         )
         .map_err(serde::de::Error::custom)
     }
@@ -156,6 +162,9 @@ pub struct Base64FileMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub detail: Option<Detail>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub filename: Option<String>,
 }
 
 /// Implement a custom deserializer for Base64FileMetadata to show a deprecation warning for the `url` field
@@ -171,6 +180,8 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
             mime_type: MediaType,
             #[serde(default)]
             detail: Option<Detail>,
+            #[serde(default)]
+            filename: Option<String>,
         }
 
         let value = serde_json::Value::deserialize(deserializer)?;
@@ -190,6 +201,7 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
             source_url: helper.source_url,
             mime_type: helper.mime_type,
             detail: helper.detail,
+            filename: helper.filename,
         })
     }
 }
@@ -208,6 +220,7 @@ impl Base64File {
         mime_type: MediaType,
         data: String,
         detail: Option<Detail>,
+        filename: Option<String>,
     ) -> Result<Self, Error> {
         // Validate that data doesn't contain the data: prefix
         if data.starts_with("data:") {
@@ -221,6 +234,7 @@ impl Base64File {
             mime_type,
             data,
             detail,
+            filename,
         })
     }
 
@@ -259,6 +273,9 @@ pub struct UrlFile {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub detail: Option<Detail>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub filename: Option<String>,
 }
 
 /// A file stored in an object storage backend, without data.
@@ -279,6 +296,9 @@ pub struct ObjectStoragePointer {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub detail: Option<Detail>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub filename: Option<String>,
 }
 
 /// A file stored in an object storage backend, with data.
@@ -338,6 +358,8 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
             storage_path: StoragePath,
             #[serde(default)]
             detail: Option<Detail>,
+            #[serde(default)]
+            filename: Option<String>,
         }
 
         let value = serde_json::Value::deserialize(deserializer)?;
@@ -358,6 +380,7 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
             mime_type: helper.mime_type,
             storage_path: helper.storage_path,
             detail: helper.detail,
+            filename: helper.filename,
         })
     }
 }
@@ -401,12 +424,16 @@ impl<'de> Deserialize<'de> for File {
                 mime_type: Option<MediaType>,
                 #[serde(default)]
                 detail: Option<Detail>,
+                #[serde(default)]
+                filename: Option<String>,
             },
             Base64 {
                 mime_type: MediaType,
                 data: String,
                 #[serde(default)]
                 detail: Option<Detail>,
+                #[serde(default)]
+                filename: Option<String>,
             },
             ObjectStoragePointer {
                 source_url: Option<Url>,
@@ -414,6 +441,8 @@ impl<'de> Deserialize<'de> for File {
                 storage_path: StoragePath,
                 #[serde(default)]
                 detail: Option<Detail>,
+                #[serde(default)]
+                filename: Option<String>,
             },
             ObjectStorage {
                 #[serde(flatten)]
@@ -431,12 +460,16 @@ impl<'de> Deserialize<'de> for File {
                 mime_type: Option<MediaType>,
                 #[serde(default)]
                 detail: Option<Detail>,
+                #[serde(default)]
+                filename: Option<String>,
             },
             Base64 {
                 mime_type: MediaType,
                 data: String,
                 #[serde(default)]
                 detail: Option<Detail>,
+                #[serde(default)]
+                filename: Option<String>,
             },
             ObjectStoragePointer {
                 source_url: Option<Url>,
@@ -444,6 +477,8 @@ impl<'de> Deserialize<'de> for File {
                 storage_path: StoragePath,
                 #[serde(default)]
                 detail: Option<Detail>,
+                #[serde(default)]
+                filename: Option<String>,
             },
             ObjectStorage {
                 #[serde(flatten)]
@@ -465,28 +500,34 @@ impl<'de> Deserialize<'de> for File {
                 url,
                 mime_type,
                 detail,
+                filename,
             }) => Ok(File::Url(UrlFile {
                 url,
                 mime_type,
                 detail,
+                filename,
             })),
             FileTaggedOrUntagged::Tagged(TaggedFile::Base64 {
                 mime_type,
                 data,
                 detail,
+                filename,
             }) => Ok(File::Base64(
-                Base64File::new(None, mime_type, data, detail).map_err(serde::de::Error::custom)?,
+                Base64File::new(None, mime_type, data, detail, filename)
+                    .map_err(serde::de::Error::custom)?,
             )),
             FileTaggedOrUntagged::Tagged(TaggedFile::ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
                 detail,
+                filename,
             }) => Ok(File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
                 detail,
+                filename,
             })),
             FileTaggedOrUntagged::Tagged(TaggedFile::ObjectStorage { file, data }) => {
                 Ok(File::ObjectStorage(ObjectStorageFile { file, data }))
@@ -495,28 +536,34 @@ impl<'de> Deserialize<'de> for File {
                 url,
                 mime_type,
                 detail,
+                filename,
             }) => Ok(File::Url(UrlFile {
                 url,
                 mime_type,
                 detail,
+                filename,
             })),
             FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::Base64 {
                 mime_type,
                 data,
                 detail,
+                filename,
             }) => Ok(File::Base64(
-                Base64File::new(None, mime_type, data, detail).map_err(serde::de::Error::custom)?,
+                Base64File::new(None, mime_type, data, detail, filename)
+                    .map_err(serde::de::Error::custom)?,
             )),
             FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
                 detail,
+                filename,
             }) => Ok(File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
                 detail,
+                filename,
             })),
             FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::ObjectStorage { file, data }) => {
                 Ok(File::ObjectStorage(ObjectStorageFile { file, data }))
@@ -529,7 +576,7 @@ impl File {
     pub async fn take_or_fetch(self, client: &TensorzeroHttpClient) -> Result<Base64File, Error> {
         match self {
             File::Url(url_file) => {
-                let UrlFile { url, mime_type, detail } = url_file;
+                let UrlFile { url, mime_type, detail, filename } = url_file;
                 let response = client.get(url.clone()).send().await.map_err(|e| {
                     Error::new(ErrorDetails::BadFileFetch {
                         url: url.clone(),
@@ -633,6 +680,7 @@ impl File {
                     mime_type,
                     data,
                     detail,
+                    filename,
                 })
             }
             File::Base64(base64_file) => {
@@ -830,6 +878,7 @@ mod tests {
                                             .unwrap(),
                                         },
                                         detail: None,
+                                        filename: None,
                                     },
                                     data: "my-image-1-data".to_string(),
                                 }
@@ -847,6 +896,7 @@ mod tests {
                                             .unwrap(),
                                         },
                                         detail: None,
+                                        filename: None,
                                     },
                                     data: "my-image-2-data".to_string(),
                                 }
@@ -864,6 +914,7 @@ mod tests {
                                             .unwrap(),
                                         },
                                         detail: None,
+                                        filename: None,
                                     },
                                     data: "my-image-1-data".to_string(),
                                 }
@@ -886,6 +937,7 @@ mod tests {
                                             .unwrap(),
                                         },
                                         detail: None,
+                                        filename: None,
                                     },
                                     data: "my-image-3-data".to_string(),
                                 }
@@ -903,6 +955,7 @@ mod tests {
                                             .unwrap(),
                                         },
                                         detail: None,
+                                        filename: None,
                                     },
                                     data: "my-image-1-data".to_string(),
                                 }
@@ -981,6 +1034,7 @@ mod tests {
                 url: "https://example.com/image.png".parse().unwrap(),
                 mime_type: Some(mime::IMAGE_PNG),
                 detail: None,
+                filename: None,
             });
 
             let serialized = serde_json::to_value(&file).unwrap();
@@ -995,6 +1049,7 @@ mod tests {
                 url: "https://example.com/image.png".parse().unwrap(),
                 mime_type: None,
                 detail: None,
+                filename: None,
             });
 
             let serialized = serde_json::to_value(&file).unwrap();
@@ -1010,6 +1065,7 @@ mod tests {
                 mime_type: mime::IMAGE_PNG,
                 data: "iVBORw0KGgo=".to_string(),
                 detail: None,
+                filename: None,
             });
 
             let serialized = serde_json::to_value(&file).unwrap();
@@ -1028,6 +1084,7 @@ mod tests {
                     path: object_store::path::Path::parse("test/path.png").unwrap(),
                 },
                 detail: None,
+                filename: None,
             });
 
             let serialized = serde_json::to_value(&file).unwrap();
@@ -1153,7 +1210,7 @@ mod tests {
         fn test_roundtrip_serialization() {
             // Test that serialize -> deserialize maintains data integrity
             let original = File::Base64(
-                Base64File::new(None, mime::IMAGE_JPEG, "base64data".to_string(), None)
+                Base64File::new(None, mime::IMAGE_JPEG, "base64data".to_string(), None, None)
                     .expect("test data should be valid"),
             );
 
@@ -1171,6 +1228,7 @@ mod tests {
                 mime::IMAGE_PNG,
                 "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA".to_string(),
                 None,
+                None,
             );
 
             assert!(result.is_err());
@@ -1185,6 +1243,7 @@ mod tests {
                 None,
                 mime::IMAGE_PNG,
                 "iVBORw0KGgoAAAANSUhEUgAAAAUA".to_string(),
+                None,
                 None,
             );
 

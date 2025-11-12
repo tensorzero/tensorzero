@@ -308,6 +308,7 @@ impl InputMessageContent {
                         url,
                         mime_type,
                         detail,
+                        filename,
                     }) => {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
@@ -325,6 +326,7 @@ impl InputMessageContent {
                         let mime_type = mime_type.clone();
                         let detail_clone = detail.clone();
                         let detail_for_future = detail.clone();
+                        let filename_for_future = filename.clone();
                         let delayed_file_future = async move {
                             let base64_file = file.take_or_fetch(&client).await?;
                             let path = storage_kind.file_path(&base64_file)?;
@@ -334,6 +336,7 @@ impl InputMessageContent {
                                     mime_type: base64_file.mime_type.clone(),
                                     storage_path: path,
                                     detail: detail_for_future,
+                                    filename: filename_for_future,
                                 },
                                 data: base64_file.data().to_string(),
                             })
@@ -358,6 +361,7 @@ impl InputMessageContent {
                         let mime_type = &base64_file.mime_type;
                         let data = base64_file.data();
                         let detail = &base64_file.detail;
+                        let filename = &base64_file.filename;
 
                         let storage_kind = get_storage_kind(&context)?;
                         let base64_file_for_path = Base64File::new(
@@ -370,6 +374,9 @@ impl InputMessageContent {
                             // affect the file's hash or storage location. The same image file with
                             // different detail values should map to the same storage path for deduplication.
                             None,
+                            // We also set filename to None when computing the storage path for the same reason.
+                            // The filename is metadata that shouldn't affect the file's hash or storage location.
+                            None,
                         )?;
                         let path = storage_kind.file_path(&base64_file_for_path)?;
 
@@ -380,6 +387,7 @@ impl InputMessageContent {
                                     mime_type: mime_type.clone(),
                                     storage_path: path,
                                     detail: detail.clone(),
+                                    filename: filename.clone(),
                                 },
                                 data: data.to_string(),
                             }),
@@ -404,6 +412,7 @@ impl InputMessageContent {
                         let owned_storage_path = file.storage_path.clone();
                         let mime_type_for_closure = file.mime_type.clone();
                         let detail_for_future = file.detail.clone();
+                        let filename_for_future = file.filename.clone();
                         // Construct a future that will fetch the file from the object store.
                         // Important: the future will not actually begin executing (including opening the network connection)
                         // until the first time the `Shared` wrapper is `.await`ed.
@@ -417,6 +426,7 @@ impl InputMessageContent {
                                     mime_type: mime_type_for_closure,
                                     storage_path: owned_storage_path,
                                     detail: detail_for_future,
+                                    filename: filename_for_future,
                                 },
                                 data: object_response.data,
                             })
@@ -427,6 +437,7 @@ impl InputMessageContent {
                                     source_url: file.source_url.clone(),
                                     mime_type: file.mime_type.clone(),
                                     detail: file.detail.clone(),
+                                    filename: file.filename.clone(),
                                 },
                                 storage_path: file.storage_path.clone(),
                                 future: delayed_file_future.boxed().shared(),
@@ -524,6 +535,7 @@ impl LazyResolvedInputMessageContent {
                     mime_type: metadata.mime_type,
                     storage_path,
                     detail: metadata.detail,
+                    filename: metadata.filename,
                 }))),
                 // File reference to object storage with data in memory.
                 // Origin: Roundtripping from database (e.g., list_inferences → update_datapoints)
@@ -546,6 +558,7 @@ impl LazyResolvedInputMessageContent {
                         resolved_file.file.mime_type.clone(),
                         resolved_file.data.clone(),
                         resolved_file.file.detail.clone(),
+                        resolved_file.file.filename.clone(),
                     )?;
                     write_file(
                         object_store_info,
@@ -566,6 +579,7 @@ impl LazyResolvedInputMessageContent {
                         pending.0.file.mime_type.clone(),
                         pending.0.data.clone(),
                         pending.0.file.detail.clone(),
+                        pending.0.file.filename.clone(),
                     )?;
                     write_file(
                         object_store_info,

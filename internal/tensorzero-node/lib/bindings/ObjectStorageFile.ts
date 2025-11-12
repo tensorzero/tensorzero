@@ -13,4 +13,5 @@ export type ObjectStorageFile = {
   mime_type: string;
   storage_path: StoragePath;
   detail?: Detail;
+  filename?: string;
 };
