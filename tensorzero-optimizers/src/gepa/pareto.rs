@@ -10,6 +10,8 @@ use std::collections::{HashMap, HashSet};
 use tensorzero_core::{
     config::{Config, MetricConfigOptimize},
     error::{Error, ErrorDetails},
+    evaluations::{EvaluationConfig, EvaluatorConfig},
+    optimization::gepa::GEPAConfig,
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
@@ -46,7 +48,7 @@ use super::evaluate::EvaluationResults;
 pub fn update_pareto_frontier(
     candidates: HashMap<String, UninitializedChatCompletionConfig>,
     val_scores: &HashMap<String, Option<EvaluationResults>>,
-    config: &tensorzero_core::optimization::gepa::GEPAConfig,
+    config: &GEPAConfig,
     tensorzero_config: &Config,
 ) -> Result<
     (
@@ -74,9 +76,7 @@ pub fn update_pareto_frontier(
         })?;
 
     let evaluators = match &**evaluation_config {
-        tensorzero_core::evaluations::EvaluationConfig::Inference(inference_config) => {
-            &inference_config.evaluators
-        }
+        EvaluationConfig::Inference(inference_config) => &inference_config.evaluators,
     };
 
     // Filter out candidates that failed evaluation (None)
@@ -115,7 +115,7 @@ pub fn update_pareto_frontier(
 
         for (variant_name, evaluation_results) in &valid_scores {
             if let Some(scores) = evaluation_results.per_datapoint.get(datapoint_id) {
-                instance_scores.push(((*variant_name).clone(), scores.clone()));
+                instance_scores.push((variant_name.to_string(), scores.clone()));
             }
         }
 
@@ -130,10 +130,10 @@ pub fn update_pareto_frontier(
     }
 
     // Step 2: Build candidate set C (union of all instance-wise Pareto sets)
-    let mut candidate_set: HashSet<String> = HashSet::new();
-    for pareto_set in instance_pareto_sets.values() {
-        candidate_set.extend(pareto_set.iter().cloned());
-    }
+    let candidate_set: HashSet<String> = instance_pareto_sets
+        .values()
+        .flat_map(|set| set.iter().cloned())
+        .collect();
 
     tracing::debug!(
         "Step 2: Candidate set has {} variants (union of instance-wise Pareto sets)",
@@ -142,16 +142,7 @@ pub fn update_pareto_frontier(
 
     // Early exit if no candidates or only one
     if candidate_set.len() <= 1 {
-        let frequencies: HashMap<String, usize> = candidate_set
-            .iter()
-            .map(|v| {
-                let freq = instance_pareto_sets
-                    .values()
-                    .filter(|s| s.contains(v))
-                    .count();
-                (v.clone(), freq)
-            })
-            .collect();
+        let frequencies = calculate_frequencies(&candidate_set, &instance_pareto_sets);
 
         let filtered_candidates: HashMap<String, UninitializedChatCompletionConfig> = candidates
             .into_iter()
@@ -202,16 +193,15 @@ pub fn update_pareto_frontier(
             let total_possible = total_datapoints * total_evaluators;
             if total_possible > 0 {
                 // Count non-None scores across all (datapoint, evaluator) pairs
-                let mut non_none_count = 0;
-                for datapoint_id in &datapoint_ids {
-                    if let Some(scores) = evaluation_results.per_datapoint.get(datapoint_id) {
-                        for evaluator_name in evaluators.keys() {
-                            if let Some(Some(_)) = scores.get(evaluator_name) {
-                                non_none_count += 1;
-                            }
-                        }
-                    }
-                }
+                let non_none_count = datapoint_ids
+                    .iter()
+                    .filter_map(|datapoint_id| evaluation_results.per_datapoint.get(datapoint_id))
+                    .flat_map(|scores| {
+                        evaluators.keys().filter_map(move |evaluator_name| {
+                            scores.get(evaluator_name).and_then(|s| s.as_ref())
+                        })
+                    })
+                    .count();
 
                 let missing_rate = 1.0 - (non_none_count as f32 / total_possible as f32);
 
@@ -229,14 +219,7 @@ pub fn update_pareto_frontier(
     }
 
     // Compute frequency map for sampling (count instance-wise Pareto memberships)
-    let mut frequencies: HashMap<String, usize> = HashMap::new();
-    for variant in &non_dominated {
-        let freq = instance_pareto_sets
-            .values()
-            .filter(|s| s.contains(variant))
-            .count();
-        frequencies.insert(variant.clone(), freq);
-    }
+    let frequencies = calculate_frequencies(&non_dominated, &instance_pareto_sets);
 
     // Filter out variants not in final non-dominated set
     let filtered_candidates: HashMap<String, UninitializedChatCompletionConfig> = candidates
@@ -273,6 +256,38 @@ pub fn impute_missing_score(score: Option<f32>, optimize: MetricConfigOptimize) 
     }
 }
 
+/// Compare two values according to optimization direction
+///
+/// Returns (is_worse, is_better) where:
+/// - `is_worse`: true if value `a` is worse than value `b` given the optimization direction
+/// - `is_better`: true if value `a` is strictly better than value `b` given the optimization direction
+fn compare_values(a_val: f32, b_val: f32, optimize: MetricConfigOptimize) -> (bool, bool) {
+    match optimize {
+        MetricConfigOptimize::Max => (a_val < b_val, a_val > b_val),
+        MetricConfigOptimize::Min => (a_val > b_val, a_val < b_val),
+    }
+}
+
+/// Calculate frequency map for variants based on instance-wise Pareto set memberships
+///
+/// For each variant, counts how many datapoint-level Pareto sets it appears in.
+/// Higher frequency indicates the variant performs well on more instances.
+fn calculate_frequencies(
+    variants: &HashSet<String>,
+    instance_pareto_sets: &HashMap<String, HashSet<String>>,
+) -> HashMap<String, usize> {
+    variants
+        .iter()
+        .map(|v| {
+            let freq = instance_pareto_sets
+                .values()
+                .filter(|s| s.contains(v))
+                .count();
+            (v.clone(), freq)
+        })
+        .collect()
+}
+
 /// Check if variant A globally dominates variant B across all (datapoint, evaluator) objectives
 ///
 /// A globally dominates B if:
@@ -284,23 +299,22 @@ pub fn impute_missing_score(score: Option<f32>, optimize: MetricConfigOptimize) 
 pub fn global_dominates(
     variant_a_results: &EvaluationResults,
     variant_b_results: &EvaluationResults,
-    evaluators: &HashMap<String, tensorzero_core::evaluations::EvaluatorConfig>,
+    evaluators: &HashMap<String, EvaluatorConfig>,
 ) -> bool {
     let mut better_or_equal_on_all = true;
     let mut strictly_better_on_at_least_one = false;
 
     // Get all (datapoint_id, evaluator_name) pairs from both variants
-    let mut all_pairs = std::collections::HashSet::new();
-    for datapoint_id in variant_a_results.per_datapoint.keys() {
-        for evaluator_name in evaluators.keys() {
-            all_pairs.insert((datapoint_id.clone(), evaluator_name.clone()));
-        }
-    }
-    for datapoint_id in variant_b_results.per_datapoint.keys() {
-        for evaluator_name in evaluators.keys() {
-            all_pairs.insert((datapoint_id.clone(), evaluator_name.clone()));
-        }
-    }
+    let all_pairs: HashSet<_> = variant_a_results
+        .per_datapoint
+        .keys()
+        .chain(variant_b_results.per_datapoint.keys())
+        .flat_map(|datapoint_id| {
+            evaluators
+                .keys()
+                .map(move |evaluator_name| (datapoint_id.clone(), evaluator_name.clone()))
+        })
+        .collect();
 
     for (datapoint_id, evaluator_name) in all_pairs {
         let Some(evaluator_config) = evaluators.get(&evaluator_name) else {
@@ -323,25 +337,13 @@ pub fn global_dominates(
         let a_val = impute_missing_score(score_a, optimize);
         let b_val = impute_missing_score(score_b, optimize);
 
-        match optimize {
-            MetricConfigOptimize::Max => {
-                if a_val < b_val {
-                    better_or_equal_on_all = false;
-                    break;
-                }
-                if a_val > b_val {
-                    strictly_better_on_at_least_one = true;
-                }
-            }
-            MetricConfigOptimize::Min => {
-                if a_val > b_val {
-                    better_or_equal_on_all = false;
-                    break;
-                }
-                if a_val < b_val {
-                    strictly_better_on_at_least_one = true;
-                }
-            }
+        let (is_worse, is_better) = compare_values(a_val, b_val, optimize);
+        if is_worse {
+            better_or_equal_on_all = false;
+            break;
+        }
+        if is_better {
+            strictly_better_on_at_least_one = true;
         }
     }
 
@@ -358,7 +360,7 @@ pub fn global_dominates(
 pub fn instance_dominates(
     a_scores: &HashMap<String, Option<f32>>,
     b_scores: &HashMap<String, Option<f32>>,
-    evaluators: &HashMap<String, tensorzero_core::evaluations::EvaluatorConfig>,
+    evaluators: &HashMap<String, EvaluatorConfig>,
 ) -> bool {
     let mut better_or_equal_on_all = true;
     let mut strictly_better_on_at_least_one = false;
@@ -373,25 +375,13 @@ pub fn instance_dominates(
         let a_val = impute_missing_score(score_a, optimize);
         let b_val = impute_missing_score(score_b, optimize);
 
-        match optimize {
-            MetricConfigOptimize::Max => {
-                if a_val < b_val {
-                    better_or_equal_on_all = false;
-                    break;
-                }
-                if a_val > b_val {
-                    strictly_better_on_at_least_one = true;
-                }
-            }
-            MetricConfigOptimize::Min => {
-                if a_val > b_val {
-                    better_or_equal_on_all = false;
-                    break;
-                }
-                if a_val < b_val {
-                    strictly_better_on_at_least_one = true;
-                }
-            }
+        let (is_worse, is_better) = compare_values(a_val, b_val, optimize);
+        if is_worse {
+            better_or_equal_on_all = false;
+            break;
+        }
+        if is_better {
+            strictly_better_on_at_least_one = true;
         }
     }
 
@@ -401,7 +391,7 @@ pub fn instance_dominates(
 /// Find non-dominated variants for a single instance (datapoint) using instance-wise dominance
 pub fn find_non_dominated_variants(
     instance_scores: &[(String, HashMap<String, Option<f32>>)],
-    evaluators: &HashMap<String, tensorzero_core::evaluations::EvaluatorConfig>,
+    evaluators: &HashMap<String, EvaluatorConfig>,
 ) -> Vec<String> {
     let mut non_dominated = Vec::new();
 
@@ -461,9 +451,7 @@ pub fn is_improvement(
 
     // Get evaluator names from the evaluation config
     let evaluators = match &**evaluation_config {
-        tensorzero_core::evaluations::EvaluationConfig::Inference(inference_config) => {
-            &inference_config.evaluators
-        }
+        EvaluationConfig::Inference(inference_config) => &inference_config.evaluators,
     };
 
     // Track whether mutation is better, worse, or equal on each metric
