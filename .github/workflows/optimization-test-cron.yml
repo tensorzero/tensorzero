@@ -33,6 +33,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      - name: Cleanup disk space
+        run: ./ci/free-disk-space.sh
+
       - name: Write GCP JWT key to file
         env:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
