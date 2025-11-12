@@ -999,6 +999,7 @@ pub enum UninitializedProviderConfig {
         #[cfg_attr(test, ts(type = "string | null"))]
         credential_location: Option<CredentialLocationWithFallback>,
         #[cfg(feature = "e2e_tests")]
+        #[ts(skip)]
         api_base: Option<Url>,
     },
     #[strum(serialize = "google_ai_studio_gemini")]
