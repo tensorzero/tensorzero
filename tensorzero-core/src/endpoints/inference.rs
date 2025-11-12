@@ -295,7 +295,7 @@ pub async fn inference(
         );
     }
 
-    let (function, function_name) = find_function(&params, &config)?;
+    let (function, function_name) = find_function(&params, &config).await?;
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
         function.variants().clone().into_iter().collect();
 
@@ -316,7 +316,8 @@ pub async fn inference(
         &params.extra_headers,
         Some(&function),
         &config.models,
-    )?;
+    )
+    .await?;
 
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
@@ -705,7 +706,10 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
 /// invalid combination of parameters is provided.
 /// If `model_name` is specified, then we use the special 'default' function
 /// Returns the function config and the function name
-fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig>, String), Error> {
+async fn find_function(
+    params: &Params,
+    config: &Config,
+) -> Result<(Arc<FunctionConfig>, String), Error> {
     match (
         &params.function_name,
         &params.model_name,
@@ -737,7 +741,8 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 &params.extra_headers,
                 None,
                 &config.models,
-            )?;
+            )
+            .await?;
 
             Ok((
                 Arc::new(FunctionConfig::Chat(FunctionConfigChat {
@@ -1585,33 +1590,37 @@ fn validate_provider_filter(provider_name: &str, models: &ModelTable) -> Result<
 }
 
 /// Validate that model_provider filter references a valid model and provider
-fn validate_model_provider_filter(
+async fn validate_model_provider_filter(
     model_name: &str,
     provider_name: &str,
     models: &ModelTable,
 ) -> Result<(), Error> {
-    // Check if the model exists in the table
-    if let Some(model_config) = models.table.get(model_name) {
+    // Check if the model exists in the table (supports shorthand notation)
+    if let Some(model_config) = models.get(model_name).await? {
         // Check if the provider exists in that model
         if !model_config.providers.contains_key(provider_name) {
             return Err(ErrorDetails::InvalidInferenceTarget {
                 message: format!(
-                    "Invalid model_provider filter: provider '{provider_name}' not found in model '{model_name}'",
+                    "Invalid model provider filter: provider `{provider_name}` not found in model `{model_name}.`",
                 ),
             }
             .into());
         }
         Ok(())
     } else {
-        Err(ErrorDetails::InvalidInferenceTarget {
-            message: format!("Invalid model_provider filter: model '{model_name}' does not exist",),
-        }
-        .into())
+        Err(
+            ErrorDetails::InvalidInferenceTarget {
+                message: format!(
+                    "Invalid model provider filter: model `{model_name}` does not exist.",
+                ),
+            }
+            .into(),
+        )
     }
 }
 
 /// Validate all filters in extra_body and extra_headers
-fn validate_inference_filters(
+async fn validate_inference_filters(
     extra_body: &UnfilteredInferenceExtraBody,
     extra_headers: &UnfilteredInferenceExtraHeaders,
     function: Option<&FunctionConfig>,
@@ -1636,7 +1645,7 @@ fn validate_inference_filters(
                 provider_name,
                 ..
             } => {
-                validate_model_provider_filter(model_name, provider_name, models)?;
+                validate_model_provider_filter(model_name, provider_name, models).await?;
             }
             InferenceExtraBody::Always { .. } => {
                 // Always variant has no filter to validate
@@ -1663,7 +1672,7 @@ fn validate_inference_filters(
                 provider_name,
                 ..
             } => {
-                validate_model_provider_filter(model_name, provider_name, models)?;
+                validate_model_provider_filter(model_name, provider_name, models).await?;
             }
             InferenceExtraHeader::Always { .. } => {
                 // Always variant has no filter to validate
@@ -1804,8 +1813,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_find_function_no_function_model() {
+    #[tokio::test]
+    async fn test_find_function_no_function_model() {
         let err = find_function(
             &Params {
                 function_name: None,
@@ -1814,6 +1823,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect_err("find_function should fail without either arg");
         assert!(
             err.to_string()
@@ -1822,8 +1832,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_find_function_both_function_model() {
+    #[tokio::test]
+    async fn test_find_function_both_function_model() {
         let err = find_function(
             &Params {
                 function_name: Some("my_function".to_string()),
@@ -1832,6 +1842,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect_err("find_function should fail with both args provided");
         assert!(
             err.to_string()
@@ -1840,8 +1851,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_find_function_model_and_variant() {
+    #[tokio::test]
+    async fn test_find_function_model_and_variant() {
         let err = find_function(
             &Params {
                 function_name: None,
@@ -1851,6 +1862,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect_err("find_function should fail without model_name");
         assert!(
             err.to_string()
@@ -1859,8 +1871,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_find_function_shorthand_model() {
+    #[tokio::test]
+    async fn test_find_function_shorthand_model() {
         let (function_config, function_name) = find_function(
             &Params {
                 function_name: None,
@@ -1869,6 +1881,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect("Failed to find shorthand function");
         assert_eq!(function_name, "tensorzero::default");
         assert_eq!(function_config.variants().len(), 1);
@@ -1878,8 +1891,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_find_function_shorthand_missing_provider() {
+    #[tokio::test]
+    async fn test_find_function_shorthand_missing_provider() {
         let err = find_function(
             &Params {
                 model_name: Some("fake_provider::gpt-9000".to_string()),
@@ -1887,6 +1900,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect_err("find_function should fail with invalid provider");
         assert!(
             err.to_string()
@@ -2262,8 +2276,8 @@ mod tests {
             );
         }
 
-        #[test]
-        fn test_validate_inference_filters_function_context_valid_variant() {
+        #[tokio::test]
+        async fn test_validate_inference_filters_function_context_valid_variant() {
             let function = create_test_function_config();
             let models = create_test_model_table();
 
@@ -2281,12 +2295,13 @@ mod tests {
                 &UnfilteredInferenceExtraHeaders::default(),
                 Some(&function),
                 &models,
-            );
+            )
+            .await;
             assert!(result.is_ok());
         }
 
-        #[test]
-        fn test_validate_inference_filters_function_context_invalid_variant() {
+        #[tokio::test]
+        async fn test_validate_inference_filters_function_context_invalid_variant() {
             let function = create_test_function_config();
             let models = create_test_model_table();
 
@@ -2304,12 +2319,13 @@ mod tests {
                 &UnfilteredInferenceExtraHeaders::default(),
                 Some(&function),
                 &models,
-            );
+            )
+            .await;
             assert!(result.is_err());
         }
 
-        #[test]
-        fn test_validate_inference_filters_function_context_invalid_provider() {
+        #[tokio::test]
+        async fn test_validate_inference_filters_function_context_invalid_provider() {
             let function = create_test_function_config();
             let models = create_test_model_table();
 
@@ -2327,12 +2343,13 @@ mod tests {
                 &extra_headers,
                 Some(&function),
                 &models,
-            );
+            )
+            .await;
             assert!(result.is_err());
         }
 
-        #[test]
-        fn test_validate_inference_filters_model_context_invalid_provider() {
+        #[tokio::test]
+        async fn test_validate_inference_filters_model_context_invalid_provider() {
             let models = create_test_model_table();
 
             let extra_body: UnfilteredInferenceExtraBody = serde_json::from_value(json!([
@@ -2349,12 +2366,13 @@ mod tests {
                 &UnfilteredInferenceExtraHeaders::default(),
                 None,
                 &models,
-            );
+            )
+            .await;
             assert!(result.is_err());
         }
 
-        #[test]
-        fn test_validate_inference_filters_always_variant_no_validation() {
+        #[tokio::test]
+        async fn test_validate_inference_filters_always_variant_no_validation() {
             let function = create_test_function_config();
             let models = create_test_model_table();
 
@@ -2372,12 +2390,13 @@ mod tests {
                 &UnfilteredInferenceExtraHeaders::default(),
                 Some(&function),
                 &models,
-            );
+            )
+            .await;
             assert!(result.is_ok());
         }
 
-        #[test]
-        fn test_validate_inference_filters_empty() {
+        #[tokio::test]
+        async fn test_validate_inference_filters_empty() {
             let function = create_test_function_config();
             let models = create_test_model_table();
 
@@ -2386,7 +2405,8 @@ mod tests {
                 &UnfilteredInferenceExtraHeaders::default(),
                 Some(&function),
                 &models,
-            );
+            )
+            .await;
             assert!(result.is_ok());
         }
     }

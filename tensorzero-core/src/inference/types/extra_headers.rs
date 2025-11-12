@@ -74,7 +74,7 @@ pub struct FullExtraHeadersConfig {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(untagged)]
+#[serde(untagged, deny_unknown_fields)]
 pub enum InferenceExtraHeader {
     Provider {
         model_provider_name: String,
@@ -391,5 +391,38 @@ mod tests {
         let json = serde_json::to_string(&original).unwrap();
         let deserialized: InferenceExtraHeader = serde_json::from_str(&json).unwrap();
         assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn test_inference_extra_header_rejects_partial_model_provider_missing_provider() {
+        // Missing provider_name should be rejected, not silently become Always
+        let json = r#"{"model_name": "gpt-4o", "name": "X-Custom-Header", "value": "test"}"#;
+        let result: Result<InferenceExtraHeader, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "Expected error when model_name is present but provider_name is missing"
+        );
+    }
+
+    #[test]
+    fn test_inference_extra_header_rejects_partial_model_provider_missing_model() {
+        // Missing model_name should be rejected, not silently become Always
+        let json = r#"{"provider_name": "openai", "name": "X-Custom-Header", "value": "test"}"#;
+        let result: Result<InferenceExtraHeader, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "Expected error when provider_name is present but model_name is missing"
+        );
+    }
+
+    #[test]
+    fn test_inference_extra_header_rejects_extra_fields() {
+        // Extra fields should be rejected
+        let json = r#"{"name": "X-Custom-Header", "value": "test", "unknown_field": "value"}"#;
+        let result: Result<InferenceExtraHeader, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "Expected error when unknown fields are present"
+        );
     }
 }
