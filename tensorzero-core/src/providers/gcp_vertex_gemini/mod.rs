@@ -516,7 +516,7 @@ impl GCPVertexGeminiProvider {
         })
     }
 
-    #[expect(clippy::too_many_arguments)]
+    #[cfg_attr(feature = "e2e_tests", allow(clippy::too_many_arguments))]
     pub async fn new(
         model_id: Option<String>,
         endpoint_id: Option<String>,
@@ -2664,7 +2664,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
     }
 }
 
-#[cfg_attr(feature = "e2e_tests", expect(clippy::too_many_arguments))]
+#[allow(clippy::too_many_arguments)]
 fn convert_stream_response_with_metadata_to_chunk(
     raw_response: String,
     response: GCPVertexGeminiResponse,
