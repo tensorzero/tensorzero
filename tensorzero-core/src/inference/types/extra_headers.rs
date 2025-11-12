@@ -40,6 +40,11 @@ impl UnfilteredInferenceExtraHeaders {
         self.extra_headers.is_empty()
     }
 
+    /// Get a reference to the extra_headers vector
+    pub fn as_slice(&self) -> &[InferenceExtraHeader] {
+        &self.extra_headers
+    }
+
     /// Filter the 'InferenceExtraHeader' options by variant name
     /// If the variant name is `None`, then all variant-specific extra header options are removed
     pub fn filter(self, variant_name: &str) -> FilteredInferenceExtraHeaders {

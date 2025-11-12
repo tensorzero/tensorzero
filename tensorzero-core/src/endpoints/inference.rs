@@ -36,8 +36,10 @@ use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier,
 };
-use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
-use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
+use crate::inference::types::extra_body::{InferenceExtraBody, UnfilteredInferenceExtraBody};
+use crate::inference::types::extra_headers::{
+    InferenceExtraHeader, UnfilteredInferenceExtraHeaders,
+};
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     collect_chunks, ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
@@ -307,6 +309,14 @@ pub async fn inference(
 
     // Validate the input
     function.validate_inference_params(&params)?;
+
+    // Validate extra_body and extra_headers filters
+    validate_inference_filters(
+        &params.extra_body,
+        &params.extra_headers,
+        Some(&function),
+        &config.models,
+    )?;
 
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
@@ -720,6 +730,14 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 }
                 .into());
             }
+
+            // Validate extra_body and extra_headers filters
+            validate_inference_filters(
+                &params.extra_body,
+                &params.extra_headers,
+                None,
+                &config.models,
+            )?;
 
             Ok((
                 Arc::new(FunctionConfig::Chat(FunctionConfigChat {
@@ -1491,6 +1509,125 @@ fn prepare_candidate_variants(
     Ok(needs_sampling)
 }
 
+/// Validate that variant filter references an existing variant in the function
+fn validate_variant_filter(variant_name: &str, function: &FunctionConfig) -> Result<(), Error> {
+    if !function.variants().contains_key(variant_name) {
+        return Err(ErrorDetails::UnknownVariant {
+            name: variant_name.to_string(),
+        }
+        .into());
+    }
+    Ok(())
+}
+
+/// Validate that provider filter references a valid provider
+fn validate_provider_filter(provider_name: &str, models: &ModelTable) -> Result<(), Error> {
+    // The provider_name in filters can be:
+    // 1. Shorthand format: "openai::gpt-4o" - just validate it's a valid shorthand prefix
+    // 2. Fully qualified: "tensorzero::model_name::X::provider_name::Y" - validate model exists and provider is in that model
+
+    // Check if it's a fully qualified name first
+    if provider_name.starts_with("tensorzero::model_name::") {
+        // Parse the fully qualified name: tensorzero::model_name::{model}::provider_name::{provider}
+        let parts: Vec<&str> = provider_name.split("::").collect();
+        if parts.len() == 5
+            && parts[0] == "tensorzero"
+            && parts[1] == "model_name"
+            && parts[3] == "provider_name"
+        {
+            let model_name = parts[2];
+            let provider = parts[4];
+
+            // Check if the model exists in the table
+            if let Some(model_config) = models.table.get(model_name) {
+                // Check if the provider exists in that model
+                if !model_config.providers.contains_key(provider) {
+                    return Err(ErrorDetails::InvalidInferenceTarget {
+                        message: format!(
+                            "Invalid model_provider_name filter '{provider_name}': provider '{provider}' not found in model '{model_name}'",
+                        ),
+                    }
+                    .into());
+                }
+                return Ok(());
+            } else {
+                return Err(ErrorDetails::InvalidInferenceTarget {
+                    message: format!(
+                        "Invalid model_provider_name filter '{provider_name}': model '{model_name}' does not exist",
+                    ),
+                }
+                .into());
+            }
+        }
+
+        // Invalid fully qualified format
+        return Err(ErrorDetails::InvalidInferenceTarget {
+            message: format!(
+                "Invalid model_provider_name filter '{provider_name}': invalid fully qualified format",
+            ),
+        }
+        .into());
+    }
+
+    // Otherwise, it should be shorthand format - just validate it's a valid model/shorthand
+    models.validate(provider_name).map_err(|e| {
+        ErrorDetails::InvalidInferenceTarget {
+            message: format!("Invalid model_provider_name filter '{provider_name}': {e}"),
+        }
+        .into()
+    })
+}
+
+/// Validate all filters in extra_body and extra_headers
+fn validate_inference_filters(
+    extra_body: &UnfilteredInferenceExtraBody,
+    extra_headers: &UnfilteredInferenceExtraHeaders,
+    function: Option<&FunctionConfig>,
+    models: &ModelTable,
+) -> Result<(), Error> {
+    // Validate extra_body filters
+    for filter in extra_body.as_slice() {
+        match filter {
+            InferenceExtraBody::Variant { variant_name, .. } => {
+                if let Some(func) = function {
+                    validate_variant_filter(variant_name, func)?;
+                }
+            }
+            InferenceExtraBody::Provider {
+                model_provider_name,
+                ..
+            } => {
+                validate_provider_filter(model_provider_name, models)?;
+            }
+            InferenceExtraBody::Always { .. } => {
+                // Always variant has no filter to validate
+            }
+        }
+    }
+
+    // Validate extra_headers filters
+    for filter in extra_headers.as_slice() {
+        match filter {
+            InferenceExtraHeader::Variant { variant_name, .. } => {
+                if let Some(func) = function {
+                    validate_variant_filter(variant_name, func)?;
+                }
+            }
+            InferenceExtraHeader::Provider {
+                model_provider_name,
+                ..
+            } => {
+                validate_provider_filter(model_provider_name, models)?;
+            }
+            InferenceExtraHeader::Always { .. } => {
+                // Always variant has no filter to validate
+            }
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1929,5 +2066,269 @@ mod tests {
         // Verify serialized format is tagged
         let serialized_value: serde_json::Value = serde_json::from_str(&serialized).unwrap();
         assert_eq!(serialized_value["file_type"], "base64");
+    }
+
+    mod validation_tests {
+        use super::*;
+        use crate::function::{FunctionConfig, FunctionConfigChat};
+        use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
+        use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
+        use crate::model::ModelTable;
+        use crate::variant::VariantInfo;
+        use serde_json::json;
+        use std::collections::{HashMap, HashSet};
+        use std::sync::Arc;
+
+        fn create_test_function_config() -> FunctionConfig {
+            let mut variants = HashMap::new();
+            variants.insert(
+                "variant1".to_string(),
+                Arc::new(VariantInfo {
+                    timeouts: Default::default(),
+                    inner: crate::variant::VariantConfig::ChatCompletion(Default::default()),
+                }),
+            );
+            variants.insert(
+                "variant2".to_string(),
+                Arc::new(VariantInfo {
+                    timeouts: Default::default(),
+                    inner: crate::variant::VariantConfig::ChatCompletion(Default::default()),
+                }),
+            );
+            FunctionConfig::Chat(FunctionConfigChat {
+                variants,
+                schemas: Default::default(),
+                tools: vec![],
+                tool_choice: Default::default(),
+                parallel_tool_calls: None,
+                description: None,
+                all_explicit_templates_names: HashSet::new(),
+                experimentation: Default::default(),
+            })
+        }
+
+        fn create_test_model_table() -> ModelTable {
+            use crate::config::provider_types::ProviderTypesConfig;
+            use crate::model::{ModelConfig, ModelProvider, ProviderConfig};
+            use crate::model_table::ProviderTypeDefaultCredentials;
+            use crate::providers::dummy::DummyProvider;
+
+            // Create a model table with one model ("test-model") and one provider ("test-provider")
+            let map = HashMap::from([(
+                "test-model".into(),
+                ModelConfig {
+                    routing: vec!["test-provider".into()],
+                    providers: HashMap::from([(
+                        "test-provider".into(),
+                        ModelProvider {
+                            name: "test-provider".into(),
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "test-model".into(),
+                                ..Default::default()
+                            }),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            timeouts: Default::default(),
+                            discard_unknown_chunks: false,
+                        },
+                    )]),
+                    timeouts: Default::default(),
+                },
+            )]);
+
+            let provider_types = ProviderTypesConfig::default();
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                chrono::Duration::seconds(120),
+            )
+            .expect("Failed to create model table")
+        }
+
+        #[test]
+        fn test_validate_variant_filter_valid() {
+            let function = create_test_function_config();
+            let result = validate_variant_filter("variant1", &function);
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_variant_filter_invalid() {
+            let function = create_test_function_config();
+            let result = validate_variant_filter("nonexistent", &function);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_provider_filter_fully_qualified_valid() {
+            let models = create_test_model_table();
+            // Valid model and valid provider
+            let result = validate_provider_filter(
+                "tensorzero::model_name::test-model::provider_name::test-provider",
+                &models,
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_provider_filter_fully_qualified_valid_model_invalid_provider() {
+            let models = create_test_model_table();
+            // Valid model but invalid provider - should fail
+            let result = validate_provider_filter(
+                "tensorzero::model_name::test-model::provider_name::nonexistent",
+                &models,
+            );
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_provider_filter_fully_qualified_invalid_model_valid_provider() {
+            let models = create_test_model_table();
+            // Invalid model with valid provider name - should fail
+            let result = validate_provider_filter(
+                "tensorzero::model_name::nonexistent::provider_name::test-provider",
+                &models,
+            );
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_provider_filter_fully_qualified_invalid_both() {
+            let models = create_test_model_table();
+            // Both model and provider invalid - should fail
+            let result = validate_provider_filter(
+                "tensorzero::model_name::nonexistent::provider_name::nonexistent",
+                &models,
+            );
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_inference_filters_function_context_valid_variant() {
+            let function = create_test_function_config();
+            let models = create_test_model_table();
+
+            let extra_body: UnfilteredInferenceExtraBody = serde_json::from_value(json!([
+                {
+                    "variant_name": "variant1",
+                    "pointer": "/test",
+                    "value": {"key": "value"}
+                }
+            ]))
+            .unwrap();
+
+            let result = validate_inference_filters(
+                &extra_body,
+                &UnfilteredInferenceExtraHeaders::default(),
+                Some(&function),
+                &models,
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_inference_filters_function_context_invalid_variant() {
+            let function = create_test_function_config();
+            let models = create_test_model_table();
+
+            let extra_body: UnfilteredInferenceExtraBody = serde_json::from_value(json!([
+                {
+                    "variant_name": "nonexistent",
+                    "pointer": "/test",
+                    "value": {"key": "value"}
+                }
+            ]))
+            .unwrap();
+
+            let result = validate_inference_filters(
+                &extra_body,
+                &UnfilteredInferenceExtraHeaders::default(),
+                Some(&function),
+                &models,
+            );
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_inference_filters_function_context_invalid_provider() {
+            let function = create_test_function_config();
+            let models = create_test_model_table();
+
+            let extra_headers: UnfilteredInferenceExtraHeaders = serde_json::from_value(json!([
+                {
+                    "model_provider_name": "invalid::model",
+                    "name": "X-Custom-Header",
+                    "value": "value"
+                }
+            ]))
+            .unwrap();
+
+            let result = validate_inference_filters(
+                &UnfilteredInferenceExtraBody::default(),
+                &extra_headers,
+                Some(&function),
+                &models,
+            );
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_inference_filters_model_context_invalid_provider() {
+            let models = create_test_model_table();
+
+            let extra_body: UnfilteredInferenceExtraBody = serde_json::from_value(json!([
+                {
+                    "model_provider_name": "invalid::model",
+                    "pointer": "/test",
+                    "value": {"key": "value"}
+                }
+            ]))
+            .unwrap();
+
+            let result = validate_inference_filters(
+                &extra_body,
+                &UnfilteredInferenceExtraHeaders::default(),
+                None,
+                &models,
+            );
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_inference_filters_always_variant_no_validation() {
+            let function = create_test_function_config();
+            let models = create_test_model_table();
+
+            // Always variant should not trigger validation
+            let extra_body: UnfilteredInferenceExtraBody = serde_json::from_value(json!([
+                {
+                    "pointer": "/test",
+                    "value": {"key": "value"}
+                }
+            ]))
+            .unwrap();
+
+            let result = validate_inference_filters(
+                &extra_body,
+                &UnfilteredInferenceExtraHeaders::default(),
+                Some(&function),
+                &models,
+            );
+            assert!(result.is_ok());
+        }
+
+        #[test]
+        fn test_validate_inference_filters_empty() {
+            let function = create_test_function_config();
+            let models = create_test_model_table();
+
+            let result = validate_inference_filters(
+                &UnfilteredInferenceExtraBody::default(),
+                &UnfilteredInferenceExtraHeaders::default(),
+                Some(&function),
+                &models,
+            );
+            assert!(result.is_ok());
+        }
     }
 }

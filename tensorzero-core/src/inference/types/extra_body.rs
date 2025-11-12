@@ -39,6 +39,12 @@ impl UnfilteredInferenceExtraBody {
     pub fn is_empty(&self) -> bool {
         self.extra_body.is_empty()
     }
+
+    /// Get a reference to the extra_body vector
+    pub fn as_slice(&self) -> &[InferenceExtraBody] {
+        &self.extra_body
+    }
+
     /// Filter the 'InferenceExtraBody' options by variant name
     /// If the variant name is `None`, then all variant-specific extra body options are removed
     pub fn filter(self, variant_name: &str) -> FilteredInferenceExtraBody {
