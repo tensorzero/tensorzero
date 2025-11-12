@@ -112,9 +112,9 @@ jobs:
       - name: Pull images referenced by the compose file
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml pull --ignore-pull-failures
 
-      - name: Run live tests container via Docker Compos
+      - name: Run live tests container via Docker Compose
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --rm -e TENSORZERO_CI=1 live-tests
+          UID=$(id -u) GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --rm -e TENSORZERO_CI=1 live-tests
 
       - name: Print live tests logs
         if: always()
