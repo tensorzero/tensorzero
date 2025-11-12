@@ -61,7 +61,11 @@ jobs:
             --from-literal=OPENAI_API_KEY="fake-openai-api-key"
         helm upgrade --install tensorzero .  -f values.yaml -f helm-ci-overrides.yaml -n tensorzero
         kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=tensorzero -n tensorzero --timeout=60s
-        kubectl port-forward service/tensorzero-gateway -n tensorzero 3000:3000
+
+    - name: Port forward the gateway and ui services
+      run: |
+        kubectl port-forward service/tensorzero-gateway -n tensorzero 3000:3000 &
+        kubectl port-forward service/tensorzero-ui -n tensorzero 4000:4000 &
     
     - name: Ping the gateway
       run: |
