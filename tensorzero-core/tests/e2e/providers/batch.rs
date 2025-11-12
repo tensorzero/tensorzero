@@ -31,9 +31,8 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 };
 
 use crate::providers::common::{
-    assert_model_name_matches, check_dynamic_json_mode_inference_response,
-    check_dynamic_tool_use_inference_response, check_json_mode_inference_response,
-    check_multi_turn_parallel_tool_use_inference_response,
+    check_dynamic_json_mode_inference_response, check_dynamic_tool_use_inference_response,
+    check_json_mode_inference_response, check_multi_turn_parallel_tool_use_inference_response,
     check_parallel_tool_use_inference_response, check_tool_use_multi_turn_inference_response,
     check_tool_use_tool_choice_allowed_tools_inference_response,
     check_tool_use_tool_choice_auto_unused_inference_response,
@@ -462,7 +461,7 @@ pub async fn check_clickhouse_batch_request_status(
     // We can't check that the batch params are exactly the same because they vary per-provider
     // We will check that they are valid by using them instead.
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -802,7 +801,7 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
     );
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -1158,7 +1157,7 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     assert_eq!(frequency_penalty, 0.2);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -1758,7 +1757,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         assert_eq!(inference_params, expected_inference_params[i]);
 
         let model_name = result.get("model_name").unwrap().as_str().unwrap();
-        assert_model_name_matches(model_name, &provider.model_name);
+        assert_eq!(model_name, &provider.model_name);
 
         let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
         assert_eq!(model_provider_name, provider.model_provider_name);
@@ -2212,7 +2211,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
     assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -2664,7 +2663,7 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
     );
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -2869,7 +2868,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
     );
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -3418,7 +3417,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
     assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -3780,7 +3779,7 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
     assert_eq!(max_tokens, 100);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -4127,7 +4126,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
@@ -4474,7 +4473,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     assert_eq!(max_tokens, expected_max_tokens);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);

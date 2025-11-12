@@ -88,38 +88,6 @@ pub struct EmbeddingTestProvider {
     pub model_name: String,
 }
 
-pub(crate) fn names_match_with_mock_batch_suffix(actual: &str, expected: &str) -> bool {
-    if actual == expected {
-        return true;
-    }
-    if let Some(stripped) = actual.strip_suffix("_mock_batch") {
-        if stripped == expected {
-            return true;
-        }
-    }
-    if let Some(stripped) = expected.strip_suffix("_mock_batch") {
-        if actual == stripped {
-            return true;
-        }
-    }
-    false
-}
-
-pub(crate) fn assert_name_matches_with_mock_batch_suffix(kind: &str, actual: &str, expected: &str) {
-    assert!(
-        names_match_with_mock_batch_suffix(actual, expected),
-        "{kind} name mismatch: actual `{actual}`, expected `{expected}` (allowing `_mock_batch` suffix)"
-    );
-}
-
-pub(crate) fn assert_function_name_matches(actual: &str, expected: &str) {
-    assert_name_matches_with_mock_batch_suffix("function", actual, expected);
-}
-
-pub(crate) fn assert_model_name_matches(actual: &str, expected: &str) {
-    assert_name_matches_with_mock_batch_suffix("model", actual, expected);
-}
-
 /// Enforce that every provider implements a common set of tests.
 ///
 /// To achieve that, each provider should call the `generate_provider_tests!` macro along with a
@@ -2025,7 +1993,7 @@ pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -2234,7 +2202,7 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -2673,7 +2641,7 @@ pub async fn check_base64_pdf_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "pdf_test");
+    assert_eq!(function_name, "pdf_test");
 
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
@@ -2747,7 +2715,7 @@ pub async fn check_base64_pdf_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -2825,7 +2793,7 @@ pub async fn check_base64_image_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "image_test");
+    assert_eq!(function_name, "image_test");
 
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
@@ -2900,7 +2868,7 @@ pub async fn check_base64_image_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -2978,7 +2946,7 @@ pub async fn check_url_image_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "tensorzero::default");
+    assert_eq!(function_name, "tensorzero::default");
 
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
@@ -3052,7 +3020,7 @@ pub async fn check_url_image_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -3142,7 +3110,7 @@ pub async fn check_simple_inference_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, hardcoded_function_name);
+    assert_eq!(function_name, hardcoded_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -3219,7 +3187,7 @@ pub async fn check_simple_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -3345,7 +3313,7 @@ pub async fn check_simple_image_inference_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "basic_test");
+    assert_eq!(function_name, "basic_test");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -3421,7 +3389,7 @@ pub async fn check_simple_image_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -3786,7 +3754,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -3969,7 +3937,7 @@ pub async fn check_inference_params_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, hardcoded_function_name);
+    assert_eq!(function_name, hardcoded_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -4059,7 +4027,7 @@ pub async fn check_inference_params_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -4316,7 +4284,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -4495,7 +4463,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper");
+    assert_eq!(function_name, "weather_helper");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -4588,7 +4556,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -4814,7 +4782,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper");
+    assert_eq!(function_name, "weather_helper");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -4933,7 +4901,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -5104,7 +5072,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper");
+    assert_eq!(function_name, "weather_helper");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -5203,7 +5171,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -5402,7 +5370,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper");
+    assert_eq!(function_name, "weather_helper");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -5510,7 +5478,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -5715,7 +5683,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper");
+    assert_eq!(function_name, "weather_helper");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -5808,7 +5776,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -6035,7 +6003,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper");
+    assert_eq!(function_name, "weather_helper");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -6154,7 +6122,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -6345,7 +6313,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper");
+    assert_eq!(function_name, "weather_helper");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -6438,7 +6406,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -6624,7 +6592,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper");
+    assert_eq!(function_name, "weather_helper");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -6726,7 +6694,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -6938,7 +6906,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper");
+    assert_eq!(function_name, "weather_helper");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -7062,7 +7030,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -7317,7 +7285,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper");
+    assert_eq!(function_name, "weather_helper");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -7469,7 +7437,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -7752,7 +7720,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -7999,7 +7967,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "basic_test");
+    assert_eq!(function_name, "basic_test");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -8107,7 +8075,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -8307,7 +8275,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper");
+    assert_eq!(function_name, "weather_helper");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -8389,7 +8357,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -8609,7 +8577,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper");
+    assert_eq!(function_name, "weather_helper");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -8691,7 +8659,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -9064,7 +9032,7 @@ pub async fn check_dynamic_tool_use_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, hardcoded_function_name);
+    assert_eq!(function_name, hardcoded_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -9156,7 +9124,7 @@ pub async fn check_dynamic_tool_use_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -9385,7 +9353,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, input_function_name);
+    assert_eq!(function_name, input_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -9504,7 +9472,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -9731,7 +9699,7 @@ pub async fn check_parallel_tool_use_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper_parallel");
+    assert_eq!(function_name, "weather_helper_parallel");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -9859,7 +9827,7 @@ pub async fn check_parallel_tool_use_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -10120,7 +10088,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper_parallel");
+    assert_eq!(function_name, "weather_helper_parallel");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -10300,7 +10268,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -10469,7 +10437,7 @@ pub async fn check_json_mode_inference_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "json_success");
+    assert_eq!(function_name, "json_success");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -10538,7 +10506,7 @@ pub async fn check_json_mode_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -10736,7 +10704,7 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "dynamic_json");
+    assert_eq!(function_name, "dynamic_json");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -10800,7 +10768,7 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -11006,7 +10974,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "json_success");
+    assert_eq!(function_name, "json_success");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -11092,7 +11060,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -11344,7 +11312,7 @@ async fn check_short_inference_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, hardcoded_function_name);
+    assert_eq!(function_name, hardcoded_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -11415,7 +11383,7 @@ async fn check_short_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -11695,7 +11663,7 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, hardcoded_function_name);
+    assert_eq!(function_name, hardcoded_function_name);
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -11744,7 +11712,7 @@ pub async fn check_multi_turn_parallel_tool_use_inference_response(
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -12036,7 +12004,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_function_name_matches(function_name, "weather_helper_parallel");
+    assert_eq!(function_name, "weather_helper_parallel");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -12077,7 +12045,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
 
@@ -12284,7 +12252,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert_eq!(inference_id_result, inference_id);
 
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_model_name_matches(model_name, &provider.model_name);
+    assert_eq!(model_name, &provider.model_name);
 
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
     assert_eq!(model_provider_name, provider.model_provider_name);
