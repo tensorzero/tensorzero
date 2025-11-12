@@ -10,7 +10,10 @@ The markers can appear anywhere in a line (in any comment style or file format).
 To skip this check, add the 'skip-if-edited-check' label to your PR.
 
 Usage:
-    python check-coordinated-edits.py [--base-ref BASE] [--head-ref HEAD]
+    python check_coordinated_edits.py [--base-ref BASE] [--head-ref HEAD]
+
+Testing:
+    python tests/test_check_coordinated_edits.py
 
 Environment Variables:
     GITHUB_EVENT_NAME: The GitHub event type (pull_request, merge_group, etc.)
@@ -191,6 +194,53 @@ def parse_lint_blocks(file_path: str, changed_ranges: List[Tuple[int, int]]) -> 
     return required_edits
 
 
+def check_coordinated_edits(base_ref: str, head_ref: str) -> List[dict]:
+    """
+    Check for coordinated edit violations.
+
+    Returns a list of violations, where each violation is a dict with:
+    - file: the file that was modified
+    - required: list of files that should have been edited
+    - missing: list of files that were not edited
+    """
+    # Get changed files
+    changed_files = get_changed_files(base_ref, head_ref)
+    if not changed_files:
+        return []
+
+    # Check each changed file for Lint.IfEdited blocks
+    violations = []
+
+    for file_path in sorted(changed_files):
+        # Skip checking the check_coordinated_edits.py script itself
+        if file_path == "ci/check_coordinated_edits.py":
+            continue
+
+        # Skip checking the test script
+        if file_path == "ci/tests/test_check_coordinated_edits.py":
+            continue
+
+        if not os.path.exists(file_path):
+            continue
+
+        # Get the line ranges that were modified
+        changed_ranges = get_changed_line_ranges(file_path, base_ref, head_ref)
+        if not changed_ranges:
+            continue
+
+        # Parse lint blocks and check if required files were edited
+        required_edits_list = parse_lint_blocks(file_path, changed_ranges)
+
+        for required_files in required_edits_list:
+            missing_files = required_files - changed_files
+            if missing_files:
+                violations.append(
+                    {"file": file_path, "required": sorted(required_files), "missing": sorted(missing_files)}
+                )
+
+    return violations
+
+
 def main():
     parser = argparse.ArgumentParser(description="Check coordinated file edits based on Lint.IfEdited/ThenEdit markers")
     parser.add_argument("--base-ref", help="Base reference for comparison")
@@ -216,54 +266,28 @@ def main():
 
     print(f"Checking coordinated edits between {base_ref} and {args.head_ref}")
 
-    # Get changed files
-    changed_files = get_changed_files(base_ref, args.head_ref)
-    if not changed_files:
-        print("✓ No files changed, skipping check")
+    violations = check_coordinated_edits(base_ref, args.head_ref)
+
+    if not violations:
+        # Check if there were any changed files
+        changed_files = get_changed_files(base_ref, args.head_ref)
+        if not changed_files:
+            print("✓ No files changed, skipping check")
+        else:
+            print(f"Found {len(changed_files)} changed file(s)")
+            print("\n✓ All coordinated edits are present")
         sys.exit(0)
 
-    print(f"Found {len(changed_files)} changed file(s)")
+    # Report violations
+    print("\n❌ Coordinated edit violations found:\n")
+    for violation in violations:
+        print(f"File: {violation['file']}")
+        print(f"  Required edits: {', '.join(violation['required'])}")
+        print(f"  Missing edits: {', '.join(violation['missing'])}")
+        print()
 
-    # Check each changed file for Lint.IfEdited blocks
-    violations = []
-
-    for file_path in sorted(changed_files):
-        # Skip checking the check-coordinated-edits.py script itself
-        if file_path == "ci/check-coordinated-edits.py":
-            continue
-
-        if not os.path.exists(file_path):
-            continue
-
-        # Get the line ranges that were modified
-        changed_ranges = get_changed_line_ranges(file_path, base_ref, args.head_ref)
-        if not changed_ranges:
-            continue
-
-        # Parse lint blocks and check if required files were edited
-        required_edits_list = parse_lint_blocks(file_path, changed_ranges)
-
-        for required_files in required_edits_list:
-            missing_files = required_files - changed_files
-            if missing_files:
-                violations.append(
-                    {"file": file_path, "required": sorted(required_files), "missing": sorted(missing_files)}
-                )
-
-    # Report results
-    if violations:
-        print("\n❌ Coordinated edit violations found:\n")
-        for violation in violations:
-            print(f"File: {violation['file']}")
-            print(f"  Required edits: {', '.join(violation['required'])}")
-            print(f"  Missing edits: {', '.join(violation['missing'])}")
-            print()
-
-        print("To skip this check, add the 'skip-if-edited-check' label to the PR, but be very careful!")
-        sys.exit(1)
-    else:
-        print("\n✓ All coordinated edits are present")
-        sys.exit(0)
+    print("To skip this check, add the 'skip-if-edited-check' label to the PR, but be very careful!")
+    sys.exit(1)
 
 
 if __name__ == "__main__":

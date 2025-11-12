@@ -52,7 +52,7 @@ jobs:
           python-version: "3.9"
 
       - name: Check coordinated edits
-        run: python3 ci/check-coordinated-edits.py
+        run: python3 ci/check_coordinated_edits.py
 
   # Like 'check-docker-compose', but loads the freshly built 'gateway' and 'ui' container images first
   # This checks that all of our docker-compose files work with the changes in the PR
