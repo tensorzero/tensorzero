@@ -882,6 +882,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         concurrency: int = 1,
         inference_cache: str = "on",
         dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> EvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -893,6 +895,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
         :param dynamic_variant_config: Optional dynamic variant configuration to use instead of config file lookup
+        :param limit: Maximum number of datapoints to evaluate (None = no limit)
+        :param offset: Number of datapoints to skip before starting evaluation (None = no offset)
         :return: An EvaluationJobHandler for iterating over evaluation results
         """
         ...
@@ -1298,6 +1302,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         concurrency: int = 1,
         inference_cache: str = "on",
         dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> AsyncEvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -1309,6 +1315,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
         :param dynamic_variant_config: Optional dynamic variant configuration to use instead of config file lookup. If provided, `variant_name` should be omitted or set to None.
+        :param limit: Maximum number of datapoints to evaluate (None = no limit)
+        :param offset: Number of datapoints to skip before starting evaluation (None = no offset)
         :return: An AsyncEvaluationJobHandler for iterating over evaluation results
         """
         ...

@@ -1100,16 +1100,21 @@ impl TensorZeroGateway {
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
+    /// * `limit` - Maximum number of datapoints to evaluate (None = no limit)
+    /// * `offset` - Number of datapoints to skip before starting evaluation (None = no offset)
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
-                        dynamic_variant_config=None
+                        dynamic_variant_config=None,
+                        limit=None,
+                        offset=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, limit=None, offset=None)"
     )]
+    #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
         evaluation_name: String,
@@ -1118,6 +1123,8 @@ impl TensorZeroGateway {
         concurrency: usize,
         inference_cache: String,
         dynamic_variant_config: Option<&Bound<'_, PyDict>>,
+        limit: Option<usize>,
+        offset: Option<usize>,
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
 
@@ -1147,6 +1154,8 @@ impl TensorZeroGateway {
             variant,
             concurrency,
             inference_cache: inference_cache_enum,
+            limit,
+            offset,
         };
 
         let result =
@@ -1961,16 +1970,21 @@ impl AsyncTensorZeroGateway {
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
+    /// * `limit` - Maximum number of datapoints to evaluate (None = no limit)
+    /// * `offset` - Number of datapoints to skip before starting evaluation (None = no offset)
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
-                        dynamic_variant_config=None
+                        dynamic_variant_config=None,
+                        limit=None,
+                        offset=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, limit=None, offset=None)"
     )]
+    #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
         this: PyRef<'py, Self>,
         evaluation_name: String,
@@ -1979,6 +1993,8 @@ impl AsyncTensorZeroGateway {
         concurrency: usize,
         inference_cache: String,
         dynamic_variant_config: Option<&Bound<'py, PyDict>>,
+        limit: Option<usize>,
+        offset: Option<usize>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();
 
@@ -2009,6 +2025,8 @@ impl AsyncTensorZeroGateway {
                 variant,
                 concurrency,
                 inference_cache: inference_cache_enum,
+                limit,
+                offset,
             };
 
             let result = run_evaluation_core_streaming(core_args)
