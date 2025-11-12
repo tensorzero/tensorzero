@@ -44,7 +44,7 @@ const mockGetDatasetMetadata = vi.hoisted(() =>
   ),
 );
 const mockStaleDatapoint = vi.hoisted(() =>
-  vi.fn<(params: StaleDatapointParams) => Promise<void>>(async () => { }),
+  vi.fn<(params: StaleDatapointParams) => Promise<void>>(async () => {}),
 );
 vi.mock("~/utils/clickhouse/datasets.server", () => ({
   staleDatapoint: mockStaleDatapoint,

@@ -13,6 +13,7 @@ import {
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
 import type {
+  Datapoint as TensorZeroDatapoint,
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsResponse,
 } from "~/types/tensorzero";
