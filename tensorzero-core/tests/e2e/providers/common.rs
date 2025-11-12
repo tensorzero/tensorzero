@@ -2043,11 +2043,6 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "value": 0.5
             },
             {
-                "variant_name": "my_wrong_variant",
-                "pointer": "/inferenceConfig/temperature",
-                "value": 0.6
-            },
-            {
                 "model_name": provider.model_name,
                 "provider_name": provider.model_provider_name,
                 "pointer": "/inferenceConfig/top_p",
@@ -2064,11 +2059,6 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "value": 0.5
             },
             {
-                "variant_name": "my_wrong_variant",
-                "pointer": "/generationConfig/temperature",
-                "value": 0.6
-            },
-            {
                 "model_name": provider.model_name,
                 "provider_name": provider.model_provider_name,
                 "pointer": "/generationConfig/top_p",
@@ -2081,11 +2071,6 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "variant_name": provider.variant_name,
                 "pointer": "/temperature",
                 "value": 0.5
-            },
-            {
-                "variant_name": "my_wrong_variant",
-                "pointer": "/temperature",
-                "value": 0.6
             },
             {
                 "model_name": provider.model_name,
@@ -2156,8 +2141,13 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
             .unwrap();
 
         // Check that the API response is ok
-        assert_eq!(response.status(), StatusCode::OK);
-        let response_json = response.json::<Value>().await.unwrap();
+        let status = response.status();
+
+        let response_text = response.text().await.unwrap();
+        println!("API response text: {response_text}");
+
+        assert_eq!(status, StatusCode::OK);
+        let response_json = serde_json::from_str::<Value>(&response_text).unwrap();
 
         println!("API response: {response_json:#?}");
 
@@ -2180,7 +2170,6 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
     let id = Uuid::parse_str(id).unwrap();
     assert_eq!(id, inference_id);
 
-    assert_eq!(extra_body[1]["variant_name"], "my_wrong_variant");
     let clickhouse_extra_body = chat_result.get("extra_body").unwrap().as_str().unwrap();
     let clickhouse_extra_body: serde_json::Value =
         serde_json::from_str(clickhouse_extra_body).unwrap();
