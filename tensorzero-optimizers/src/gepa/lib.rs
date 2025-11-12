@@ -34,6 +34,9 @@ pub use super::pareto::{is_improvement, update_pareto_frontier};
 #[expect(unused_imports)]
 pub use super::sample::{random_sample, sample_by_frequency};
 
+// Import utils module for config extraction
+use super::utils;
+
 /// Main GEPA optimization orchestration function
 ///
 /// This function implements the GEPA algorithm:
@@ -475,7 +478,9 @@ fn initialize_pareto_frontier(
                 })
             })?;
 
-            if let Some(chat_config) = extract_chat_completion_config(variant_info, variant_name)? {
+            if let Some(chat_config) =
+                utils::extract_chat_completion_from_variant_info(variant_info, variant_name)
+            {
                 frontier.insert(variant_name.clone(), chat_config);
                 tracing::info!("Using initial variant: {}", variant_name);
             }
@@ -483,7 +488,9 @@ fn initialize_pareto_frontier(
     } else {
         // Use all ChatCompletion variants from the function
         for (variant_name, variant_info) in variants {
-            if let Some(chat_config) = extract_chat_completion_config(variant_info, variant_name)? {
+            if let Some(chat_config) =
+                utils::extract_chat_completion_from_variant_info(variant_info, variant_name)
+            {
                 frontier.insert(variant_name.clone(), chat_config);
             }
         }
@@ -505,36 +512,6 @@ fn initialize_pareto_frontier(
     }
 
     Ok(frontier)
-}
-
-/// Extracts a ChatCompletion config from a VariantInfo, or returns None if it's not a ChatCompletion variant
-fn extract_chat_completion_config(
-    variant_info: &tensorzero_core::variant::VariantInfo,
-    variant_name: &str,
-) -> Result<Option<UninitializedChatCompletionConfig>, Error> {
-    match &variant_info.inner {
-        VariantConfig::ChatCompletion(_chat_config) => {
-            // TODO: Convert ChatCompletionConfig to UninitializedChatCompletionConfig
-            // This will require extracting the model, system_template, user_template, etc.
-            // For now, we'll need to understand the ChatCompletionConfig structure
-            tracing::debug!("Found ChatCompletion variant: {}", variant_name);
-            Err(Error::new(ErrorDetails::InternalError {
-                message: format!(
-                    "ChatCompletion config extraction not yet implemented for variant '{variant_name}'"
-                ),
-            }))
-        }
-        VariantConfig::BestOfNSampling(_)
-        | VariantConfig::Dicl(_)
-        | VariantConfig::MixtureOfN(_)
-        | VariantConfig::ChainOfThought(_) => {
-            tracing::warn!(
-                "Skipping non-ChatCompletion variant '{}' (GEPA only supports ChatCompletion variants)",
-                variant_name
-            );
-            Ok(None)
-        }
-    }
 }
 
 /// Generate mutation of a variant using GEPA analysis and mutation

@@ -9,6 +9,7 @@ mod lib;
 mod mutate;
 mod pareto;
 mod sample;
+mod utils;
 
 use async_trait::async_trait;
 
