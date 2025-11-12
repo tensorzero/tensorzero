@@ -36,6 +36,10 @@ use super::evaluate::EvaluationResults;
 /// 3. Filter candidates globally to remove dominated variants (Step 3)
 /// 4. Compute frequency of each variant's membership in instance-wise Pareto sets
 ///
+/// Note: The original GEPA paper uses a single evaluator and selects variants achieving
+/// maximum score per instance. We extend this to multiple evaluators by selecting Pareto
+/// non-dominated variants per instance, which naturally generalizes the single-objective case.
+///
 /// Returns (filtered variants, frequency map) where frequencies are used for weighted sampling.
 #[cfg_attr(not(test), expect(dead_code))]
 #[expect(clippy::type_complexity)]
@@ -101,6 +105,8 @@ pub fn update_pareto_frontier(
     );
 
     // Step 1: Build instance-wise Pareto sets P*[i] for each datapoint
+    // Original paper: P*[i] = {variants with max score on instance i} (single evaluator)
+    // Our extension: P*[i] = {Pareto non-dominated variants on instance i} (multiple evaluators)
     let mut instance_pareto_sets: HashMap<String, HashSet<String>> = HashMap::new();
 
     for datapoint_id in &datapoint_ids {
@@ -252,6 +258,9 @@ pub fn update_pareto_frontier(
 /// Missing data treatment: Aggressive imputation to penalize unreliable variants.
 /// - For "max" optimization: missing scores treated as -inf
 /// - For "min" optimization: missing scores treated as +inf
+///
+/// Rationale: Aggressive imputation penalizes variants that systematically fail (e.g., causing
+/// inference errors) while treating random failures (e.g., provider unavailable) equally across variants.
 ///
 /// This ensures variants with missing evaluations are dominated unless they excel on other objectives.
 pub fn impute_missing_score(score: Option<f32>, optimize: MetricConfigOptimize) -> f32 {
