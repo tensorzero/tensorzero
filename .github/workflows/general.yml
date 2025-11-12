@@ -281,13 +281,7 @@ jobs:
             fi
           done
         shell: bash
-
-      - name: Configure Namespace cache for Rust
-        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
-        with:
-          cache: |
-            rust
-
+        
       - name: Install cargo-hack
         uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
