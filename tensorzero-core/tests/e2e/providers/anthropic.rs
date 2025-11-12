@@ -275,14 +275,16 @@ async fn test_thinking_inference_extra_header_128k() {
             ]},
         "extra_headers": [
             {
-                "model_provider_name": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic",
+                "model_name": "anthropic::claude-3-7-sonnet-20250219",
+                "provider_name": "anthropic",
                 "name": "anthropic-beta",
                 "value": "output-128k-2025-02-19"
             }
         ],
         "extra_body": [
             {
-                "model_provider_name": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic",
+                "model_name": "anthropic::claude-3-7-sonnet-20250219",
+                "provider_name": "anthropic",
                 "pointer": "/stop_sequences",
                 "value": [
                     "my_custom_stop",

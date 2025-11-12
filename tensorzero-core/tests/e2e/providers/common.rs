@@ -2048,7 +2048,8 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "value": 0.6
             },
             {
-                "model_provider_name": format!("tensorzero::model_name::{model_name}::provider_name::{model_provider_name}", model_name=provider.model_name, model_provider_name=provider.model_provider_name),
+                "model_name": provider.model_name,
+                "provider_name": provider.model_provider_name,
                 "pointer": "/inferenceConfig/top_p",
                 "value": 0.8
             }
@@ -2068,7 +2069,8 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "value": 0.6
             },
             {
-                "model_provider_name": format!("tensorzero::model_name::{model_name}::provider_name::{model_provider_name}", model_name=provider.model_name, model_provider_name=provider.model_provider_name),
+                "model_name": provider.model_name,
+                "provider_name": provider.model_provider_name,
                 "pointer": "/generationConfig/top_p",
                 "value": 0.8
             }
@@ -2086,7 +2088,8 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
                 "value": 0.6
             },
             {
-                "model_provider_name": format!("tensorzero::model_name::{model_name}::provider_name::{model_provider_name}", model_name=provider.model_name, model_provider_name=provider.model_provider_name),
+                "model_name": provider.model_name,
+                "provider_name": provider.model_provider_name,
                 "pointer": "/top_p",
                 "value": 0.8
             }

@@ -1522,11 +1522,11 @@ fn validate_variant_filter(variant_name: &str, function: &FunctionConfig) -> Res
 
 /// Validate that provider filter references a valid provider
 fn validate_provider_filter(provider_name: &str, models: &ModelTable) -> Result<(), Error> {
-    // The provider_name in filters can be:
-    // 1. Shorthand format: "openai::gpt-4o" - just validate it's a valid shorthand prefix
-    // 2. Fully qualified: "tensorzero::model_name::X::provider_name::Y" - validate model exists and provider is in that model
+    // The provider_name in filters must be in fully qualified format:
+    // "tensorzero::model_name::X::provider_name::Y"
+    // Shorthand format is NOT accepted for provider filters.
 
-    // Check if it's a fully qualified name first
+    // Check if it's a fully qualified name
     if provider_name.starts_with("tensorzero::model_name::") {
         tracing::warn!(
             "Using fully qualified format '{}' for model_provider_name is deprecated. \
@@ -1575,13 +1575,13 @@ fn validate_provider_filter(provider_name: &str, models: &ModelTable) -> Result<
         .into());
     }
 
-    // Otherwise, it should be shorthand format - just validate it's a valid model/shorthand
-    models.validate(provider_name).map_err(|e| {
-        ErrorDetails::InvalidInferenceTarget {
-            message: format!("Invalid model_provider_name filter '{provider_name}': {e}"),
-        }
-        .into()
-    })
+    // Reject shorthand format
+    Err(ErrorDetails::InvalidInferenceTarget {
+        message: format!(
+            "Invalid model_provider_name filter '{provider_name}': must use fully qualified format 'tensorzero::model_name::{{model}}::provider_name::{{provider}}'"
+        ),
+    }
+    .into())
 }
 
 /// Validate that model_provider filter references a valid model and provider
@@ -2247,6 +2247,19 @@ mod tests {
                 &models,
             );
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_validate_provider_filter_shorthand_rejected() {
+            let models = create_test_model_table();
+            // Shorthand format should be rejected
+            let result = validate_provider_filter("openai::gpt-4o", &models);
+            assert!(result.is_err());
+            let err_msg = result.unwrap_err().to_string();
+            assert!(
+                err_msg.contains("must use fully qualified format"),
+                "Expected error about fully qualified format, got: {err_msg}"
+            );
         }
 
         #[test]
