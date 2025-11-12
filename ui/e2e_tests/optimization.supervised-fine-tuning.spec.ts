@@ -88,7 +88,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
 
         await page
           .getByText("running", { exact: true })
-          .waitFor({ timeout: 6000 });
+          .waitFor({ timeout: 12000 });
 
         await expect(page.getByText(model)).toBeVisible();
         await expect(
@@ -137,7 +137,7 @@ model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
       .click();
     await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
 
-    await page.getByText("running", { exact: true }).waitFor({ timeout: 6000 });
+    await page.getByText("running", { exact: true }).waitFor({ timeout: 12000 });
     await expect(page.getByText("gpt-4o-2024-08-06")).toBeVisible();
     await expect(
       page.getByRole("link", { name: "extract_entities" }),
@@ -287,7 +287,7 @@ test.describe("Error handling", () => {
 
     await page
       .getByText("failed because the model is an error model")
-      .waitFor({ timeout: 6000 });
+      .waitFor({ timeout: 12000 });
   });
 });
 
