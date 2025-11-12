@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::error::{Error, ErrorDetails};
 use crate::model::UninitializedModelConfig;
@@ -30,7 +31,6 @@ use crate::optimization::openai_sft::{
 use crate::optimization::together_sft::{
     TogetherSFTConfig, TogetherSFTJobHandle, UninitializedTogetherSFTConfig,
 };
-use std::collections::HashMap;
 
 pub mod dicl;
 pub mod fireworks_sft;
