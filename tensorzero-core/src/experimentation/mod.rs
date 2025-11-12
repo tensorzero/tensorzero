@@ -14,13 +14,13 @@ use crate::variant::VariantInfo;
 pub mod asymptotic_confidence_sequences;
 mod static_weights;
 pub mod track_and_stop;
+mod uniform;
 
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ExperimentationConfig {
-    #[default]
-    Uniform,
+    Uniform(uniform::UniformConfig),
     StaticWeights(static_weights::StaticWeightsConfig),
     // NOTE: this diverges from the spec due to technical limitations with `serde`
     // (serde enums cannot be #[serde(flatten)])
@@ -31,11 +31,17 @@ pub enum ExperimentationConfig {
     AlwaysFails(AlwaysFailsConfig),
 }
 
+impl Default for ExperimentationConfig {
+    fn default() -> Self {
+        Self::Uniform(uniform::UniformConfig::default())
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum UninitializedExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
-    Uniform,
+    Uniform(uniform::UniformConfig),
     TrackAndStop(track_and_stop::UninitializedTrackAndStopConfig),
 }
 
@@ -67,7 +73,9 @@ impl UninitializedExperimentationConfig {
             UninitializedExperimentationConfig::StaticWeights(config) => {
                 Ok(ExperimentationConfig::StaticWeights(config))
             }
-            UninitializedExperimentationConfig::Uniform => Ok(ExperimentationConfig::Uniform),
+            UninitializedExperimentationConfig::Uniform(config) => {
+                Ok(ExperimentationConfig::Uniform(config.load(variants)?))
+            }
             UninitializedExperimentationConfig::TrackAndStop(config) => Ok(
                 ExperimentationConfig::TrackAndStop(config.load(variants, metrics)?),
             ),
@@ -118,7 +126,7 @@ impl ExperimentationConfig {
                 );
             }
         }
-        Self::Uniform
+        Self::Uniform(uniform::UniformConfig::default())
     }
 
     pub async fn setup(
@@ -134,7 +142,11 @@ impl ExperimentationConfig {
                     .setup(db, function_name, postgres, cancel_token)
                     .await
             }
-            Self::Uniform => Ok(()),
+            Self::Uniform(config) => {
+                config
+                    .setup(db, function_name, postgres, cancel_token)
+                    .await
+            }
             Self::TrackAndStop(config) => {
                 config
                     .setup(db, function_name, postgres, cancel_token)
@@ -163,7 +175,11 @@ impl ExperimentationConfig {
                     .sample(function_name, episode_id, active_variants, postgres)
                     .await
             }
-            Self::Uniform => sample_uniform(function_name, &episode_id, active_variants, None),
+            Self::Uniform(config) => {
+                config
+                    .sample(function_name, episode_id, active_variants, postgres)
+                    .await
+            }
             #[cfg(test)]
             Self::AlwaysFails(config) => {
                 config
@@ -185,12 +201,17 @@ impl ExperimentationConfig {
             } else {
                 let allowed: Vec<&str> = match self {
                     Self::StaticWeights(config) => config.allowed_variants().collect(),
-                    Self::Uniform => return Err(e), // Uniform has no restrictions, so if it failed we just propagate
+                    Self::Uniform(config) => config.allowed_variants().collect(),
                     #[cfg(test)]
                     Self::AlwaysFails(config) => config.allowed_variants().collect(),
                     Self::TrackAndStop(config) => config.allowed_variants().collect(),
                 };
-                sample_uniform(function_name, &episode_id, active_variants, Some(&allowed))
+                // If allowed is empty (UniformConfig with None, None), fall back to all variants
+                if allowed.is_empty() {
+                    sample_uniform(function_name, &episode_id, active_variants, None)
+                } else {
+                    sample_uniform(function_name, &episode_id, active_variants, Some(&allowed))
+                }
             }
         })
     }
@@ -205,17 +226,8 @@ impl ExperimentationConfig {
             Self::StaticWeights(config) => {
                 config.get_current_display_probabilities(function_name, active_variants, postgres)
             }
-            Self::Uniform => {
-                // Uniform distribution over all active variants
-                let num_variants = active_variants.len();
-                if num_variants == 0 {
-                    return Ok(HashMap::new());
-                }
-                let uniform_prob = 1.0 / num_variants as f64;
-                Ok(active_variants
-                    .keys()
-                    .map(|k| (k.as_str(), uniform_prob))
-                    .collect())
+            Self::Uniform(config) => {
+                config.get_current_display_probabilities(function_name, active_variants, postgres)
             }
             #[cfg(test)]
             Self::AlwaysFails(config) => {
@@ -565,7 +577,7 @@ mod tests {
             );
         }
 
-        let config = ExperimentationConfig::Uniform;
+        let config = ExperimentationConfig::Uniform(uniform::UniformConfig::default());
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
             .get_current_display_probabilities("test", &active_variants, &postgres)
@@ -586,7 +598,7 @@ mod tests {
     fn test_get_current_display_probabilities_uniform_empty() {
         let active_variants = HashMap::new();
 
-        let config = ExperimentationConfig::Uniform;
+        let config = ExperimentationConfig::Uniform(uniform::UniformConfig::default());
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
             .get_current_display_probabilities("test", &active_variants, &postgres)

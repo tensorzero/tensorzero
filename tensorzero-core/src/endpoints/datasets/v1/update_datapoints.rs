@@ -579,7 +579,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: Some(true),
                 description: None,
-                experimentation: ExperimentationConfig::Uniform,
+                experimentation: ExperimentationConfig::default(),
                 all_explicit_templates_names: HashSet::new(),
             });
 
@@ -655,7 +655,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: Some(true),
                 description: None,
-                experimentation: ExperimentationConfig::Uniform,
+                experimentation: ExperimentationConfig::default(),
                 all_explicit_templates_names: HashSet::new(),
             });
 
@@ -799,7 +799,7 @@ mod tests {
                     tool_choice: ToolChoice::Auto,
                     parallel_tool_calls: Some(true),
                     description: None,
-                    experimentation: ExperimentationConfig::Uniform,
+                    experimentation: ExperimentationConfig::default(),
                     all_explicit_templates_names: HashSet::new(),
                 })),
             );
@@ -819,7 +819,7 @@ mod tests {
                     .unwrap(),
                     implicit_tool_call_config: crate::tool::ToolCallConfig::default(),
                     description: None,
-                    experimentation: ExperimentationConfig::Uniform,
+                    experimentation: ExperimentationConfig::default(),
                     all_explicit_template_names: HashSet::new(),
                 })),
             );
