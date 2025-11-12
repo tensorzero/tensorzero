@@ -230,13 +230,6 @@ impl GatewayHandle {
         postgres_connection_info: PostgresConnectionInfo,
         http_client: TensorzeroHttpClient,
     ) -> Result<Self, Error> {
-        let cancel_token = CancellationToken::new();
-        setup_howdy(
-            &config,
-            clickhouse_connection_info.clone(),
-            cancel_token.clone(),
-        );
-
         // Validate that rate limiting is not configured when Postgres is disabled
         if config.rate_limiting.enabled()
             && !config.rate_limiting.rules().is_empty()
@@ -246,6 +239,13 @@ impl GatewayHandle {
                 message: "Rate limiting is configured but PostgreSQL is disabled. Rate limiting requires PostgreSQL to be configured. Please set the `TENSORZERO_POSTGRES_URL` environment variable and ensure `gateway.postgres.enabled` is not set to false, or disable rate limiting.".to_string(),
             }));
         }
+
+        let cancel_token = CancellationToken::new();
+        setup_howdy(
+            &config,
+            clickhouse_connection_info.clone(),
+            cancel_token.clone(),
+        );
 
         for (function_name, function_config) in &config.functions {
             function_config
