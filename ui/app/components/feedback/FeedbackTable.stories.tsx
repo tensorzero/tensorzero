@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import FeedbackTable from "./FeedbackTable";
 import { ConfigProvider } from "~/context/config";
-import type { Config } from "tensorzero-node";
+import type { Config } from "~/types/tensorzero";
 
 // Helper function to generate a UUID-like string from a number that sorts correctly
 // Higher numbers produce lexicographically larger UUIDs (for descending sort)
@@ -12,6 +12,7 @@ function makeOrderedUuid(num = 0): string {
 
 const config: Config = {
   gateway: {
+    global_outbound_http_timeout: [300000, 0],
     disable_pseudonymous_usage_analytics: false,
     fetch_and_encode_input_files_before_inference: false,
     auth: {
@@ -72,8 +73,8 @@ const config: Config = {
     xai: { defaults: { api_key_location: "" } },
   },
   optimizers: {},
-  models: { table: {} },
-  embedding_models: { table: {} },
+  models: { table: {}, global_outbound_http_timeout: [300000, 0] },
+  embedding_models: { table: {}, global_outbound_http_timeout: [300000, 0] },
   functions: {},
   metrics: {
     accuracy: {

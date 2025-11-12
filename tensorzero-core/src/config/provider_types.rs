@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ProviderTypesConfig {
     #[serde(default)]
     pub anthropic: AnthropicProviderTypeConfig,
@@ -44,9 +44,8 @@ pub struct ProviderTypesConfig {
 
 // Anthropic
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct AnthropicProviderTypeConfig {
     #[serde(default)]
     pub defaults: AnthropicDefaults,
@@ -71,9 +70,8 @@ impl Default for AnthropicDefaults {
 
 // Azure
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct AzureProviderTypeConfig {
     #[serde(default)]
     pub defaults: AzureDefaults,
@@ -98,9 +96,8 @@ impl Default for AzureDefaults {
 
 // DeepSeek
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct DeepSeekProviderTypeConfig {
     #[serde(default)]
     pub defaults: DeepSeekDefaults,
@@ -125,9 +122,8 @@ impl Default for DeepSeekDefaults {
 
 // Fireworks
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FireworksProviderTypeConfig {
     #[serde(default)]
     pub defaults: FireworksDefaults,
@@ -155,8 +151,8 @@ impl Default for FireworksDefaults {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct GCPProviderTypeConfig {
     #[serde(default)]
     pub batch: Option<GCPBatchConfigType>,
@@ -166,8 +162,8 @@ pub struct GCPProviderTypeConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "storage_type", rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub enum GCPBatchConfigType {
     // In the future, we'll want to allow explicitly setting 'none' at the model provider level,
@@ -179,8 +175,8 @@ pub enum GCPBatchConfigType {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct GCPBatchConfigCloudStorage {
     pub input_uri_prefix: String,
     pub output_uri_prefix: String,
@@ -205,9 +201,8 @@ impl Default for GCPDefaults {
 
 // Google AI Studio
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GoogleAIStudioGeminiProviderTypeConfig {
     #[serde(default)]
     pub defaults: GoogleAIStudioGeminiDefaults,
@@ -232,9 +227,8 @@ impl Default for GoogleAIStudioGeminiDefaults {
 
 // Groq
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GroqProviderTypeConfig {
     #[serde(default)]
     pub defaults: GroqDefaults,
@@ -259,9 +253,8 @@ impl Default for GroqDefaults {
 
 // Hyperbolic
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct HyperbolicProviderTypeConfig {
     #[serde(default)]
     pub defaults: HyperbolicDefaults,
@@ -286,9 +279,8 @@ impl Default for HyperbolicDefaults {
 
 // Mistral
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct MistralProviderTypeConfig {
     #[serde(default)]
     pub defaults: MistralDefaults,
@@ -313,9 +305,8 @@ impl Default for MistralDefaults {
 
 // OpenAI
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct OpenAIProviderTypeConfig {
     #[serde(default)]
     pub defaults: OpenAIDefaults,
@@ -340,9 +331,8 @@ impl Default for OpenAIDefaults {
 
 // Openrouter
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct OpenRouterProviderTypeConfig {
     pub defaults: OpenRouterDefaults,
 }
@@ -366,9 +356,8 @@ impl Default for OpenRouterDefaults {
 
 // SGLang
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SGLangProviderTypeConfig {
     #[serde(default)]
     pub defaults: SGLangDefaults,
@@ -393,9 +382,8 @@ impl Default for SGLangDefaults {
 
 // TGI
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TGIProviderTypeConfig {
     pub defaults: TGIDefaults,
 }
@@ -419,9 +407,8 @@ impl Default for TGIDefaults {
 
 // Together
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct TogetherProviderTypeConfig {
     pub defaults: TogetherDefaults,
 }
@@ -445,9 +432,8 @@ impl Default for TogetherDefaults {
 
 // vLLM
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct VLLMProviderTypeConfig {
     #[serde(default)]
     pub defaults: VLLMDefaults,
@@ -472,9 +458,8 @@ impl Default for VLLMDefaults {
 
 // xAI
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct XAIProviderTypeConfig {
     #[serde(default)]
     pub defaults: XAIDefaults,

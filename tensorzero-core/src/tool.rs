@@ -5,8 +5,10 @@ use std::{
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize, Serializer};
 use serde_json::Value;
+use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -41,9 +43,10 @@ use crate::{
  */
 
 /// A Tool object describes how a tool can be dynamically configured by the user.
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
+#[export_schema]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct Tool {
     pub description: String,
@@ -88,11 +91,13 @@ impl Tool {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(untagged)]
+#[export_schema]
 pub enum ProviderToolScope {
     #[default]
     Unscoped,
+    #[schemars(title = "ProviderToolScopeModelProvider")]
     ModelProvider {
         model_name: String,
         model_provider_name: String,
@@ -111,7 +116,7 @@ impl ProviderToolScope {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ProviderTool {
@@ -127,8 +132,8 @@ impl std::fmt::Display for ProviderTool {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ToolConfig {
     Static(Arc<StaticToolConfig>),
@@ -138,8 +143,8 @@ pub enum ToolConfig {
 }
 
 /// Contains the configuration information for a specific tool
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Debug, PartialEq, Serialize)]
 pub struct StaticToolConfig {
     pub description: String,
@@ -149,8 +154,8 @@ pub struct StaticToolConfig {
 }
 
 /// Contains the configuration information for a tool defined at runtime
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct DynamicToolConfig {
     pub description: String,
@@ -161,8 +166,8 @@ pub struct DynamicToolConfig {
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ImplicitToolConfig {
     pub parameters: StaticJSONSchema,
@@ -170,8 +175,8 @@ pub struct ImplicitToolConfig {
 
 /// Contains the configuration information for a tool used in implicit tool calling for
 /// JSON schema enforcement for a JSON schema that is dynamically passed at inference time
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DynamicImplicitToolConfig {
     pub parameters: DynamicJSONSchema,
@@ -180,14 +185,14 @@ pub struct DynamicImplicitToolConfig {
 /// Records / lists the tools that were allowed in the request
 /// Also lists how they were set (default, dynamically set)
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, ts_rs::TS)]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 pub struct AllowedTools {
     pub tools: Vec<String>,
     pub choice: AllowedToolsChoice,
 }
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, ts_rs::TS)]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum AllowedToolsChoice {
     // If `allowed_tools` is not explicitly passed, we set the function tools
@@ -202,9 +207,8 @@ pub enum AllowedToolsChoice {
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ToolCallConfig {
     pub(crate) static_tools_available: Vec<ToolConfig>,
     pub(crate) dynamic_tools_available: Vec<ToolConfig>,
@@ -537,20 +541,27 @@ impl ToolCallConfigDatabaseInsert {
 /// ```
 ///
 /// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
 #[ts(optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[export_schema]
 pub struct DynamicToolParams {
-    /// Names of static tools (from function config) to use. If None, all static tools are available.
+    /// A subset of static tools configured for the function that the inference is allowed to use. Optional.
+    /// If not provided, all static tools are allowed.
     pub allowed_tools: Option<Vec<String>>,
-    /// Additional tools provided at runtime (not in function config)
+
+    /// Tools that the user provided at inference time (not in function config), in addition to the function-configured
+    /// tools, that are also allowed.
     pub additional_tools: Option<Vec<Tool>>,
-    /// Override the function's tool choice strategy
+    /// User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+    /// Optional.
     pub tool_choice: Option<ToolChoice>,
-    /// Override whether parallel tool calls are enabled
+
+    /// Whether to use parallel tool calls in the inference. Optional.
+    /// If provided during inference, it will override the function-configured parallel tool calls.
     pub parallel_tool_calls: Option<bool>,
+
     /// Provider-specific tool configurations (not persisted to database)
     pub provider_tools: Option<Vec<ProviderTool>>,
 }
@@ -623,9 +634,10 @@ where
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[export_schema]
 pub struct ToolCall {
     pub id: String,
     pub name: String,
@@ -661,9 +673,10 @@ impl ToolCall {
 }
 
 /// `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(untagged)]
+#[export_schema]
 pub enum ToolCallWrapper {
     ToolCall(ToolCall), // the format we store in the database
     InferenceResponseToolCall(InferenceResponseToolCall), // the format we send on an inference response
@@ -687,14 +700,24 @@ impl TryFrom<ToolCallWrapper> for ToolCall {
 
 /// An InferenceResponseToolCall is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[export_schema]
 pub struct InferenceResponseToolCall {
+    /// A Tool Call ID to match up with tool call responses. See #4058.
     pub id: String,
+
+    /// The name of the tool to call, as generated by the model.
     pub raw_name: String,
+
+    /// The raw arguments JSON string of the tool to call, as generated by the model.
     pub raw_arguments: String,
+
+    /// The name of the tool to call, validated against tool configs. If not present, it means the tool call was invalid.
     pub name: Option<String>,
+
+    /// The arguments of the tool to call, validated against tool configs. If not present, it means the tool call arguments were invalid.
     pub arguments: Option<Value>,
 }
 
@@ -766,9 +789,10 @@ impl ToolCallConfig {
 
 /// A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
+#[export_schema]
 pub struct ToolResult {
     pub name: String,
     pub result: String,
@@ -806,16 +830,18 @@ impl ToolResult {
 /// and even specify which tool to be used.
 ///
 /// This enum is used to denote this tool choice.
-#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
+#[export_schema]
 pub enum ToolChoice {
     None,
     #[default]
     Auto,
     Required,
-    // Forces the LLM to call a specific tool. The String is the name of the tool.
+    /// Forces the LLM to call a specific tool. The String is the name of the tool.
+    #[schemars(title = "ToolChoiceSpecific")]
     Specific(String),
 }
 

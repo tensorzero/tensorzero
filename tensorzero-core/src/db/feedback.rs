@@ -25,6 +25,30 @@ pub trait FeedbackQueries {
     /// includes all data from the beginning up to that point. This will return max_periods
     /// complete time periods worth of data if present as well as the current time period's data.
     /// So there are at most max_periods + 1 time periods worth of data returned.
+    ///
+    /// # Data Sources
+    ///
+    /// The function aggregates data from the `FeedbackByVariantStatistics` table, which includes:
+    /// - All inference-level feedback (feedback submitted with an inference ID as the target)
+    /// - Episode-level feedback **only for episodes where a single variant was used for the function**
+    ///
+    /// Episodes with mixed variant usage (where multiple variants were used for the same
+    /// function within an episode) are excluded from the statistics. This is a conservative
+    /// approach to ensure clean attribution of feedback to variants.
+    ///
+    /// # Parameters
+    ///
+    /// - `function_name`: The name of the function to query
+    /// - `metric_name`: The name of the metric to query
+    /// - `variant_names`: Optional filter for specific variants. If `None`, all variants are included.
+    ///   If `Some(vec![])`, returns empty results.
+    /// - `time_window`: The time granularity (Minute, Hour, Day, Week, or Month)
+    /// - `max_periods`: Maximum number of complete time periods to return
+    ///
+    /// # Returns
+    ///
+    /// A vector of `CumulativeFeedbackTimeSeriesPoint` containing cumulative statistics
+    /// for each variant at each time point, including asymptotic confidence sequences.
     async fn get_cumulative_feedback_timeseries(
         &self,
         function_name: String,
@@ -40,7 +64,7 @@ pub trait FeedbackQueries {
         target_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<FeedbackRow>, Error>;
 
     /// Queries feedback bounds for a given target ID
@@ -57,7 +81,7 @@ pub trait FeedbackQueries {
         target_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error>;
 }
 

@@ -55,7 +55,7 @@ We'll use Docker Compose to deploy the TensorZero Gateway, ClickHouse, and MinIO
 
 services:
   clickhouse:
-    image: clickhouse/clickhouse-server:24.12-alpine
+    image: clickhouse:24.12-alpine
     environment:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -237,3 +237,11 @@ curl -X POST http://localhost:3000/inference \
 
 </Tab>
 </Tabs>
+
+## Image Detail Parameter
+
+When working with image files, you can optionally specify a `detail` parameter to control the fidelity of image processing.
+This parameter accepts three values: `low`, `high`, or `auto`.
+The `detail` parameter only applies to image files and is ignored for other file types like PDFs or audio files.
+Using `low` detail reduces token consumption and processing time at the cost of image quality, while `high` detail provides better image quality but consumes more tokens.
+The `auto` setting allows the model provider to automatically choose the appropriate detail level based on the image characteristics.

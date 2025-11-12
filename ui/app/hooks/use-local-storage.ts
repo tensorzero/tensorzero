@@ -5,6 +5,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
+import { logger } from "~/utils/logger";
 
 type Value = string | boolean | object | null | undefined;
 
@@ -73,7 +74,11 @@ export function useLocalStorage<T extends Value>(
           setLocalStorageItem(key, nextState);
         }
       } catch (e) {
-        console.warn(e);
+        // TODO: Consider whether or not it's worth exposing this error to
+        // users. A serialization error is only really useful for developers,
+        // and we should probably move to a smarter typed serialization strategy
+        // to limit the potential for landing here.
+        logger.debug(null, e);
       }
     },
     [key, store],

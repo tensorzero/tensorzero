@@ -362,9 +362,9 @@ _More coming soon..._
 <pre><code class="language-bash">Run ID: 01961de9-c8a4-7c60-ab8d-15491a9708e4
 Number of datapoints: 100
 ██████████████████████████████████████ 100/100
-exact_match: 0.83 ± 0.03
-semantic_match: 0.98 ± 0.01
-item_count: 7.15 ± 0.39</code></pre>
+exact_match: 0.83 ± 0.03 (n=100)
+semantic_match: 0.98 ± 0.01 (n=100)
+item_count: 7.15 ± 0.39 (n=100)</code></pre>
     </td>
   </tr>
 </table>
@@ -474,3 +474,13 @@ We are working on a series of **complete runnable examples** illustrating Tensor
 > This example shows how to optimize a TensorZero function using an arbitrary tool — here, DSPy.
 
 _& many more on the way!_
+
+## Blog Posts
+
+We write about LLM engineering on the **[TensorZero Blog](https://www.tensorzero.com/blog)**.
+Here are some of our favorite posts:
+
+- **[Bandits in your LLM Gateway: Improve LLM Applications Faster with Adaptive Experimentation (A/B Testing)](https://www.tensorzero.com/blog/bandits-in-your-llm-gateway/)**
+- **[Is OpenAI's Reinforcement Fine-Tuning (RFT) Worth It?](https://www.tensorzero.com/blog/is-openai-reinforcement-fine-tuning-rft-worth-it/)**
+- **[Distillation with Programmatic Data Curation: Smarter LLMs, 5-30x Cheaper Inference](https://www.tensorzero.com/blog/distillation-programmatic-data-curation-smarter-llms-5-30x-cheaper-inference/)**
+- **[From NER to Agents: Does Automated Prompt Engineering Scale to Complex Tasks?](https://www.tensorzero.com/blog/from-ner-to-agents-does-automated-prompt-engineering-scale-to-complex-tasks/)**

@@ -39,9 +39,8 @@ use crate::tool::{ToolCall, ToolCallChunk};
 const PROVIDER_NAME: &str = "Dummy";
 pub const PROVIDER_TYPE: &str = "dummy";
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct DummyProvider {
     pub model_name: String,
     #[serde(skip)]

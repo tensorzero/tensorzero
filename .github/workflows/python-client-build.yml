@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
         with:
-          python-version: 3.9
+          python-version: "3.10"
 
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
@@ -52,7 +52,7 @@ jobs:
         with:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist -i python3.10
           #sccache: "true"
           manylinux: auto
       - name: Upload wheels
@@ -94,7 +94,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
         with:
-          python-version: 3.9
+          python-version: "3.10"
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
       - name: Build wheels
@@ -102,7 +102,7 @@ jobs:
         with:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist -i python3.10
           #sccache: "true"
           manylinux: musllinux_1_2
       - name: Upload wheels
@@ -142,7 +142,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
         with:
-          python-version: 3.9
+          python-version: "3.10"
           architecture: ${{ matrix.platform.target }}
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
@@ -152,7 +152,7 @@ jobs:
         with:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist -i python3.10
           #sccache: "true"
       - name: Upload wheels
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -170,10 +170,12 @@ jobs:
     strategy:
       matrix:
         platform:
-          - runner: macos-13
-            target: x86_64
+          # TODO - add back x86_64 support
           - runner: macos-14
             target: aarch64
+          # TODO - add this back (without the conflicting artifact upload)
+          #- runner: macos-15
+          #  target: aarch64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust toolchain
@@ -194,7 +196,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38
         with:
-          python-version: 3.9
+          python-version: "3.10"
 
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
@@ -204,7 +206,7 @@ jobs:
         with:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist -i python3.10
           #sccache: "true"
 
       - name: Upload wheels
@@ -237,6 +239,10 @@ jobs:
       - name: Check local sdist
         run: |
           ./ci/check-local-wheel.sh ./clients/python/dist/tensorzero-*.tar.gz
+      - name: Run twine on sdist
+        run: |
+          uv pip install twine
+          uv run twine check ./clients/python/dist/tensorzero-*.tar.gz
 
   check-artifacts:
     needs: [linux, musllinux, windows, macos, sdist]
@@ -247,6 +253,6 @@ jobs:
       - name: Count wheels
         run: |
           ls -lh ./wheels-*/*
-          # Count the number of files named 'tensorzero-*.whl', and verify that it equals 7
+          # Count the number of files named 'tensorzero-*.whl', and verify that it equals 6
           # If we add new platforms / python versions, update this number
-          ls -lh ./wheels-*/* | grep -c 'tensorzero-.*\.whl' | grep -q 7
+          ls -lh ./wheels-*/* | grep -c 'tensorzero-.*\.whl' | grep -q 6

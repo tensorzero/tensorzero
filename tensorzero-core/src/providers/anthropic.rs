@@ -21,7 +21,7 @@ use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
 };
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
@@ -57,9 +57,8 @@ const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const PROVIDER_NAME: &str = "Anthropic";
 pub const PROVIDER_TYPE: &str = "anthropic";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct AnthropicProvider {
     model_name: String,
     api_base: Option<Url>,
@@ -304,6 +303,7 @@ impl InferenceProvider for AnthropicProvider {
             model_provider,
             model_name,
             provider_name,
+            &raw_request,
         )
         .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
@@ -351,7 +351,9 @@ fn stream_anthropic(
     model_provider: &ModelProvider,
     model_name: &str,
     provider_name: &str,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
     let model_name = model_name.to_string();
     let provider_name = provider_name.to_string();
@@ -362,7 +364,7 @@ fn stream_anthropic(
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
-                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -374,7 +376,7 @@ fn stream_anthropic(
                                     e, message.data
                                 ),
                                 provider_type: PROVIDER_TYPE.to_string(),
-                                raw_request: None,
+                                raw_request: Some(raw_request.to_string()),
                                 raw_response: Some(message.data.clone()),
                             }));
                         // Anthropic streaming API docs specify that this is the last message
@@ -392,6 +394,7 @@ fn stream_anthropic(
                                 discard_unknown_chunks,
                                 &model_name,
                                 &provider_name,
+                                PROVIDER_TYPE,
                             )
                         });
 
@@ -413,7 +416,7 @@ fn stream_anthropic(
 #[serde(rename_all = "lowercase")]
 /// Anthropic doesn't handle the system message in this way
 /// It's a field of the POST body instead
-enum AnthropicRole {
+pub(super) enum AnthropicRole {
     User,
     Assistant,
 }
@@ -472,11 +475,11 @@ impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct AnthropicTool<'a> {
-    name: &'a str,
+pub(super) struct AnthropicTool<'a> {
+    pub(super) name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<&'a str>,
-    input_schema: &'a Value,
+    pub(super) description: Option<&'a str>,
+    pub(super) input_schema: &'a Value,
 }
 
 impl<'a> From<&'a ToolConfig> for AnthropicTool<'a> {
@@ -493,8 +496,7 @@ impl<'a> From<&'a ToolConfig> for AnthropicTool<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-// NB: Anthropic also supports Image blocks here but we won't for now
-enum AnthropicMessageContent<'a> {
+pub(super) enum AnthropicMessageContent<'a> {
     Text {
         text: &'a str,
     },
@@ -533,9 +535,10 @@ pub enum AnthropicDocumentSource {
 }
 
 impl<'a> AnthropicMessageContent<'a> {
-    async fn from_content_block(
+    pub(super) async fn from_content_block(
         block: &'a ContentBlock,
         messages_config: AnthropicMessagesConfig,
+        provider_type: &str,
     ) -> Result<Option<FlattenUnknown<'a, AnthropicMessageContent<'a>>>, Error> {
         match block {
             ContentBlock::Text(Text { text }) => Ok(Some(FlattenUnknown::Normal(
@@ -550,7 +553,7 @@ impl<'a> AnthropicMessageContent<'a> {
                             "Error parsing tool call arguments as JSON Value: {}",
                             DisplayOrDebugGateway::new(e)
                         ),
-                        provider_type: PROVIDER_TYPE.to_string(),
+                        provider_type: provider_type.to_string(),
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     })
@@ -560,7 +563,7 @@ impl<'a> AnthropicMessageContent<'a> {
                     return Err(Error::new(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
+                        provider_type: provider_type.to_string(),
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     }));
@@ -588,11 +591,17 @@ impl<'a> AnthropicMessageContent<'a> {
                         FileUrl {
                             mime_type: Some(mime_type),
                             url,
+                            detail,
                         },
                     future: _,
                 } if !messages_config.fetch_and_encode_input_files_before_inference => {
                     // If the user provided a url, and we're not configured to fetch the file beforehand,
                     // then forward the url directly to Anthropic.
+                    if detail.is_some() {
+                        tracing::warn!(
+                            "The image detail parameter is not supported by Anthropic. The `detail` field will be ignored."
+                        );
+                    }
                     if mime_type.type_() == mime::IMAGE {
                         Ok(Some(FlattenUnknown::Normal(
                             AnthropicMessageContent::Image {
@@ -615,11 +624,16 @@ impl<'a> AnthropicMessageContent<'a> {
                     warn_cannot_forward_url_if_missing_mime_type(
                         file,
                         messages_config.fetch_and_encode_input_files_before_inference,
-                        PROVIDER_TYPE,
+                        provider_type,
                     );
                     // Otherwise, fetch the file, encode it as base64, and send it to Anthropic
                     let resolved_file = file.resolve().await?;
                     let ObjectStorageFile { file, data } = &*resolved_file;
+                    if file.detail.is_some() {
+                        tracing::warn!(
+                            "The image detail parameter is not supported by Anthropic. The `detail` field will be ignored."
+                        );
+                    }
                     let document = AnthropicDocumentSource::Base64 {
                         media_type: file.mime_type.clone(),
                         data: data.clone(),
@@ -660,26 +674,25 @@ impl<'a> AnthropicMessageContent<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct AnthropicMessage<'a> {
-    role: AnthropicRole,
-    content: Vec<FlattenUnknown<'a, AnthropicMessageContent<'a>>>,
+pub(super) struct AnthropicMessage<'a> {
+    pub(super) role: AnthropicRole,
+    pub(super) content: Vec<FlattenUnknown<'a, AnthropicMessageContent<'a>>>,
 }
 
 impl<'a> AnthropicMessage<'a> {
-    async fn from_request_message(
+    pub(super) async fn from_request_message(
         message: &'a RequestMessage,
         messages_config: AnthropicMessagesConfig,
+        provider_type: &str,
     ) -> Result<Self, Error> {
-        let content: Vec<FlattenUnknown<AnthropicMessageContent>> = try_join_all(
-            message
-                .content
-                .iter()
-                .map(|c| AnthropicMessageContent::from_content_block(c, messages_config)),
-        )
-        .await?
-        .into_iter()
-        .flatten()
-        .collect();
+        let content: Vec<FlattenUnknown<AnthropicMessageContent>> =
+            try_join_all(message.content.iter().map(|c| {
+                AnthropicMessageContent::from_content_block(c, messages_config, provider_type)
+            }))
+            .await?
+            .into_iter()
+            .flatten()
+            .collect();
 
         Ok(AnthropicMessage {
             role: message.role.into(),
@@ -690,7 +703,7 @@ impl<'a> AnthropicMessage<'a> {
 
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-enum AnthropicSystemBlock<'a> {
+pub(super) enum AnthropicSystemBlock<'a> {
     Text {
         text: &'a str,
         // This also contains cache control and citations but we will ignore these for now.
@@ -720,6 +733,8 @@ struct AnthropicRequestBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    service_tier: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequences: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<AnthropicToolChoice<'a>>,
@@ -728,8 +743,8 @@ struct AnthropicRequestBody<'a> {
 }
 
 #[derive(Copy, Clone, Debug)]
-struct AnthropicMessagesConfig {
-    pub fetch_and_encode_input_files_before_inference: bool,
+pub(super) struct AnthropicMessagesConfig {
+    pub(super) fetch_and_encode_input_files_before_inference: bool,
 }
 
 impl<'a> AnthropicRequestBody<'a> {
@@ -753,13 +768,11 @@ impl<'a> AnthropicRequestBody<'a> {
             Some(text) => Some(vec![AnthropicSystemBlock::Text { text }]),
             None => None,
         };
-        let request_messages: Vec<AnthropicMessage> = try_join_all(
-            request
-                .messages
-                .iter()
-                .map(|m| AnthropicMessage::from_request_message(m, messages_config)),
-        )
-        .await?;
+        let request_messages: Vec<AnthropicMessage> =
+            try_join_all(request.messages.iter().map(|m| {
+                AnthropicMessage::from_request_message(m, messages_config, PROVIDER_TYPE)
+            }))
+            .await?;
         let messages = prepare_messages(request_messages);
         let messages = if matches!(
             request.json_mode,
@@ -804,6 +817,7 @@ impl<'a> AnthropicRequestBody<'a> {
             temperature: request.temperature,
             thinking: None,
             top_p: request.top_p,
+            service_tier: None, // handled below
             tool_choice,
             tools,
             stop_sequences: request.borrow_stop_sequences(),
@@ -821,6 +835,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -831,6 +846,21 @@ fn apply_inference_params(
             "reasoning_effort",
             Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
         );
+    }
+
+    // Map service_tier values to Anthropic-compatible values
+    if let Some(tier) = service_tier {
+        match tier {
+            ServiceTier::Auto | ServiceTier::Priority => {
+                request.service_tier = Some("auto".to_string());
+            }
+            ServiceTier::Default => {
+                request.service_tier = Some("standard_only".to_string());
+            }
+            ServiceTier::Flex => {
+                warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier (flex)", None);
+            }
+        }
     }
 
     if let Some(budget_tokens) = thinking_budget_tokens {
@@ -1081,7 +1111,7 @@ struct AnthropicResponse {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum AnthropicStopReason {
+pub enum AnthropicStopReason {
     EndTurn,
     MaxTokens,
     StopSequence,
@@ -1162,7 +1192,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
     }
 }
 
-fn handle_anthropic_error(
+pub(super) fn handle_anthropic_error(
     response_code: StatusCode,
     raw_request: String,
     raw_response: String,
@@ -1193,8 +1223,7 @@ fn handle_anthropic_error(
 
 #[derive(Deserialize, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[expect(clippy::enum_variant_names)]
-enum AnthropicContentBlockDelta {
+pub enum AnthropicContentBlockDelta {
     TextDelta { text: String },
     InputJsonDelta { partial_json: String },
     SignatureDelta { signature: String },
@@ -1203,16 +1232,16 @@ enum AnthropicContentBlockDelta {
 
 #[derive(Deserialize, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub(crate) struct AnthropicMessageDelta {
+pub struct AnthropicMessageDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) stop_reason: Option<AnthropicStopReason>,
+    pub stop_reason: Option<AnthropicStopReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) stop_sequence: Option<String>,
+    pub stop_sequence: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-enum AnthropicStreamMessage {
+pub enum AnthropicStreamMessage {
     ContentBlockDelta {
         delta: FlattenUnknown<'static, AnthropicContentBlockDelta>,
         index: u32,
@@ -1245,7 +1274,7 @@ enum AnthropicStreamMessage {
 /// There is no need to do the same bookkeeping for TextDelta chunks since they come with an index (which we use as an ID for a text chunk).
 /// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
 #[expect(clippy::too_many_arguments)]
-fn anthropic_to_tensorzero_stream_message(
+pub(super) fn anthropic_to_tensorzero_stream_message(
     raw_message: String,
     message: AnthropicStreamMessage,
     message_latency: Duration,
@@ -1254,6 +1283,7 @@ fn anthropic_to_tensorzero_stream_message(
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
+    provider_type: &str,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match message {
         AnthropicStreamMessage::ContentBlockDelta {
@@ -1281,7 +1311,7 @@ fn anthropic_to_tensorzero_stream_message(
                         raw_name: None,
                         id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
-                            provider_type: PROVIDER_TYPE.to_string(),
+                            provider_type: provider_type.to_string(),
                             raw_request: None,
                             raw_response: None,
                         }))?,
@@ -1301,7 +1331,7 @@ fn anthropic_to_tensorzero_stream_message(
                         id: index.to_string(),
                         summary_id: None,
                         summary_text: None,
-                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                        provider_type: Some(provider_type.to_string()),
                     })],
                     None,
                     raw_message,
@@ -1317,7 +1347,7 @@ fn anthropic_to_tensorzero_stream_message(
                         id: index.to_string(),
                         summary_id: None,
                         summary_text: None,
-                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                        provider_type: Some(provider_type.to_string()),
                     })],
                     None,
                     raw_message,
@@ -1370,7 +1400,7 @@ fn anthropic_to_tensorzero_stream_message(
                     id: index.to_string(),
                     summary_id: None,
                     summary_text: None,
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                    provider_type: Some(provider_type.to_string()),
                 })],
                 None,
                 raw_message,
@@ -1385,7 +1415,7 @@ fn anthropic_to_tensorzero_stream_message(
                         id: index.to_string(),
                         summary_id: None,
                         summary_text: None,
-                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                        provider_type: Some(provider_type.to_string()),
                     })],
                     None,
                     raw_message,
@@ -1397,7 +1427,7 @@ fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
         AnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
             message: error.to_string(),
-            provider_type: PROVIDER_TYPE.to_string(),
+            provider_type: provider_type.to_string(),
             raw_request: None,
             raw_response: None,
         }
@@ -1435,7 +1465,7 @@ fn anthropic_to_tensorzero_stream_message(
             index,
         } => {
             if discard_unknown_chunks {
-                warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
+                warn_discarded_unknown_chunk(provider_type, &delta.to_string());
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
@@ -1455,7 +1485,7 @@ fn anthropic_to_tensorzero_stream_message(
             index,
         } => {
             if discard_unknown_chunks {
-                warn_discarded_unknown_chunk(PROVIDER_TYPE, &content_block.to_string());
+                warn_discarded_unknown_chunk(provider_type, &content_block.to_string());
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
@@ -1475,7 +1505,7 @@ fn anthropic_to_tensorzero_stream_message(
             delta: FlattenUnknown::Unknown(delta),
         } => {
             if discard_unknown_chunks {
-                warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
+                warn_discarded_unknown_chunk(provider_type, &delta.to_string());
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
@@ -1512,13 +1542,19 @@ fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
 mod tests {
     use std::borrow::Cow;
 
+    use futures::FutureExt;
+    use serde_json::json;
+    use url::Url;
+    use uuid::Uuid;
+
     use super::*;
-    use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
+    use crate::inference::types::file::Detail;
+    use crate::inference::types::resolved_input::{FileUrl, LazyFile};
+    use crate::inference::types::{ContentBlock, FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
-    use serde_json::json;
-    use uuid::Uuid;
+    use crate::utils::testing::capture_logs;
 
     #[test]
     fn test_try_from_tool_call_config() {
@@ -1613,6 +1649,7 @@ mod tests {
             AnthropicMessagesConfig {
                 fetch_and_encode_input_files_before_inference: false,
             },
+            PROVIDER_TYPE,
         )
         .await
         .unwrap()
@@ -1632,6 +1669,7 @@ mod tests {
             AnthropicMessagesConfig {
                 fetch_and_encode_input_files_before_inference: false,
             },
+            PROVIDER_TYPE,
         )
         .await
         .unwrap()
@@ -1658,6 +1696,7 @@ mod tests {
             AnthropicMessagesConfig {
                 fetch_and_encode_input_files_before_inference: false,
             },
+            PROVIDER_TYPE,
         )
         .await
         .unwrap();
@@ -1681,6 +1720,7 @@ mod tests {
             AnthropicMessagesConfig {
                 fetch_and_encode_input_files_before_inference: false,
             },
+            PROVIDER_TYPE,
         )
         .await
         .unwrap();
@@ -1708,6 +1748,7 @@ mod tests {
             AnthropicMessagesConfig {
                 fetch_and_encode_input_files_before_inference: false,
             },
+            PROVIDER_TYPE,
         )
         .await
         .unwrap();
@@ -1801,7 +1842,8 @@ mod tests {
                         &inference_request.messages[0],
                         AnthropicMessagesConfig {
                             fetch_and_encode_input_files_before_inference: false,
-                        }
+                        },
+                        PROVIDER_TYPE,
                     )
                     .await
                     .unwrap(),
@@ -1856,7 +1898,8 @@ mod tests {
                         &inference_request.messages[0],
                         AnthropicMessagesConfig {
                             fetch_and_encode_input_files_before_inference: false,
-                        }
+                        },
+                        PROVIDER_TYPE,
                     )
                     .await
                     .unwrap(),
@@ -1864,7 +1907,8 @@ mod tests {
                         &inference_request.messages[1],
                         AnthropicMessagesConfig {
                             fetch_and_encode_input_files_before_inference: false,
-                        }
+                        },
+                        PROVIDER_TYPE,
                     )
                     .await
                     .unwrap(),
@@ -1922,6 +1966,7 @@ mod tests {
                 AnthropicMessagesConfig {
                     fetch_and_encode_input_files_before_inference: false,
                 },
+                PROVIDER_TYPE,
             )
         }))
         .await
@@ -1981,7 +2026,8 @@ mod tests {
                 &inference_request.messages[0],
                 AnthropicMessagesConfig {
                     fetch_and_encode_input_files_before_inference: false,
-                }
+                },
+                PROVIDER_TYPE,
             )
             .await
             .unwrap()
@@ -1992,7 +2038,8 @@ mod tests {
                 &inference_request.messages[1],
                 AnthropicMessagesConfig {
                     fetch_and_encode_input_files_before_inference: false,
-                }
+                },
+                PROVIDER_TYPE,
             )
             .await
             .unwrap()
@@ -2670,6 +2717,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2702,6 +2750,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2734,6 +2783,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2768,8 +2818,10 @@ mod tests {
             false,
             "test_model",
             "test_provider",
-        );
-        let chunk = result.unwrap().unwrap();
+            PROVIDER_TYPE,
+        )
+        .unwrap();
+        let chunk = result.unwrap();
         assert_eq!(chunk.content.len(), 1);
         match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
@@ -2802,6 +2854,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2826,6 +2879,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2844,6 +2898,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2875,6 +2930,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2900,6 +2956,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2922,6 +2979,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2938,6 +2996,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -3211,6 +3270,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -3245,6 +3305,7 @@ mod tests {
             true,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(res, None);
@@ -3256,6 +3317,7 @@ mod tests {
         let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };
@@ -3285,6 +3347,35 @@ mod tests {
         // Test that verbosity warns
         assert!(logs_contain(
             "Anthropic does not support the inference parameter `verbosity`"
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_anthropic_warns_on_detail() {
+        let logs_contain = capture_logs();
+
+        // Test URL forwarding path with detail
+        let url = Url::parse("https://example.com/image.png").unwrap();
+        let content_block = ContentBlock::File(Box::new(LazyFile::Url {
+            file_url: FileUrl {
+                url: url.clone(),
+                mime_type: Some(mime::IMAGE_PNG),
+                detail: Some(Detail::Low),
+            },
+            future: async { panic!("Should not resolve") }.boxed().shared(),
+        }));
+
+        let config = AnthropicMessagesConfig {
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let _result =
+            AnthropicMessageContent::from_content_block(&content_block, config, PROVIDER_TYPE)
+                .await;
+
+        // Should log a warning about detail not being supported
+        assert!(logs_contain(
+            "The image detail parameter is not supported by Anthropic"
         ));
     }
 }

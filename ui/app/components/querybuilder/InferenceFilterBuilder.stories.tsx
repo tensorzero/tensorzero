@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import InferenceFilterBuilder from "./InferenceFilterBuilder";
 import { ConfigProvider } from "~/context/config";
-import type { Config } from "tensorzero-node";
-import type { InferenceFilter } from "tensorzero-node";
+import type { Config } from "~/types/tensorzero";
+import type { InferenceFilter } from "~/types/tensorzero";
 import { FormProvider, useForm } from "react-hook-form";
 import { useState } from "react";
+import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";
 
 const meta = {
   title: "QueryBuilder/InferenceFilterBuilder",
@@ -12,7 +13,7 @@ const meta = {
   decorators: [
     (Story) => {
       return (
-        <div className="border-border w-2xl rounded border p-4">
+        <div className="w-2xl">
           <Story />
         </div>
       );
@@ -63,6 +64,7 @@ const FILLED_INFERENCE_FILTER: InferenceFilter = {
 
 const mockConfig: Config = {
   gateway: {
+    global_outbound_http_timeout: [300000, 0],
     disable_pseudonymous_usage_analytics: false,
     fetch_and_encode_input_files_before_inference: false,
     auth: {
@@ -123,8 +125,8 @@ const mockConfig: Config = {
     xai: { defaults: { api_key_location: "" } },
   },
   optimizers: {},
-  models: { table: {} },
-  embedding_models: { table: {} },
+  models: { table: {}, global_outbound_http_timeout: [300000, 0] },
+  embedding_models: { table: {}, global_outbound_http_timeout: [300000, 0] },
   functions: {},
   metrics: {
     sentiment_score: {
@@ -184,22 +186,15 @@ export const Default: Story = {
     return (
       <ConfigProvider value={mockConfig}>
         <FormProvider {...form}>
-          <InferenceFilterBuilder
-            inferenceFilter={inferenceFilter}
-            setInferenceFilter={setInferenceFilter}
-          />
-          <div className="mt-4 rounded border border-blue-300 bg-blue-50 p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-semibold text-blue-900">
-                Debug: Inference Filters
-              </h3>
-            </div>
-            <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
-              {inferenceFilter
-                ? JSON.stringify(inferenceFilter, null, 2)
-                : "undefined"}
-            </pre>
-          </div>
+          <StoryDebugWrapper
+            debugLabel="inferenceFilter"
+            debugData={inferenceFilter}
+          >
+            <InferenceFilterBuilder
+              inferenceFilter={inferenceFilter}
+              setInferenceFilter={setInferenceFilter}
+            />
+          </StoryDebugWrapper>
         </FormProvider>
       </ConfigProvider>
     );
@@ -220,22 +215,15 @@ export const Filled: Story = {
     return (
       <ConfigProvider value={mockConfig}>
         <FormProvider {...form}>
-          <InferenceFilterBuilder
-            inferenceFilter={inferenceFilter}
-            setInferenceFilter={setInferenceFilter}
-          />
-          <div className="mt-4 rounded border border-blue-300 bg-blue-50 p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-semibold text-blue-900">
-                Debug: Inference Filters
-              </h3>
-            </div>
-            <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
-              {inferenceFilter
-                ? JSON.stringify(inferenceFilter, null, 2)
-                : "undefined"}
-            </pre>
-          </div>
+          <StoryDebugWrapper
+            debugLabel="inferenceFilter"
+            debugData={inferenceFilter}
+          >
+            <InferenceFilterBuilder
+              inferenceFilter={inferenceFilter}
+              setInferenceFilter={setInferenceFilter}
+            />
+          </StoryDebugWrapper>
         </FormProvider>
       </ConfigProvider>
     );
@@ -261,22 +249,15 @@ export const EmptyMetrics: Story = {
     return (
       <ConfigProvider value={emptyMetricsConfig}>
         <FormProvider {...form}>
-          <InferenceFilterBuilder
-            inferenceFilter={inferenceFilter}
-            setInferenceFilter={setInferenceFilter}
-          />
-          <div className="mt-4 rounded border border-blue-300 bg-blue-50 p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-semibold text-blue-900">
-                Debug: Inference Filters
-              </h3>
-            </div>
-            <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
-              {inferenceFilter
-                ? JSON.stringify(inferenceFilter, null, 2)
-                : "undefined"}
-            </pre>
-          </div>
+          <StoryDebugWrapper
+            debugLabel="inferenceFilter"
+            debugData={inferenceFilter}
+          >
+            <InferenceFilterBuilder
+              inferenceFilter={inferenceFilter}
+              setInferenceFilter={setInferenceFilter}
+            />
+          </StoryDebugWrapper>
         </FormProvider>
       </ConfigProvider>
     );

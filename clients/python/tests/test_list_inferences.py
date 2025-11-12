@@ -62,9 +62,9 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
     # ORDER BY timestamp DESC is applied - verify timestamps are in descending order
     timestamps = [inference.timestamp for inference in inferences]
     for i in range(len(timestamps) - 1):
-        assert timestamps[i] >= timestamps[i + 1], f"Timestamps not in descending order: {timestamps[i]} < {
-            timestamps[i + 1]
-        }"
+        assert timestamps[i] >= timestamps[i + 1], (
+            f"Timestamps not in descending order: {timestamps[i]} < {timestamps[i + 1]}"
+        )
 
 
 def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway):
@@ -140,9 +140,9 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
     # ORDER BY timestamp ASC is applied - verify timestamps are in ascending order
     timestamps = [inference.timestamp for inference in inferences]
     for i in range(len(timestamps) - 1):
-        assert timestamps[i] <= timestamps[i + 1], f"Timestamps not in ascending order: {timestamps[i]} > {
-            timestamps[i + 1]
-        }"
+        assert timestamps[i] <= timestamps[i + 1], (
+            f"Timestamps not in ascending order: {timestamps[i]} > {timestamps[i + 1]}"
+        )
 
 
 def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroGateway):
@@ -370,9 +370,9 @@ def test_simple_time_filter(embedded_sync_client: TensorZeroGateway):
     # Verify timestamps are in ascending order (secondary sort)
     timestamps = [inference.timestamp for inference in inferences]
     for i in range(len(timestamps) - 1):
-        assert timestamps[i] <= timestamps[i + 1], f"Timestamps not in ascending order: {timestamps[i]} > {
-            timestamps[i + 1]
-        }"
+        assert timestamps[i] <= timestamps[i + 1], (
+            f"Timestamps not in ascending order: {timestamps[i]} > {timestamps[i + 1]}"
+        )
 
 
 def test_simple_tag_filter(embedded_sync_client: TensorZeroGateway):
@@ -501,9 +501,9 @@ async def test_simple_list_json_inferences_async(
     # ORDER BY timestamp DESC is applied - verify timestamps are in descending order
     timestamps = [inference.timestamp for inference in inferences]
     for i in range(len(timestamps) - 1):
-        assert timestamps[i] >= timestamps[i + 1], f"Timestamps not in descending order: {timestamps[i]} < {
-            timestamps[i + 1]
-        }"
+        assert timestamps[i] >= timestamps[i + 1], (
+            f"Timestamps not in descending order: {timestamps[i]} < {timestamps[i + 1]}"
+        )
 
 
 @pytest.mark.asyncio
@@ -582,9 +582,9 @@ async def test_simple_query_chat_function_async(
     # ORDER BY timestamp ASC is applied - verify timestamps are in ascending order
     timestamps = [inference.timestamp for inference in inferences]
     for i in range(len(timestamps) - 1):
-        assert timestamps[i] <= timestamps[i + 1], f"Timestamps not in ascending order: {timestamps[i]} > {
-            timestamps[i + 1]
-        }"
+        assert timestamps[i] <= timestamps[i + 1], (
+            f"Timestamps not in ascending order: {timestamps[i]} > {timestamps[i + 1]}"
+        )
 
 
 @pytest.mark.asyncio
@@ -754,9 +754,9 @@ async def test_simple_time_filter_async(
     # Verify timestamps are in ascending order (secondary sort)
     timestamps = [inference.timestamp for inference in inferences]
     for i in range(len(timestamps) - 1):
-        assert timestamps[i] <= timestamps[i + 1], f"Timestamps not in ascending order: {timestamps[i]} > {
-            timestamps[i + 1]
-        }"
+        assert timestamps[i] <= timestamps[i + 1], (
+            f"Timestamps not in ascending order: {timestamps[i]} > {timestamps[i + 1]}"
+        )
 
 
 @pytest.mark.asyncio

@@ -169,6 +169,14 @@ async fn get_providers() -> E2ETestProviders {
         use_modal_headers: false,
     }];
 
+    let input_audio_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "google_ai_studio_gemini".to_string(),
+        model_name: "gemini-2.5-flash-lite".into(),
+        model_provider_name: "google_ai_studio_gemini".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -187,8 +195,9 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers.clone(),
-        shorthand_inference: shorthand_providers.clone(),
         pdf_inference: image_providers,
+        input_audio: input_audio_providers,
+        shorthand_inference: shorthand_providers.clone(),
         credential_fallbacks,
     }
 }

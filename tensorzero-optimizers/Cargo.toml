@@ -1,0 +1,78 @@
+[package]
+name = "tensorzero-optimizers"
+version.workspace = true
+rust-version.workspace = true
+edition = "2021"
+license.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+e2e_tests = ["tensorzero/e2e_tests"]
+optimization_tests = ["e2e_tests"]
+
+[dependencies]
+tensorzero-core = { path = "../tensorzero-core" }
+
+# Core async and serialization
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-util = "0.7.12"
+
+# HTTP and web framework (needed for handlers)
+axum = { workspace = true }
+http = { workspace = true }
+
+# Error handling
+thiserror = "2.0.16"
+
+# Utilities
+futures = { workspace = true }
+itertools = "0.14.0"
+rand = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+secrecy = { workspace = true }
+
+# HTTP client
+reqwest = { workspace = true }
+
+# Object storage (for file uploads)
+object_store = { workspace = true }
+mime = { workspace = true }
+mime_guess = "2.0.5"
+
+# Tracing and logging
+tracing = { workspace = true }
+
+# ts-rs
+ts-rs = { workspace = true }
+
+[dev-dependencies]
+tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
+tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
+evaluations = { path = "../evaluations" }
+paste = "1.0.15"
+tempfile = "3.21.0"
+base64 = "0.22.1"
+tokio-stream = { workspace = true }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+
+[[test]]
+name = "optimization-live"
+path = "tests/live_tests.rs"
+required-features = ["optimization_tests"]
+
+[[test]]
+name = "optimization-mock"
+path = "tests/mock_tests.rs"
+required-features = ["e2e_tests"]
+
+[[test]]
+name = "e2e_dicl"
+path = "tests/e2e/dicl.rs"
+required-features = ["e2e_tests"]

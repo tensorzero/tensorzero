@@ -4,7 +4,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use axum::extract::State;
-use axum::{debug_handler, Json};
+use axum::{debug_handler, Extension, Json};
 use human_feedback::write_static_evaluation_human_feedback_if_necessary;
 use metrics::counter;
 use serde::{Deserialize, Serialize};
@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 use crate::config::{Config, MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
+use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{
@@ -93,9 +94,10 @@ pub struct FeedbackResponse {
 #[debug_handler(state = AppStateData)]
 pub async fn feedback_handler(
     State(app_state): AppState,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Json<FeedbackResponse>, Error> {
-    Ok(Json(feedback(app_state, params).await?))
+    Ok(Json(feedback(app_state, params, api_key_ext).await?))
 }
 
 // Helper function to avoid requiring axum types in the client
@@ -115,6 +117,7 @@ pub async fn feedback(
         ..
     }: AppStateData,
     mut params: Params,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<FeedbackResponse, Error> {
     let span = tracing::Span::current();
     if let Some(inference_id) = params.inference_id {
@@ -136,6 +139,12 @@ pub async fn feedback(
     }
     validate_tags(&params.tags, params.internal)?;
     validate_feedback_specific_tags(&params.tags)?;
+    if let Some(api_key_ext) = api_key_ext {
+        params.tags.insert(
+            "tensorzero::api_key_public_id".to_string(),
+            api_key_ext.0.api_key.get_public_id().into(),
+        );
+    }
     // Get the metric config or return an error if it doesn't exist
     let feedback_metadata = get_feedback_metadata(
         &config,
@@ -475,9 +484,20 @@ async fn throttled_get_function_info(
     target_id: &Uuid,
 ) -> Result<FunctionInfo, Error> {
     // Compute how long ago the target_id was created.
-    // Some UUIDs are in the future, e.g. for dynamic evaluation runs.
-    // In this case we should be conservative and assume no time has passed.
-    let elapsed = uuid_elapsed(target_id).unwrap_or(Duration::from_secs(0));
+    let elapsed = match uuid_elapsed(target_id) {
+        Ok(elapsed) => elapsed,
+        Err(e) => {
+            // Some UUIDs are in the future, e.g. for dynamic evaluation runs.
+            // In this case we should be conservative and assume no time has passed.
+            if matches!(e.get_details(), ErrorDetails::UuidInFuture { .. }) {
+                // We don't log anything, since this is an expected case.
+                e.suppress_logging_of_error_message();
+                Duration::from_secs(0)
+            } else {
+                return Err(e.log());
+            }
+        }
+    };
 
     // Calculate the remaining cooldown (which may be zero) and ensure we wait at least FEEDBACK_MINIMUM_WAIT_TIME.
     let wait_time = max(
@@ -1108,6 +1128,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await;
@@ -1143,6 +1164,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await
@@ -1169,6 +1191,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await;
@@ -1215,6 +1238,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await
@@ -1239,6 +1263,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await;
@@ -1282,6 +1307,7 @@ mod tests {
         };
         let response = feedback_handler(
             State(gateway_handle.app_state.clone()),
+            None,
             StructuredJson(params),
         )
         .await;

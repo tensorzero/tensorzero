@@ -5,8 +5,9 @@ import {
 import { isErrorLike, JSONParseError } from "~/utils/common";
 import type { Route } from "./+types/inference";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
-import type { ClientInferenceParams } from "tensorzero-node";
+import type { ClientInferenceParams } from "~/types/tensorzero";
 import { getExtraInferenceOptions } from "~/utils/feature_flags";
+import { logger } from "~/utils/logger";
 
 export async function action({ request }: Route.ActionArgs): Promise<Response> {
   const formData = await request.formData();
@@ -41,7 +42,7 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
     return Response.json(inference);
   } catch (error) {
     if (process.env.NODE_ENV === "development") {
-      console.error("Error in inference action:", error);
+      logger.warn("Error in inference action:", error);
     }
 
     if (error instanceof JSONParseError) {

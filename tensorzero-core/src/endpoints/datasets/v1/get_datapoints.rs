@@ -52,7 +52,7 @@ pub async fn get_datapoints_handler(
     Ok(Json(response))
 }
 
-async fn list_datapoints(
+pub async fn list_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
     config: &Config,
     dataset_name: String,
@@ -89,7 +89,7 @@ async fn list_datapoints(
     Ok(GetDatapointsResponse { datapoints })
 }
 
-async fn get_datapoints(
+pub async fn get_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
     config: &Config,
     request: GetDatapointsRequest,

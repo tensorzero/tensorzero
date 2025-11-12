@@ -1,10 +1,11 @@
 #![recursion_limit = "256"]
 #![deny(clippy::all)]
 use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
+use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 use url::Url;
 
 use evaluations::stats::{EvaluationInfo, EvaluationUpdate};
-use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs};
+use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs, EvaluationVariant};
 use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use serde::Serialize;
 use serde_json::Value;
@@ -184,7 +185,7 @@ pub async fn run_evaluation_streaming(
         clickhouse_client: clickhouse_client.clone(),
         config: config.clone(),
         dataset_name: params.dataset_name.clone(),
-        variant_name: params.variant_name.clone(),
+        variant: EvaluationVariant::Name(params.variant_name.clone()),
         evaluation_name: params.evaluation_name.clone(),
         evaluation_run_id,
         inference_cache: cache_mode,
@@ -334,10 +335,13 @@ impl TensorZeroClient {
     pub async fn stale_dataset(&self, dataset_name: String) -> Result<String, napi::Error> {
         let result = self
             .client
-            .stale_dataset(dataset_name)
+            .delete_dataset(dataset_name)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        let result_str = serde_json::to_string(&result).map_err(|e| {
+        let shim_result = StaleDatasetResponse {
+            num_staled_datapoints: result.num_deleted_datapoints,
+        };
+        let result_str = serde_json::to_string(&shim_result).map_err(|e| {
             napi::Error::from_reason(format!("Failed to serialize stale dataset result: {e}"))
         })?;
         Ok(result_str)

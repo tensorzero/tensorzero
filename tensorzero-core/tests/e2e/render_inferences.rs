@@ -269,6 +269,7 @@ pub async fn test_render_samples_normal() {
                         StoredInputMessageContent::File(Box::new(StoredFile(
                             ObjectStoragePointer {
                                 source_url: None,
+                                detail: None,
                                 mime_type: mime::IMAGE_PNG,
                                 storage_path: StoragePath {
                                     kind: StorageKind::S3Compatible {
@@ -280,6 +281,7 @@ pub async fn test_render_samples_normal() {
                                     },
                                     path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                                 },
+                                filename: None,
                             },
                         ))),
                     ],
@@ -822,6 +824,7 @@ pub async fn test_render_datapoints_normal() {
                         StoredInputMessageContent::File(Box::new(StoredFile(
                             ObjectStoragePointer {
                                 source_url: None,
+                                detail: None,
                                 mime_type: mime::IMAGE_PNG,
                                 storage_path: StoragePath {
                                     kind: StorageKind::S3Compatible {
@@ -833,6 +836,7 @@ pub async fn test_render_datapoints_normal() {
                                     },
                                     path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                                 },
+                                filename: None,
                             },
                         ))),
                     ],

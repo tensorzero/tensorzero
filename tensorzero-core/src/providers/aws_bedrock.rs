@@ -50,9 +50,8 @@ const PROVIDER_NAME: &str = "AWS Bedrock";
 pub const PROVIDER_TYPE: &str = "aws_bedrock";
 
 // NB: If you add `Clone` someday, you'll need to wrap client in Arc
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct AWSBedrockProvider {
     model_id: String,
     #[serde(skip)]
@@ -68,6 +67,7 @@ fn apply_inference_params(
     let mut bedrock_request = bedrock_request;
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -86,6 +86,10 @@ fn apply_inference_params(
             .clone();
         let merged_fields = build_bedrock_additional_fields(existing_fields, *budget_tokens);
         bedrock_request = bedrock_request.set_additional_model_request_fields(Some(merged_fields));
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if verbosity.is_some() {
@@ -102,6 +106,7 @@ fn apply_inference_params_stream(
     let mut bedrock_request = bedrock_request;
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -120,6 +125,10 @@ fn apply_inference_params_stream(
             .clone();
         let merged_fields = build_bedrock_additional_fields(existing_fields, *budget_tokens);
         bedrock_request = bedrock_request.set_additional_model_request_fields(Some(merged_fields));
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if verbosity.is_some() {
@@ -783,6 +792,11 @@ async fn bedrock_content_block_from_content_block(
         ContentBlock::File(file) => {
             let resolved_file = file.resolve().await?;
             let ObjectStorageFile { file, data } = &*resolved_file;
+            if file.detail.is_some() {
+                tracing::warn!(
+                    "The image detail parameter is not supported by AWS Bedrock. The `detail` field will be ignored."
+                );
+            }
             let file_bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
                     raw_request: None,

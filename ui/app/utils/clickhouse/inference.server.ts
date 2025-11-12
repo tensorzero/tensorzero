@@ -16,7 +16,7 @@ import type {
   FunctionConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
 import {
@@ -38,21 +38,21 @@ import { logger } from "~/utils/logger";
 import { getConfig, getFunctionConfig } from "../config/index.server";
 
 /**
- * Query a table of at most `page_size` Inferences from ChatInference or JsonInference that are
+ * Query a table of at most `limit` Inferences from ChatInference or JsonInference that are
  * before the given `before` ID or after the given `after` ID. If `episode_id` is provided,
  * we only return rows from that specific episode.
  *
- * - If `before` and `after` are both not provided, returns the most recent `page_size` Inferences.
+ * - If `before` and `after` are both not provided, returns the most recent `limit` Inferences.
  * - If `before` and `after` are both provided, throw an error.
- * - If `before` is provided, returns the most recent `page_size` Inferences before the given `before` ID.
- * - If `after` is provided, returns the earliest `page_size` Inferences after the given `after` ID.
+ * - If `before` is provided, returns the most recent `limit` Inferences before the given `before` ID.
+ * - If `after` is provided, returns the earliest `limit` Inferences after the given `after` ID.
  *
  * All returned data should be ordered by `id` in descending order.
  *
  * TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
  */
 export async function queryInferenceTable(params: {
-  page_size: number;
+  limit: number;
   before?: string; // UUIDv7 string
   after?: string; // UUIDv7 string
   /**
@@ -65,7 +65,7 @@ export async function queryInferenceTable(params: {
    */
   extraParams?: Record<string, string | number>;
 }): Promise<InferenceByIdRow[]> {
-  const { page_size, before, after, extraWhere, extraParams } = params;
+  const { limit, before, after, extraWhere, extraParams } = params;
 
   if (before && after) {
     throw new Error("Cannot specify both 'before' and 'after' parameters");
@@ -76,7 +76,7 @@ export async function queryInferenceTable(params: {
 
   // Base query params
   const query_params: Record<string, string | number> = {
-    page_size,
+    limit,
   };
 
   // Add the built-in before/after logic
@@ -108,7 +108,7 @@ export async function queryInferenceTable(params: {
 
   let query: string;
   if (!before && !after) {
-    // No "before"/"after" => get the most recent page_size items
+    // No "before"/"after" => get the most recent limit items
     query = `
       SELECT
         uint_to_uuid(id_uint) as id,
@@ -120,10 +120,10 @@ export async function queryInferenceTable(params: {
       FROM InferenceById FINAL
       ${combinedWhere}
       ORDER BY id_uint DESC
-      LIMIT {page_size:UInt32}
+      LIMIT {limit:UInt32}
     `;
   } else if (before) {
-    // "Most recent" page_size before given ID
+    // "Most recent" limit before given ID
     query = `
       SELECT
         uint_to_uuid(id_uint) as id,
@@ -135,10 +135,10 @@ export async function queryInferenceTable(params: {
       FROM InferenceById FINAL
       ${combinedWhere}
       ORDER BY id_uint DESC
-      LIMIT {page_size:UInt32}
+      LIMIT {limit:UInt32}
     `;
   } else {
-    // "Earliest" page_size after given ID => subselect ascending, then reorder descending
+    // "Earliest" limit after given ID => subselect ascending, then reorder descending
     query = `
       SELECT
         id,
@@ -160,7 +160,7 @@ export async function queryInferenceTable(params: {
         FROM InferenceById FINAL
         ${combinedWhere}
         ORDER BY id_uint ASC
-        LIMIT {page_size:UInt32}
+        LIMIT {limit:UInt32}
       )
       ORDER BY id_uint DESC
     `;
@@ -229,12 +229,12 @@ export async function queryInferenceTableBounds(params?: {
 
 export async function queryInferenceTableByEpisodeId(params: {
   episode_id: string;
-  page_size: number;
+  limit: number;
   before?: string;
   after?: string;
 }): Promise<InferenceByIdRow[]> {
   return queryInferenceTable({
-    page_size: params.page_size,
+    limit: params.limit,
     before: params.before,
     after: params.after,
     extraWhere: ["episode_id = {episode_id:String}"],
@@ -253,12 +253,12 @@ export async function queryInferenceTableBoundsByEpisodeId(params: {
 
 export async function queryInferenceTableByFunctionName(params: {
   function_name: string;
-  page_size: number;
+  limit: number;
   before?: string;
   after?: string;
 }): Promise<InferenceByIdRow[]> {
   return queryInferenceTable({
-    page_size: params.page_size,
+    limit: params.limit,
     before: params.before,
     after: params.after,
     extraWhere: ["function_name = {function_name:String}"],
@@ -278,12 +278,12 @@ export async function queryInferenceTableBoundsByFunctionName(params: {
 export async function queryInferenceTableByVariantName(params: {
   function_name: string;
   variant_name: string;
-  page_size: number;
+  limit: number;
   before?: string;
   after?: string;
 }): Promise<InferenceByIdRow[]> {
   return queryInferenceTable({
-    page_size: params.page_size,
+    limit: params.limit,
     before: params.before,
     after: params.after,
     extraWhere: [

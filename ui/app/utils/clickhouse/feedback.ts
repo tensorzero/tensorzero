@@ -3,7 +3,7 @@ import { getClickhouseClient } from "./client.server";
 import { getNativeDatabaseClient } from "../tensorzero/native_client.server";
 import { z } from "zod";
 import { logger } from "~/utils/logger";
-import type { FeedbackRow } from "tensorzero-node";
+import type { FeedbackRow } from "~/types/tensorzero";
 
 export const booleanMetricFeedbackRowSchema = z.object({
   type: z.literal("boolean"),
@@ -183,7 +183,7 @@ export async function queryMetricsWithFeedback(params: {
  * Polls for a specific feedback item on the first page.
  * @param targetId The ID of the target (e.g., inference_id).
  * @param feedbackId The ID of the feedback item to find.
- * @param pageSize The number of items per page to fetch.
+ * @param limit The number of items per page to fetch.
  * @param maxRetries Maximum number of polling attempts.
  * @param retryDelay Delay between retries in milliseconds.
  * @returns The fetched feedback list.
@@ -191,7 +191,7 @@ export async function queryMetricsWithFeedback(params: {
 export async function pollForFeedbackItem(
   targetId: string,
   feedbackId: string,
-  pageSize: number,
+  limit: number,
   maxRetries: number = 10,
   retryDelay: number = 200,
 ): Promise<FeedbackRow[]> {
@@ -204,7 +204,7 @@ export async function pollForFeedbackItem(
       target_id: targetId,
       before: undefined,
       after: undefined,
-      page_size: pageSize,
+      limit,
     });
     if (feedback.some((f) => f.id === feedbackId)) {
       found = true;

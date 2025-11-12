@@ -48,6 +48,7 @@ export default [
       "react/jsx-uses-react": "error",
       "react/jsx-uses-vars": "error",
       "react/react-in-jsx-scope": "off",
+      "no-console": ["warn"],
       "no-restricted-syntax": [
         "error",
         {
@@ -73,6 +74,18 @@ export default [
           message:
             "Direct access to config.functions[functionName] is not allowed. Use the useFunctionConfig(functionName) hook instead.",
         },
+        {
+          selector:
+            "ImportDeclaration[source.value='tensorzero-node'][importKind='type']",
+          message:
+            "Do not import types directly from 'tensorzero-node'. Use 'import type { ... } from \"~/types/tensorzero\"' instead to avoid bundling the native client in browser code.",
+        },
+        {
+          selector:
+            "ImportDeclaration[source.value='tensorzero-node'] ImportSpecifier[importKind='type']",
+          message:
+            "Do not import types directly from 'tensorzero-node'. Use 'import type { ... } from \"~/types/tensorzero\"' instead to avoid bundling the native client in browser code.",
+        },
       ],
     },
   },
@@ -82,6 +95,15 @@ export default [
   {
     rules: {
       "@typescript-eslint/switch-exhaustiveness-check": "error",
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
     },
   },
 ];

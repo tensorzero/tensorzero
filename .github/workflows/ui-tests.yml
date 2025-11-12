@@ -7,6 +7,10 @@ on:
         required: true
         type: boolean
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   ui-tests:
     runs-on: namespace-profile-tensorzero-8x16
@@ -15,7 +19,7 @@ jobs:
     strategy:
       matrix:
         # TODO: Temporarily using 25.9-alpine instead of latest-alpine
-        clickhouse_version: ${{ inputs.is_merge_group && fromJSON('["24.12-alpine", "25.9-alpine"]') || fromJSON('["25.9-alpine"]') }}
+        clickhouse_version: ${{ inputs.is_merge_group && fromJSON('["24.12", "25.9"]') || fromJSON('["25.9"]') }}
 
     steps:
       - name: Set DNS
@@ -43,7 +47,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: "22.9.0"
+          node-version: "24.11.0"
 
       - name: Setup `pnpm`
         run: |
@@ -113,6 +117,11 @@ jobs:
         working-directory: ui
         run: docker compose -f fixtures/docker-compose.yml logs -t
 
+      - name: Print Docker Compose status
+        if: always()
+        working-directory: ui
+        run: docker compose -f fixtures/docker-compose.yml ps --all
+
       - name: Make sure the current commit short hash is in the Docker Compose gateway logs
         if: always()
         working-directory: ui
@@ -125,8 +134,10 @@ jobs:
 
       - name: Print ClickHouse error logs
         if: always()
-        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+        working-directory: ui
+        run: docker cp fixtures-clickhouse-1:/var/log/clickhouse-server/clickhouse-server.err.log -
 
       - name: Print ClickHouse trace logs
         if: always()
-        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
+        working-directory: ui
+        run: docker cp fixtures-clickhouse-1:/var/log/clickhouse-server/clickhouse-server.log -

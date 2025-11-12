@@ -80,10 +80,7 @@ export const Default: Story = {
         <DatasetSelector
           {...args}
           selected={selected}
-          onSelect={(dataset, isNew) => {
-            updateArgs({ selected: dataset });
-            console.log(`Selected: ${dataset}, isNew: ${isNew}`);
-          }}
+          onSelect={(dataset) => updateArgs({ selected: dataset })}
         />
       </QueryClientProvider>
     );
@@ -105,10 +102,7 @@ export const EmptyDatasets: Story = {
         <DatasetSelector
           {...args}
           selected={selected}
-          onSelect={(dataset, isNew) => {
-            updateArgs({ selected: dataset });
-            console.log(`Selected: ${dataset}, isNew: ${isNew}`);
-          }}
+          onSelect={(dataset) => updateArgs({ selected: dataset })}
         />
       </QueryClientProvider>
     );
@@ -130,10 +124,7 @@ export const DisallowCreation: Story = {
         <DatasetSelector
           {...args}
           selected={selected}
-          onSelect={(dataset, isNew) => {
-            updateArgs({ selected: dataset });
-            console.log(`Selected: ${dataset}, isNew: ${isNew}`);
-          }}
+          onSelect={(dataset) => updateArgs({ selected: dataset })}
         />
       </QueryClientProvider>
     );
@@ -166,10 +157,7 @@ export const ManyDatasets: Story = {
         <DatasetSelector
           {...args}
           selected={selected}
-          onSelect={(dataset, isNew) => {
-            updateArgs({ selected: dataset });
-            console.log(`Selected: ${dataset}, isNew: ${isNew}`);
-          }}
+          onSelect={(dataset) => updateArgs({ selected: dataset })}
         />
       </QueryClientProvider>
     );

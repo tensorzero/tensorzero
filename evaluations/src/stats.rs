@@ -4,7 +4,7 @@ use anyhow::Result;
 use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tensorzero::InferenceResponse;
+use tensorzero_core::client::InferenceResponse;
 use tensorzero_core::{endpoints::datasets::StoredDatapoint, evaluations::EvaluatorConfig};
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
@@ -37,7 +37,7 @@ impl EvaluationStats {
         }
     }
 
-    pub(crate) fn push(
+    pub fn push(
         &mut self,
         evaluation_update: EvaluationUpdate,
         writer: &mut impl Write,
@@ -128,7 +128,14 @@ impl EvaluationStats {
                 stderr = stderr,
                 "Computed statistics for evaluator"
             );
-            stats.insert(evaluator_name.clone(), EvaluatorStats { mean, stderr });
+            stats.insert(
+                evaluator_name.clone(),
+                EvaluatorStats {
+                    mean,
+                    stderr,
+                    count,
+                },
+            );
         }
         info!(
             computed_stats = stats.len(),
@@ -198,19 +205,24 @@ pub struct EvaluationError {
 
 /// Statistics computed about a particular evaluator
 /// We anticipate extending this over time
-#[derive(Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct EvaluatorStats {
     pub mean: f32,
     pub stderr: f32,
+    pub count: usize,
 }
 
 impl std::fmt::Display for EvaluatorStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:.2} ± {:.2}", self.mean, self.stderr)
+        write!(
+            f,
+            "{:.2} ± {:.2} (n={})",
+            self.mean, self.stderr, self.count
+        )
     }
 }
 
-fn mean(data: &[f32]) -> Option<f32> {
+pub fn mean(data: &[f32]) -> Option<f32> {
     let sum = data.iter().sum::<f32>();
     let count = data.len();
 
@@ -220,7 +232,7 @@ fn mean(data: &[f32]) -> Option<f32> {
     }
 }
 
-fn std_deviation(data: &[f32]) -> Option<f32> {
+pub fn std_deviation(data: &[f32]) -> Option<f32> {
     match (mean(data), data.len()) {
         (Some(data_mean), count) if count > 0 => {
             let variance = data

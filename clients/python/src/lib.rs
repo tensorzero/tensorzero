@@ -10,7 +10,7 @@
 /// and defines methods on them.
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 
-use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs};
+use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs, EvaluationVariant};
 use futures::StreamExt;
 use pyo3::{
     exceptions::{PyDeprecationWarning, PyStopAsyncIteration, PyStopIteration, PyValueError},
@@ -64,8 +64,9 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
     Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
-    InferenceStream, LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle,
-    RenderedSample, StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
+    InferenceStream, LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams,
+    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
+    WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -538,6 +539,35 @@ impl BaseTensorZeroGateway {
         })
     }
 }
+
+/// Helper function to construct an EvaluationVariant from the optional variant_name and dynamic_variant_config parameters.
+/// Deserializes the dynamic_variant_config if provided and validates that exactly one of the two is provided.
+fn construct_evaluation_variant(
+    py: Python<'_>,
+    dynamic_variant_config: Option<&Bound<'_, PyDict>>,
+    variant_name: Option<String>,
+) -> PyResult<EvaluationVariant> {
+    // Deserialize dynamic_variant_config if provided
+    let dynamic_variant_config: Option<UninitializedVariantInfo> =
+        if let Some(config) = dynamic_variant_config {
+            Some(deserialize_from_pyobj(py, config)?)
+        } else {
+            None
+        };
+
+    match (dynamic_variant_config, variant_name) {
+        (Some(info), None) => Ok(EvaluationVariant::Info(Box::new(info))),
+        (None, Some(name)) => Ok(EvaluationVariant::Name(name)),
+        (None, None) => Err(PyValueError::new_err(
+            "Either 'variant_name' or 'dynamic_variant_config' must be provided.",
+        )),
+        (Some(_), Some(_)) => Err(PyValueError::new_err(
+            "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
+            When using a dynamic variant, provide only 'dynamic_variant_config'.",
+        )),
+    }
+}
+
 #[pymethods]
 impl TensorZeroGateway {
     #[classmethod]
@@ -938,8 +968,10 @@ impl TensorZeroGateway {
             .iter()
             .map(|dp| deserialize_from_pyobj(this.py(), dp))
             .collect::<Result<Vec<_>, _>>()?;
-        let params = InsertDatapointParams { datapoints };
-        let fut = client.create_datapoints(dataset_name, params);
+
+        #[expect(deprecated)]
+        let fut =
+            client.create_datapoints_legacy(dataset_name, InsertDatapointParams { datapoints });
         let self_module = PyModule::import(this.py(), "uuid")?;
         let uuid = self_module.getattr("UUID")?.unbind();
         let res =
@@ -971,6 +1003,7 @@ impl TensorZeroGateway {
             .map(|dp| deserialize_from_pyobj(this.py(), dp))
             .collect::<Result<Vec<_>, _>>()?;
         let params = InsertDatapointParams { datapoints };
+        #[expect(deprecated)]
         let fut = client.bulk_insert_datapoints(dataset_name, params);
         let self_module = PyModule::import(this.py(), "uuid")?;
         let uuid = self_module.getattr("UUID")?.unbind();
@@ -996,6 +1029,7 @@ impl TensorZeroGateway {
     ) -> PyResult<()> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
+        #[expect(deprecated)]
         let fut = client.delete_datapoint(dataset_name, datapoint_id);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
@@ -1013,6 +1047,7 @@ impl TensorZeroGateway {
     ) -> PyResult<Bound<'py, Datapoint>> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
+        #[expect(deprecated)]
         let fut = client.get_datapoint(dataset_name, datapoint_id);
         let wire: Datapoint =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
@@ -1032,11 +1067,18 @@ impl TensorZeroGateway {
         offset: Option<u32>,
     ) -> PyResult<Bound<'_, PyList>> {
         let client = this.as_super().client.clone();
-        let fut = client.list_datapoints(dataset_name, function_name, limit, offset);
+        let request = ListDatapointsRequest {
+            function_name,
+            limit,
+            offset,
+            ..Default::default()
+        };
+        let fut = client.list_datapoints(dataset_name, request);
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
             Ok(datapoints) => {
                 let py_datapoints = datapoints
+                    .datapoints
                     .into_iter()
                     .map(|x| x.into_pyobject(this.py()))
                     .collect::<Result<Vec<_>, _>>()?;
@@ -1054,25 +1096,28 @@ impl TensorZeroGateway {
     ///
     /// * `evaluation_name` - User chosen name of the evaluation.
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
-    /// * `variant_name` - The name of the variant to evaluate
+    /// * `variant_name` - Optional name of the variant to evaluate (omit when using dynamic_variant_config)
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
+    /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
-                        variant_name,
+                        variant_name=None,
                         concurrency=1,
-                        inference_cache="on".to_string()
+                        inference_cache="on".to_string(),
+                        dynamic_variant_config=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency=1, inference_cache='on')"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None)"
     )]
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
         evaluation_name: String,
         dataset_name: String,
-        variant_name: String,
+        variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
+        dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
 
@@ -1089,6 +1134,9 @@ impl TensorZeroGateway {
                 &inference_cache.into_pyobject(this.py())?.into_any(),
             )?;
 
+        let variant =
+            construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
+
         let core_args = EvaluationCoreArgs {
             tensorzero_client: (*client).clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
@@ -1096,7 +1144,7 @@ impl TensorZeroGateway {
             evaluation_name,
             evaluation_run_id,
             dataset_name,
-            variant_name,
+            variant,
             concurrency,
             inference_cache: inference_cache_enum,
         };
@@ -1772,7 +1820,8 @@ impl AsyncTensorZeroGateway {
         let self_module = PyModule::import(this.py(), "uuid")?;
         let uuid = self_module.getattr("UUID")?.unbind();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.create_datapoints(dataset_name, params).await;
+            #[expect(deprecated)]
+            let res = client.create_datapoints_legacy(dataset_name, params).await;
             Python::attach(|py| match res {
                 Ok(uuids) => Ok(PyList::new(
                     py,
@@ -1810,6 +1859,7 @@ impl AsyncTensorZeroGateway {
         let self_module = PyModule::import(this.py(), "uuid")?;
         let uuid = self_module.getattr("UUID")?.unbind();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            #[expect(deprecated)]
             let res = client.bulk_insert_datapoints(dataset_name, params).await;
             Python::attach(|py| match res {
                 Ok(uuids) => Ok(PyList::new(
@@ -1839,6 +1889,7 @@ impl AsyncTensorZeroGateway {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            #[expect(deprecated)]
             let res = client.delete_datapoint(dataset_name, datapoint_id).await;
             Python::attach(|py| match res {
                 Ok(()) => Ok(()),
@@ -1861,6 +1912,7 @@ impl AsyncTensorZeroGateway {
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            #[expect(deprecated)]
             let res = client.get_datapoint(dataset_name, datapoint_id).await;
             Python::attach(|py| match res {
                 Ok(wire) => Ok(wire.into_py_any(py)?),
@@ -1883,11 +1935,15 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client
-                .list_datapoints(dataset_name, function_name, limit, offset)
-                .await;
+            let request = ListDatapointsRequest {
+                function_name,
+                limit,
+                offset,
+                ..Default::default()
+            };
+            let res = client.list_datapoints(dataset_name, request).await;
             Python::attach(|py| match res {
-                Ok(wire_datapoints) => Ok(PyList::new(py, wire_datapoints)?.unbind()),
+                Ok(response) => Ok(PyList::new(py, response.datapoints)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -1901,26 +1957,29 @@ impl AsyncTensorZeroGateway {
     ///
     /// * `evaluation_name` - User chosen name of the evaluation.
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
-    /// * `variant_name` - The name of the variant to evaluate
+    /// * `variant_name` - Optional name of the variant to evaluate (omit when using dynamic_variant_config)
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
+    /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
-                        variant_name,
+                        variant_name=None,
                         concurrency=1,
-                        inference_cache="on".to_string()
+                        inference_cache="on".to_string(),
+                        dynamic_variant_config=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name, concurrency=1, inference_cache='on')"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None)"
     )]
-    fn experimental_run_evaluation(
-        this: PyRef<'_, Self>,
+    fn experimental_run_evaluation<'py>(
+        this: PyRef<'py, Self>,
         evaluation_name: String,
         dataset_name: String,
-        variant_name: String,
+        variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
-    ) -> PyResult<Bound<'_, PyAny>> {
+        dynamic_variant_config: Option<&Bound<'py, PyDict>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();
 
         let inference_cache_enum: tensorzero_core::cache::CacheEnabledMode =
@@ -1928,6 +1987,9 @@ impl AsyncTensorZeroGateway {
                 this.py(),
                 &inference_cache.into_pyobject(this.py())?.into_any(),
             )?;
+
+        let variant =
+            construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             // Get app state data
@@ -1944,7 +2006,7 @@ impl AsyncTensorZeroGateway {
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,
-                variant_name,
+                variant,
                 concurrency,
                 inference_cache: inference_cache_enum,
             };

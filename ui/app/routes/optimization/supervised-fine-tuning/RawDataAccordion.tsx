@@ -6,7 +6,7 @@ import {
 } from "~/components/ui/accordion";
 import { useEffect, useState } from "react";
 import { Textarea } from "~/components/ui/textarea";
-import type { OptimizationJobInfo } from "tensorzero-node";
+import type { OptimizationJobInfo } from "~/types/tensorzero";
 
 interface RawDataAccordionProps {
   rawData: OptimizationJobInfo;

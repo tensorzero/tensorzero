@@ -225,7 +225,11 @@ fn add_local_self_signed_cert(
 }
 
 impl TracerWrapper {
-    fn get_or_create_custom_tracer(&self, key: &CustomTracerKey, context: Context) -> Context {
+    fn get_or_create_custom_tracer(
+        &self,
+        key: &CustomTracerKey,
+        context: Context,
+    ) -> Result<Context, Error> {
         // This is the potentially expensive part - we need to dynamically create a new `SdkTracer`.
         // If this ends up causing performance issues (due to thrashing the `custom_tracers` cache,
         // or `build_tracer` becoming expensive), then we should do the following:
@@ -234,23 +238,20 @@ impl TracerWrapper {
         //    and don't immediately create the `SdkTracer`.
         // 3. In the `Drop` impl for `SpanWrapper`, call `tokio::task::spawn_blocking`, and perform the cache
         //    lookup and nested `build_with_context` inside the closure.
-        let tracer = self.custom_tracers.try_get_with_by_ref(key, || {
-            // We need to provide a dummy generic parameter to satisfy the compiler
-            let (provider, tracer) =
-                build_tracer::<opentelemetry_otlp::SpanExporter>(key.clone(), None)?;
-            Ok::<_, Error>(Arc::new(CustomTracer {
-                inner: tracer,
-                provider: Some(provider),
-                shutdown_tasks: self.shutdown_tasks.clone(),
-            }))
-        });
-        match tracer {
-            Ok(tracer) => context.with_value(CustomTracerContextEntry { inner: tracer }),
-            Err(e) => {
-                tracing::error!("Failed to create custom tracer: {e}");
-                context
-            }
-        }
+        let tracer = self
+            .custom_tracers
+            .try_get_with_by_ref(key, || {
+                // We need to provide a dummy generic parameter to satisfy the compiler
+                let (provider, tracer) =
+                    build_tracer::<opentelemetry_otlp::SpanExporter>(key.clone(), None)?;
+                Ok::<_, Error>(Arc::new(CustomTracer {
+                    inner: tracer,
+                    provider: Some(provider),
+                    shutdown_tasks: self.shutdown_tasks.clone(),
+                }))
+            })
+            .map_err(Arc::unwrap_or_clone)?;
+        Ok(context.with_value(CustomTracerContextEntry { inner: tracer }))
     }
 }
 
@@ -732,7 +733,7 @@ fn make_otel_http_span<B>(
     req: &http::Request<B>,
     key: Option<CustomTracerKey>,
     tracer_wrapper: &TracerWrapper,
-) -> Span {
+) -> Result<Span, Error> {
     // Based on `OtelAxumLayer`.
     // If we need to use a custom otel `Tracer`, then attach an `CustomTracerKey` to the OTEL context.
     // We check for a `CustomTracerKey` in `TracerWrapper`, and use it to dispatch to a
@@ -748,7 +749,7 @@ fn make_otel_http_span<B>(
     // This is stored in the span's `Context`, which is automatically propagated to descendants.
     // When a span is exported to OpenTelemetry, we'll look for
     if let Some(custom_tracer_key) = key {
-        context = tracer_wrapper.get_or_create_custom_tracer(&custom_tracer_key, context);
+        context = tracer_wrapper.get_or_create_custom_tracer(&custom_tracer_key, context)?;
     }
     let _guard = context.attach();
 
@@ -787,7 +788,7 @@ fn make_otel_http_span<B>(
         span.record("http.route", route);
     }
 
-    span
+    Ok(span)
 }
 
 /// Attach information from our HTTP response to the original span for the overall
@@ -853,7 +854,12 @@ async fn tensorzero_otel_tracing_middleware(
             // As a result, if we reject a request due to a failure to parse custom OTLP headers,
             // we will *not* create an OpenTelemetry span. Custom headers can be required to correctly
             // process an OpenTelemetry span (e.g. to set the Arize API key), so this is correct behavior.
-            let span = make_otel_http_span(&req, custom_tracer_key, &tracer_wrapper);
+            let span = match make_otel_http_span(&req, custom_tracer_key, &tracer_wrapper) {
+                Ok(span) => span,
+                Err(e) => {
+                    return e.into_response();
+                }
+            };
             let response = next.run(req).instrument(span.clone()).await;
             handle_response(&response, &span);
             return response;

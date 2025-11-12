@@ -33,9 +33,8 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
  *      to not add keys which could trample one another.
  */
 
-#[derive(Debug, Serialize, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct RateLimitingConfig {
     rules: Vec<RateLimitingConfigRule>,
     enabled: bool, // TODO (#3643): default true, Postgres required if rules is nonempty.
@@ -393,9 +392,8 @@ impl ActiveRateLimit {
     }
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, Clone, ts_rs::TS)]
+#[ts(export)]
 pub struct RateLimitingConfigRule {
     pub limits: Vec<Arc<RateLimit>>,
     pub scope: RateLimitingConfigScopes,
@@ -426,9 +424,8 @@ impl RateLimitingConfigRule {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct RateLimit {
     pub resource: RateLimitResource,
     pub interval: RateLimitInterval,
@@ -438,8 +435,8 @@ pub struct RateLimit {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum RateLimitResource {
     ModelInference,
     Token,
@@ -476,8 +473,8 @@ impl EstimatedRateLimitResourceUsage {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum RateLimitInterval {
     Second,
     Minute,
@@ -524,9 +521,8 @@ impl RateLimitInterval {
     }
 }
 
-#[derive(Debug, Serialize, PartialEq, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, PartialEq, Clone, ts_rs::TS)]
+#[ts(export)]
 pub enum RateLimitingConfigPriority {
     Priority(usize),
     Always,
@@ -534,9 +530,8 @@ pub enum RateLimitingConfigPriority {
 
 /// Wrapper type for rate limiting scopes.
 /// Forces them to be sorted on construction
-#[derive(Clone, Debug, Hash, Serialize, PartialEq, Eq)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Hash, Serialize, PartialEq, Eq, ts_rs::TS)]
+#[ts(export)]
 pub struct RateLimitingConfigScopes(Vec<RateLimitingConfigScope>);
 
 impl RateLimitingConfigScopes {
@@ -575,8 +570,8 @@ trait Scope {
 // Note to reviewer:  what else could we do to ensure the sort order is maintained across future changes?
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(untagged)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum RateLimitingConfigScope {
     Tag(TagRateLimitingConfigScope),
     ApiKeyPublicId(ApiKeyPublicIdConfigScope),
@@ -595,9 +590,8 @@ impl Scope for RateLimitingConfigScope {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
+#[ts(export)]
 pub struct TagRateLimitingConfigScope {
     tag_key: String,
     tag_value: TagValueScope,
@@ -639,9 +633,8 @@ impl TagRateLimitingConfigScope {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
+#[ts(export)]
 pub struct ApiKeyPublicIdConfigScope {
     api_key_public_id: ApiKeyPublicIdValueScope,
 }
@@ -672,9 +665,8 @@ impl ApiKeyPublicIdConfigScope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
+#[ts(export)]
 pub enum TagValueScope {
     Concrete(String),
     Each,
@@ -694,9 +686,8 @@ impl Serialize for TagValueScope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, ts_rs::TS)]
+#[ts(export)]
 pub enum ApiKeyPublicIdValueScope {
     Concrete(String),
     Each,

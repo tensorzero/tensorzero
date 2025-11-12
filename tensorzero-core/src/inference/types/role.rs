@@ -2,14 +2,18 @@
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+use tensorzero_derive::export_schema;
 
 use crate::variant::chat_completion::{ASSISTANT_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR};
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass)]
+#[export_schema]
 pub enum Role {
     User,
     Assistant,

@@ -167,6 +167,8 @@ async fn test_image_url_with_fetch_true() {
                         ClientInputMessageContent::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: None,
+                            detail: None,
+                            filename: None,
                         })),
                     ],
                 }],
@@ -243,6 +245,8 @@ async fn test_image_url_with_fetch_false() {
                         ClientInputMessageContent::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: None,
+                            detail: None,
+                            filename: None,
                         })),
                     ],
                 }],
@@ -297,11 +301,16 @@ async fn test_base64_image_with_fetch_true() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "Describe this image briefly.".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Base64(Base64File {
-                            source_url: None,
-                            mime_type: mime::IMAGE_PNG,
-                            data: IMAGE_BASE64.to_string(),
-                        })),
+                        ClientInputMessageContent::File(File::Base64(
+                            Base64File::new(
+                                None,
+                                mime::IMAGE_PNG,
+                                IMAGE_BASE64.to_string(),
+                                None,
+                                None,
+                            )
+                            .expect("test data should be valid"),
+                        )),
                     ],
                 }],
             },
@@ -372,11 +381,16 @@ async fn test_base64_image_with_fetch_false() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "Describe this image briefly.".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Base64(Base64File {
-                            source_url: None,
-                            mime_type: mime::IMAGE_PNG,
-                            data: IMAGE_BASE64.to_string(),
-                        })),
+                        ClientInputMessageContent::File(File::Base64(
+                            Base64File::new(
+                                None,
+                                mime::IMAGE_PNG,
+                                IMAGE_BASE64.to_string(),
+                                None,
+                                None,
+                            )
+                            .expect("test data should be valid"),
+                        )),
                     ],
                 }],
             },
@@ -452,6 +466,8 @@ async fn test_wikipedia_image_url_with_fetch_true() {
                         ClientInputMessageContent::File(File::Url(UrlFile {
                             url: wikipedia_url.clone(),
                             mime_type: None,
+                            detail: None,
+                            filename: None,
                         })),
                     ],
                 }],
@@ -526,6 +542,8 @@ async fn test_wikipedia_image_url_with_fetch_false() {
                         ClientInputMessageContent::File(File::Url(UrlFile {
                             url: wikipedia_url.clone(),
                             mime_type: None,
+                            detail: None,
+                            filename: None,
                         })),
                     ],
                 }],
@@ -602,6 +620,8 @@ async fn test_image_url_403_error() {
                         ClientInputMessageContent::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: None,
+                            detail: None,
+                            filename: None,
                         })),
                     ],
                 }],

@@ -52,7 +52,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
         config,
         clickhouse,
         PostgresConnectionInfo::Disabled,
-        TensorzeroHttpClient::new().unwrap(),
+        TensorzeroHttpClient::new_testing().unwrap(),
     )
     .await
     .unwrap();

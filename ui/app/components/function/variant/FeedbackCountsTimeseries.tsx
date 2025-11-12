@@ -1,4 +1,4 @@
-import type { TimeWindow } from "tensorzero-node";
+import type { TimeWindow } from "~/types/tensorzero";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   formatChartNumber,
@@ -168,6 +168,7 @@ export function FeedbackCountsTimeseries({
                 stroke={chartConfig[variantName].color}
                 strokeWidth={0}
                 stackId="1"
+                isAnimationActive={false}
               />
             ))}
           </AreaChart>

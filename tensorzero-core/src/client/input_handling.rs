@@ -1,4 +1,5 @@
 use super::{ClientInput, ClientInputMessage, ClientInputMessageContent};
+use crate::error::Error;
 use crate::inference::types::{
     Base64File, File, ObjectStorageFile, ResolvedInput, ResolvedInputMessage,
     ResolvedInputMessageContent, TextKind,
@@ -6,24 +7,24 @@ use crate::inference::types::{
 use crate::tool::{ToolCall, ToolCallWrapper};
 
 /// Convert a resolved input to a client input
-pub fn resolved_input_to_client_input(resolved_input: ResolvedInput) -> ClientInput {
+pub fn resolved_input_to_client_input(resolved_input: ResolvedInput) -> Result<ClientInput, Error> {
     let ResolvedInput { system, messages } = resolved_input;
     let messages = messages
         .into_iter()
         .map(resolved_input_message_to_client_input_message)
-        .collect::<Vec<_>>();
-    ClientInput { system, messages }
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ClientInput { system, messages })
 }
 
 fn resolved_input_message_to_client_input_message(
     resolved_input_message: ResolvedInputMessage,
-) -> ClientInputMessage {
+) -> Result<ClientInputMessage, Error> {
     let ResolvedInputMessage { role, content } = resolved_input_message;
     let content = content
         .into_iter()
         .map(resolved_input_message_content_to_client_input_message_content)
-        .collect::<Vec<_>>();
-    ClientInputMessage { role, content }
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ClientInputMessage { role, content })
 }
 
 fn convert_tool_call(tool_call: ToolCall) -> ToolCallWrapper {
@@ -32,8 +33,8 @@ fn convert_tool_call(tool_call: ToolCall) -> ToolCallWrapper {
 
 fn resolved_input_message_content_to_client_input_message_content(
     resolved_input_message_content: ResolvedInputMessageContent,
-) -> ClientInputMessageContent {
-    match resolved_input_message_content {
+) -> Result<ClientInputMessageContent, Error> {
+    Ok(match resolved_input_message_content {
         ResolvedInputMessageContent::Text(text) => {
             ClientInputMessageContent::Text(TextKind::Text { text: text.text })
         }
@@ -55,17 +56,16 @@ fn resolved_input_message_content_to_client_input_message_content(
         ResolvedInputMessageContent::File(resolved) => {
             let ObjectStorageFile { file, data } = *resolved;
             let mime_type = file.mime_type;
+            let detail = file.detail;
+            let filename = file.filename;
 
-            ClientInputMessageContent::File(File::Base64(Base64File {
-                source_url: None,
-                mime_type,
-                data,
-            }))
+            let base64_file = Base64File::new(None, mime_type, data, detail, filename)?;
+            ClientInputMessageContent::File(File::Base64(base64_file))
         }
         ResolvedInputMessageContent::Unknown(unknown) => {
             ClientInputMessageContent::Unknown(unknown)
         }
-    }
+    })
 }
 
 #[cfg(test)]
@@ -74,7 +74,7 @@ mod tests {
 
     use crate::inference::types::{
         storage::{StorageKind, StoragePath},
-        Base64File, ObjectStorageFile, ObjectStoragePointer,
+        ObjectStorageFile, ObjectStoragePointer,
     };
     use url::Url;
 
@@ -129,23 +129,22 @@ mod tests {
                 source_url: Some(Url::parse("http://notaurl.com").unwrap()),
                 mime_type: mime::IMAGE_JPEG,
                 storage_path: storage_path.clone(),
+                detail: None,
+                filename: None,
             },
             data: image_data.to_string(),
         }));
 
         // Call the function under test
         let result =
-            resolved_input_message_content_to_client_input_message_content(resolved_content);
+            resolved_input_message_content_to_client_input_message_content(resolved_content)
+                .expect("Should convert successfully");
 
         // Verify the result
         match result {
-            ClientInputMessageContent::File(File::Base64(Base64File {
-                mime_type: result_mime_type,
-                data: result_data,
-                ..
-            })) => {
-                assert_eq!(result_mime_type, mime::IMAGE_JPEG);
-                assert_eq!(result_data, image_data);
+            ClientInputMessageContent::File(File::Base64(base64_file)) => {
+                assert_eq!(base64_file.mime_type, mime::IMAGE_JPEG);
+                assert_eq!(base64_file.data(), image_data);
             }
             _ => panic!("Expected ClientInputMessageContent::Image, got something else"),
         }

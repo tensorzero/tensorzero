@@ -10,6 +10,15 @@ permissions:
   contents: read
 
 jobs:
+  print-event:
+    name: Print event for debugging
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print event
+        run: |
+          echo "Event name: ${{ github.event_name }}"
+          echo "Event details:"
+          echo "${{ toJSON(github.event) }}"
   cancel-on-failure:
     name: Cancel General Checks on Failure
     runs-on: ubuntu-latest

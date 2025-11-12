@@ -81,9 +81,8 @@ const INFERENCE_ID_LABEL: &str = "tensorzero::inference_id";
 /// * In streaming mode, 'thought: true' parts with non-text content produce an error (since we don't have "unknown" blocks in streaming mode)
 ///
 /// In the future, we'll support 'unknown' blocks in streaming mode, and adjust this provider to emit them.
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GCPVertexGeminiProvider {
     api_v1_base_url: Url,
     request_url: String,
@@ -97,9 +96,8 @@ pub struct GCPVertexGeminiProvider {
     batch_config: Option<BatchConfig>,
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 struct BatchConfig {
     input_uri_prefix: String,
     output_uri_prefix: String,
@@ -713,7 +711,7 @@ struct GCPVertexGeminiRequestMinimal {
 #[serde(rename_all = "camelCase")]
 struct GCPVertexBatchResponseLine {
     request: Box<RawValue>,
-    response: GCPVertexGeminiResponse,
+    response: Box<RawValue>,
 }
 fn make_provider_batch_inference_output(
     line: GCPVertexBatchResponseLine,
@@ -726,9 +724,10 @@ fn make_provider_batch_inference_output(
             message: format!("Error deserializing batch request: {e}"),
         })
     })?;
-    let raw_response = serde_json::to_string(&line.response).map_err(|e| {
+    let raw_response = line.response.to_string();
+    let response = GCPVertexGeminiResponse::deserialize(&*line.response).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
-            message: format!("Error serializing batch response: {e}"),
+            message: format!("Error deserializing batch response: {e}"),
         })
     })?;
     let inference_id = request.labels.get(INFERENCE_ID_LABEL).ok_or_else(|| {
@@ -737,8 +736,7 @@ fn make_provider_batch_inference_output(
         })
     })?;
 
-    let usage = line
-        .response
+    let usage = response
         .usage_metadata
         .clone()
         .ok_or_else(|| {
@@ -752,7 +750,7 @@ fn make_provider_batch_inference_output(
         .into();
 
     let (output, finish_reason) = get_response_content(
-        line.response,
+        response,
         &raw_request,
         &raw_response,
         model_name,
@@ -1162,6 +1160,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             model_provider,
             model_name,
             provider_name,
+            &raw_request,
         )
         .peekable();
         Ok((stream, raw_request))
@@ -1498,7 +1497,9 @@ fn stream_gcp_vertex_gemini(
     model_provider: &ModelProvider,
     model_name: &str,
     provider_name: &str,
+    raw_request: &str,
 ) -> ProviderInferenceResponseStreamInner {
+    let raw_request = raw_request.to_string();
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
     let model_name = model_name.to_string();
     let provider_name = provider_name.to_string();
@@ -1511,7 +1512,7 @@ fn stream_gcp_vertex_gemini(
                     if matches!(e, reqwest_eventsource::Error::StreamEnded) {
                         break;
                     }
-                    yield Err(convert_stream_error(PROVIDER_TYPE.to_string(), e).await);
+                    yield Err(convert_stream_error(raw_request.clone(), PROVIDER_TYPE.to_string(), e).await);
                 }
                 Ok(event) => match event {
                     Event::Open => continue,
@@ -1520,7 +1521,7 @@ fn stream_gcp_vertex_gemini(
                             Error::new(ErrorDetails::InferenceServer {
                                 message: format!("Error parsing streaming JSON response: {}", DisplayOrDebugGateway::new(e)),
                                 provider_type: PROVIDER_TYPE.to_string(),
-                                raw_request: None,
+                                raw_request: Some(raw_request.clone()),
                                 raw_response: Some(message.data.clone()),
                             })
                         });
@@ -1849,6 +1850,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -1882,6 +1884,10 @@ fn apply_inference_params(
                 response_schema: None,
             });
         }
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if verbosity.is_some() {
@@ -2810,7 +2816,7 @@ mod tests {
     #[test]
     fn test_from_tool_choice() {
         let tool_choice = ToolChoice::Auto;
-        let supports_any_model_name = "gemini-2.5-pro-preview-06-05";
+        let supports_any_model_name = "gemini-2.5-pro";
         let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
         assert_eq!(
             tool_config,
@@ -2976,9 +2982,7 @@ mod tests {
             ..Default::default()
         };
         // JSON schema should be supported for Gemini Pro models
-        let result =
-            GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro-preview-06-05", false)
-                .await;
+        let result = GCPVertexGeminiRequest::new(&inference_request, "gemini-2.5-pro", false).await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GCPVertexGeminiRole::User);
@@ -3461,8 +3465,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) =
-            prepare_tools(&request_with_tools, "gemini-2.5-pro-preview-06-05");
+        let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-2.5-pro");
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -4792,6 +4795,7 @@ mod tests {
         let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };

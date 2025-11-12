@@ -525,7 +525,7 @@ async fn test_get_dataset_metadata_returns_correct_counts_for_specific_function(
 async fn test_get_dataset_rows_returns_correct_rows_for_specific_dataset() {
     let params = GetDatasetRowsParams {
         dataset_name: "notadataset".to_string(),
-        page_size: 10,
+        limit: 10,
         offset: 0,
     };
 
@@ -542,12 +542,12 @@ async fn test_get_dataset_rows_returns_correct_rows_for_specific_dataset() {
 async fn test_get_dataset_rows_pages_correctly() {
     let mut all_rows = Vec::new();
     let mut offset = 0;
-    let page_size = 10;
+    let limit = 10;
 
     loop {
         let params = GetDatasetRowsParams {
             dataset_name: "foo".to_string(),
-            page_size,
+            limit,
             offset,
         };
         let rows = get_clickhouse()
@@ -555,10 +555,10 @@ async fn test_get_dataset_rows_pages_correctly() {
             .get_dataset_rows(&params)
             .await
             .unwrap();
-        let is_last_page = rows.len() != page_size as usize;
+        let is_last_page = rows.len() != limit as usize;
 
         all_rows.extend(rows);
-        offset += page_size;
+        offset += limit;
 
         if is_last_page {
             break;
@@ -2167,11 +2167,13 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
     // Create a StoredFile with ObjectStorage
     let stored_file = StoredFile(ObjectStoragePointer {
         source_url: Some("https://example.com/original.png".parse().unwrap()),
+        detail: None,
         mime_type: mime::IMAGE_PNG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image.png").unwrap(),
         },
+        filename: None,
     });
 
     let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
@@ -2250,11 +2252,13 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
     // Create a StoredFile with ObjectStorage
     let stored_file = StoredFile(ObjectStoragePointer {
         source_url: Some("https://example.com/data.json".parse().unwrap()),
+        detail: None,
         mime_type: mime::APPLICATION_JSON,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/data.json").unwrap(),
         },
+        filename: None,
     });
 
     let json_datapoint = DatapointInsert::Json(JsonInferenceDatapointInsert {
@@ -2334,20 +2338,24 @@ async fn test_datapoint_with_mixed_file_types() {
     // Create multiple StoredFiles
     let stored_file1 = StoredFile(ObjectStoragePointer {
         source_url: Some("https://example.com/image1.png".parse().unwrap()),
+        detail: None,
         mime_type: mime::IMAGE_PNG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image1.png").unwrap(),
         },
+        filename: None,
     });
 
     let stored_file2 = StoredFile(ObjectStoragePointer {
         source_url: None, // No source URL
+        detail: None,
         mime_type: mime::IMAGE_JPEG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image2.jpg").unwrap(),
         },
+        filename: None,
     });
 
     let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {

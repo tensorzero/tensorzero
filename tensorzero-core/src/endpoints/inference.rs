@@ -33,7 +33,9 @@ use crate::experimentation::ExperimentationConfig;
 use crate::function::FunctionConfig;
 use crate::function::FunctionConfigChat;
 use crate::http::TensorzeroHttpClient;
-use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
+use crate::inference::types::chat_completion_inference_params::{
+    ChatCompletionInferenceParamsV2, ServiceTier,
+};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::resolved_input::LazyResolvedInput;
@@ -284,13 +286,19 @@ pub async fn inference(
     if params.episode_id.is_none() {
         tracing::Span::current().record("episode_id", episode_id.to_string());
     }
+    if let Some(api_key_ext) = &api_key_ext {
+        params.tags.insert(
+            "tensorzero::api_key_public_id".to_string(),
+            api_key_ext.0.api_key.get_public_id().into(),
+        );
+    }
 
     let (function, function_name) = find_function(&params, &config)?;
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
         function.variants().clone().into_iter().collect();
 
-    // If the function has no variants, return an error
-    if candidate_variants.is_empty() {
+    // If the function has no variants and no dynamic variant config, return an error
+    if candidate_variants.is_empty() && params.internal_dynamic_variant_config.is_none() {
         return Err(ErrorDetails::InvalidFunctionVariants {
             message: format!("Function `{function_name}` has no variants"),
         }
@@ -1015,30 +1023,22 @@ async fn write_inference(
     futures.push(Box::pin(async {
         // Write the inference to the Inference table
         match result {
-            InferenceResult::Chat(result) => match input.clone().into_stored_input() {
-                Ok(stored_input) => {
-                    let chat_inference =
-                        ChatInferenceDatabaseInsert::new(result, stored_input, metadata);
-                    let _ = clickhouse_connection_info
-                        .write_batched(&[chat_inference], TableName::ChatInference)
-                        .await;
-                }
-                Err(e) => {
-                    tracing::error!("Failed to convert input to stored input: {e:?}");
-                }
-            },
-            InferenceResult::Json(result) => match input.clone().into_stored_input() {
-                Ok(stored_input) => {
-                    let json_inference =
-                        JsonInferenceDatabaseInsert::new(result, stored_input, metadata);
-                    let _ = clickhouse_connection_info
-                        .write_batched(&[json_inference], TableName::JsonInference)
-                        .await;
-                }
-                Err(e) => {
-                    tracing::error!("Failed to convert input to stored input: {e:?}");
-                }
-            },
+            InferenceResult::Chat(result) => {
+                let stored_input = input.clone().into_stored_input();
+                let chat_inference =
+                    ChatInferenceDatabaseInsert::new(result, stored_input, metadata);
+                let _ = clickhouse_connection_info
+                    .write_batched(&[chat_inference], TableName::ChatInference)
+                    .await;
+            }
+            InferenceResult::Json(result) => {
+                let stored_input = input.clone().into_stored_input();
+                let json_inference =
+                    JsonInferenceDatabaseInsert::new(result, stored_input, metadata);
+                let _ = clickhouse_connection_info
+                    .write_batched(&[json_inference], TableName::JsonInference)
+                    .await;
+            }
         }
     }));
     futures::future::join_all(futures).await;
@@ -1347,6 +1347,9 @@ pub struct ChatCompletionInferenceParams {
     pub reasoning_effort: Option<String>,
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_tier: Option<ServiceTier>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking_budget_tokens: Option<i32>,
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1389,12 +1392,16 @@ impl ChatCompletionInferenceParams {
         }
         let ChatCompletionInferenceParamsV2 {
             reasoning_effort,
+            service_tier,
             thinking_budget_tokens,
             verbosity,
         } = inference_params_v2;
 
         if self.reasoning_effort.is_none() {
             self.reasoning_effort = reasoning_effort;
+        }
+        if self.service_tier.is_none() {
+            self.service_tier = service_tier;
         }
         if self.thinking_budget_tokens.is_none() {
             self.thinking_budget_tokens = thinking_budget_tokens;
@@ -1732,6 +1739,8 @@ mod tests {
             InputMessageContent::File(File::Url(UrlFile {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: Some(mime::IMAGE_PNG),
+                detail: None,
+                filename: None,
             }))
         );
     }
@@ -1760,11 +1769,16 @@ mod tests {
         assert_eq!(input_with_base64.messages[0].content.len(), 1);
         assert_eq!(
             input_with_base64.messages[0].content[0],
-            InputMessageContent::File(File::Base64(Base64File {
-                source_url: None,
-                mime_type: mime::IMAGE_PNG,
-                data: "fake_base64_data".to_string(),
-            }))
+            InputMessageContent::File(File::Base64(
+                Base64File::new(
+                    None,
+                    mime::IMAGE_PNG,
+                    "fake_base64_data".to_string(),
+                    None,
+                    None
+                )
+                .expect("test data should be valid")
+            ))
         );
     }
 
@@ -1774,17 +1788,24 @@ mod tests {
         let file_url = File::Url(UrlFile {
             url: "https://example.com/file.txt".parse().unwrap(),
             mime_type: Some(mime::IMAGE_PNG),
+            detail: None,
+            filename: None,
         });
         let serialized = serde_json::to_value(&file_url).unwrap();
         assert_eq!(serialized["file_type"], "url");
         assert_eq!(serialized["url"], "https://example.com/file.txt");
         assert_eq!(serialized["mime_type"], "image/png");
 
-        let file_base64 = File::Base64(Base64File {
-            source_url: None,
-            mime_type: mime::IMAGE_PNG,
-            data: "fake_base64_data".to_string(),
-        });
+        let file_base64 = File::Base64(
+            Base64File::new(
+                None,
+                mime::IMAGE_PNG,
+                "fake_base64_data".to_string(),
+                None,
+                None,
+            )
+            .expect("test data should be valid"),
+        );
         let serialized = serde_json::to_value(&file_base64).unwrap();
         assert_eq!(serialized["file_type"], "base64");
         assert_eq!(serialized["mime_type"], "image/png");
@@ -1817,6 +1838,8 @@ mod tests {
             InputMessageContent::File(File::Url(UrlFile {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: None,
+                detail: None,
+                filename: None,
             }))
         );
     }
@@ -1845,11 +1868,16 @@ mod tests {
         assert_eq!(input_with_base64.messages[0].content.len(), 1);
         assert_eq!(
             input_with_base64.messages[0].content[0],
-            InputMessageContent::File(File::Base64(Base64File {
-                source_url: None,
-                mime_type: mime::IMAGE_PNG,
-                data: "fake_base64_data".to_string(),
-            }))
+            InputMessageContent::File(File::Base64(
+                Base64File::new(
+                    None,
+                    mime::IMAGE_PNG,
+                    "fake_base64_data".to_string(),
+                    None,
+                    None
+                )
+                .expect("test data should be valid")
+            ))
         );
     }
 
@@ -1901,6 +1929,8 @@ mod tests {
                     },
                     path: Path::from("test-path"),
                 },
+                detail: None,
+                filename: None,
             }))
         );
     }
@@ -1908,11 +1938,10 @@ mod tests {
     #[test]
     fn test_file_roundtrip_serialization() {
         // Test that serialize -> deserialize maintains data integrity
-        let original = File::Base64(Base64File {
-            source_url: None,
-            mime_type: mime::IMAGE_JPEG,
-            data: "base64data".to_string(),
-        });
+        let original = File::Base64(
+            Base64File::new(None, mime::IMAGE_JPEG, "abcdef".to_string(), None, None)
+                .expect("test data should be valid"),
+        );
 
         let serialized = serde_json::to_string(&original).unwrap();
         let deserialized: File = serde_json::from_str(&serialized).unwrap();

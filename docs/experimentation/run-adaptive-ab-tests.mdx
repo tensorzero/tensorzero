@@ -8,17 +8,21 @@ TensorZero supports any number of variants in an adaptive A/B test.
 
 In simple terms, you define:
 
-- A TensorZero function ("task")
-- A set of candidate variants (prompts, models, etc.) to experiment with
+- A [TensorZero function](/gateway/configure-functions-and-variants) (a task or agent)
+- A set of candidate [variants](/gateway/configure-functions-and-variants) (prompts, models, etc.) to experiment with
 - A [metric](/gateway/guides/metrics-feedback) to optimize for
 
 And TensorZero takes care of the rest.
-TensorZero's experimentation algorithm is designed to efficiently find the best variant of the system within a specified confidence interval.
+TensorZero's experimentation algorithm is designed to efficiently find the best variant of the system with a specified level of confidence.
 You can add more variants over time and TensorZero will adjust the experiment accordingly while maintaining its statistical soundness.
+
+You don't need to choose the sample size or experiment duration up front.
+TensorZero will automatically detect when there are enough samples to identify the best variant.
+Once it has done so, it will use that variant for all subsequent inferences.
 
 <Tip>
 
-See the [Tutorial](/gateway/tutorial) to learn more about functions and variants in TensorZero.
+Learn more about adaptive A/B testing for LLMs in our blog post [Bandits in your LLM Gateway: Improve LLM Applications Faster with Adaptive Experimentation (A/B Testing)](https://www.tensorzero.com/blog/bandits-in-your-llm-gateway/).
 
 </Tip>
 
@@ -148,8 +152,10 @@ You can add more variants at any time and TensorZero will adjust the experiment 
 
 In addition to `candidate_variants`, you can also specify `fallback_variants` in your configuration.
 
-If a variant fails for any results, TensorZero first resamples from `candidate_variants`.
-Once they are exhausted, it samples from `fallback_variants` with uniform probability.
+If a variant fails for any reason, TensorZero first resamples from `candidate_variants`.
+Once they are exhausted, it attempts to use the first variant in `fallback_variants`; if that fails, it goes to the second fallback variant, etc.
+
+Note that episodes that contain inferences that use different variants for the same function (e.g. as a result of a fallback) are not used by the adaptive A/B testing algorithm.
 
 See the [Configuration Reference](/gateway/configuration-reference) for more details.
 
@@ -158,5 +164,7 @@ See the [Configuration Reference](/gateway/configuration-reference) for more det
 The `track_and_stop` algorithm has multiple parameters that can be customized.
 For example, you can trade off the speed of the experiment with the statistical confidence of the results.
 The default parameters are sensible for most use cases, but advanced users might want to customize them.
-
 See the [Configuration Reference](/gateway/configuration-reference) for more details.
+
+Two important parameters are `epsilon` and `delta`, which control a fundamental trade-off in experimentation: higher sensitivity and lower error rates require longer experiments.
+For a discussion on `epsilon` and `delta`, see our blog post [Bandits in your LLM Gateway: Improve LLM Applications Faster with Adaptive Experimentation (A/B Testing)](https://www.tensorzero.com/blog/bandits-in-your-llm-gateway/).

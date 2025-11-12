@@ -19,7 +19,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{FetchContext, Input};
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::{DynamicJSONSchema, JsonSchemaRef};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
@@ -57,7 +57,7 @@ pub async fn update_datapoints_handler(
 /// and inserts the updated datapoints into ClickHouse.
 ///
 /// Returns an error if there are no datapoints, or if there are duplicate datapoint IDs.
-async fn update_datapoints(
+pub async fn update_datapoints(
     app_state: &AppStateData,
     dataset_name: &str,
     request: UpdateDatapointsRequest,
@@ -332,7 +332,11 @@ async fn prepare_json_update(
     // Validate the output against the output schema. If the output is invalid, we only store the raw output.
     if let Some(new_output) = update.output {
         updated_datapoint.output = match new_output {
-            Some(output) => Some(output.into_json_inference_output(&output_schema).await),
+            Some(output) => Some(
+                output
+                    .into_json_inference_output(JsonSchemaRef::Dynamic(&output_schema))
+                    .await,
+            ),
             None => None,
         };
     }
@@ -414,7 +418,7 @@ pub async fn update_datapoints_metadata_handler(
 /// Business logic for updating datapoint metadata in a dataset.
 /// This function only updates metadata fields (like name) without creating new datapoint IDs.
 /// Unlike update_datapoints, this does NOT stale the old datapoint or create a new ID.
-async fn update_datapoints_metadata(
+pub async fn update_datapoints_metadata(
     clickhouse_handler: &impl DatasetQueries,
     dataset_name: &str,
     request: UpdateDatapointsMetadataRequest,
@@ -556,6 +560,8 @@ mod tests {
                 source_url: Some("https://example.com/original.png".parse().unwrap()),
                 mime_type: mime::IMAGE_PNG,
                 storage_path: storage_path.clone(),
+                detail: None,
+                filename: None,
             });
 
             let input = Input {
@@ -580,7 +586,7 @@ mod tests {
 
             // Create fetch context with NO actual object storage info.
             // If the code tries to access object storage, it will fail with an error.
-            let http_client = TensorzeroHttpClient::new().unwrap();
+            let http_client = TensorzeroHttpClient::new_testing().unwrap();
             let object_store_info: Option<ObjectStoreInfo> = None;
             let fetch_context = FetchContext {
                 client: &http_client,
@@ -624,11 +630,16 @@ mod tests {
             // - File::ObjectStorage: future is discarded, no async operations, just metadata passthrough
             // - File::Base64: goes through async resolve() -> write_file() -> storage write (or no-op if disabled)
 
-            let file = File::Base64(Base64File {
-                source_url: None,
-                mime_type: mime::IMAGE_PNG,
-                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
-            });
+            let file = File::Base64(
+                Base64File::new(
+                    None,
+                    mime::IMAGE_PNG,
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
+                    None,
+                    None,
+                )
+                .expect("test data should be valid"),
+            );
 
             let input = Input {
                 system: None,
@@ -652,7 +663,7 @@ mod tests {
 
             // Create fetch context with disabled storage
             // File::Base64 will call write_file() but it no-ops with disabled storage
-            let http_client = TensorzeroHttpClient::new().unwrap();
+            let http_client = TensorzeroHttpClient::new_testing().unwrap();
             let object_store_info = Some(ObjectStoreInfo {
                 object_store: None, // Disabled storage - write_file() returns Ok(()) without writing
                 kind: StorageKind::Disabled,

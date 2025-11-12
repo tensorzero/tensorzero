@@ -2,6 +2,7 @@
 use std::collections::HashMap;
 
 use futures::StreamExt;
+use indexmap::IndexMap;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
@@ -167,6 +168,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers,
         pdf_inference: pdf_providers,
+        input_audio: vec![],
         shorthand_inference: shorthand_providers.clone(),
         credential_fallbacks,
     }
@@ -355,20 +357,33 @@ async fn test_thinking_128k() {
 }
 
 #[tokio::test]
-async fn test_thinking_signature() {
+pub async fn test_thinking_signature() {
+    test_thinking_signature_helper(
+        "anthropic-thinking",
+        "anthropic::claude-3-7-sonnet-20250219",
+        "anthropic",
+    )
+    .await;
+}
+
+pub async fn test_thinking_signature_helper(
+    variant_name: &str,
+    model_name: &str,
+    model_provider_name: &str,
+) {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
         "function_name": "weather_helper",
-        "variant_name": "anthropic-thinking",
+        "variant_name": variant_name,
         "episode_id": episode_id,
         "input":{
             "system": {"assistant_name": "AskJeeves"},
             "messages": [
                 {
                     "role": "user",
-                    "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                    "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather (use degrees Celsius)?"
                 }
             ]},
         "stream": false,
@@ -386,7 +401,7 @@ async fn test_thinking_signature() {
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     let tensorzero_content_blocks = content_blocks.clone();
     assert!(
-        content_blocks.len() == 3,
+        content_blocks.len() >= 2,
         "Unexpected content blocks: {content_blocks:?}"
     );
     let first_block = &content_blocks[0];
@@ -401,23 +416,17 @@ async fn test_thinking_signature() {
         "Thinking block should mention 'weather': {first_block}"
     );
 
-    let second_block = &content_blocks[1];
-    assert_eq!(second_block["type"], "text");
-    let content = second_block.get("text").unwrap().as_str().unwrap();
-    // Assert that weather is in the content
-    assert!(
-        content.contains("weather") || content.contains("temperature"),
-        "Content should mention 'weather' or 'temperature': {second_block}"
-    );
-    // Check that inference_id is here
+    // There should be a tool call block in the output. We don't check for a 'text' output block, since not
+    // all models emit one here.
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
-
-    let third_block = &content_blocks[2];
-    assert_eq!(third_block["type"], "tool_call");
-    assert_eq!(third_block["name"], "get_temperature");
-    println!("Third block: {third_block}");
-    let tool_id = third_block.get("id").unwrap().as_str().unwrap();
+    let tool_call_block = content_blocks
+        .iter()
+        .find(|block| block["type"] == "tool_call")
+        .unwrap();
+    assert_eq!(tool_call_block["type"], "tool_call");
+    assert_eq!(tool_call_block["name"], "get_temperature");
+    let tool_id = tool_call_block.get("id").unwrap().as_str().unwrap();
 
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -441,29 +450,18 @@ async fn test_thinking_signature() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
+                "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather (use degrees Celsius)?"}]
             }
         ]
     });
     assert_eq!(input, correct_input);
-    let content_blocks = result.get("output").unwrap().as_str().unwrap();
-    // Check that content_blocks is a list of blocks length 1
-    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
-    assert_eq!(content_blocks.len(), 3);
-    let first_block = &content_blocks[0];
-    // Check the type and content in the block
-    assert_eq!(first_block["type"], "thought");
-    let second_block = &content_blocks[1];
-    assert_eq!(second_block["type"], "text");
-    let clickhouse_content = second_block.get("text").unwrap().as_str().unwrap();
-    assert_eq!(clickhouse_content, content);
     // Check that episode_id is here and correct
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
-    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "anthropic-thinking");
+    let retrieved_variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(retrieved_variant_name, variant_name);
     // Check the processing time
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -475,10 +473,11 @@ async fn test_thinking_signature() {
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "anthropic::claude-3-7-sonnet-20250219");
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, "anthropic");
+    let retrieved_model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(retrieved_model_name, model_name);
+    let retrieved_model_provider_name =
+        result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(retrieved_model_provider_name, model_provider_name);
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("weather"));
     // Check that raw_request is valid JSON
@@ -513,7 +512,7 @@ async fn test_thinking_signature() {
     println!("New messages: {new_messages:?}");
 
     let payload = json!({
-        "model_name": "anthropic::claude-3-7-sonnet-20250219",
+        "model_name": model_name,
         "episode_id": episode_id,
         "input": {
             "messages": new_messages
@@ -550,12 +549,25 @@ async fn test_thinking_signature() {
 }
 
 #[tokio::test]
-async fn test_redacted_thinking() {
+pub async fn test_redacted_thinking() {
+    test_redacted_thinking_helper(
+        "anthropic::claude-3-7-sonnet-20250219",
+        "anthropic",
+        "anthropic",
+    )
+    .await;
+}
+
+pub async fn test_redacted_thinking_helper(
+    model_name: &str,
+    model_provider_name: &str,
+    provider_type: &str,
+) {
     let client = Client::new();
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "model_name": "anthropic::claude-3-7-sonnet-20250219",
+        "model_name": model_name,
         "episode_id": episode_id,
         "input": {
             "messages": [
@@ -595,7 +607,7 @@ async fn test_redacted_thinking() {
     let first_block = &content_blocks[0];
     let first_block_type = first_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(first_block_type, "thought");
-    assert_eq!(first_block["_internal_provider_type"], "anthropic");
+    assert_eq!(first_block["_internal_provider_type"], provider_type);
     assert!(first_block["signature"].as_str().is_some());
 
     let second_block = &content_blocks[1];
@@ -644,7 +656,7 @@ async fn test_redacted_thinking() {
     let first_block = &content_blocks[0];
     // Check the type and content in the block
     assert_eq!(first_block["type"], "thought");
-    assert_eq!(first_block["_internal_provider_type"], "anthropic");
+    assert_eq!(first_block["_internal_provider_type"], provider_type);
     assert!(first_block["signature"].as_str().is_some());
     let second_block = &content_blocks[1];
     assert_eq!(second_block["type"], "text");
@@ -656,7 +668,7 @@ async fn test_redacted_thinking() {
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "anthropic::claude-3-7-sonnet-20250219");
+    assert_eq!(variant_name, model_name);
     // Check the processing time
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -668,10 +680,11 @@ async fn test_redacted_thinking() {
     let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
-    let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "anthropic::claude-3-7-sonnet-20250219");
-    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, "anthropic");
+    let retrieved_model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(retrieved_model_name, model_name);
+    let retrieved_model_provider_name =
+        result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(retrieved_model_provider_name, model_provider_name);
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
     // Check that raw_request is valid JSON
@@ -706,7 +719,7 @@ async fn test_redacted_thinking() {
     }));
 
     let payload = json!({
-        "model_name": "anthropic::claude-3-7-sonnet-20250219",
+        "model_name": model_name,
         "episode_id": episode_id,
         "input": {
             "messages": new_messages
@@ -740,10 +753,14 @@ async fn test_redacted_thinking() {
 /// This test checks that streaming inference works as expected.
 #[tokio::test]
 async fn test_streaming_thinking() {
+    test_streaming_thinking_helper("anthropic::claude-3-7-sonnet-20250219", "anthropic").await;
+}
+
+pub async fn test_streaming_thinking_helper(model_name: &str, provider_type: &str) {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "model_name": "anthropic::claude-3-7-sonnet-20250219",
+        "model_name": model_name,
         "episode_id": episode_id,
         "input": {
             "system": "Always thinking before responding",
@@ -803,7 +820,7 @@ async fn test_streaming_thinking() {
         }
     }
     let mut inference_id = None;
-    let mut content_blocks: HashMap<String, String> = HashMap::new();
+    let mut content_blocks: IndexMap<(String, String), String> = IndexMap::new();
     let mut content_block_signatures: HashMap<String, String> = HashMap::new();
     for chunk in chunks {
         let chunk_json: Value = serde_json::from_str(&chunk).unwrap();
@@ -819,13 +836,16 @@ async fn test_streaming_thinking() {
         for block in chunk_json.get("content").unwrap().as_array().unwrap() {
             let block_id = block.get("id").unwrap().as_str().unwrap();
             let block_type = block.get("type").unwrap().as_str().unwrap();
-            let target = content_blocks.entry(block_id.to_string()).or_default();
+            let target = content_blocks
+                .entry((block_type.to_string(), block_id.to_string()))
+                .or_default();
             if block_type == "text" {
                 *target += block.get("text").unwrap().as_str().unwrap();
             } else if block_type == "thought" {
                 if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
                     *target += text;
-                } else if let Some(signature) = block.get("signature").and_then(|s| s.as_str()) {
+                }
+                if let Some(signature) = block.get("signature").and_then(|s| s.as_str()) {
                     *content_block_signatures
                         .entry(block_id.to_string())
                         .or_default() += signature;
@@ -895,14 +915,17 @@ async fn test_streaming_thinking() {
         clickhouse_content_blocks[0],
         serde_json::json!({
             "type": "thought",
-            "text": content_blocks["0"],
+            "text": content_blocks[&("thought".to_string(), "0".to_string())],
             "signature": content_block_signatures["0"],
-            "_internal_provider_type": "anthropic",
+            "_internal_provider_type": provider_type,
         })
     );
 
     if has_text_block {
-        assert_eq!(clickhouse_content_blocks[1]["text"], content_blocks["1"]);
+        assert_eq!(
+            clickhouse_content_blocks[1]["text"],
+            content_blocks[&("text".to_string(), "1".to_string())]
+        );
     }
 
     let tool_call_id = clickhouse_content_blocks[tool_call_index]["id"]
@@ -911,7 +934,7 @@ async fn test_streaming_thinking() {
 
     assert_eq!(
         clickhouse_content_blocks[tool_call_index]["raw_arguments"],
-        content_blocks[tool_call_id]
+        content_blocks[&("tool_call".to_string(), tool_call_id.to_string())]
     );
 
     // We already check ModelInference in lots of tests, so we don't check it here
@@ -919,7 +942,7 @@ async fn test_streaming_thinking() {
     // Call Anthropic again with our reconstructed blocks, and make sure that it accepts the signed thought block
 
     let good_input = json!({
-        "model_name": "anthropic::claude-3-7-sonnet-20250219",
+        "model_name": model_name,
         "episode_id": episode_id,
         "input": {
             "system": "Always thinking before responding",
@@ -972,6 +995,8 @@ async fn test_streaming_thinking() {
         },
         "stream": false,
     });
+
+    println!("Good input: {good_input}");
 
     let good_response = client
         .post(get_gateway_endpoint("/inference"))
@@ -1037,7 +1062,9 @@ async fn test_forward_image_url() {
                 content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
                 ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
-                    mime_type: Some(mime::IMAGE_PNG)
+                    mime_type: Some(mime::IMAGE_PNG),
+                    detail: None,
+                    filename: None,
                 })),
                 ],
             }],
@@ -1114,7 +1141,9 @@ async fn test_forward_file_url() {
                 content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
                 ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
-                    mime_type: Some(mime::APPLICATION_PDF)
+                    mime_type: Some(mime::APPLICATION_PDF),
+                    detail: None,
+                    filename: None,
                 })),
                 ],
             }],

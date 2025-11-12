@@ -3,7 +3,7 @@ import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
   JsonValue,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import {
   SnippetLayout,
   SnippetContent,

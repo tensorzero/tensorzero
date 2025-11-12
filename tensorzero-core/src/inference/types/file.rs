@@ -48,9 +48,8 @@ use std::borrow::Cow;
 
 use futures::FutureExt;
 use mime::MediaType;
-use scoped_tls::scoped_thread_local;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use url::Url;
 
 use super::{ContentBlock, RequestMessage};
@@ -62,8 +61,7 @@ use crate::{
 use aws_smithy_types::base64;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-
-scoped_thread_local!(static SERIALIZE_FILE_DATA: ());
+use tensorzero_derive::export_schema;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -72,29 +70,40 @@ pub enum FileEncoding {
     Url,
 }
 
-pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), Error> {
-    if mime_type.type_() != mime::IMAGE {
-        return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
-            content_block_type: format!("file: {mime_type}"),
-            provider_type: provider_type.to_string(),
-        }));
-    }
-    Ok(())
+/// Detail level for input images (affects fidelity and token cost)
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+#[export_schema]
+pub enum Detail {
+    Low,
+    High,
+    Auto,
 }
 
 /// A file already encoded as base64
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[ts(export)]
+#[export_schema]
 pub struct Base64File {
     // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
     #[ts(optional)]
+    #[schemars(with = "Option<String>")]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
+    #[schemars(with = "String")]
     pub mime_type: MediaType,
-    // TODO: should we add a wrapper type to enforce base64?
-    pub data: String,
+    // This field contains *unprefixed* base64-encoded data.
+    // It's private and validated by the constructor.
+    data: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub detail: Option<Detail>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub filename: Option<String>,
 }
 
 /// Implement a custom deserializer for Base64File to show a deprecation warning for the `url` field
@@ -109,6 +118,10 @@ impl<'de> Deserialize<'de> for Base64File {
             source_url: Option<Url>,
             mime_type: MediaType,
             data: String,
+            #[serde(default)]
+            detail: Option<Detail>,
+            #[serde(default)]
+            filename: Option<String>,
         }
 
         let value = serde_json::Value::deserialize(deserializer)?;
@@ -124,11 +137,14 @@ impl<'de> Deserialize<'de> for Base64File {
         let helper: Base64FileHelper =
             serde_json::from_value(value).map_err(serde::de::Error::custom)?;
 
-        Ok(Base64File {
-            source_url: helper.source_url,
-            mime_type: helper.mime_type,
-            data: helper.data,
-        })
+        Base64File::new(
+            helper.source_url,
+            helper.mime_type,
+            helper.data,
+            helper.detail,
+            helper.filename,
+        )
+        .map_err(serde::de::Error::custom)
     }
 }
 
@@ -143,6 +159,12 @@ pub struct Base64FileMetadata {
     pub source_url: Option<Url>,
     #[ts(type = "string")]
     pub mime_type: MediaType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub detail: Option<Detail>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub filename: Option<String>,
 }
 
 /// Implement a custom deserializer for Base64FileMetadata to show a deprecation warning for the `url` field
@@ -156,6 +178,10 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
             #[serde(alias = "url")]
             source_url: Option<Url>,
             mime_type: MediaType,
+            #[serde(default)]
+            detail: Option<Detail>,
+            #[serde(default)]
+            filename: Option<String>,
         }
 
         let value = serde_json::Value::deserialize(deserializer)?;
@@ -174,6 +200,8 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
         Ok(Base64FileMetadata {
             source_url: helper.source_url,
             mime_type: helper.mime_type,
+            detail: helper.detail,
+            filename: helper.filename,
         })
     }
 }
@@ -186,8 +214,32 @@ impl std::fmt::Display for Base64File {
 }
 
 impl Base64File {
-    pub fn data(&self) -> Result<&String, Error> {
-        Ok(&self.data)
+    /// Create a new Base64File with validation
+    pub fn new(
+        source_url: Option<Url>,
+        mime_type: MediaType,
+        data: String,
+        detail: Option<Detail>,
+        filename: Option<String>,
+    ) -> Result<Self, Error> {
+        // Validate that data doesn't contain the data: prefix
+        if data.starts_with("data:") {
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "The `data` field for a `Base64File` must not contain `data:` prefix. Data should be pure base64-encoded content only.".to_string(),
+            }));
+        }
+
+        Ok(Self {
+            source_url,
+            mime_type,
+            data,
+            detail,
+            filename,
+        })
+    }
+
+    pub fn data(&self) -> &str {
+        &self.data
     }
 }
 #[cfg(feature = "pyo3")]
@@ -208,43 +260,52 @@ impl Base64File {
     }
 }
 
-pub fn serialize_with_file_data<T: Serialize>(value: &T) -> Result<Value, Error> {
-    SERIALIZE_FILE_DATA.set(&(), || {
-        serde_json::to_value(value).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing value: {e}"),
-            })
-        })
-    })
-}
-
 /// A file that can be located at a URL
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 pub struct UrlFile {
+    #[schemars(with = "String")]
     pub url: Url,
     #[ts(type = "string | null")]
+    #[schemars(with = "Option<String>")]
     pub mime_type: Option<MediaType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub detail: Option<Detail>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub filename: Option<String>,
 }
 
 /// A file stored in an object storage backend, without data.
 /// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[export_schema]
 pub struct ObjectStoragePointer {
     #[serde(alias = "url")] // DEPRECATED (SEE IMPORTANT NOTE BELOW)
     #[ts(optional)]
+    #[schemars(with = "Option<String>")]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
+    #[schemars(with = "String")]
     pub mime_type: MediaType,
     pub storage_path: StoragePath,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub detail: Option<Detail>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub filename: Option<String>,
 }
 
 /// A file stored in an object storage backend, with data.
 /// This struct can NOT be stored in the database.
 /// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 pub struct ObjectStorageFile {
     #[serde(flatten)]
@@ -252,6 +313,18 @@ pub struct ObjectStorageFile {
     // TODO (GabrielBianconi): in the future this should be an Option<String> so we can handle failures more gracefully (or alternatively, another variant for `File`)
     // TODO: should we add a wrapper type to enforce base64?
     pub data: String,
+}
+
+/// A file that we failed to read from object storage.
+/// This struct can NOT be stored in the database.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[ts(export)]
+#[export_schema]
+pub struct ObjectStorageError {
+    #[serde(flatten)]
+    pub file: ObjectStoragePointer,
+    #[ts(optional)]
+    pub error: Option<String>,
 }
 
 /// A newtype wrapper around `ObjectStorageFile` that represents file data
@@ -283,6 +356,10 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
             source_url: Option<Url>,
             mime_type: MediaType,
             storage_path: StoragePath,
+            #[serde(default)]
+            detail: Option<Detail>,
+            #[serde(default)]
+            filename: Option<String>,
         }
 
         let value = serde_json::Value::deserialize(deserializer)?;
@@ -302,23 +379,32 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
             source_url: helper.source_url,
             mime_type: helper.mime_type,
             storage_path: helper.storage_path,
+            detail: helper.detail,
+            filename: helper.filename,
         })
     }
 }
 
 /// A file for an inference or a datapoint.
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(tag = "file_type", rename_all = "snake_case")]
 #[ts(export)]
+#[export_schema]
 // NOTE(shuyangli, 2025-10-21): we're manually implementing Serialize and Deserialize for a while until we're confident
 // that clients are sending us the correct tagged versions. Serialization always produces tagged format, but
 // deserialization accepts both tagged and untagged formats for backwards compatibility.
 // TODO(#4107): Remove this once we're confident that clients are sending us the tagged version.
 pub enum File {
-    Url(UrlFile),                               // a file URL
-    Base64(Base64File),                         // a base64-encoded file
+    #[schemars(title = "FileUrlFile")]
+    Url(UrlFile), // a file URL
+    #[schemars(title = "FileBase64")]
+    Base64(Base64File), // a base64-encoded file
+    #[schemars(title = "FileObjectStoragePointer")]
     ObjectStoragePointer(ObjectStoragePointer), // a pointer to an object storage file (metadata only)
-    ObjectStorage(ObjectStorageFile),           // a file from object storage (metadata + data)
+    #[schemars(title = "FileObjectStorage")]
+    ObjectStorage(ObjectStorageFile), // a file from object storage (metadata + data)
+    #[schemars(title = "FileObjectStorageError")]
+    ObjectStorageError(ObjectStorageError), // a file we couldn't fetch from object storage (metadata + error)
 }
 
 // Allow deserializing File as either tagged or untagged format.
@@ -336,15 +422,27 @@ impl<'de> Deserialize<'de> for File {
             Url {
                 url: Url,
                 mime_type: Option<MediaType>,
+                #[serde(default)]
+                detail: Option<Detail>,
+                #[serde(default)]
+                filename: Option<String>,
             },
             Base64 {
                 mime_type: MediaType,
                 data: String,
+                #[serde(default)]
+                detail: Option<Detail>,
+                #[serde(default)]
+                filename: Option<String>,
             },
             ObjectStoragePointer {
                 source_url: Option<Url>,
                 mime_type: MediaType,
                 storage_path: StoragePath,
+                #[serde(default)]
+                detail: Option<Detail>,
+                #[serde(default)]
+                filename: Option<String>,
             },
             ObjectStorage {
                 #[serde(flatten)]
@@ -360,15 +458,27 @@ impl<'de> Deserialize<'de> for File {
                 url: Url,
                 #[serde(default)]
                 mime_type: Option<MediaType>,
+                #[serde(default)]
+                detail: Option<Detail>,
+                #[serde(default)]
+                filename: Option<String>,
             },
             Base64 {
                 mime_type: MediaType,
                 data: String,
+                #[serde(default)]
+                detail: Option<Detail>,
+                #[serde(default)]
+                filename: Option<String>,
             },
             ObjectStoragePointer {
                 source_url: Option<Url>,
                 mime_type: MediaType,
                 storage_path: StoragePath,
+                #[serde(default)]
+                detail: Option<Detail>,
+                #[serde(default)]
+                filename: Option<String>,
             },
             ObjectStorage {
                 #[serde(flatten)]
@@ -386,46 +496,74 @@ impl<'de> Deserialize<'de> for File {
         }
 
         match FileTaggedOrUntagged::deserialize(deserializer)? {
-            FileTaggedOrUntagged::Tagged(TaggedFile::Url { url, mime_type }) => {
-                Ok(File::Url(UrlFile { url, mime_type }))
-            }
-            FileTaggedOrUntagged::Tagged(TaggedFile::Base64 { mime_type, data }) => {
-                Ok(File::Base64(Base64File {
-                    mime_type,
-                    data,
-                    source_url: None,
-                }))
-            }
+            FileTaggedOrUntagged::Tagged(TaggedFile::Url {
+                url,
+                mime_type,
+                detail,
+                filename,
+            }) => Ok(File::Url(UrlFile {
+                url,
+                mime_type,
+                detail,
+                filename,
+            })),
+            FileTaggedOrUntagged::Tagged(TaggedFile::Base64 {
+                mime_type,
+                data,
+                detail,
+                filename,
+            }) => Ok(File::Base64(
+                Base64File::new(None, mime_type, data, detail, filename)
+                    .map_err(serde::de::Error::custom)?,
+            )),
             FileTaggedOrUntagged::Tagged(TaggedFile::ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
+                detail,
+                filename,
             }) => Ok(File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
+                detail,
+                filename,
             })),
             FileTaggedOrUntagged::Tagged(TaggedFile::ObjectStorage { file, data }) => {
                 Ok(File::ObjectStorage(ObjectStorageFile { file, data }))
             }
-            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::Url { url, mime_type }) => {
-                Ok(File::Url(UrlFile { url, mime_type }))
-            }
-            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::Base64 { mime_type, data }) => {
-                Ok(File::Base64(Base64File {
-                    mime_type,
-                    data,
-                    source_url: None,
-                }))
-            }
+            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::Url {
+                url,
+                mime_type,
+                detail,
+                filename,
+            }) => Ok(File::Url(UrlFile {
+                url,
+                mime_type,
+                detail,
+                filename,
+            })),
+            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::Base64 {
+                mime_type,
+                data,
+                detail,
+                filename,
+            }) => Ok(File::Base64(
+                Base64File::new(None, mime_type, data, detail, filename)
+                    .map_err(serde::de::Error::custom)?,
+            )),
             FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
+                detail,
+                filename,
             }) => Ok(File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
+                detail,
+                filename,
             })),
             FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::ObjectStorage { file, data }) => {
                 Ok(File::ObjectStorage(ObjectStorageFile { file, data }))
@@ -438,7 +576,7 @@ impl File {
     pub async fn take_or_fetch(self, client: &TensorzeroHttpClient) -> Result<Base64File, Error> {
         match self {
             File::Url(url_file) => {
-                let UrlFile { url, mime_type } = url_file;
+                let UrlFile { url, mime_type, detail, filename } = url_file;
                 let response = client.get(url.clone()).send().await.map_err(|e| {
                     Error::new(ErrorDetails::BadFileFetch {
                         url: url.clone(),
@@ -541,6 +679,8 @@ impl File {
                     source_url: Some(url.clone()),
                     mime_type,
                     data,
+                    detail,
+                    filename,
                 })
             }
             File::Base64(base64_file) => {
@@ -549,22 +689,27 @@ impl File {
             File::ObjectStoragePointer(_) => Err(Error::new(ErrorDetails::InternalError {
                 // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
                 // the base File::Url type calls this method.
-                message: format!("File::ObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
+                message: format!("File::ObjectStoragePointer::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
             })),
             File::ObjectStorage(_) => Err(Error::new(ErrorDetails::InternalError {
                 // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
                 // the base File::Url type calls this method.
                 message: format!("File::ObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
             })),
+            File::ObjectStorageError(_) => Err(Error::new(ErrorDetails::InternalError {
+                // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
+                // the base File::Url type calls this method.
+                message: format!("File::ObjectStorageError::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
+            })),
         }
     }
 
     pub fn into_stored_file(self) -> Result<StoredFile, Error> {
         match self {
-            File::ObjectStorage(ObjectStorageFile { file, data: _ }) => {
+            File::ObjectStorage(ObjectStorageFile { file, .. }) | File::ObjectStoragePointer(file) | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
                 Ok(StoredFile(file))
             }
-            File::Url(_) | File::Base64(_) | File::ObjectStoragePointer(_) => {
+            File::Url(_) | File::Base64(_) => {
                 Err(Error::new(ErrorDetails::InternalError {
                     message: format!(
                         "File::into_stored_file should only be called on ObjectStorage! {IMPOSSIBLE_ERROR_MESSAGE}"
@@ -625,8 +770,10 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
                     let data = match &*file {
                         File::ObjectStorage(resolved) => &resolved.data,
                         File::Base64(base64) => &base64.data,
-                        File::Url(_) | File::ObjectStoragePointer(_) => {
-                            // These variants should not occur in resolved files
+                        // These variants should not occur in resolved files
+                        File::Url(_)
+                        | File::ObjectStoragePointer(_)
+                        | File::ObjectStorageError(_) => {
                             continue;
                         }
                     };
@@ -645,69 +792,61 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
 /// to provide to OpenAI (which doesn't accept mime types for file input)
 pub fn mime_type_to_ext(mime_type: &MediaType) -> Result<Option<&'static str>, Error> {
     Ok(match mime_type {
-        _ if mime_type == &mime::IMAGE_JPEG => Some("jpg"),
-        _ if mime_type == &mime::IMAGE_PNG => Some("png"),
-        _ if mime_type == &mime::IMAGE_GIF => Some("gif"),
-        _ if mime_type == &mime::APPLICATION_PDF => Some("pdf"),
+        _ if mime_type == "image/jpeg" => Some("jpg"),
+        _ if mime_type == "image/png" => Some("png"),
+        _ if mime_type == "image/gif" => Some("gif"),
+        _ if mime_type == "application/pdf" => Some("pdf"),
         _ if mime_type == "image/webp" => Some("webp"),
         _ if mime_type == "text/plain" => Some("txt"),
+        _ if mime_type == "audio/midi" => Some("mid"),
+        _ if mime_type == "audio/mpeg" || mime_type == "audio/mp3" => Some("mp3"),
+        _ if mime_type == "audio/m4a" || mime_type == "audio/mp4" => Some("m4a"),
+        _ if mime_type == "audio/ogg" => Some("ogg"),
+        _ if mime_type == "audio/x-flac" || mime_type == "audio/flac" => Some("flac"),
+        _ if mime_type == "audio/x-wav"
+            || mime_type == "audio/wav"
+            || mime_type == "audio/wave" =>
+        {
+            Some("wav")
+        }
+        _ if mime_type == "audio/amr" => Some("amr"),
+        _ if mime_type == "audio/aac" || mime_type == "audio/x-aac" => Some("aac"),
+        _ if mime_type == "audio/x-aiff" || mime_type == "audio/aiff" => Some("aiff"),
+        _ if mime_type == "audio/x-dsf" => Some("dsf"),
+        _ if mime_type == "audio/x-ape" => Some("ape"),
+        _ if mime_type == "audio/webm" => Some("webm"),
         _ => {
             let guess = mime_guess::get_mime_extensions_str(mime_type.as_ref())
                 .and_then(|types| types.last());
             if guess.is_some() {
-                tracing::warn!("Guessed file extension {guess:?} for mime-type {mime_type} - this may not be correct");
+                tracing::warn!("Guessed file extension `{guess:?}` for MIME type `{mime_type}`. This may not be correct.");
             }
             guess.copied()
         }
     })
 }
 
-/// Tries to convert a filename to a mime type, based on the file extension.
-/// This picks an arbitrary mime type if there are multiple mime types for the extension.
-///
-/// This is used by the openai-compatible endpoint to determine the mime type for
-/// a file input (the OpenAI chat-completions endpoint doesn't provide a mime type for
-/// file inputs)
-pub fn filename_to_mime_type(filename: &str) -> Result<MediaType, Error> {
-    let ext = filename.split('.').next_back().ok_or_else(|| {
-        Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-            message: "File name must contain a file extension".to_string(),
-        })
-    })?;
+/// Converts audio MIME types to OpenAI's audio format strings.
+pub fn mime_type_to_audio_format(mime_type: &MediaType) -> Result<&'static str, Error> {
+    if mime_type.type_() != mime::AUDIO {
+        return Err(Error::new(ErrorDetails::InvalidMessage {
+            message: format!("Expected audio MIME type, got: {mime_type}"),
+        }));
+    }
 
-    Ok(match ext {
-        "jpeg" | "jpg" => mime::IMAGE_JPEG,
-        "png" => mime::IMAGE_PNG,
-        "gif" => mime::IMAGE_GIF,
-        "pdf" => mime::APPLICATION_PDF,
-        "webp" => "image/webp".parse::<MediaType>().map_err(|_| {
-            Error::new(ErrorDetails::InternalError {
-                message: "Unknown mime-type `image/webp`. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
-            })
-        })?,
-        _ => {
-            let mime_type = mime_guess::from_ext(ext).first().ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: format!("Unknown file extension `{ext}`"),
-                })
-            })?;
-            tracing::warn!("Guessed mime-type `{mime_type}` for file with extension `{ext}` - this may not be correct");
-            // Reparse to handle different `mime` crate versions
-            mime_type.to_string().parse::<MediaType>().map_err(|_| {
-                Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                    message: format!("Unknown mime-type `{mime_type}`"),
-                })
-            })?
-        }
+    mime_type_to_ext(mime_type)?.ok_or_else(|| {
+        Error::new(ErrorDetails::InvalidMessage {
+            message: format!(
+                "Unsupported audio MIME type: {mime_type}. Supported types: audio/midi, audio/mpeg, audio/m4a, audio/mp4, audio/ogg, audio/x-flac, audio/x-wav, audio/amr, audio/aac, audio/x-aiff, audio/x-dsf, audio/x-ape. Please open a feature request if your provider supports another audio format: https://github.com/tensorzero/tensorzero/discussions/categories/feature-requests"
+            ),
+        })
     })
 }
 
 #[cfg(test)]
 mod tests {
     use crate::inference::types::{
-        file::{
-            filename_to_mime_type, sanitize_raw_request, ObjectStorageFile, ObjectStoragePointer,
-        },
+        file::{sanitize_raw_request, ObjectStorageFile, ObjectStoragePointer},
         resolved_input::LazyFile,
         storage::{StorageKind, StoragePath},
         ContentBlock, RequestMessage, Role,
@@ -738,6 +877,8 @@ mod tests {
                                             )
                                             .unwrap(),
                                         },
+                                        detail: None,
+                                        filename: None,
                                     },
                                     data: "my-image-1-data".to_string(),
                                 }
@@ -754,6 +895,8 @@ mod tests {
                                             )
                                             .unwrap(),
                                         },
+                                        detail: None,
+                                        filename: None,
                                     },
                                     data: "my-image-2-data".to_string(),
                                 }
@@ -770,6 +913,8 @@ mod tests {
                                             )
                                             .unwrap(),
                                         },
+                                        detail: None,
+                                        filename: None,
                                     },
                                     data: "my-image-1-data".to_string(),
                                 }
@@ -791,6 +936,8 @@ mod tests {
                                             )
                                             .unwrap(),
                                         },
+                                        detail: None,
+                                        filename: None,
                                     },
                                     data: "my-image-3-data".to_string(),
                                 }
@@ -807,6 +954,8 @@ mod tests {
                                             )
                                             .unwrap(),
                                         },
+                                        detail: None,
+                                        filename: None,
                                     },
                                     data: "my-image-1-data".to_string(),
                                 }
@@ -820,34 +969,6 @@ mod tests {
             "First <TENSORZERO_FILE_0> then <TENSORZERO_FILE_1> then <TENSORZERO_FILE_3>"
                 .to_string()
         );
-    }
-
-    #[test]
-    fn test_filename_to_mime_type() {
-        let logs_contain = crate::utils::testing::capture_logs();
-        assert_eq!(filename_to_mime_type("test.png").unwrap(), mime::IMAGE_PNG);
-        assert_eq!(filename_to_mime_type("test.jpg").unwrap(), mime::IMAGE_JPEG);
-        assert_eq!(
-            filename_to_mime_type("test.jpeg").unwrap(),
-            mime::IMAGE_JPEG
-        );
-        assert_eq!(filename_to_mime_type("test.gif").unwrap(), mime::IMAGE_GIF);
-        assert_eq!(filename_to_mime_type("test.webp").unwrap(), "image/webp");
-        assert_eq!(
-            filename_to_mime_type("test.pdf").unwrap(),
-            mime::APPLICATION_PDF
-        );
-        assert!(!logs_contain("Guessed"));
-    }
-
-    #[test]
-    fn test_guessed_mime_type_warning() {
-        let logs_contain = crate::utils::testing::capture_logs();
-        assert_eq!(
-            filename_to_mime_type("my_file.txt").unwrap(),
-            mime::TEXT_PLAIN
-        );
-        assert!(logs_contain("Guessed"));
     }
 
     #[test]
@@ -882,6 +1003,18 @@ mod tests {
         assert_eq!(inferred.mime_type(), "image/webp");
         assert_eq!(inferred.extension(), "webp");
 
+        // Test WAV detection (magic bytes: RIFF....WAVE)
+        let wav_bytes = b"RIFF\x00\x00\x00\x00WAVEfmt ";
+        let inferred = infer::get(wav_bytes).expect("Should detect WAV");
+        assert_eq!(inferred.mime_type(), "audio/x-wav");
+        assert_eq!(inferred.extension(), "wav");
+
+        // Test MP3 detection (magic bytes: FF FB or ID3)
+        let mp3_bytes = [0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00];
+        let inferred = infer::get(&mp3_bytes).expect("Should detect MP3");
+        assert_eq!(inferred.mime_type(), "audio/mpeg");
+        assert_eq!(inferred.extension(), "mp3");
+
         // Test that unknown bytes return None
         let unknown_bytes = [0x00, 0x01, 0x02, 0x03];
         assert!(infer::get(&unknown_bytes).is_none());
@@ -900,6 +1033,8 @@ mod tests {
             let file = File::Url(UrlFile {
                 url: "https://example.com/image.png".parse().unwrap(),
                 mime_type: Some(mime::IMAGE_PNG),
+                detail: None,
+                filename: None,
             });
 
             let serialized = serde_json::to_value(&file).unwrap();
@@ -913,6 +1048,8 @@ mod tests {
             let file = File::Url(UrlFile {
                 url: "https://example.com/image.png".parse().unwrap(),
                 mime_type: None,
+                detail: None,
+                filename: None,
             });
 
             let serialized = serde_json::to_value(&file).unwrap();
@@ -927,6 +1064,8 @@ mod tests {
                 source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 data: "iVBORw0KGgo=".to_string(),
+                detail: None,
+                filename: None,
             });
 
             let serialized = serde_json::to_value(&file).unwrap();
@@ -944,6 +1083,8 @@ mod tests {
                     kind: StorageKind::Disabled,
                     path: object_store::path::Path::parse("test/path.png").unwrap(),
                 },
+                detail: None,
+                filename: None,
             });
 
             let serialized = serde_json::to_value(&file).unwrap();
@@ -965,7 +1106,7 @@ mod tests {
 
             let file: File = serde_json::from_value(json).unwrap();
             assert!(matches!(file, File::Url(_)));
-            if let File::Url(UrlFile { url, mime_type }) = file {
+            if let File::Url(UrlFile { url, mime_type, .. }) = file {
                 assert_eq!(url.as_str(), "https://example.com/image.png");
                 assert_eq!(mime_type, Some(mime::IMAGE_PNG));
             }
@@ -981,7 +1122,7 @@ mod tests {
 
             let file: File = serde_json::from_value(json).unwrap();
             assert!(matches!(file, File::Url(_)));
-            if let File::Url(UrlFile { url, mime_type }) = file {
+            if let File::Url(UrlFile { url, mime_type, .. }) = file {
                 assert_eq!(url.as_str(), "https://example.com/image.png");
                 assert_eq!(mime_type, Some(mime::IMAGE_PNG));
             }
@@ -1002,6 +1143,7 @@ mod tests {
                     source_url: _,
                     mime_type,
                     data,
+                    ..
                 } = base64_file;
                 assert_eq!(mime_type, mime::IMAGE_PNG);
                 assert_eq!(data, "iVBORw0KGgo=");
@@ -1022,6 +1164,7 @@ mod tests {
                     source_url: _,
                     mime_type,
                     data,
+                    ..
                 } = base64_file;
                 assert_eq!(mime_type, mime::IMAGE_PNG);
                 assert_eq!(data, "iVBORw0KGgo=");
@@ -1066,16 +1209,83 @@ mod tests {
         #[test]
         fn test_roundtrip_serialization() {
             // Test that serialize -> deserialize maintains data integrity
-            let original = File::Base64(Base64File {
-                source_url: None,
-                mime_type: mime::IMAGE_JPEG,
-                data: "base64data".to_string(),
-            });
+            let original = File::Base64(
+                Base64File::new(None, mime::IMAGE_JPEG, "base64data".to_string(), None, None)
+                    .expect("test data should be valid"),
+            );
 
             let serialized = serde_json::to_string(&original).unwrap();
             let deserialized: File = serde_json::from_str(&serialized).unwrap();
 
             assert_eq!(original, deserialized);
+        }
+
+        #[test]
+        fn test_base64file_rejects_data_prefix() {
+            // Test that Base64File::new rejects data with data: prefix
+            let result = Base64File::new(
+                None,
+                mime::IMAGE_PNG,
+                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA".to_string(),
+                None,
+                None,
+            );
+
+            assert!(result.is_err());
+            let err = result.unwrap_err();
+            assert!(err.to_string().contains("`data:` prefix"));
+        }
+
+        #[test]
+        fn test_base64file_accepts_pure_base64() {
+            // Test that Base64File::new accepts pure base64 data
+            let result = Base64File::new(
+                None,
+                mime::IMAGE_PNG,
+                "iVBORw0KGgoAAAANSUhEUgAAAAUA".to_string(),
+                None,
+                None,
+            );
+
+            assert!(result.is_ok());
+            let base64_file = result.unwrap();
+            assert_eq!(base64_file.data(), "iVBORw0KGgoAAAANSUhEUgAAAAUA");
+        }
+
+        #[test]
+        fn test_deserialize_rejects_data_prefix() {
+            // Test that deserialization validates and rejects data: prefix
+            let json = serde_json::json!({
+                "file_type": "base64",
+                "source_url": null,
+                "mime_type": "image/png",
+                "data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA",
+                "detail": null
+            });
+
+            let result: Result<File, _> = serde_json::from_value(json);
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_deserialize_accepts_pure_base64() {
+            // Test that deserialization accepts pure base64 data
+            let json = serde_json::json!({
+                "file_type": "base64",
+                "source_url": null,
+                "mime_type": "image/png",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAUA",
+                "detail": null
+            });
+
+            let result: Result<File, _> = serde_json::from_value(json);
+            assert!(result.is_ok());
+
+            if let File::Base64(base64_file) = result.unwrap() {
+                assert_eq!(base64_file.data(), "iVBORw0KGgoAAAANSUhEUgAAAAUA");
+            } else {
+                panic!("Expected File::Base64");
+            }
         }
     }
 }

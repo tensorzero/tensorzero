@@ -22,6 +22,7 @@ reqwest-eventsource = { workspace = true }
 async-stream = { workspace = true }
 tokio-stream = { workspace = true }
 tensorzero-core = { path = "../../tensorzero-core" }
+tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
 tensorzero-auth = { path = "../../internal/tensorzero-auth" }
 ts-rs = { workspace = true }
 url = { workspace = true }
@@ -34,7 +35,7 @@ git2 = { workspace = true }
 serde_path_to_error = { workspace = true }
 tensorzero-derive = { path = "../../internal/tensorzero-derive" }
 mime = { workspace = true }
-tokio-util = "0.7.15"
+tokio-util = "0.7.17"
 tempfile = { version = "3.21.0" }
 paste = { version = "1.0.15", optional = true }
 lazy_static = { workspace = true }
