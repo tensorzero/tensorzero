@@ -3,6 +3,7 @@ use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Extension, Json};
 use futures::future::{join_all, try_join_all};
+use indexmap::IndexMap;
 use itertools::{izip, Itertools};
 use metrics::counter;
 use serde::{Deserialize, Serialize};
@@ -222,7 +223,7 @@ pub async fn start_batch_inference(
     .increment(num_inferences as u64);
 
     // Keep track of which variants failed
-    let mut variant_errors = std::collections::HashMap::new();
+    let mut variant_errors = IndexMap::new();
 
     let cache_options = CacheOptions {
         max_age_s: None,

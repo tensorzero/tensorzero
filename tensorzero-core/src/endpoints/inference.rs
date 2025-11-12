@@ -6,6 +6,7 @@ use axum::{debug_handler, Extension, Json};
 use futures::stream::Stream;
 use futures::FutureExt;
 use futures_core::FusedStream;
+use indexmap::IndexMap;
 use metrics::counter;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
@@ -352,7 +353,7 @@ pub async fn inference(
     let stream = params.stream.unwrap_or(false);
 
     // Keep track of which variants failed
-    let mut variant_errors: HashMap<String, Error> = HashMap::new();
+    let mut variant_errors: IndexMap<String, Error> = IndexMap::new();
 
     // Set up inference config
     let output_schema = params.output_schema.map(DynamicJSONSchema::new);
