@@ -1290,6 +1290,7 @@ impl UninitializedProviderConfig {
                 provider_tools,
             } => {
                 // This should only be used when we are mocking batch inferences, otherwise defer to the API base set
+                #[cfg(feature = "e2e_tests")]
                 let api_base = provider_types
                     .openai
                     .batch_inference_api_base
