@@ -276,12 +276,12 @@ jobs:
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable --component clippy,rustfmt && rustup default stable; then
+            if rustup toolchain install stable --component clippy && rustup default stable; then
               break
             fi
           done
         shell: bash
-        
+
       - name: Install cargo-hack
         uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
@@ -306,7 +306,7 @@ jobs:
       - name: Install Rust 1.88.0
         run: |
           for attempt in 1 2 3; do
-            if rustup install 1.88.0 && rustup default 1.88.0; then
+            if rustup install 1.88.0 --component rustfmt && rustup default 1.88.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
