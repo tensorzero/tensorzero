@@ -62,10 +62,7 @@ retries = { num_retries = 4, max_delay_s = 10 }
 If we specify multiple variants for a function, the gateway will try different variants until one succeeds or all fail.
 The sampling behavior is controlled by the `[functions.function_name.experimentation]` configuration section.
 
-### Uniform Sampling (Default)
-
 By default, if no experimentation section is specified, the gateway will sample variants uniformly at random.
-
 In the example below, both variants have an equal chance of being selected (50% each):
 
 ```toml
@@ -81,10 +78,7 @@ type = "chat_completion"
 model = "anthropic::claude-3-5-haiku-20241022"
 ```
 
-### Uniform Sampling with Fallbacks
-
 You can specify candidate variants to sample uniformly from, and fallback variants to try sequentially if all candidates fail.
-
 In the example below, the gateway will first sample uniformly from `gpt_4o_mini` or `claude_3_5_haiku`.
 If both of those variants fail, the gateway will try the fallback variants in order: first `gemini_1_5_flash_8b`, then `grok_2`.
 
@@ -114,10 +108,7 @@ type = "chat_completion"
 model = "xai::grok-2-1212"
 ```
 
-### Weighted Sampling with Fallbacks
-
 You can also use static weights to control the sampling probabilities of candidate variants.
-
 In the example below, the gateway will sample `gpt_4o_mini` 70% of the time and `claude_3_5_haiku` 30% of the time.
 If both of those variants fail, the gateway will try the fallback variants sequentially.
 
@@ -146,6 +137,8 @@ model = "google_ai_studio_gemini::gemini-1.5-flash-8b"
 type = "chat_completion"
 model = "xai::grok-2-1212"
 ```
+
+See [Run static A/B tests](/experimentation/run-static-ab-tests) and [Run adaptive A/B tests](/experimentation/run-adaptive-ab-tests) for more details.
 
 ## Combining Strategies
 
