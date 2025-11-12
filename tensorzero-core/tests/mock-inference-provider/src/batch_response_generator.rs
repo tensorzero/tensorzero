@@ -167,7 +167,8 @@ fn extract_tool_results_from_openai(messages: &[Value]) -> Option<ToolResults> {
             let content = msg.get("content").and_then(|c| c.as_str()).unwrap_or("");
             // Try to find the tool name from the corresponding tool call
             let tool_call_id = msg.get("tool_call_id").and_then(|id| id.as_str());
-            let name = find_tool_name_by_id(messages, tool_call_id).unwrap_or_else(|| "tool".to_string());
+            let name =
+                find_tool_name_by_id(messages, tool_call_id).unwrap_or_else(|| "tool".to_string());
             results.push((name, content.to_string()));
         }
     }

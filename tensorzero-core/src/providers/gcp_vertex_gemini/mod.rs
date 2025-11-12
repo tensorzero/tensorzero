@@ -516,6 +516,7 @@ impl GCPVertexGeminiProvider {
         })
     }
 
+    #[expect(clippy::too_many_arguments)]
     pub async fn new(
         model_id: Option<String>,
         endpoint_id: Option<String>,
@@ -533,12 +534,17 @@ impl GCPVertexGeminiProvider {
         let location_prefix = location_subdomain_prefix(&location);
 
         #[cfg(feature = "e2e_tests")]
-        let api_v1_base_url = api_base.clone().unwrap_or_else(|| {
-            Url::parse(&format!(
+        let api_v1_base_url = match api_base.clone() {
+            Some(base) => base,
+            None => Url::parse(&format!(
                 "https://{location_prefix}aiplatform.googleapis.com/v1/"
             ))
-            .expect("Failed to parse base URL - this should never happen")
-        });
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Failed to parse base URL - this should never happen: {e}"),
+                })
+            })?,
+        };
 
         #[cfg(not(feature = "e2e_tests"))]
         let api_v1_base_url = Url::parse(&format!(

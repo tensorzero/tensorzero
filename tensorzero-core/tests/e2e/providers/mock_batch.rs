@@ -64,7 +64,7 @@ async fn poll_until_completed(
             .get(url.clone())
             .send()
             .await
-            .map_err(|e| format!("Failed to send request: {}", e))?;
+            .map_err(|e| format!("Failed to send request: {e}"))?;
 
         if response.status() != StatusCode::OK {
             return Err(format!("Expected status 200, got {}", response.status()));
@@ -73,17 +73,14 @@ async fn poll_until_completed(
         let response_json = response
             .json::<Value>()
             .await
-            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+            .map_err(|e| format!("Failed to parse JSON: {e}"))?;
 
         let status = response_json
             .get("status")
             .and_then(|s| s.as_str())
             .ok_or_else(|| "No status field in response".to_string())?;
 
-        println!(
-            "Poll attempt {}/{}: status = {}",
-            attempt, max_attempts, status
-        );
+        println!("Poll attempt {attempt}/{max_attempts}: status = {status}");
 
         if status == "completed" {
             return Ok(response_json);

@@ -3278,7 +3278,7 @@ pub async fn check_simple_image_inference_response(
         should_be_cached,
         "basic_test",
     )
-    .await
+    .await;
 }
 
 pub async fn check_simple_image_inference_response_with_function_name(
@@ -4434,7 +4434,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
         is_batch,
         "weather_helper",
     )
-    .await
+    .await;
 }
 
 pub async fn check_tool_use_tool_choice_auto_used_inference_response_with_function_name(
@@ -5096,7 +5096,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
         is_batch,
         "weather_helper",
     )
-    .await
+    .await;
 }
 
 pub async fn check_tool_use_tool_choice_auto_unused_inference_response_with_function_name(
@@ -5680,7 +5680,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
         is_batch,
         "weather_helper",
     )
-    .await
+    .await;
 }
 
 pub async fn check_tool_use_tool_choice_required_inference_response_with_function_name(
@@ -6359,7 +6359,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
         is_batch,
         "weather_helper",
     )
-    .await
+    .await;
 }
 
 pub async fn check_tool_use_tool_choice_none_inference_response_with_function_name(
@@ -6952,7 +6952,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
         is_batch,
         "weather_helper",
     )
-    .await
+    .await;
 }
 
 pub async fn check_tool_use_tool_choice_specific_inference_response_with_function_name(
@@ -9725,7 +9725,7 @@ pub async fn check_parallel_tool_use_inference_response(
         parallel_param,
         "weather_helper_parallel",
     )
-    .await
+    .await;
 }
 
 pub async fn check_parallel_tool_use_inference_response_with_function_name(
@@ -10538,7 +10538,7 @@ pub async fn check_json_mode_inference_response(
         is_batch,
         "json_success",
     )
-    .await
+    .await;
 }
 
 pub async fn check_json_mode_inference_response_with_function_name(

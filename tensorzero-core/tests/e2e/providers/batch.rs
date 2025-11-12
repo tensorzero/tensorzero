@@ -8,21 +8,21 @@
 use std::collections::HashMap;
 
 use reqwest::{Client, StatusCode};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::HashSet;
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage};
 use tensorzero_core::{
     db::clickhouse::{
-        ClickHouseConnectionInfo, TableName, test_helpers::select_batch_model_inferences_clickhouse,
+        test_helpers::select_batch_model_inferences_clickhouse, ClickHouseConnectionInfo, TableName,
     },
     endpoints::batch_inference::PollPathParams,
     inference::types::{
-        Role, Text,
         batch::{BatchModelInferenceRow, BatchRequestRow},
+        Role, Text,
     },
     tool::{ToolCall, ToolResult},
 };
-use tokio::time::{Duration, sleep};
+use tokio::time::{sleep, Duration};
 use url::Url;
 use uuid::Uuid;
 
@@ -1110,11 +1110,9 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec![
-            "What is the name of the capital city of Japan?"
-                .to_string()
-                .into(),
-        ],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -4100,11 +4098,9 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec![
-            "What is the name of the capital city of Japan?"
-                .to_string()
-                .into(),
-        ],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
@@ -4449,11 +4445,9 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
     let input_messages: Vec<StoredRequestMessage> = serde_json::from_str(input_messages).unwrap();
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
-        content: vec![
-            "What is the name of the capital city of Japan?"
-                .to_string()
-                .into(),
-        ],
+        content: vec!["What is the name of the capital city of Japan?"
+            .to_string()
+            .into()],
     }];
     assert_eq!(input_messages, expected_input_messages);
 
