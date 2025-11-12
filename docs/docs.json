@@ -44,6 +44,8 @@
               "gateway/index",
               "gateway/call-any-llm",
               "gateway/call-the-openai-responses-api",
+              "gateway/configure-models-and-providers",
+              "gateway/configure-functions-and-variants",
               "gateway/create-a-prompt-template",
               "gateway/generate-embeddings",
               "gateway/tutorial",

@@ -26,14 +26,14 @@ export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
-  const pageSize = parseInt(searchParams.get("pageSize") || "15");
-  const evaluationRuns = await getEvaluationRunInfo(pageSize, offset);
+  const limit = parseInt(searchParams.get("limit") || "15");
+  const evaluationRuns = await getEvaluationRunInfo(limit, offset);
 
   return {
     totalEvaluationRuns,
     evaluationRuns,
     offset,
-    pageSize,
+    limit,
   };
 }
 
@@ -85,16 +85,16 @@ export default function EvaluationSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const { totalEvaluationRuns, evaluationRuns, offset, pageSize } = loaderData;
+  const { totalEvaluationRuns, evaluationRuns, offset, limit } = loaderData;
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset + pageSize));
+    searchParams.set("offset", String(offset + limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   const handlePreviousPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("offset", String(offset - pageSize));
+    searchParams.set("offset", String(offset - limit));
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
   const [launchEvaluationModalIsOpen, setLaunchEvaluationModalIsOpen] =
@@ -112,7 +112,7 @@ export default function EvaluationSummaryPage({
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset <= 0}
-          disableNext={offset + pageSize >= totalEvaluationRuns}
+          disableNext={offset + limit >= totalEvaluationRuns}
         />
       </SectionLayout>
       <LaunchEvaluationModal

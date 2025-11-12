@@ -1,4 +1,6 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::export_schema;
 
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
 use crate::db::clickhouse::query_builder::{ClickhouseType, QueryParameter};
@@ -6,23 +8,29 @@ use crate::endpoints::stored_inferences::v1::types::{TagFilter, TimeFilter};
 
 /// Filter tree for querying datapoints.
 /// This is similar to `InferenceFilter` but without metric filters, as datapoints don't have associated metrics.
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize)]
+#[derive(JsonSchema, ts_rs::TS, Clone, Debug, Deserialize, Serialize)]
+#[export_schema]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DatapointFilter {
     /// Filter by tag key-value pair
+    #[schemars(title = "TagDatapointFilter")]
     Tag(TagFilter),
 
     /// Filter by datapoint update time
+    #[schemars(title = "TimeDatapointFilter")]
     Time(TimeFilter),
 
     /// Logical AND of multiple filters
+    #[schemars(title = "AndDatapointFilter")]
     And { children: Vec<DatapointFilter> },
 
     /// Logical OR of multiple filters
+    #[schemars(title = "OrDatapointFilter")]
     Or { children: Vec<DatapointFilter> },
 
     /// Logical NOT of a filter
+    #[schemars(title = "NotDatapointFilter")]
     Not { child: Box<DatapointFilter> },
 }
 

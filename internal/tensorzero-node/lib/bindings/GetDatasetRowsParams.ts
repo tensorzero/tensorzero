@@ -2,6 +2,6 @@
 
 export type GetDatasetRowsParams = {
   dataset_name: string;
-  page_size: number;
+  limit: number;
   offset: number;
 };

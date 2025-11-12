@@ -26,10 +26,6 @@ RUN apt-get update && apt-get install -y ca-certificates openssl wget && rm -rf 
 
 FROM base AS provider-proxy
 
-RUN useradd -m -s /bin/bash provider-proxy
-
-USER provider-proxy
-
 COPY --from=builder /release/provider-proxy /usr/local/bin/provider-proxy
 
 WORKDIR /app

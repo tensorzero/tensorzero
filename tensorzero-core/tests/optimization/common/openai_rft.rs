@@ -4,7 +4,7 @@ use tensorzero_core::optimization::{
     openai_rft::UninitializedOpenAIRFTConfig, UninitializedOptimizerConfig,
     UninitializedOptimizerInfo,
 };
-use tensorzero_core::providers::openai::optimization::{
+use tensorzero_core::providers::openai::grader::{
     OpenAIGrader, OpenAIModelGraderInput, OpenAIRFTRole, OpenAIStringCheckOp,
 };
 

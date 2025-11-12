@@ -48,6 +48,7 @@ export default [
       "react/jsx-uses-react": "error",
       "react/jsx-uses-vars": "error",
       "react/react-in-jsx-scope": "off",
+      "no-console": ["warn"],
       "no-restricted-syntax": [
         "error",
         {
@@ -94,6 +95,15 @@ export default [
   {
     rules: {
       "@typescript-eslint/switch-exhaustiveness-check": "error",
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
     },
   },
 ];

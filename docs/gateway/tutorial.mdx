@@ -127,6 +127,8 @@ You can add multiple providers for the same model to enable fallbacks.
 The gateway will try each provider in the `routing` field in order until one succeeds.
 This is helpful to mitigate the impact of provider downtime and rate limiting.
 
+For a comprehensive guide to configuring models and providers, see [Configure models and providers](/gateway/configure-models-and-providers).
+
 </Tip>
 
 ### Variants
@@ -179,6 +181,8 @@ model = "my_gpt_4o_mini"
 If you don't require advanced functionality for model providers (e.g. [Retries & Fallbacks](/gateway/guides/retries-fallbacks/)), you don't have to define `model` configuration blocks.
 TensorZero supports short-hand model names like `openai::gpt-4o-mini` or `anthropic::claude-3-5-haiku` in a variant's `model` field.
 See [Configuration Reference](/gateway/configuration-reference/#modelsmodel_nameprovidersprovider_name) for more details.
+
+To learn more about variant configuration options, see [Configure functions and variants](/gateway/configure-functions-and-variants).
 
 </Tip>
 

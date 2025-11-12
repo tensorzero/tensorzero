@@ -25,14 +25,10 @@ It also sets up customizations to make them work well together:
 1.  `schemars` generates one JSON Schema file for each Rust type, bringing in all its dependencies. Naively
     generating Python dataclasses from these JSON Schemas would cause dependencies to be repeatedly generated, so
     we merge them into a single schema file before generating Python dataclasses.
-2.  When merging the schema files, some references are recursive
-    (e.g. `InferenceFilter`) that point to the root schema of these
+2.  When merging the schema files, some references are recursive (e.g. `InferenceFilter`) that point to the root schema of these
     types, so we need to rewrite the `$ref`s to point to the schema definition itself instead of the root schema (which becomes
     `Any` after python dataclass generation).
-3.  To generate the __init__.py file so clients can simply write `from tensorzero.generated_types import X`, we
-    collect all the type names from the schema and export them.
-4.  We generate a custom header file for the generated types to include the `UNSET` sentinel value.
-
+3.  We generate a custom header file for the generated types to include the `UNSET` sentinel value.
 
 
 To run this script: run `pnpm generate-python-schemas` from the root of the repository.
@@ -144,128 +140,6 @@ def preprocess_and_merge_schemas(schema_files: List[Path], output_file: Path) ->
     print(f"✓ Merged schema written to {output_file}")
 
 
-def extract_names_from_schema_recursive(schema: Any, exported_names: set[str]) -> None:  # pyright: ignore[reportUnknownParameterType]
-    """
-    Recursively extract all type names from a schema definition.
-
-    This processes:
-    - title fields (become class names)
-    - oneOf variants (discriminated unions with inline schemas)
-    - allOf compositions (inheritance)
-    - nested schemas
-
-    Note: We skip titles in oneOf/anyOf variants that are just $ref pointers,
-    since those don't create new types - they just reference existing ones.
-
-    Args:
-        schema: A JSON schema definition dictionary
-                Takes Any to handle non-dict inputs gracefully
-        exported_names: Set to accumulate exported type names into
-    """
-    if not isinstance(schema, dict):
-        return
-
-    # Extract title if present, but only if this isn't just a $ref wrapper
-    # (titles on $ref-only schemas are just documentation)
-    if "title" in schema and "$ref" not in schema:
-        exported_names.add(schema["title"])  # pyright: ignore[reportUnknownArgumentType]
-
-    # Recursively process oneOf (discriminated unions)
-    # Only extract names from inline schemas, not from $ref pointers
-    # Note: pyright can't infer types through dict iteration when input is Any
-    if "oneOf" in schema:
-        for variant in schema["oneOf"]:  # pyright: ignore[reportUnknownVariableType]
-            # Skip variants that are just $ref pointers - they don't create new types
-            if isinstance(variant, dict) and "$ref" not in variant:
-                extract_names_from_schema_recursive(variant, exported_names)
-
-    # Recursively process allOf (composition/inheritance)
-    # For allOf, we do want to process $ref items to find inline properties
-    if "allOf" in schema:
-        for item in schema["allOf"]:  # pyright: ignore[reportUnknownVariableType]
-            # Only recurse into inline schemas, not $ref pointers
-            if isinstance(item, dict) and "$ref" not in item:
-                extract_names_from_schema_recursive(item, exported_names)
-
-    # Recursively process anyOf
-    if "anyOf" in schema:
-        for item in schema["anyOf"]:  # pyright: ignore[reportUnknownVariableType]
-            # Skip variants that are just $ref pointers
-            if isinstance(item, dict) and "$ref" not in item:
-                extract_names_from_schema_recursive(item, exported_names)
-
-    # Recursively process properties
-    if "properties" in schema:
-        for prop_schema in schema["properties"].values():  # pyright: ignore[reportUnknownVariableType, reportUnknownMemberType]
-            extract_names_from_schema_recursive(prop_schema, exported_names)
-
-    # Recursively process items (for arrays)
-    if "items" in schema:
-        extract_names_from_schema_recursive(schema["items"], exported_names)
-
-
-def extract_exported_names_from_schema(merged_schema: Dict[str, Any]) -> List[str]:
-    """
-    Extract all type names from the merged JSON schema.
-
-    Args:
-        merged_schema: A merged JSON schema dictionary with $defs
-
-    Returns:
-        A sorted list of names that should be exported
-    """
-    exported_names: set[str] = set()
-
-    # Extract all definitions from $defs
-    if "$defs" not in merged_schema:
-        return []
-
-    for def_name, def_schema in merged_schema["$defs"].items():
-        # Always add the definition name itself (this becomes a class or type alias)
-        exported_names.add(def_name)
-
-        # Recursively extract names from this definition
-        extract_names_from_schema_recursive(def_schema, exported_names)
-
-    # Sort the names for consistent output
-    return sorted(exported_names)
-
-
-def generate_init_exports(exported_names: List[str], output_init_file: Path) -> None:
-    """
-    Generate a Python snippet for __init__.py that exports all generated types.
-
-    The snippet includes both the import statement and the __all__ additions.
-    """
-    # Always include UNSET and UnsetType since they're always in generated_types.py
-    # but not in the schema definitions
-    special_exports = ["UNSET", "UnsetType"]
-    all_exports = sorted(set(special_exports + exported_names))
-
-    # Generate the __all__ list entries
-    all_list_entries = "\n".join(f'    "{name}",' for name in all_exports)
-
-    init_template = f"""# Auto-generated exports from generated_types.py
-# To regenerate, run: `pnpm generate-python-schemas`
-
-from .generated_types import *
-
-__all__ = [
-{all_list_entries}
-]
-"""
-
-    # Write to a separate file that can be copied into __init__.py
-    with open(output_init_file, "w") as f:
-        f.write(init_template)
-
-    print(f"✓ Generated exports written to {output_init_file}")
-    print(f"  Found {len(all_exports)} exported types")
-    print()
-    print("To use these exports, copy the imports and __all__ entries from generated_exports.py")
-    print("into your __init__.py file.")
-
-
 def generate_dataclasses_from_schema(schema_file: Path, templates_dir: Path, output_file: Path) -> None:
     """
     Generate Python dataclasses from a JSON schema file using datamodel-code-generator.
@@ -294,6 +168,8 @@ def generate_dataclasses_from_schema(schema_file: Path, templates_dir: Path, out
                 "dataclasses.dataclass",
                 "--target-python-version",
                 "3.10",
+                # For types with a single literal field (like `type = Literal["text"]`), generate default value for it
+                "--use-one-literal-as-default",
                 # Use list, dict instead of List, Dict
                 "--use-standard-collections",
                 # Use keyword-only arguments for dataclasses; otherwise we are sensitive to
@@ -321,7 +197,7 @@ def generate_dataclasses_from_schema(schema_file: Path, templates_dir: Path, out
                 str(templates_dir),
                 # Use a custom file header to include the Unset sentinel value
                 "--custom-file-header-path",
-                str(templates_dir / "generated_types_header.py"),
+                str(templates_dir / "generated_types_header.py.template"),
             ],
             capture_output=True,
             text=True,
@@ -340,6 +216,46 @@ def generate_dataclasses_from_schema(schema_file: Path, templates_dir: Path, out
     except FileNotFoundError:
         print("Error: datamodel-code-generator not found.", file=sys.stderr)
         print("Install it with: pip install 'datamodel-code-generator[http]'", file=sys.stderr)
+        sys.exit(1)
+
+    # Format and fix the generated dataclasses with ruff
+    try:
+        result = subprocess.run(
+            [
+                "uvx",
+                "ruff",
+                "check",
+                str(output_file),
+                "--extend-select=I",
+                "--fix",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+
+        result = subprocess.run(
+            [
+                "uvx",
+                "ruff",
+                "format",
+                str(output_file),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+    except subprocess.CalledProcessError as e:
+        print(f"Error fixing and formatting generated dataclasses: {e}", file=sys.stderr)
+        print(e.stderr, file=sys.stderr)
         sys.exit(1)
 
 
@@ -385,9 +301,7 @@ def main() -> None:
     script_dir = Path(__file__).parent
     repo_root = (script_dir / "../..").resolve()
     schema_dir = repo_root / "clients" / "schemas"
-    output_dir = script_dir / "tensorzero" / "generated_types"
-    output_file = output_dir / "generated_types.py"
-    output_init_file = output_dir / "__init__.py"
+    output_file = script_dir / "tensorzero" / "generated_types.py"
     temp_dir = script_dir / ".temp_schemas"
     templates_dir = script_dir / "templates"
     custom_header_file = templates_dir / "generated_types_header.py"
@@ -415,9 +329,9 @@ def main() -> None:
 
     # If there are no schema files, just output the header file
     if len(schema_files) == 0:
-        print("No schema files found, generating header file only...")
-        # Copy custom_header_file to output_init_file
-        shutil.copy(custom_header_file, output_init_file)
+        print("No schema files found, using header file only...")
+        # Copy custom_header_file to output_file
+        shutil.copy(custom_header_file, output_file)
         return
 
     # Create temp directory for individual generated files
@@ -430,14 +344,6 @@ def main() -> None:
 
         # Generate dataclasses from merged schema
         generate_dataclasses_from_schema(merged_schema_file, templates_dir, output_file)
-
-        # Generate exports for __init__.py (before deleting temp files)
-        print()
-        print("Generating exports for __init__.py...")
-        with open(merged_schema_file, "r") as f:
-            merged_schema = json.load(f)
-        exported_names = extract_exported_names_from_schema(merged_schema)
-        generate_init_exports(exported_names, output_init_file)
 
     finally:
         # Clean up temp files
@@ -466,9 +372,8 @@ def main() -> None:
     print("=" * 70)
     print()
     print("Generated types can be imported with:")
-    print("    from tensorzero.generated_types import Input, DynamicToolParams, ...")
+    print("    from tensorzero.generated_types import ...")
     print()
-    print("See tensorzero/generated_types/__init__.py for the complete list of exports.")
 
 
 if __name__ == "__main__":

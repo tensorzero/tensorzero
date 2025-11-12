@@ -84,7 +84,7 @@ pub fn skip_credential_validation() -> bool {
 // Note - the `Default` impl only exists for convenience in tests
 // It might produce a completely broken config - if a test fails,
 // use one of the public `Config` constructors instead.
-#[cfg_attr(test, derive(Default))]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(Default))]
 pub struct Config {
     pub gateway: GatewayConfig,
     pub models: Arc<ModelTable>, // model name => model config

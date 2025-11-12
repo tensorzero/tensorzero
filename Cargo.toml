@@ -10,6 +10,7 @@ members = [
     "clients/python",
     "provider-proxy",
     "evaluations",
+    "tensorzero-optimizers",
     "internal/tensorzero-derive",
     "internal/tensorzero-auth",
     "examples/integrations/cursor/feedback",
@@ -17,7 +18,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.11.3"
+version = "2025.11.4"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 

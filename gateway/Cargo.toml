@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
+tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 axum = { workspace = true }
 tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
 tracing-subscriber = { version = "0.3.20", features = [
