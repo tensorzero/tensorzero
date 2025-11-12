@@ -4,5 +4,6 @@ import type { GCPDefaults } from "./GCPDefaults";
 
 export type GCPProviderTypeConfig = {
   batch: GCPBatchConfigType | null;
+  batch_inference_api_base: string | null;
   defaults: GCPDefaults;
 };
