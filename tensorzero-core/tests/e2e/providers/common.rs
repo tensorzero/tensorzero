@@ -120,6 +120,7 @@ pub struct E2ETestProviders {
 
     pub image_inference: Vec<E2ETestProvider>,
     pub pdf_inference: Vec<E2ETestProvider>,
+    pub input_audio: Vec<E2ETestProvider>,
 
     pub shorthand_inference: Vec<E2ETestProvider>,
     pub embeddings: Vec<EmbeddingTestProvider>,
@@ -533,6 +534,13 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_audio_inference_store_filesystem() {
+            let providers = $func().await.input_audio;
+            for provider in providers {
+                $crate::providers::commonv2::input_audio::test_audio_inference_with_provider_filesystem(provider).await;
+            }
+        }
 
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
@@ -753,9 +761,22 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 type = "chat_completion"
 model = "anthropic::claude-sonnet-4-5-20250929"
 
+[functions.pdf_test.variants.gcp-vertex-sonnet]
+type = "chat_completion"
+model = "claude-sonnet-4-5-gcp-vertex"
+
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
+
+[models.claude-sonnet-4-5-gcp-vertex]
+routing = ["gcp_vertex_anthropic"]
+
+[models.claude-sonnet-4-5-gcp-vertex.providers.gcp_vertex_anthropic]
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "tensorzero-public"
 
 [models."responses-gpt-4o-mini-2024-07-18"]
 routing = ["openai"]

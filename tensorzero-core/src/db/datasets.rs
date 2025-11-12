@@ -190,7 +190,7 @@ pub struct DatasetQueryParams {
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct GetDatasetRowsParams {
     pub dataset_name: String,
-    pub page_size: u32,
+    pub limit: u32,
     pub offset: u32,
 }
 

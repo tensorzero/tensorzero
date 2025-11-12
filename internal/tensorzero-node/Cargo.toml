@@ -24,7 +24,8 @@ tensorzero = { path = "../../clients/rust" }
 tensorzero-core = { path = "../../tensorzero-core" }
 tensorzero-auth = { path = "../../internal/tensorzero-auth" }
 evaluations = { path = "../../evaluations" }
+tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
 ts-rs = { workspace = true }
 
 [build-dependencies]
-napi-build = "2.2.4"
+napi-build = "2.3.0"

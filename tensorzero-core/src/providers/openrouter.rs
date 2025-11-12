@@ -26,7 +26,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::chat_completion_inference_params::{
     warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
 };
-use crate::inference::types::file::require_image;
+use crate::inference::types::file::{mime_type_to_audio_format, mime_type_to_ext};
 use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -479,9 +479,21 @@ where
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum OpenRouterContentBlock<'a> {
-    Text { text: Cow<'a, str> },
-    ImageUrl { image_url: OpenRouterImageUrl },
-    Unknown { data: Cow<'a, Value> },
+    Text {
+        text: Cow<'a, str>,
+    },
+    ImageUrl {
+        image_url: OpenRouterImageUrl,
+    },
+    File {
+        file: OpenRouterFile<'a>,
+    },
+    InputAudio {
+        input_audio: OpenRouterInputAudio<'a>,
+    },
+    Unknown {
+        data: Cow<'a, Value>,
+    },
 }
 
 impl Serialize for OpenRouterContentBlock<'_> {
@@ -492,13 +504,27 @@ impl Serialize for OpenRouterContentBlock<'_> {
         #[derive(Serialize)]
         #[serde(tag = "type", rename_all = "snake_case")]
         enum Helper<'a> {
-            Text { text: &'a str },
-            ImageUrl { image_url: &'a OpenRouterImageUrl },
+            Text {
+                text: &'a str,
+            },
+            ImageUrl {
+                image_url: &'a OpenRouterImageUrl,
+            },
+            File {
+                file: &'a OpenRouterFile<'a>,
+            },
+            InputAudio {
+                input_audio: &'a OpenRouterInputAudio<'a>,
+            },
         }
         match self {
             OpenRouterContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
             OpenRouterContentBlock::ImageUrl { image_url } => {
                 Helper::ImageUrl { image_url }.serialize(serializer)
+            }
+            OpenRouterContentBlock::File { file } => Helper::File { file }.serialize(serializer),
+            OpenRouterContentBlock::InputAudio { input_audio } => {
+                Helper::InputAudio { input_audio }.serialize(serializer)
             }
             OpenRouterContentBlock::Unknown { data } => data.serialize(serializer),
         }
@@ -509,6 +535,22 @@ impl Serialize for OpenRouterContentBlock<'_> {
 #[serde(rename_all = "snake_case")]
 pub struct OpenRouterImageUrl {
     pub url: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct OpenRouterFile<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_data: Option<Cow<'a, str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename: Option<Cow<'a, str>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub struct OpenRouterInputAudio<'a> {
+    pub data: Cow<'a, str>,
+    pub format: Cow<'a, str>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -571,6 +613,8 @@ impl OpenRouterRequestMessage<'_> {
             OpenRouterRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenRouterContentBlock::Text { text } => text.to_lowercase().contains(value),
                 OpenRouterContentBlock::ImageUrl { .. } => false,
+                OpenRouterContentBlock::File { .. } => false,
+                OpenRouterContentBlock::InputAudio { .. } => false,
                 // Don't inspect the contents of 'unknown' blocks
                 OpenRouterContentBlock::Unknown { data: _ } => false,
             }),
@@ -581,6 +625,8 @@ impl OpenRouterRequestMessage<'_> {
                             text.to_lowercase().contains(value)
                         }
                         OpenRouterContentBlock::ImageUrl { .. } => false,
+                        OpenRouterContentBlock::File { .. } => false,
+                        OpenRouterContentBlock::InputAudio { .. } => false,
                         // Don't inspect the contents of 'unknown' blocks
                         OpenRouterContentBlock::Unknown { data: _ } => false,
                     })
@@ -688,6 +734,45 @@ pub(super) fn tensorzero_to_openrouter_system_message<'a>(
     }
 }
 
+async fn prepare_openrouter_file_content_block(
+    file: &crate::inference::types::resolved_input::LazyFile,
+) -> Result<OpenRouterContentBlock<'static>, Error> {
+    let resolved_file = file.resolve().await?;
+    let ObjectStorageFile { file, data } = &*resolved_file;
+    let base64_url = format!("data:{};base64,{}", file.mime_type, data);
+
+    if file.mime_type.type_() == mime::IMAGE {
+        if file.detail.is_some() {
+            tracing::warn!(
+                "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
+            );
+        }
+        Ok(OpenRouterContentBlock::ImageUrl {
+            image_url: OpenRouterImageUrl { url: base64_url },
+        })
+    } else if file.mime_type.type_() == mime::AUDIO {
+        let format = mime_type_to_audio_format(&file.mime_type)?;
+        Ok(OpenRouterContentBlock::InputAudio {
+            input_audio: OpenRouterInputAudio {
+                data: Cow::Owned(data.clone()),
+                format: Cow::Owned(format.to_string()),
+            },
+        })
+    } else {
+        let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidMessage {
+                message: format!("Mime type {} has no filetype suffix", file.mime_type),
+            })
+        })?;
+        Ok(OpenRouterContentBlock::File {
+            file: OpenRouterFile {
+                file_data: Some(Cow::Owned(base64_url)),
+                filename: Some(Cow::Owned(format!("input.{suffix}"))),
+            },
+        })
+    }
+}
+
 pub(super) async fn tensorzero_to_openrouter_messages(
     message: &RequestMessage,
 ) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
@@ -726,21 +811,7 @@ async fn tensorzero_to_openrouter_user_messages(
                 ));
             }
             ContentBlock::File(file) => {
-                let resolved_file = file.resolve().await?;
-                let ObjectStorageFile { file, data } = &*resolved_file;
-                if file.detail.is_some() {
-                    tracing::warn!(
-                        "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
-                    );
-                }
-                require_image(&file.mime_type, PROVIDER_TYPE)?;
-                user_content_blocks.push(OpenRouterContentBlock::ImageUrl {
-                    image_url: OpenRouterImageUrl {
-                        // This will only produce an error if we pass in a bad
-                        // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", file.mime_type, data),
-                    },
-                });
+                user_content_blocks.push(prepare_openrouter_file_content_block(file).await?);
             }
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);
@@ -800,21 +871,7 @@ async fn tensorzero_to_openrouter_assistant_messages(
                 }));
             }
             ContentBlock::File(file) => {
-                let resolved_file = file.resolve().await?;
-                let ObjectStorageFile { file, data } = &*resolved_file;
-                if file.detail.is_some() {
-                    tracing::warn!(
-                        "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
-                    );
-                }
-                require_image(&file.mime_type, PROVIDER_TYPE)?;
-                assistant_content_blocks.push(OpenRouterContentBlock::ImageUrl {
-                    image_url: OpenRouterImageUrl {
-                        // This will only produce an error if we pass in a bad
-                        // `Base64File` (with missing image data)
-                        url: format!("data:{};base64,{}", file.mime_type, data),
-                    },
-                });
+                assistant_content_blocks.push(prepare_openrouter_file_content_block(file).await?);
             }
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);

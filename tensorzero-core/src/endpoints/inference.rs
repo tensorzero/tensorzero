@@ -297,8 +297,8 @@ pub async fn inference(
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
         function.variants().clone().into_iter().collect();
 
-    // If the function has no variants, return an error
-    if candidate_variants.is_empty() {
+    // If the function has no variants and no dynamic variant config, return an error
+    if candidate_variants.is_empty() && params.internal_dynamic_variant_config.is_none() {
         return Err(ErrorDetails::InvalidFunctionVariants {
             message: format!("Function `{function_name}` has no variants"),
         }
@@ -1023,30 +1023,22 @@ async fn write_inference(
     futures.push(Box::pin(async {
         // Write the inference to the Inference table
         match result {
-            InferenceResult::Chat(result) => match input.clone().into_stored_input() {
-                Ok(stored_input) => {
-                    let chat_inference =
-                        ChatInferenceDatabaseInsert::new(result, stored_input, metadata);
-                    let _ = clickhouse_connection_info
-                        .write_batched(&[chat_inference], TableName::ChatInference)
-                        .await;
-                }
-                Err(e) => {
-                    tracing::error!("Failed to convert input to stored input: {e:?}");
-                }
-            },
-            InferenceResult::Json(result) => match input.clone().into_stored_input() {
-                Ok(stored_input) => {
-                    let json_inference =
-                        JsonInferenceDatabaseInsert::new(result, stored_input, metadata);
-                    let _ = clickhouse_connection_info
-                        .write_batched(&[json_inference], TableName::JsonInference)
-                        .await;
-                }
-                Err(e) => {
-                    tracing::error!("Failed to convert input to stored input: {e:?}");
-                }
-            },
+            InferenceResult::Chat(result) => {
+                let stored_input = input.clone().into_stored_input();
+                let chat_inference =
+                    ChatInferenceDatabaseInsert::new(result, stored_input, metadata);
+                let _ = clickhouse_connection_info
+                    .write_batched(&[chat_inference], TableName::ChatInference)
+                    .await;
+            }
+            InferenceResult::Json(result) => {
+                let stored_input = input.clone().into_stored_input();
+                let json_inference =
+                    JsonInferenceDatabaseInsert::new(result, stored_input, metadata);
+                let _ = clickhouse_connection_info
+                    .write_batched(&[json_inference], TableName::JsonInference)
+                    .await;
+            }
         }
     }));
     futures::future::join_all(futures).await;

@@ -16,7 +16,7 @@ import {
 } from "./workflow_evaluations";
 
 export async function getWorkflowEvaluationRuns(
-  page_size: number,
+  limit: number,
   offset: number,
   run_id?: string,
   project_name?: string,
@@ -35,7 +35,7 @@ export async function getWorkflowEvaluationRuns(
       ${run_id ? `WHERE toUInt128(toUUID({run_id:String})) = run_id_uint` : ""}
       ${project_name ? `WHERE project_name = {project_name:String}` : ""}
       ORDER BY run_id_uint DESC
-      LIMIT {page_size:UInt64}
+      LIMIT {limit:UInt64}
       OFFSET {offset:UInt64}
     ),
     DynamicEvaluationRunsEpisodeCounts AS (
@@ -62,7 +62,7 @@ export async function getWorkflowEvaluationRuns(
     query,
     format: "JSONEachRow",
     query_params: {
-      page_size,
+      limit,
       offset,
       run_id,
       project_name,
@@ -134,7 +134,7 @@ export async function countWorkflowEvaluationRuns(): Promise<number> {
  * The arrays are sorted by the metric name.
  */
 export async function getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
-  page_size: number,
+  limit: number,
   offset: number,
   run_id: string,
 ): Promise<WorkflowEvaluationRunEpisodeWithFeedback[]> {
@@ -151,7 +151,7 @@ export async function getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
         FROM DynamicEvaluationRunEpisodeByRunId
         WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
         ORDER BY episode_id_uint DESC
-        LIMIT {page_size:UInt64}
+        LIMIT {limit:UInt64}
         OFFSET {offset:UInt64}
       ),
       feedback_union AS (
@@ -227,7 +227,7 @@ export async function getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
   const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
-    query_params: { page_size, offset, run_id },
+    query_params: { limit, offset, run_id },
   });
   const rows = await result.json<WorkflowEvaluationRunEpisodeWithFeedback[]>();
   return rows.map((row) =>
@@ -310,7 +310,7 @@ export async function countWorkflowEvaluationRunEpisodes(
 }
 
 export async function getWorkflowEvaluationProjects(
-  page_size: number,
+  limit: number,
   offset: number,
 ): Promise<WorkflowEvaluationProject[]> {
   const query = `
@@ -321,13 +321,13 @@ export async function getWorkflowEvaluationProjects(
     FROM DynamicEvaluationRunByProjectName
     GROUP BY project_name
     ORDER BY last_updated DESC
-    LIMIT {page_size:UInt64}
+    LIMIT {limit:UInt64}
     OFFSET {offset:UInt64}
   `;
   const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
-    query_params: { page_size, offset },
+    query_params: { limit, offset },
   });
   const rows = await result.json<WorkflowEvaluationProject[]>();
   return rows.map((row) => workflowEvaluationProjectSchema.parse(row));
@@ -349,7 +349,7 @@ export async function countWorkflowEvaluationProjects(): Promise<number> {
 }
 
 export async function searchWorkflowEvaluationRuns(
-  page_size: number,
+  limit: number,
   offset: number,
   project_name?: string,
   search_query?: string,
@@ -385,14 +385,14 @@ export async function searchWorkflowEvaluationRuns(
     FROM DynamicEvaluationRun
     ${whereClause}
     ORDER BY updated_at DESC
-    LIMIT {page_size:UInt64}
+    LIMIT {limit:UInt64}
     OFFSET {offset:UInt64}
   `;
 
   const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
-    query_params: { project_name, search_query, page_size, offset },
+    query_params: { project_name, search_query, limit, offset },
   });
   const rows = await result.json<WorkflowEvaluationRun[]>();
   return rows.map((row) => workflowEvaluationRunSchema.parse(row));
@@ -407,7 +407,7 @@ export async function searchWorkflowEvaluationRuns(
  */
 export async function getWorkflowEvaluationRunEpisodesByTaskName(
   runIds: string[],
-  page_size: number,
+  limit: number,
   offset: number,
 ): Promise<GroupedWorkflowEvaluationRunEpisodeWithFeedback[][]> {
   const query = `
@@ -436,7 +436,7 @@ export async function getWorkflowEvaluationRunEpisodesByTaskName(
         FROM episodes_raw
         GROUP BY group_key
         ORDER BY last_updated DESC
-        LIMIT {page_size:UInt64}
+        LIMIT {limit:UInt64}
         OFFSET {offset:UInt64}
       ),
 
@@ -518,7 +518,7 @@ export async function getWorkflowEvaluationRunEpisodesByTaskName(
   const result = await getClickhouseClient().query({
     query,
     format: "JSONEachRow",
-    query_params: { runIds, page_size, offset },
+    query_params: { runIds, limit, offset },
   });
   const raw =
     await result.json<GroupedWorkflowEvaluationRunEpisodeWithFeedback>();

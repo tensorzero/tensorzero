@@ -50,6 +50,7 @@ export * from "./CreateDatapointsFromInferenceRequestParams";
 export * from "./CreateDatapointsRequest";
 export * from "./CreateDatapointsResponse";
 export * from "./CreateJsonDatapointRequest";
+export * from "./CredentialLocationWithFallback";
 export * from "./CumulativeFeedbackTimeSeriesPoint";
 export * from "./Datapoint";
 export * from "./DatapointFilter";

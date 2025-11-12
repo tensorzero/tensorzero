@@ -92,6 +92,14 @@ jobs:
           OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
           OPENAI_API_KEY=dummy docker compose down
 
+      - name: Apply Postgres migrations for examples/blog/bandits-in-your-llm-gateway
+        # Note: In isolation, applying migrations should not require `ANTHROPIC_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/blog/bandits-in-your-llm-gateway
+          ANTHROPIC_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          ANTHROPIC_API_KEY=dummy docker compose down
+
       - name: Check latest docker-compose
         run: ./ci/check-all-docker-compose.sh
 
@@ -154,6 +162,14 @@ jobs:
           OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
           OPENAI_API_KEY=dummy docker compose down
 
+      - name: Apply Postgres migrations for examples/blog/bandits-in-your-llm-gateway
+        # Note: In isolation, applying migrations should not require `ANTHROPIC_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/blog/bandits-in-your-llm-gateway
+          ANTHROPIC_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          ANTHROPIC_API_KEY=dummy docker compose down
+
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
 
@@ -175,7 +191,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "22.9.0"
+          node-version: "24.11.0"
 
       - name: Install pnpm
         run: |
@@ -308,7 +324,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "22.9.0"
+          node-version: "24.11.0"
 
       - name: Install pnpm
         run: |
@@ -511,15 +527,15 @@ jobs:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        # TODO: Temporarily using 25.9-alpine instead of latest
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"25.9-alpine","prefix":"25.9","allow_failure":false}]') || fromJSON('[{"tag":"25.9-alpine","prefix":"25.9","allow_failure":false}]') }}
+        # TODO: Temporarily using 25.9 instead of latest
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12","prefix":"24.12","allow_failure":false},{"tag":"25.9","prefix":"25.9","allow_failure":false}]') || fromJSON('[{"tag":"25.9","prefix":"25.9","allow_failure":false}]') }}
         exclude:
-          # Use 25.7-alpine instead of 25.9-alpine for replicated tests in merge group
+          # Use 25.7 instead of 25.9 for replicated tests in merge group
           - replicated: true
             clickhouse_version:
-              { "tag": "25.9-alpine", "prefix": "25.9", "allow_failure": false }
-          # Add 25.7-alpine for replicated tests in merge group
-        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.7-alpine","prefix":"25.7","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
+              { "tag": "25.9", "prefix": "25.9", "allow_failure": false }
+          # Add 25.7 for replicated tests in merge group
+        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.7","prefix":"25.7","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

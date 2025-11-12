@@ -59,7 +59,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: "22.9.0"
+          node-version: "24.11.0"
 
       - name: Setup `pnpm`
         run: |
@@ -88,7 +88,9 @@ jobs:
           merge-multiple: true
 
       - name: Load `gateway` and `ui` containers
-        if: inputs.regen_cache == false
+        # These containers may not exist if we manually triggered this workflow (or merge-queue.yml),
+        # We'll automatically build the container locally if they don't exist, so let this step fail.
+        continue-on-error: true
         run: |
           docker load < gateway-container.tar
           docker load < ui-container.tar
@@ -119,7 +121,7 @@ jobs:
         if: matrix.auth_enabled == true
         working-directory: ui
         run: |
-          sed -i '2a\\n[gateway.auth]\nenabled = true' fixtures/config/tensorzero.e2e.toml
+          sed -i '2a\\n[gateway.auth]\nenabled = true' fixtures/config/tensorzero.toml
 
       - name: Regenerate model inference cache
         working-directory: ui

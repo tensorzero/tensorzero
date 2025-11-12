@@ -53,6 +53,7 @@ use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
+pub mod built_in;
 pub mod gateway;
 pub mod path;
 pub mod provider_types;
@@ -83,7 +84,7 @@ pub fn skip_credential_validation() -> bool {
 // Note - the `Default` impl only exists for convenience in tests
 // It might produce a completely broken config - if a test fails,
 // use one of the public `Config` constructors instead.
-#[cfg_attr(test, derive(Default))]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(Default))]
 pub struct Config {
     pub gateway: GatewayConfig,
     pub models: Arc<ModelTable>, // model name => model config
@@ -803,15 +804,30 @@ impl Config {
             .gateway
             .load(object_store_info.as_ref())?;
 
-        let functions = uninitialized_config
+        // Load built-in functions first
+        let mut functions = built_in::get_all_built_in_functions()?;
+
+        // Load user-defined functions and ensure they don't use tensorzero:: prefix
+        let user_functions = uninitialized_config
             .functions
             .into_iter()
             .map(|(name, config)| {
+                // Prevent user functions from using tensorzero:: prefix
+                if name.starts_with("tensorzero::") {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "User-defined function name cannot start with 'tensorzero::': {name}"
+                        ),
+                    }));
+                }
                 config
                     .load(&name, &uninitialized_config.metrics)
                     .map(|c| (name, Arc::new(c)))
             })
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
+
+        // Merge user functions into the functions map
+        functions.extend(user_functions);
 
         let tools = uninitialized_config
             .tools
@@ -1026,15 +1042,10 @@ impl Config {
             .into());
         }
         // Validate each function
+        // Note: We don't check for tensorzero:: prefix here because:
+        // 1. Built-in functions are allowed to have this prefix
+        // 2. User-defined functions are prevented from using it during loading
         for (function_name, function) in &self.functions {
-            if function_name.starts_with("tensorzero::") {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Function name cannot start with 'tensorzero::': {function_name}"
-                    ),
-                }
-                .into());
-            }
             function
                 .validate(
                     &self.tools,

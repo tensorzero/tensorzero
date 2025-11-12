@@ -525,7 +525,7 @@ async fn test_get_dataset_metadata_returns_correct_counts_for_specific_function(
 async fn test_get_dataset_rows_returns_correct_rows_for_specific_dataset() {
     let params = GetDatasetRowsParams {
         dataset_name: "notadataset".to_string(),
-        page_size: 10,
+        limit: 10,
         offset: 0,
     };
 
@@ -542,12 +542,12 @@ async fn test_get_dataset_rows_returns_correct_rows_for_specific_dataset() {
 async fn test_get_dataset_rows_pages_correctly() {
     let mut all_rows = Vec::new();
     let mut offset = 0;
-    let page_size = 10;
+    let limit = 10;
 
     loop {
         let params = GetDatasetRowsParams {
             dataset_name: "foo".to_string(),
-            page_size,
+            limit,
             offset,
         };
         let rows = get_clickhouse()
@@ -555,10 +555,10 @@ async fn test_get_dataset_rows_pages_correctly() {
             .get_dataset_rows(&params)
             .await
             .unwrap();
-        let is_last_page = rows.len() != page_size as usize;
+        let is_last_page = rows.len() != limit as usize;
 
         all_rows.extend(rows);
-        offset += page_size;
+        offset += limit;
 
         if is_last_page {
             break;

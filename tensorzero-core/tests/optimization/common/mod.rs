@@ -30,15 +30,15 @@ use tensorzero_core::{
         Text,
     },
     model_table::ProviderTypeDefaultCredentials,
-    optimization::{
-        JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
-    },
+    optimization::{OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerInfo},
     stored_inference::StoredOutput,
     tool::{ClientSideFunctionTool, DynamicToolParams, ToolCall, ToolChoice, ToolResult},
     variant::JsonMode,
 };
+use tensorzero_optimizers::{JobHandle, Optimizer};
 
 pub mod dicl;
+pub mod evaluations;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
 pub mod openai_rft;
@@ -119,7 +119,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             val_examples,
             &credentials,
             &clickhouse,
-            &config,
+            Arc::new(config),
         )
         .await
         .unwrap();
