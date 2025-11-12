@@ -30,15 +30,6 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
 
-# Mock batch testing model - OpenAI
-[models."gpt-4o-mini-2024-07-18_mock_batch"]
-routing = ["openai"]
-
-[models."gpt-4o-mini-2024-07-18_mock_batch".providers.openai]
-type = "openai"
-model_name = "gpt-4o-mini-2024-07-18"
-api_base = "http://localhost:3030/openai/"
-
 [models."responses-gpt-4o-mini-2024-07-18"]
 routing = ["openai"]
 
@@ -284,18 +275,6 @@ model_id = "gemini-2.0-flash-001"
 location = "us-central1"
 project_id = "tensorzero-public"
 credential_location = "sdk"
-
-# Mock batch testing model - GCP Vertex Gemini
-[models."gemini-2.0-flash-001_mock_batch"]
-routing = ["gcp_vertex_gemini"]
-
-[models."gemini-2.0-flash-001_mock_batch".providers.gcp_vertex_gemini]
-type = "gcp_vertex_gemini"
-model_id = "gemini-2.0-flash-001"
-location = "us-central1"
-project_id = "test-project"
-credential_location = "sdk"
-api_base = "http://localhost:3030/v1/"
 
 [models."gcp-gemini-2.5-pro"]
 routing = ["gcp_vertex_gemini"]
@@ -3733,107 +3712,6 @@ assistant_schema = "../../fixtures/config/functions/basic_test/system_schema.jso
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 assistant_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
-
-
-# ┌────────────────────────────────────────────────────────────────────────────┐
-# │                        MOCK BATCH TEST FUNCTIONS                           │
-# └────────────────────────────────────────────────────────────────────────────┘
-
-[functions.basic_test_mock_batch]
-type = "chat"
-system_schema = "../../fixtures/config/functions/basic_test/system_schema.json"
-
-[functions.basic_test_mock_batch.variants.openai]
-type = "chat_completion"
-model = "gpt-4o-mini-2024-07-18_mock_batch"
-system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
-
-[functions.basic_test_mock_batch.variants.gcp-vertex-gemini-flash]
-type = "chat_completion"
-model = "gemini-2.0-flash-001_mock_batch"
-system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-max_tokens = 100
-
-[functions.json_success_mock_batch]
-type = "json"
-schemas.system.path = "../../fixtures/config/functions/basic_test/system_schema.json"
-user_schema = "../../fixtures/config/functions/json_success/user_schema.json"
-output_schema = "../../fixtures/config/functions/basic_test/output_schema.json"
-
-[functions.json_success_mock_batch.variants.openai]
-type = "chat_completion"
-model = "gpt-4o-mini-2024-07-18_mock_batch"
-system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
-user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
-json_mode = "on"
-max_tokens = 100
-
-[functions.json_success_mock_batch.variants.gcp-vertex-gemini-flash]
-type = "chat_completion"
-model = "gemini-2.0-flash-001_mock_batch"
-system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
-user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
-json_mode = "on"
-max_tokens = 100
-
-[functions.weather_helper_mock_batch]
-type = "chat"
-system_schema = "../../fixtures/config/functions/weather_helper/system_schema.json"
-tools = ["get_temperature"]
-tool_choice = "auto"
-
-[functions.weather_helper_mock_batch.variants.openai]
-type = "chat_completion"
-model = "gpt-4o-mini-2024-07-18_mock_batch"
-system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 100
-
-[functions.weather_helper_mock_batch.variants.gcp-vertex-gemini-flash]
-type = "chat_completion"
-model = "gemini-2.0-flash-001_mock_batch"
-system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-max_tokens = 100
-
-[functions.weather_helper_parallel_mock_batch]
-type = "chat"
-system_schema = "../../fixtures/config/functions/weather_helper_parallel/system_schema.json"
-tools = ["get_temperature", "get_humidity"]
-tool_choice = "auto"
-# We use an inference-time parameter to set `parallel_tool_calls = true` for the test
-
-[functions.weather_helper_parallel_mock_batch.variants.openai]
-type = "chat_completion"
-model = "gpt-4o-mini-2024-07-18_mock_batch"
-system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
-max_tokens = 100
-
-[functions.weather_helper_parallel_mock_batch.variants.gcp-vertex-gemini-flash]
-type = "chat_completion"
-model = "gemini-2.0-flash-001_mock_batch"
-system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
-max_tokens = 100
-
-[functions.dynamic_json_mock_batch]
-type = "json"
-system_schema = "../../fixtures/config/functions/dynamic_json/system_schema.json"
-user_schema = "../../fixtures/config/functions/dynamic_json/user_schema.json"
-
-[functions.dynamic_json_mock_batch.variants.openai]
-type = "chat_completion"
-model = "gpt-4o-mini-2024-07-18_mock_batch"
-system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
-user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
-json_mode = "strict"
-max_tokens = 100
-
-[functions.dynamic_json_mock_batch.variants.gcp-vertex-gemini-flash]
-type = "chat_completion"
-model = "gemini-2.0-flash-001_mock_batch"
-system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
-user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
-json_mode = "strict"
 max_tokens = 100
 
 

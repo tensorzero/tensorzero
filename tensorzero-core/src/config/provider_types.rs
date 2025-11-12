@@ -1,5 +1,7 @@
 use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "e2e_tests")]
+use url::Url;
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -156,6 +158,8 @@ impl Default for FireworksDefaults {
 pub struct GCPProviderTypeConfig {
     #[serde(default)]
     pub batch: Option<GCPBatchConfigType>,
+    #[cfg(feature = "e2e_tests")]
+    pub batch_inference_api_base: Option<Url>,
     #[serde(default)]
     pub defaults: GCPDefaults,
 }
@@ -310,6 +314,8 @@ impl Default for MistralDefaults {
 pub struct OpenAIProviderTypeConfig {
     #[serde(default)]
     pub defaults: OpenAIDefaults,
+    #[cfg(feature = "e2e_tests")]
+    pub batch_inference_api_base: Option<Url>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
