@@ -542,10 +542,10 @@ func TestBasicInference(t *testing.T) {
 		req.WithExtraFields(map[string]any{
 			"tensorzero::extra_headers": []map[string]any{
 				{
-					"model_name":      "dummy::echo_extra_info",
-					"provider_name":   "dummy",
-					"name":                "x-my-extra-header",
-					"value":               "my-extra-header-value",
+					"model_name":    "dummy::echo_extra_info",
+					"provider_name": "dummy",
+					"name":          "x-my-extra-header",
+					"value":         "my-extra-header-value",
 				},
 			},
 		})
@@ -568,10 +568,10 @@ func TestBasicInference(t *testing.T) {
 			"extra_headers": map[string]interface{}{
 				"inference_extra_headers": []interface{}{
 					map[string]interface{}{
-						"model_name":      "dummy::echo_extra_info",
-					"provider_name":   "dummy",
-						"name":                "x-my-extra-header",
-						"value":               "my-extra-header-value",
+						"model_name":    "dummy::echo_extra_info",
+						"provider_name": "dummy",
+						"name":          "x-my-extra-header",
+						"value":         "my-extra-header-value",
 					},
 				},
 				"variant_extra_headers": nil,
@@ -594,9 +594,9 @@ func TestBasicInference(t *testing.T) {
 		req.WithExtraFields(map[string]any{
 			"tensorzero::extra_body": []map[string]any{
 				{
-					"model_name":      "dummy::echo_extra_info",
-					"provider_name":   "dummy",
-					"pointer":             "/thinking",
+					"model_name":    "dummy::echo_extra_info",
+					"provider_name": "dummy",
+					"pointer":       "/thinking",
 					"value": map[string]any{
 						"type":          "enabled",
 						"budget_tokens": 1024,
@@ -620,9 +620,9 @@ func TestBasicInference(t *testing.T) {
 			"extra_body": map[string]interface{}{
 				"inference_extra_body": []interface{}{
 					map[string]interface{}{
-						"model_name":      "dummy::echo_extra_info",
-					"provider_name":   "dummy",
-						"pointer":             "/thinking",
+						"model_name":    "dummy::echo_extra_info",
+						"provider_name": "dummy",
+						"pointer":       "/thinking",
 						"value": map[string]interface{}{
 							"type":          "enabled",
 							"budget_tokens": float64(1024),
