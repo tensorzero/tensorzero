@@ -64,11 +64,11 @@ pub(crate) fn sample_uniform(
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct UniformConfig {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     candidate_variants: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     fallback_variants: Option<Vec<String>>,
 }
 
@@ -137,10 +137,16 @@ impl VariantSampler for UniformConfig {
         _cancel_token: CancellationToken,
     ) -> Result<(), Error> {
         // Validate that at least one sampling strategy is available
-        let has_candidates = self
-            .candidate_variants
-            .as_ref()
-            .is_none_or(|c| !c.is_empty()); // None = all variants (ok), Some(non-empty) = ok
+        // This must align with the sample() semantics (lines 178-182):
+        // - (None, None): candidates = all variants (ok)
+        // - (None, Some(_)): candidates = empty, rely on fallbacks
+        // - (Some(c), _): candidates = c
+        let has_candidates = match (&self.candidate_variants, &self.fallback_variants) {
+            (None, None) => true,          // All variants available as candidates
+            (None, Some(_)) => false,      // Fallbacks specified, no candidates
+            (Some(c), _) => !c.is_empty(), // Explicit candidates must be non-empty
+        };
+
         let has_fallbacks = self
             .fallback_variants
             .as_ref()
@@ -149,7 +155,9 @@ impl VariantSampler for UniformConfig {
         if !has_candidates && !has_fallbacks {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
-                    "Uniform config for function '{function_name}' has empty candidate_variants and no fallback_variants. At least one is required."
+                    "Uniform config for function '{function_name}' has no valid sampling strategy. \
+                    When fallback_variants is specified, either candidate_variants must be non-empty \
+                    or fallback_variants must be non-empty."
                 ),
             }));
         }
@@ -640,5 +648,69 @@ mod tests {
             .setup(db, "test_function", &postgres, cancel_token)
             .await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_setup_validation_none_candidates_empty_fallbacks() {
+        // This is the bug scenario: candidate_variants: None, fallback_variants: Some([])
+        // Should be rejected because it would fail at runtime
+        let config = UniformConfig {
+            candidate_variants: None,
+            fallback_variants: Some(vec![]),
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("no valid sampling strategy"));
+    }
+
+    #[tokio::test]
+    async fn test_setup_validation_none_candidates_with_fallbacks() {
+        // This should pass: candidate_variants: None, fallback_variants: Some([...])
+        // Runtime will use only fallbacks
+        let config = UniformConfig {
+            candidate_variants: None,
+            fallback_variants: Some(vec!["A".to_string(), "B".to_string()]),
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_setup_validation_none_none() {
+        // This should pass: candidate_variants: None, fallback_variants: None
+        // Runtime will use all variants
+        let config = UniformConfig {
+            candidate_variants: None,
+            fallback_variants: None,
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+        assert!(result.is_ok());
     }
 }
