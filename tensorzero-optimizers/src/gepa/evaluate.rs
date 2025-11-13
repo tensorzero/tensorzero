@@ -6,8 +6,10 @@
 //! - Creating evaluation datasets in ClickHouse
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use tokio::sync::mpsc;
+use futures::future::join_all;
+use tokio::sync::{mpsc, Semaphore};
 use uuid::Uuid;
 
 use tensorzero_core::{
@@ -63,7 +65,6 @@ pub async fn evaluate_variants(
     variant_configs: &HashMap<String, UninitializedChatCompletionConfig>,
     dataset_name: &str,
 ) -> Result<HashMap<String, Option<EvaluationResults>>, Error> {
-    let mut results = HashMap::new();
     let concurrency = config.max_concurrency as usize;
 
     // Get evaluation config for later use
@@ -80,72 +81,116 @@ pub async fn evaluate_variants(
         })?
         .clone();
 
-    for (variant_name, chat_config) in variant_configs {
-        tracing::info!(
-            "Evaluating variant '{}' on dataset '{}'",
-            variant_name,
-            dataset_name
-        );
+    // Create semaphore for concurrency control
+    let semaphore = Arc::new(Semaphore::new(concurrency));
+    let evaluation_name = config.evaluation_name.clone();
 
-        let evaluation_run_id = Uuid::now_v7();
+    // Create futures for parallel execution
+    let evaluation_futures: Vec<_> = variant_configs
+        .iter()
+        .map(|(variant_name, chat_config)| {
+            let semaphore = Arc::clone(&semaphore);
+            let gateway_client = gateway_client.clone();
+            let clickhouse_connection_info = clickhouse_connection_info.clone();
+            let tensorzero_config = Arc::clone(&tensorzero_config);
+            let evaluation_config = Arc::clone(&evaluation_config);
+            let evaluation_name = evaluation_name.clone();
+            let variant_name = variant_name.clone();
+            let chat_config = chat_config.clone();
+            let dataset_name = dataset_name.to_string();
 
-        // Create UninitializedVariantInfo from the chat config
-        let dynamic_variant_config = UninitializedVariantInfo {
-            inner: UninitializedVariantConfig::ChatCompletion(chat_config.clone()),
-            timeouts: None,
-        };
+            async move {
+                // Acquire semaphore permit for concurrency control
+                let _permit = semaphore.acquire().await.map_err(|e| {
+                    Error::new(ErrorDetails::Inference {
+                        message: format!("Failed to acquire semaphore: {e}"),
+                    })
+                })?;
 
-        // Create EvaluationCoreArgs
-        let core_args = EvaluationCoreArgs {
-            tensorzero_client: gateway_client.clone(),
-            clickhouse_client: clickhouse_connection_info.clone(),
-            config: tensorzero_config.clone(),
-            evaluation_name: config.evaluation_name.clone(),
-            evaluation_run_id,
-            dataset_name: dataset_name.to_string(),
-            variant: EvaluationVariant::Info(Box::new(dynamic_variant_config)),
-            concurrency,
-            inference_cache: CacheEnabledMode::Off, // Disable caching for fair evaluation
-        };
-
-        // Call run_evaluation_core_streaming
-        let stream_result = match evaluations::run_evaluation_core_streaming(core_args).await {
-            Ok(result) => result,
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to start evaluation for variant '{}': {}",
+                tracing::info!(
+                    "Evaluating variant '{}' on dataset '{}'",
                     variant_name,
-                    e
+                    dataset_name
                 );
-                results.insert(variant_name.clone(), None);
-                continue;
-            }
-        };
 
-        // Consume the streaming channel and aggregate results
-        let evaluation_results = match consume_evaluation_stream(
-            stream_result.receiver,
-            &evaluation_config,
-            stream_result.run_info.num_datapoints,
-        )
-        .await
-        {
-            Ok(results) => results,
+                let evaluation_run_id = Uuid::now_v7();
+
+                // Create UninitializedVariantInfo from the chat config
+                let dynamic_variant_config = UninitializedVariantInfo {
+                    inner: UninitializedVariantConfig::ChatCompletion(chat_config.clone()),
+                    timeouts: None,
+                };
+
+                // Create EvaluationCoreArgs
+                let core_args = EvaluationCoreArgs {
+                    tensorzero_client: gateway_client,
+                    clickhouse_client: clickhouse_connection_info,
+                    config: tensorzero_config,
+                    evaluation_name,
+                    evaluation_run_id,
+                    dataset_name,
+                    variant: EvaluationVariant::Info(Box::new(dynamic_variant_config)),
+                    concurrency,
+                    inference_cache: CacheEnabledMode::Off, // Disable caching for fair evaluation
+                };
+
+                // Call run_evaluation_core_streaming
+                let stream_result =
+                    match evaluations::run_evaluation_core_streaming(core_args).await {
+                        Ok(result) => result,
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to start evaluation for variant '{}': {}",
+                                variant_name,
+                                e
+                            );
+                            return Ok::<_, Error>((variant_name, None));
+                        }
+                    };
+
+                // Consume the streaming channel and aggregate results
+                let evaluation_results = match consume_evaluation_stream(
+                    stream_result.receiver,
+                    &evaluation_config,
+                    stream_result.run_info.num_datapoints,
+                )
+                .await
+                {
+                    Ok(results) => results,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to complete evaluation for variant '{}': {}",
+                            variant_name,
+                            e
+                        );
+                        return Ok::<_, Error>((variant_name, None));
+                    }
+                };
+
+                Ok::<_, Error>((variant_name, Some(evaluation_results)))
+            }
+        })
+        .collect();
+
+    // Execute all evaluations in parallel
+    let results = join_all(evaluation_futures).await;
+
+    // Collect results into HashMap
+    let mut results_map = HashMap::new();
+    for result in results {
+        match result {
+            Ok((variant_name, evaluation_results)) => {
+                results_map.insert(variant_name, evaluation_results);
+            }
             Err(e) => {
-                tracing::warn!(
-                    "Failed to complete evaluation for variant '{}': {}",
-                    variant_name,
-                    e
-                );
-                results.insert(variant_name.clone(), None);
-                continue;
+                // This shouldn't happen since we handle errors inside the futures,
+                // but handle it gracefully just in case
+                tracing::error!("Unexpected error in evaluation future: {}", e);
             }
-        };
-
-        results.insert(variant_name.clone(), Some(evaluation_results));
+        }
     }
 
-    Ok(results)
+    Ok(results_map)
 }
 
 /// Consume the evaluation stream and aggregate results
