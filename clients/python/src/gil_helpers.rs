@@ -61,13 +61,16 @@ impl<T: Send> Deref for DropInTokio<T> {
 
 impl<T: Send> Drop for DropInTokio<T> {
     fn drop(&mut self) {
-        let dummy = (self.make_dummy)();
-        // 'self.value' may hold a reference `Client`, and thus may need to block
-        // inside Tokio when it gets dropped
-        if let Some(value_ref) = Arc::get_mut(&mut self.value) {
-            let inner_value = std::mem::replace(value_ref, dummy);
+        let dummy = Arc::new((self.make_dummy)());
+        let inner_value = std::mem::replace(&mut self.value, dummy);
+        // To avoid a race condition, we need to use `Arc::into_inner`, rather than
+        // calling `Arc::get_mut`. If multiple threads execute `DropInTokio::drop` at the same time,
+        // then `Arc::into_inner` is guaranteed to return `Some` for exactly one of them:
+        // https://doc.rust-lang.org/std/sync/struct.Arc.html#method.into_inner
+        // This ensures that we actually drop the inner `Client` within `in_tokio_runtime_no_gil` closure
+        if let Some(client) = Arc::into_inner(inner_value) {
             in_tokio_runtime_no_gil(|| {
-                drop(inner_value);
+                drop(client);
             });
         }
     }
