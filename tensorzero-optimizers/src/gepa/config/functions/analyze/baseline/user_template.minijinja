@@ -3,18 +3,18 @@
 <model_name>{{model}}</model_name>
 
 <message_templates>
-{% for template_name, template_content in templates.items() %}
+{% for template_name in templates %}
 <template name="{{template_name}}">
-{{template_content}}
+{{templates[template_name]}}
 </template>
 {% endfor %}
 </message_templates>
 
 {% if schemas %}
 <message_schemas>
-{% for schema_name, schema_content in schemas.items() %}
+{% for schema_name in schemas %}
 <schema name="{{schema_name}}">
-{{schema_content | tojson(indent=2)}}
+{{schemas[schema_name] | tojson(indent=2)}}
 </schema>
 {% endfor %}
 </message_schemas>
