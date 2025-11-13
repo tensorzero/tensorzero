@@ -35,7 +35,7 @@ impl<T: Send> DropInTokio<T> {
     ///
     /// The `make_dummy` function is called to produce a new value,
     /// which is needed to satisfy the borrow checker. It will *not* be
-    /// dropped inside of Tokio, so it should shouldn't contain a `Client`
+    /// dropped inside of Tokio, so it should not contain a `Client`
     /// or similar TensorZero handle.
     pub fn new(value: T, make_dummy: fn() -> T) -> Self {
         Self { value, make_dummy }
