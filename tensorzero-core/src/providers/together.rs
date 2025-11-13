@@ -369,8 +369,9 @@ struct TogetherRequest<'a> {
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    allowed_tools: Option<Vec<&'a str>>,
+    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -442,8 +443,8 @@ impl<'a> TogetherRequest<'a> {
             .as_ref()
             .map(|config| &config.tool_choice);
 
-        let (tools, mut tool_choice, parallel_tool_calls, allowed_tools) = match tool_choice {
-            Some(&ToolChoice::None) => (None, None, None, None),
+        let (tools, mut tool_choice, parallel_tool_calls) = match tool_choice {
+            Some(&ToolChoice::None) => (None, None, None),
             _ => prepare_openai_tools(request),
         };
         // Together AI doesn't seem to support `tool_choice="required"`, so we convert it to `tool_choice="auto"`
@@ -464,7 +465,7 @@ impl<'a> TogetherRequest<'a> {
             response_format,
             tools,
             tool_choice,
-            allowed_tools,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None,

@@ -35,8 +35,8 @@ use crate::providers::openai::OpenAIMessagesConfig;
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
-    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
-    OpenAIToolChoiceString, OpenAIUsage, SpecificToolChoice, SystemOrDeveloper,
+    AllowedToolsChoice, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
+    OpenAIToolChoice, OpenAIToolChoiceString, OpenAIUsage, SpecificToolChoice, SystemOrDeveloper,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -552,6 +552,7 @@ fn into_embedding_provider_response(
 enum AzureToolChoice<'a> {
     String(AzureToolChoiceString),
     Specific(SpecificToolChoice<'a>),
+    AllowedTools(AllowedToolsChoice<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -579,6 +580,9 @@ impl<'a> From<OpenAIToolChoice<'a>> for AzureToolChoice<'a> {
                 }
             }
             OpenAIToolChoice::Specific(tool_choice) => AzureToolChoice::Specific(tool_choice),
+            OpenAIToolChoice::AllowedTools(allowed_tools) => {
+                AzureToolChoice::AllowedTools(allowed_tools)
+            }
         }
     }
 }
@@ -611,8 +615,9 @@ struct AzureRequest<'a> {
     response_format: Option<AzureResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    allowed_tools: Option<Vec<&'a str>>,
+    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<AzureToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -684,7 +689,7 @@ impl<'a> AzureRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _, allowed_tools) = prepare_openai_tools(request);
+        let (tools, tool_choice, _) = prepare_openai_tools(request);
         let mut azure_request = AzureRequest {
             messages,
             temperature: request.temperature,
@@ -697,7 +702,7 @@ impl<'a> AzureRequest<'a> {
             response_format,
             seed: request.seed,
             tools,
-            allowed_tools,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             tool_choice: tool_choice.map(AzureToolChoice::from),
             reasoning_effort: None,
             service_tier: None, // handled below
@@ -1189,7 +1194,7 @@ mod tests {
             stream: false,
             response_format: None,
             tools: None,
-            allowed_tools: None,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             tool_choice: None,
             reasoning_effort: None,
             service_tier: None,

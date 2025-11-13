@@ -38,14 +38,28 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send_eventsource,
 };
 
+// Import unified OpenAI types for allowed_tools support
+use super::openai::{
+    AllowedToolsChoice as OpenAIAllowedToolsChoice,
+    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode,
+    OpenAIToolType, SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
+};
+
 const PROVIDER_NAME: &str = "Groq";
 pub const PROVIDER_TYPE: &str = "groq";
+
+// OLD: returned separate allowed_tools field
+// type PreparedToolsResult<'a> = (
+//     Option<Vec<GroqTool<'a>>>,
+//     Option<GroqToolChoice<'a>>,
+//     Option<bool>,
+//     Option<Vec<&'a str>>,
+// );
 
 type PreparedToolsResult<'a> = (
     Option<Vec<GroqTool<'a>>>,
     Option<GroqToolChoice<'a>>,
     Option<bool>,
-    Option<Vec<&'a str>>,
 );
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -564,16 +578,45 @@ pub(super) fn prepare_groq_tools<'a>(
     request: &'a ModelInferenceRequest,
 ) -> PreparedToolsResult<'a> {
     match &request.tool_config {
-        None => (None, None, None, None),
+        None => (None, None, None),
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None, None, None);
+                return (None, None, None);
             }
             let tools = Some(tool_config.tools_available().map(Into::into).collect());
-            let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
-            let allowed_tools = tool_config.allowed_tools.as_dynamic_allowed_tools();
-            (tools, tool_choice, parallel_tool_calls, allowed_tools)
+
+            // Check if we need to construct an AllowedToolsChoice variant
+            let allowed_tools_list = tool_config.allowed_tools.as_dynamic_allowed_tools();
+
+            let tool_choice = if let Some(allowed_tool_names) = allowed_tools_list {
+                // Construct the OpenAI spec-compliant allowed_tools structure
+                let mode = match &tool_config.tool_choice {
+                    ToolChoice::Required => AllowedToolsMode::Required,
+                    _ => AllowedToolsMode::Auto,
+                };
+
+                let tool_refs: Vec<ToolReference> = allowed_tool_names
+                    .iter()
+                    .map(|name| ToolReference {
+                        r#type: OpenAIToolType::Function,
+                        function: OpenAISpecificToolFunction { name },
+                    })
+                    .collect();
+
+                Some(GroqToolChoice::AllowedTools(OpenAIAllowedToolsChoice {
+                    r#type: "allowed_tools",
+                    allowed_tools: OpenAIAllowedToolsConstraint {
+                        mode,
+                        tools: tool_refs,
+                    },
+                }))
+            } else {
+                // No allowed_tools constraint, use regular tool_choice
+                Some((&tool_config.tool_choice).into())
+            };
+
+            (tools, tool_choice, parallel_tool_calls)
         }
     }
 }
@@ -842,6 +885,7 @@ impl<'a> From<&'a ToolConfig> for GroqTool<'a> {
 pub(super) enum GroqToolChoice<'a> {
     String(GroqToolChoiceString),
     Specific(SpecificToolChoice<'a>),
+    AllowedTools(OpenAIAllowedToolsChoice<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -921,8 +965,9 @@ struct GroqRequest<'a> {
     tool_choice: Option<GroqToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    allowed_tools: Option<Vec<&'a str>>,
+    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -993,7 +1038,7 @@ impl<'a> GroqRequest<'a> {
         };
         let mut messages = prepare_groq_messages(request).await?;
 
-        let (tools, tool_choice, parallel_tool_calls, allowed_tools) = prepare_groq_tools(request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(request);
 
         if model.to_lowercase().starts_with("o1-mini") {
             if let Some(GroqRequestMessage::System(_)) = messages.first() {
@@ -1023,7 +1068,7 @@ impl<'a> GroqRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
-            allowed_tools,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None,
             service_tier: None, // handled below
@@ -1715,7 +1760,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            allowed_tools: None,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             service_tier: None,
@@ -1815,7 +1860,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            allowed_tools: None,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             service_tier: None,
@@ -1885,7 +1930,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            allowed_tools: None,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             service_tier: None,
@@ -1945,7 +1990,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            allowed_tools: None,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             service_tier: None,
@@ -1988,8 +2033,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls, allowed_tools) =
-            prepare_groq_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request_with_tools);
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -2003,7 +2047,6 @@ mod tests {
         );
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
-        assert!(allowed_tools.is_none());
         let tool_config = ToolCallConfig {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
@@ -2032,12 +2075,10 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls, allowed_tools) =
-            prepare_groq_tools(&request_without_tools);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request_without_tools);
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());
-        assert!(allowed_tools.is_none());
     }
 
     #[test]
@@ -2079,27 +2120,30 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls, allowed_tools) = prepare_groq_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request);
 
         // Verify tools are returned
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
 
-        // Verify tool_choice
+        // Verify tool_choice - should now be AllowedTools variant with OpenAI spec structure
         let tool_choice = tool_choice.unwrap();
-        assert_eq!(
-            tool_choice,
-            GroqToolChoice::String(GroqToolChoiceString::Auto)
-        );
+        match tool_choice {
+            GroqToolChoice::AllowedTools(allowed_tools_choice) => {
+                assert_eq!(allowed_tools_choice.r#type, "allowed_tools");
+                assert_eq!(allowed_tools_choice.allowed_tools.mode, AllowedToolsMode::Auto);
+                assert_eq!(allowed_tools_choice.allowed_tools.tools.len(), 1);
+                assert_eq!(
+                    allowed_tools_choice.allowed_tools.tools[0].function.name,
+                    WEATHER_TOOL.name()
+                );
+            }
+            _ => panic!("Expected AllowedTools variant"),
+        }
 
         // Verify parallel_tool_calls
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(!parallel_tool_calls);
-
-        // Verify allowed_tools contains only the weather tool
-        let allowed_tools = allowed_tools.unwrap();
-        assert_eq!(allowed_tools.len(), 1);
-        assert_eq!(allowed_tools[0], WEATHER_TOOL.name());
     }
 
     #[tokio::test]

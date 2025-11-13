@@ -415,6 +415,18 @@ impl<'a> ToolCallConfigConstructorArgs<'a> {
 }
 
 impl ToolCallConfig {
+    /// Creates a new `ToolCallConfig` from the provided arguments.
+    ///
+    /// This method validates and categorizes tools into three groups:
+    /// 1. **Function tools**: Tools explicitly configured in the function's tool list
+    /// 2. **Config-only allowed tools**: Tools from the TensorZero config that are in `allowed_tools` but not in the function's tool list
+    /// 3. **Dynamic tools**: Tools provided at inference time via `dynamic_additional_tools`
+    ///
+    /// We store function tools + config-only allowed tools in `static_tools_available`.
+    /// We store dynamic tools in `dynamic_tools_available`.
+    /// We check here that there are no tools with duplicate display names.
+    /// We also validate tool choice arguments.
+    /// If there are no tools we return None.
     pub fn new(args: ToolCallConfigConstructorArgs<'_>) -> Result<Option<Self>, Error> {
         let ToolCallConfigConstructorArgs {
             function_tools,
@@ -461,12 +473,23 @@ impl ToolCallConfig {
             }
         }
 
-        // Get all static tools from function_tools
-        let static_tools_available: Vec<ToolConfig> = function_tools
+        // Get all static tools from function_tools and allowed_tools
+        // First, collect tools from function_tools (preserving order)
+        let mut static_tool_names: Vec<&str> = function_tools.iter().map(|s| s.as_str()).collect();
+
+        // Then, add any tools from allowed_tools that exist in static_tools but not in function_tools
+        // This ensures that all allowed tools from the config are actually available
+        for tool_name in &allowed_tools.tools {
+            if static_tools.contains_key(tool_name) && !static_tool_names.contains(&tool_name.as_str()) {
+                static_tool_names.push(tool_name);
+            }
+        }
+
+        let static_tools_available: Vec<ToolConfig> = static_tool_names
             .iter()
             .filter_map(|tool_name| {
                 static_tools
-                    .get(tool_name)
+                    .get(*tool_name)
                     .map(|static_tool| ToolConfig::Static(static_tool.clone()))
             })
             .collect();
@@ -544,11 +567,11 @@ impl ToolCallConfig {
     }
 
     /// Returns an iterator over tools that respects the allowed_tools list.
-    /// - For FunctionDefault and DynamicAllowedTools: returns all tools (same as tools_available)
+    /// - For FunctionDefault and DynamicAllowedTools (a legacy format): returns all tools (same as tools_available)
     /// - For AllAllowedTools: filters to only tools in the allowed_tools list
     pub fn strict_tools_available(&self) -> Box<dyn Iterator<Item = &ToolConfig> + '_> {
-        #[expect(deprecated)]
         match self.allowed_tools.choice {
+            #[expect(deprecated)] // DynamicAllowedTools
             AllowedToolsChoice::FunctionDefault | AllowedToolsChoice::DynamicAllowedTools => {
                 // Return all tools (lenient mode)
                 Box::new(self.tools_available())
@@ -3070,5 +3093,182 @@ mod tests {
         let tools: Vec<_> = config.strict_tools_available().collect();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].name(), "get_temperature");
+    }
+
+    #[tokio::test]
+    async fn test_config_only_allowed_tool_added_to_static_tools() {
+        // Test that a tool from the config that is NOT in function_tools
+        // but IS in allowed_tools gets added to static_tools_available
+
+        // Function only has get_temperature in its tools list
+        let function_tools = vec!["get_temperature".to_string()];
+
+        // But allowed_tools includes query_articles (which exists in config)
+        let dynamic_tool_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "query_articles".to_string(), // This is in config but not in function_tools
+            ]),
+            ..Default::default()
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &function_tools,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Should have 2 tools available (both get_temperature and query_articles)
+        assert_eq!(tool_call_config.tools_available().count(), 2);
+
+        // Both should be in strict_tools_available since they're in allowed_tools
+        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+
+        let tool_names: Vec<_> = tool_call_config
+            .tools_available()
+            .map(|t| t.name())
+            .collect();
+        assert!(tool_names.contains(&"get_temperature"));
+        assert!(tool_names.contains(&"query_articles"));
+    }
+
+    #[tokio::test]
+    async fn test_multiple_config_only_allowed_tools() {
+        // Test that multiple tools from config (not in function_tools) can be added via allowed_tools
+
+        // Function has no tools configured
+        let function_tools: Vec<String> = vec![];
+
+        // But allowed_tools includes both tools from config
+        let dynamic_tool_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "query_articles".to_string(),
+            ]),
+            ..Default::default()
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &function_tools,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Should have 2 tools available (both from config via allowed_tools)
+        assert_eq!(tool_call_config.tools_available().count(), 2);
+        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_mix_of_function_and_config_only_allowed_tools() {
+        // Test mixing function tools and config-only allowed tools
+
+        // Function only has get_temperature
+        let function_tools = vec!["get_temperature".to_string()];
+
+        // allowed_tools has get_temperature (from function) and query_articles (config-only)
+        let dynamic_tool_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "query_articles".to_string(),
+            ]),
+            ..Default::default()
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &function_tools,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(tool_call_config.tools_available().count(), 2);
+        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+
+        // Verify choice is AllAllowedTools
+        assert!(matches!(
+            tool_call_config.allowed_tools.choice,
+            AllowedToolsChoice::AllAllowedTools
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_config_only_tool_with_dynamic_tools() {
+        // Test that config-only allowed tools work alongside dynamic tools
+
+        let function_tools = vec!["get_temperature".to_string()];
+
+        let dynamic_tool_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "query_articles".to_string(),       // config-only
+                "establish_campground".to_string(), // dynamic
+            ]),
+            additional_tools: Some(vec![ClientSideFunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
+                strict: false,
+            }]),
+            ..Default::default()
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &function_tools,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Should have 3 tools: get_temperature (function), query_articles (config-only), establish_campground (dynamic)
+        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert_eq!(tool_call_config.strict_tools_available().count(), 3);
+
+        let tool_names: Vec<_> = tool_call_config
+            .tools_available()
+            .map(|t| t.name())
+            .collect();
+        assert!(tool_names.contains(&"get_temperature"));
+        assert!(tool_names.contains(&"query_articles"));
+        assert!(tool_names.contains(&"establish_campground"));
+    }
+
+    #[tokio::test]
+    async fn test_existing_function_tools_behavior_unchanged() {
+        // Test that existing behavior for function_tools without allowed_tools still works
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            DynamicToolParams::default(),
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Should have all function tools
+        assert_eq!(tool_call_config.tools_available().count(), 2);
+        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+
+        // Should be FunctionDefault mode
+        assert!(matches!(
+            tool_call_config.allowed_tools.choice,
+            AllowedToolsChoice::FunctionDefault
+        ));
     }
 }

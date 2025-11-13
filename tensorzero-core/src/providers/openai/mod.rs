@@ -82,11 +82,18 @@ lazy_static! {
 const PROVIDER_NAME: &str = "OpenAI";
 pub const PROVIDER_TYPE: &str = "openai";
 
+// OLD: returned separate allowed_tools field
+// type PreparedOpenAIToolsResult<'a> = (
+//     Option<Vec<OpenAITool<'a>>>,
+//     Option<OpenAIToolChoice<'a>>,
+//     Option<bool>,
+//     Option<Vec<&'a str>>,
+// );
+
 type PreparedOpenAIToolsResult<'a> = (
     Option<Vec<OpenAITool<'a>>>,
     Option<OpenAIToolChoice<'a>>,
     Option<bool>,
-    Option<Vec<&'a str>>,
 );
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
@@ -1512,16 +1519,45 @@ pub(super) fn prepare_openai_tools<'a>(
     request: &'a ModelInferenceRequest,
 ) -> PreparedOpenAIToolsResult<'a> {
     match &request.tool_config {
-        None => (None, None, None, None),
+        None => (None, None, None),
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None, None, None);
+                return (None, None, None);
             }
             let tools = Some(tool_config.tools_available().map(Into::into).collect());
-            let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
-            let allowed_tools = tool_config.allowed_tools.as_dynamic_allowed_tools();
-            (tools, tool_choice, parallel_tool_calls, allowed_tools)
+
+            // Check if we need to construct an AllowedToolsChoice variant
+            let allowed_tools_list = tool_config.allowed_tools.as_dynamic_allowed_tools();
+
+            let tool_choice = if let Some(allowed_tool_names) = allowed_tools_list {
+                // Construct the OpenAI spec-compliant allowed_tools structure
+                let mode = match &tool_config.tool_choice {
+                    ToolChoice::Required => AllowedToolsMode::Required,
+                    _ => AllowedToolsMode::Auto,
+                };
+
+                let tool_refs: Vec<ToolReference> = allowed_tool_names
+                    .iter()
+                    .map(|name| ToolReference {
+                        r#type: OpenAIToolType::Function,
+                        function: SpecificToolFunction { name },
+                    })
+                    .collect();
+
+                Some(OpenAIToolChoice::AllowedTools(AllowedToolsChoice {
+                    r#type: "allowed_tools",
+                    allowed_tools: AllowedToolsConstraint {
+                        mode,
+                        tools: tool_refs,
+                    },
+                }))
+            } else {
+                // No allowed_tools constraint, use regular tool_choice
+                Some((&tool_config.tool_choice).into())
+            };
+
+            (tools, tool_choice, parallel_tool_calls)
         }
     }
 }
@@ -2055,6 +2091,7 @@ impl<'a> OpenAIBatchParams<'a> {
 pub(super) enum OpenAIToolChoice<'a> {
     String(OpenAIToolChoiceString),
     Specific(SpecificToolChoice<'a>),
+    AllowedTools(AllowedToolsChoice<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -2072,8 +2109,44 @@ pub(super) struct SpecificToolChoice<'a> {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(super) struct SpecificToolFunction<'a> {
-    pub(super) name: &'a str,
+pub struct SpecificToolFunction<'a> {
+    pub name: &'a str,
+}
+
+/// Represents the OpenAI API's allowed_tools constraint for tool_choice.
+/// This matches the OpenAI spec structure:
+/// {
+///   "type": "allowed_tools",
+///   "allowed_tools": {
+///     "mode": "auto" | "required",
+///     "tools": [{"type": "function", "function": {"name": "..."}}]
+///   }
+/// }
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct AllowedToolsChoice<'a> {
+    pub r#type: &'static str, // Always "allowed_tools"
+    pub allowed_tools: AllowedToolsConstraint<'a>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct AllowedToolsConstraint<'a> {
+    pub mode: AllowedToolsMode,
+    pub tools: Vec<ToolReference<'a>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AllowedToolsMode {
+    Auto,
+    Required,
+}
+
+/// A reference to a tool by name, used in allowed_tools constraint.
+/// Serializes as: {"type": "function", "function": {"name": "tool_name"}}
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ToolReference<'a> {
+    pub r#type: OpenAIToolType,
+    pub function: SpecificToolFunction<'a>,
 }
 
 impl Default for OpenAIToolChoice<'_> {
@@ -2134,8 +2207,9 @@ struct OpenAIRequest<'a> {
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    allowed_tools: Option<Vec<&'a str>>,
+    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2175,8 +2249,7 @@ impl<'a> OpenAIRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, mut parallel_tool_calls, allowed_tools) =
-            prepare_openai_tools(request);
+        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openai_tools(request);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
@@ -2209,7 +2282,7 @@ impl<'a> OpenAIRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
-            allowed_tools,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None, // handled below
             service_tier: None,     // handled below
@@ -3528,8 +3601,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls, allowed_tools) =
-            prepare_openai_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_with_tools);
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -3543,7 +3615,6 @@ mod tests {
         );
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
-        assert!(allowed_tools.is_none());
         let tool_config = ToolCallConfig {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
@@ -3572,12 +3643,10 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls, allowed_tools) =
-            prepare_openai_tools(&request_without_tools);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_without_tools);
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());
-        assert!(allowed_tools.is_none());
     }
 
     #[tokio::test]

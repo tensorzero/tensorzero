@@ -438,7 +438,7 @@ impl<'a> FireworksRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _, _) = prepare_openai_tools(request);
+        let (tools, tool_choice, _) = prepare_openai_tools(request);
         let tools = tools.map(|t| t.into_iter().map(OpenAITool::into).collect());
 
         let mut fireworks_request = FireworksRequest {

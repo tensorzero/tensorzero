@@ -46,6 +46,13 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send_eventsource,
 };
 
+// Import unified OpenAI types for allowed_tools support
+use super::openai::{
+    AllowedToolsChoice as OpenAIAllowedToolsChoice,
+    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode,
+    OpenAIToolType, SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
+};
+
 use crate::inference::TensorZeroEventError;
 
 lazy_static! {
@@ -59,11 +66,18 @@ lazy_static! {
 const PROVIDER_NAME: &str = "OpenRouter";
 pub const PROVIDER_TYPE: &str = "openrouter";
 
+// OLD: returned separate allowed_tools field
+// type PreparedOpenRouterToolsResult<'a> = (
+//     Option<Vec<OpenRouterTool<'a>>>,
+//     Option<OpenRouterToolChoice<'a>>,
+//     Option<bool>,
+//     Option<Vec<&'a str>>,
+// );
+
 type PreparedOpenRouterToolsResult<'a> = (
     Option<Vec<OpenRouterTool<'a>>>,
     Option<OpenRouterToolChoice<'a>>,
     Option<bool>,
-    Option<Vec<&'a str>>,
 );
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -675,16 +689,47 @@ pub(super) fn prepare_openrouter_tools<'a>(
     request: &'a ModelInferenceRequest,
 ) -> PreparedOpenRouterToolsResult<'a> {
     match &request.tool_config {
-        None => (None, None, None, None),
+        None => (None, None, None),
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None, None, None);
+                return (None, None, None);
             }
             let tools = Some(tool_config.tools_available().map(Into::into).collect());
-            let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
-            let allowed_tools = tool_config.allowed_tools.as_dynamic_allowed_tools();
-            (tools, tool_choice, parallel_tool_calls, allowed_tools)
+
+            // Check if we need to construct an AllowedToolsChoice variant
+            let allowed_tools_list = tool_config.allowed_tools.as_dynamic_allowed_tools();
+
+            let tool_choice = if let Some(allowed_tool_names) = allowed_tools_list {
+                // Construct the OpenAI spec-compliant allowed_tools structure
+                let mode = match &tool_config.tool_choice {
+                    ToolChoice::Required => AllowedToolsMode::Required,
+                    _ => AllowedToolsMode::Auto,
+                };
+
+                let tool_refs: Vec<ToolReference> = allowed_tool_names
+                    .iter()
+                    .map(|name| ToolReference {
+                        r#type: OpenAIToolType::Function,
+                        function: OpenAISpecificToolFunction { name },
+                    })
+                    .collect();
+
+                Some(OpenRouterToolChoice::AllowedTools(
+                    OpenAIAllowedToolsChoice {
+                        r#type: "allowed_tools",
+                        allowed_tools: OpenAIAllowedToolsConstraint {
+                            mode,
+                            tools: tool_refs,
+                        },
+                    },
+                ))
+            } else {
+                // No allowed_tools constraint, use regular tool_choice
+                Some((&tool_config.tool_choice).into())
+            };
+
+            (tools, tool_choice, parallel_tool_calls)
         }
     }
 }
@@ -997,6 +1042,7 @@ impl<'a> From<&'a ToolConfig> for OpenRouterTool<'a> {
 pub(super) enum OpenRouterToolChoice<'a> {
     String(OpenRouterToolChoiceString),
     Specific(SpecificToolChoice<'a>),
+    AllowedTools(OpenAIAllowedToolsChoice<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1074,8 +1120,9 @@ struct OpenRouterRequest<'a> {
     response_format: Option<OpenRouterResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenRouterTool<'a>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    allowed_tools: Option<Vec<&'a str>>,
+    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenRouterToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1136,8 +1183,7 @@ impl<'a> OpenRouterRequest<'a> {
         };
         let mut messages = prepare_openrouter_messages(request).await?;
 
-        let (tools, tool_choice, mut parallel_tool_calls, allowed_tools) =
-            prepare_openrouter_tools(request);
+        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openrouter_tools(request);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
@@ -1168,7 +1214,7 @@ impl<'a> OpenRouterRequest<'a> {
             stream_options,
             response_format,
             tools,
-            allowed_tools,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
@@ -1948,7 +1994,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            allowed_tools: None,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
@@ -2048,7 +2094,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            allowed_tools: None,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
@@ -2118,7 +2164,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            allowed_tools: None,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
@@ -2178,7 +2224,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            allowed_tools: None,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
@@ -2221,8 +2267,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls, allowed_tools) =
-            prepare_openrouter_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openrouter_tools(&request_with_tools);
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -2236,7 +2281,6 @@ mod tests {
         );
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
-        assert!(allowed_tools.is_none());
         let tool_config = ToolCallConfig {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
@@ -2265,12 +2309,10 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls, allowed_tools) =
-            prepare_openrouter_tools(&request_without_tools);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openrouter_tools(&request_without_tools);
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());
-        assert!(allowed_tools.is_none());
     }
 
     #[tokio::test]
@@ -2897,7 +2939,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            allowed_tools: None,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
