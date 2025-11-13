@@ -19,7 +19,7 @@ use tensorzero_core::{
     error::{Error, ErrorDetails},
     function::FunctionConfig,
     inference::types::{Role, TextKind},
-    variant::chat_completion::UninitializedChatCompletionConfig,
+    variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
 use super::analyze::InferenceWithAnalysis;
@@ -27,14 +27,10 @@ use super::analyze::InferenceWithAnalysis;
 /// Output from the GEPA mutate function
 ///
 /// Contains improved prompt templates generated based on aggregated analysis feedback.
-/// Templates are only present if they existed in the original variant configuration.
+/// Uses the new template format with arbitrary template names (not just system/user/assistant).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MutateOutput {
-    pub system_template: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_template: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub assistant_template: Option<String>,
+    pub templates: HashMap<String, String>,
 }
 
 /// Build the input JSON for the mutate function
@@ -43,16 +39,30 @@ pub fn build_mutate_input(
     function_config: &FunctionConfig,
     parent_variant_config: &UninitializedChatCompletionConfig,
 ) -> Result<serde_json::Value, Error> {
-    // Extract templates from parent variant config
-    // For now, we'll use placeholder values - in production, we'd need to read the actual template content
-    let system_template = ""; // TODO: Extract actual content from parent_variant_config.system_template
-    let user_template: Option<String> = None; // TODO: Extract from parent_variant_config.user_template
-    let assistant_template: Option<String> = None; // TODO: Extract from parent_variant_config.assistant_template
+    // Extract templates from variant_config.templates.inner (new format only)
+    let templates_map: HashMap<String, String> = parent_variant_config
+        .templates
+        .inner
+        .iter()
+        .map(|(name, config)| config.path.read().map(|content| (name.clone(), content)))
+        .collect::<Result<_, _>>()?;
 
-    // Extract schemas from function config
-    let system_schema = function_config.system_schema().map(|s| s.value.clone());
-    let user_schema = function_config.user_schema().map(|s| s.value.clone());
-    let assistant_schema = function_config.assistant_schema().map(|s| s.value.clone());
+    // Error if empty templates
+    if templates_map.is_empty() {
+        return Err(Error::new(ErrorDetails::Config {
+            message: "Cannot mutate variant with no templates".to_string(),
+        }));
+    }
+
+    // Extract schemas from function_config.schemas.inner (matching analyze.rs pattern)
+    let schemas_map: HashMap<String, serde_json::Value> = function_config
+        .schemas()
+        .inner
+        .iter()
+        .map(|(name, schema_with_metadata)| {
+            (name.clone(), schema_with_metadata.schema.value.clone())
+        })
+        .collect();
 
     // Extract output schema for JSON functions
     let output_schema = match function_config {
@@ -90,12 +100,8 @@ pub fn build_mutate_input(
     let input = serde_json::json!({
         "function_name": function_name,
         "model": parent_variant_config.model,
-        "system_template": system_template,
-        "user_template": user_template,
-        "assistant_template": assistant_template,
-        "system_schema": system_schema,
-        "user_schema": user_schema,
-        "assistant_schema": assistant_schema,
+        "templates": templates_map,
+        "schemas": if schemas_map.is_empty() { None } else { Some(schemas_map) },
         "output_schema": output_schema,
         "tools": tools,
         "analyses": analyses_json,
@@ -235,7 +241,7 @@ pub async fn mutate_templates(
 /// Create a new variant with mutated templates
 ///
 /// Generates a new variant name and clones the parent variant config with updated templates.
-#[expect(dead_code)]
+#[cfg_attr(not(test), expect(dead_code))]
 pub fn create_mutated_variant(
     parent_config: &UninitializedChatCompletionConfig,
     mutated_templates: MutateOutput,
@@ -249,26 +255,27 @@ pub fn create_mutated_variant(
     // Clone parent config
     let mut new_config = parent_config.clone();
 
-    // Replace templates with mutated versions using fake paths
+    // Clear existing templates (to ensure clean state)
+    new_config.templates.inner.clear();
+
+    // Populate with mutated templates using fake paths
     // Fake paths are used because these templates are generated dynamically, not from files
-    new_config.system_template = Some(ResolvedTomlPath::new_fake_path(
-        format!("gepa_mutated/{new_variant_name}/system.minijinja"),
-        mutated_templates.system_template,
-    ));
-
-    if let Some(user_template) = mutated_templates.user_template {
-        new_config.user_template = Some(ResolvedTomlPath::new_fake_path(
-            format!("gepa_mutated/{new_variant_name}/user.minijinja"),
-            user_template,
-        ));
+    for (template_name, content) in mutated_templates.templates {
+        new_config.templates.inner.insert(
+            template_name.clone(),
+            UninitializedChatTemplate {
+                path: ResolvedTomlPath::new_fake_path(
+                    format!("gepa_mutated/{new_variant_name}/{template_name}.minijinja"),
+                    content,
+                ),
+            },
+        );
     }
 
-    if let Some(assistant_template) = mutated_templates.assistant_template {
-        new_config.assistant_template = Some(ResolvedTomlPath::new_fake_path(
-            format!("gepa_mutated/{new_variant_name}/assistant.minijinja"),
-            assistant_template,
-        ));
-    }
+    // Ensure legacy fields remain None (don't mix old and new formats)
+    new_config.system_template = None;
+    new_config.user_template = None;
+    new_config.assistant_template = None;
 
     tracing::info!(
         "Created mutated variant '{}' from parent '{}'",
@@ -277,4 +284,194 @@ pub fn create_mutated_variant(
     );
 
     (new_variant_name, new_config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tensorzero_core::config::path::ResolvedTomlPath;
+
+    #[test]
+    fn test_mutate_output_serde() {
+        // Create MutateOutput with templates HashMap
+        let mut templates = HashMap::new();
+        templates.insert("system".to_string(), "Improved system template".to_string());
+        templates.insert("user".to_string(), "Improved user template".to_string());
+
+        let mutate_output = MutateOutput { templates };
+
+        // Verify JSON serialization works
+        let serialized = serde_json::to_string(&mutate_output).expect("Failed to serialize");
+        let deserialized: MutateOutput =
+            serde_json::from_str(&serialized).expect("Failed to deserialize");
+
+        // Verify roundtrip
+        assert_eq!(deserialized.templates.len(), 2);
+        assert_eq!(
+            deserialized.templates.get("system").unwrap(),
+            "Improved system template"
+        );
+        assert_eq!(
+            deserialized.templates.get("user").unwrap(),
+            "Improved user template"
+        );
+    }
+
+    #[test]
+    fn test_mutate_output_from_json() {
+        // Test parsing from JSON (as returned by LLM)
+        let json = r#"{"templates": {"system": "Test system", "user": "Test user"}}"#;
+        let mutate_output: MutateOutput = serde_json::from_str(json).expect("Failed to parse");
+
+        assert_eq!(mutate_output.templates.len(), 2);
+        assert_eq!(
+            mutate_output.templates.get("system").unwrap(),
+            "Test system"
+        );
+        assert_eq!(mutate_output.templates.get("user").unwrap(), "Test user");
+    }
+
+    #[test]
+    fn test_create_mutated_variant_uses_new_format() {
+        // Create parent config with templates.inner
+        let mut parent_config = UninitializedChatCompletionConfig {
+            model: "test-model".into(),
+            ..Default::default()
+        };
+
+        // Add some templates to parent
+        parent_config.templates.inner.insert(
+            "system".to_string(),
+            UninitializedChatTemplate {
+                path: ResolvedTomlPath::new_fake_path(
+                    "old_system.minijinja".to_string(),
+                    "Old system template".to_string(),
+                ),
+            },
+        );
+
+        // Create MutateOutput with improved templates
+        let mut improved_templates = HashMap::new();
+        improved_templates.insert("system".to_string(), "New system template".to_string());
+        improved_templates.insert("user".to_string(), "New user template".to_string());
+
+        let mutate_output = MutateOutput {
+            templates: improved_templates,
+        };
+
+        // Call create_mutated_variant
+        let (variant_name, new_config) =
+            create_mutated_variant(&parent_config, mutate_output, 1, "gepa", "baseline");
+
+        // Verify variant name
+        assert_eq!(variant_name, "gepa_iter1_baseline");
+
+        // Verify new_config.templates.inner is populated
+        assert_eq!(new_config.templates.inner.len(), 2);
+        assert!(new_config.templates.inner.contains_key("system"));
+        assert!(new_config.templates.inner.contains_key("user"));
+
+        // Verify legacy fields are None
+        assert!(new_config.system_template.is_none());
+        assert!(new_config.user_template.is_none());
+        assert!(new_config.assistant_template.is_none());
+
+        // Verify template content
+        let system_template = new_config.templates.inner.get("system").unwrap();
+        let system_content = system_template.path.read().expect("Failed to read");
+        assert_eq!(system_content, "New system template");
+
+        let user_template = new_config.templates.inner.get("user").unwrap();
+        let user_content = user_template.path.read().expect("Failed to read");
+        assert_eq!(user_content, "New user template");
+    }
+
+    #[test]
+    fn test_create_mutated_variant_clears_old_templates() {
+        // Create parent config with multiple templates
+        let mut parent_config = UninitializedChatCompletionConfig {
+            model: "test-model".into(),
+            ..Default::default()
+        };
+
+        parent_config.templates.inner.insert(
+            "system".to_string(),
+            UninitializedChatTemplate {
+                path: ResolvedTomlPath::new_fake_path(
+                    "system.minijinja".to_string(),
+                    "Old system".to_string(),
+                ),
+            },
+        );
+        parent_config.templates.inner.insert(
+            "old_template".to_string(),
+            UninitializedChatTemplate {
+                path: ResolvedTomlPath::new_fake_path(
+                    "old.minijinja".to_string(),
+                    "Old template to be removed".to_string(),
+                ),
+            },
+        );
+
+        // Create MutateOutput with only one template
+        let mut improved_templates = HashMap::new();
+        improved_templates.insert("system".to_string(), "New system".to_string());
+
+        let mutate_output = MutateOutput {
+            templates: improved_templates,
+        };
+
+        // Call create_mutated_variant
+        let (_variant_name, new_config) =
+            create_mutated_variant(&parent_config, mutate_output, 1, "gepa", "baseline");
+
+        // Verify parent_config was NOT mutated (defensive check for immutability)
+        assert_eq!(
+            parent_config.templates.inner.len(),
+            2,
+            "parent_config should still have 2 templates (not mutated)"
+        );
+        assert!(
+            parent_config.templates.inner.contains_key("system"),
+            "parent_config should still contain 'system' template"
+        );
+        assert!(
+            parent_config.templates.inner.contains_key("old_template"),
+            "parent_config should still contain 'old_template' template"
+        );
+
+        // Verify parent_config template contents unchanged
+        let parent_system = parent_config.templates.inner.get("system").unwrap();
+        let parent_system_content = parent_system
+            .path
+            .read()
+            .expect("Failed to read parent system");
+        assert_eq!(
+            parent_system_content, "Old system",
+            "parent_config system template content should be unchanged"
+        );
+
+        let parent_old = parent_config.templates.inner.get("old_template").unwrap();
+        let parent_old_content = parent_old
+            .path
+            .read()
+            .expect("Failed to read parent old_template");
+        assert_eq!(
+            parent_old_content, "Old template to be removed",
+            "parent_config old_template content should be unchanged"
+        );
+
+        // Verify only the new template is present (old_template should be gone)
+        assert_eq!(new_config.templates.inner.len(), 1);
+        assert!(new_config.templates.inner.contains_key("system"));
+        assert!(!new_config.templates.inner.contains_key("old_template"));
+
+        // Verify new_config has the mutated content (not the old content)
+        let new_system = new_config.templates.inner.get("system").unwrap();
+        let new_system_content = new_system.path.read().expect("Failed to read new system");
+        assert_eq!(
+            new_system_content, "New system",
+            "new_config system template should contain the mutated content"
+        );
+    }
 }

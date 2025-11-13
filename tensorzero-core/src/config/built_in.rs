@@ -189,13 +189,12 @@ fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
 ///
 /// This is a JSON function that generates improved prompt templates based on
 /// analysis feedback from the GEPA optimization algorithm.
-/// TODO: support new templates/schemas
 fn get_gepa_mutate_function() -> Result<Arc<FunctionConfig>, Error> {
     // Define user schema inline
     let user_schema_json = serde_json::json!({
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
-        "required": ["function_name", "model", "system_template", "analyses"],
+        "required": ["function_name", "model", "templates", "analyses"],
         "additionalProperties": false,
         "properties": {
             "function_name": {
@@ -206,33 +205,23 @@ fn get_gepa_mutate_function() -> Result<Arc<FunctionConfig>, Error> {
                 "type": "string",
                 "description": "The target model for the optimized templates"
             },
-            "system_template": {
-                "type": "string",
-                "description": "The reference system template"
+            "templates": {
+                "type": "object",
+                "description": "Map of template names to their contents",
+                "additionalProperties": {
+                    "type": "string"
+                }
             },
-            "user_template": {
-                "type": ["string", "null"],
-                "description": "Optional reference user template"
-            },
-            "assistant_template": {
-                "type": ["string", "null"],
-                "description": "Optional reference assistant template"
+            "schemas": {
+                "type": ["object", "null"],
+                "description": "Optional map of schema names to their JSON schemas",
+                "additionalProperties": {
+                    "type": "object"
+                }
             },
             "output_schema": {
                 "type": ["object", "null"],
                 "description": "Optional reference JSON schema for the function output (if function type is json)"
-            },
-            "system_schema": {
-                "type": ["object", "null"],
-                "description": "Optional JSON schema specifying any arguments for the reference system template"
-            },
-            "user_schema": {
-                "type": ["object", "null"],
-                "description": "Optional JSON schema specifying any arguments for the reference user template"
-            },
-            "assistant_schema": {
-                "type": ["object", "null"],
-                "description": "Optional JSON schema specifying any arguments for the reference assistant template"
             },
             "tools": {
                 "type": ["object", "null"],
@@ -275,25 +264,19 @@ fn get_gepa_mutate_function() -> Result<Arc<FunctionConfig>, Error> {
     let schemas = SchemaData { inner };
 
     // Define output schema inline
-    // TODO: support new templates
     let output_schema_json = serde_json::json!({
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
         "properties": {
-            "system_template": {
-                "type": "string",
-                "description": "Your improved system template"
-            },
-            "user_template": {
-                "type": ["string", "null"],
-                "description": "Your improved user template. Only return if the user provides a reference user template"
-            },
-            "assistant_template": {
-                "type": ["string", "null"],
-                "description": "Your improved assistant template. Only return if the user provides a reference assistant template"
+            "templates": {
+                "type": "object",
+                "description": "Map of template names to improved template contents",
+                "additionalProperties": {
+                    "type": "string"
+                }
             }
         },
-        "required": ["system_template"],
+        "required": ["templates"],
         "additionalProperties": false
     });
     let output_schema = StaticJSONSchema::from_value(output_schema_json)?;

@@ -2,38 +2,20 @@
 <model_name>{{model}}</model_name>
 
 <message_templates>
-<system_template>
-{{system_template}}
-</system_template>
-{% if user_template %}
-<user_template>
-{{user_template}}
-</user_template>
-{% endif %}
-{% if assistant_template %}
-<assistant_template>
-{{assistant_template}}
-</assistant_template>
-{% endif %}
+{% for template_name in templates %}
+<template name="{{template_name}}">
+{{templates[template_name]}}
+</template>
+{% endfor %}
 </message_templates>
 
-{% if system_schema or user_schema or assistant_schema %}
+{% if schemas %}
 <message_schemas>
-{% if system_schema %}
-<system_schema>
-{{system_schema | tojson(indent=2)}}
-</system_schema>
-{% endif %}
-{% if user_schema %}
-<user_schema>
-{{user_schema | tojson(indent=2)}}
-</user_schema>
-{% endif %}
-{% if assistant_schema %}
-<assistant_schema>
-{{assistant_schema | tojson(indent=2)}}
-</assistant_schema>
-{% endif %}
+{% for schema_name in schemas %}
+<schema name="{{schema_name}}">
+{{schemas[schema_name] | tojson(indent=2)}}
+</schema>
+{% endfor %}
 </message_schemas>
 {% endif %}
 {% if output_schema %}
@@ -72,14 +54,14 @@ Read the message_templates, schemas, tools, and analyses above. Extract insights
 Return your improved templates in the following JSON format:
 
 {
-    "system_template": "<your improved system template as a string>"{% if user_template %},
-    "user_template": "<your improved user template as a string>"{% endif %}{% if assistant_template %},
-    "assistant_template": "<your improved assistant template as a string>"{% endif %}
-
+    "templates": {
+        {% for template_name in templates %}"{{template_name}}": "<your improved {{template_name}} template as a string>"{% if not loop.last %},
+        {% endif %}{% endfor %}
+    }
 }
 
 Notes:
-- Always return an improved system_template (required)
-{% if user_template %}- Return an improved user_template (reference provided above){% endif %}
-{% if assistant_template %}- Return an improved assistant_template (reference provided above){% endif %}
+- Return improved versions of ALL templates: {% for template_name in templates %}{{template_name}}{% if not loop.last %}, {% endif %}{% endfor %}
+- Preserve variable placeholders exactly as they appear in the schemas
+- Ensure output format matches the required schema
 </task>
