@@ -176,7 +176,7 @@ impl AWSBedrockProvider {
         let config = aws_sdk_bedrockruntime::config::Builder::from(
             &aws_common::config_with_region(PROVIDER_TYPE, region).await?,
         )
-        .http_client(super::aws_http_client::Client::new(http_client.clone()))
+        .http_client(super::aws_http_client::Client::new(http_client))
         .build();
         let client = aws_sdk_bedrockruntime::Client::from_conf(config);
 
