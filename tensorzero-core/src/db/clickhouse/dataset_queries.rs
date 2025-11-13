@@ -2340,7 +2340,7 @@ mod tests {
                 assert_eq!(actual_row_as_json["dynamic_provider_tools"], json!([]));
                 assert_eq!(
                     actual_row_as_json["allowed_tools"],
-                    json!({"tools": ["weather_tool"], "choice": "all_allowed_tools"})
+                    json!({"tools": ["weather_tool"], "choice": "explicit"})
                 );
                 assert_eq!(actual_row_as_json["tool_choice"], json!("required"));
                 assert_eq!(actual_row_as_json["parallel_tool_calls"], json!(true));

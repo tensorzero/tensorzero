@@ -154,11 +154,10 @@ async fn test_inference_full_tool_params_round_trip() {
     // Step 4: Verify DynamicToolParams correctly reconstructed
     let retrieved_tool_params = &stored_inference.tool_params;
 
-    // Static + dynamic tools should be in allowed_tools
+    // Only explicitly specified tools should be in allowed tools
     let allowed_tools = retrieved_tool_params.allowed_tools.as_ref().unwrap();
-    assert_eq!(allowed_tools.len(), 2);
+    assert_eq!(allowed_tools.len(), 1);
     assert_eq!(allowed_tools[0], "get_temperature");
-    assert_eq!(allowed_tools[1], "custom_weather_tool");
 
     // Dynamic tools should be in additional_tools
     let additional_tools = retrieved_tool_params.additional_tools.as_ref().unwrap();

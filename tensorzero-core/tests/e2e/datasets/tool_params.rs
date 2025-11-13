@@ -333,8 +333,8 @@ async fn test_datapoint_update_tool_params() {
     // Verify updated tool_params (flattened at top level)
     assert_eq!(
         dp["allowed_tools"],
-        json!(["get_temperature", "updated_tool"]),
-        "allowed_tools should be updated"
+        json!(["get_temperature"]),
+        // Note: we no longer update updated tools because additional_tools are no longer added by default
     );
 
     let additional_tools = dp["additional_tools"].as_array().unwrap();
@@ -743,11 +743,11 @@ async fn test_datapoint_only_dynamic_tools() {
     let resp_json: Value = resp.json().await.unwrap();
     let dp = &resp_json["datapoints"][0];
 
-    // Static tool from function config should be in allowed_tools (flattened)
+    // Static + dynamic tool should be in allowed_tools
     let allowed_tools = dp["allowed_tools"].as_array().unwrap();
     assert_eq!(allowed_tools.len(), 2);
-    assert_eq!(allowed_tools[0], "get_temperature");
-    assert_eq!(allowed_tools[1], "runtime_tool");
+    assert_eq!(allowed_tools[0], "runtime_tool");
+    assert_eq!(allowed_tools[1], "get_temperature");
 
     // Dynamic tool should be in additional_tools (flattened)
     let additional_tools = dp["additional_tools"].as_array().unwrap();

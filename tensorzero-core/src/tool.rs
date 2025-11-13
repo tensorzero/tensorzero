@@ -419,8 +419,8 @@ impl ToolCallConfig {
     ///
     /// This method validates and categorizes tools into three groups:
     /// 1. **Function tools**: Tools explicitly configured in the function's tool list
-    /// 2. **Config-only allowed tools**: Tools from the TensorZero config that are in `allowed_tools` but not in the function's tool list
-    /// 3. **Dynamic tools**: Tools provided at inference time via `dynamic_additional_tools`
+    /// 2. **Dynamic tools**: Tools provided at inference time via `dynamic_additional_tools`
+    /// 3. **Config-only allowed tools**: Tools from the TensorZero config that are in `allowed_tools` but not in the function's tool list or the dynamic tool
     ///
     /// We store function tools + config-only allowed tools in `static_tools_available`.
     /// We store dynamic tools in `dynamic_tools_available`.
@@ -492,6 +492,7 @@ impl ToolCallConfig {
         for tool_name in &allowed_tools.tools {
             if static_tools.contains_key(tool_name)
                 && !static_tool_names.contains(&tool_name.as_str())
+                && !additional_tool_names.contains(&tool_name.as_str())
             {
                 static_tool_names.push(tool_name);
             }
