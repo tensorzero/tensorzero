@@ -174,11 +174,18 @@ class InferenceResponseToolCall:
 
 
 @dataclass(kw_only=True)
-class Tool:
+class ClientSideFunctionTool:
     description: str
     parameters: Any
     name: str
     strict: bool | None = False
+    """
+    `strict` here specifies that TensorZero should attempt to use any facilities
+    available from the model provider to force the model to generate an accurate tool call,
+    notably OpenAI's strict tool call mode (https://platform.openai.com/docs/guides/function-calling#strict-mode).
+    This imposes additional restrictions on the JSON schema that may vary across providers
+    so we allow it to be configurable.
+    """
 
 
 @dataclass(kw_only=True)
@@ -571,7 +578,7 @@ class DynamicToolParams:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[Tool] | None = None
+    additional_tools: list[ClientSideFunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -586,9 +593,9 @@ class DynamicToolParams:
     Whether to use parallel tool calls in the inference. Optional.
     If provided during inference, it will override the function-configured parallel tool calls.
     """
-    provider_tools: list[ProviderTool] | None = None
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
     """
-    Provider-specific tool configurations (not persisted to database)
+    Provider-specific tool configurations
     """
 
 
@@ -678,7 +685,7 @@ class CreateChatDatapointRequest:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[Tool] | None = None
+    additional_tools: list[ClientSideFunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -693,9 +700,9 @@ class CreateChatDatapointRequest:
     Whether to use parallel tool calls in the inference. Optional.
     If provided during inference, it will override the function-configured parallel tool calls.
     """
-    provider_tools: list[ProviderTool] | None = None
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
     """
-    Provider-specific tool configurations (not persisted to database)
+    Provider-specific tool configurations
     """
     tags: dict[str, Any] | None = None
     """
@@ -770,7 +777,7 @@ class ChatInferenceDatapoint:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[Tool] | None = None
+    additional_tools: list[ClientSideFunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -785,9 +792,9 @@ class ChatInferenceDatapoint:
     Whether to use parallel tool calls in the inference. Optional.
     If provided during inference, it will override the function-configured parallel tool calls.
     """
-    provider_tools: list[ProviderTool] | None = None
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
     """
-    Provider-specific tool configurations (not persisted to database)
+    Provider-specific tool configurations
     """
     tags: dict[str, Any] | None = None
     auxiliary: str | None = None
