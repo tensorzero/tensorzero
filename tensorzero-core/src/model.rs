@@ -2198,7 +2198,7 @@ pub enum Credential {
     },
 }
 
-const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
+pub const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "anthropic::",
     "deepseek::",
     "fireworks::",

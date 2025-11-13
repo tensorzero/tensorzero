@@ -22,7 +22,7 @@ use crate::{
         },
         ProviderInferenceResponseChunk,
     },
-    model::{fully_qualified_name, ModelProviderRequestInfo},
+    model::{fully_qualified_name, ModelProviderRequestInfo, SHORTHAND_MODEL_PREFIXES},
 };
 
 pub struct JsonlBatchFileInfo {
@@ -30,6 +30,23 @@ pub struct JsonlBatchFileInfo {
     pub raw_request: String,
     pub raw_response: String,
     pub file_id: String,
+}
+
+/// Strip shorthand prefix from model name if it's a known shorthand prefix matching the provider.
+/// For example, "openai::gpt-4o" with provider "openai" returns "gpt-4o".
+/// Only strips if the prefix is in the known SHORTHAND_MODEL_PREFIXES list.
+/// If no matching shorthand prefix exists, returns the original name unchanged.
+fn strip_shorthand_prefix<'a>(model_name: &'a str, provider_name: &str) -> &'a str {
+    let expected_prefix = format!("{provider_name}::");
+
+    // Only strip if this is a known shorthand prefix
+    if SHORTHAND_MODEL_PREFIXES.contains(&expected_prefix.as_str()) {
+        model_name
+            .strip_prefix(&expected_prefix)
+            .unwrap_or(model_name)
+    } else {
+        model_name
+    }
 }
 
 pub async fn convert_stream_error(
@@ -330,7 +347,9 @@ pub fn inject_extra_request_data(
                 pointer,
                 kind,
             } => {
-                if filter_model_name == expected_model_name
+                let canonical_filter_model_name =
+                    strip_shorthand_prefix(filter_model_name, filter_provider_name);
+                if canonical_filter_model_name == expected_model_name
                     && filter_provider_name.as_str() == expected_provider_name_plain.as_ref()
                 {
                     match kind {
@@ -476,7 +495,9 @@ pub fn inject_extra_request_data(
                 name,
                 kind,
             } => {
-                if filter_model_name == expected_model_name
+                let canonical_filter_model_name =
+                    strip_shorthand_prefix(filter_model_name, filter_provider_name);
+                if canonical_filter_model_name == expected_model_name
                     && filter_provider_name.as_str() == expected_provider_name_plain.as_ref()
                 {
                     let name =
@@ -894,6 +915,51 @@ mod tests {
                 .await
                 .expect("Peeking stream should succeed");
         assert_eq!(&chunk, peeked_chunk);
+    }
+
+    #[test]
+    fn test_strip_shorthand_prefix() {
+        // Known shorthand prefix - should strip
+        assert_eq!(strip_shorthand_prefix("openai::gpt-4o", "openai"), "gpt-4o");
+        assert_eq!(
+            strip_shorthand_prefix("anthropic::claude-3-5-sonnet-20241022", "anthropic"),
+            "claude-3-5-sonnet-20241022"
+        );
+        assert_eq!(
+            strip_shorthand_prefix("dummy::test-model", "dummy"),
+            "test-model"
+        );
+
+        // Already just suffix - should return as-is
+        assert_eq!(strip_shorthand_prefix("gpt-4o", "openai"), "gpt-4o");
+        assert_eq!(
+            strip_shorthand_prefix("claude-3-5-sonnet-20241022", "anthropic"),
+            "claude-3-5-sonnet-20241022"
+        );
+
+        // Wrong provider for the prefix - should NOT strip
+        assert_eq!(
+            strip_shorthand_prefix("openai::gpt-4o", "anthropic"),
+            "openai::gpt-4o"
+        );
+        assert_eq!(
+            strip_shorthand_prefix("anthropic::claude-3", "openai"),
+            "anthropic::claude-3"
+        );
+
+        // External model with :: but not a known prefix - should NOT strip
+        assert_eq!(
+            strip_shorthand_prefix("custom::model::name", "custom"),
+            "custom::model::name"
+        );
+        assert_eq!(
+            strip_shorthand_prefix("azure::deployment::model", "azure"),
+            "azure::deployment::model"
+        );
+        assert_eq!(
+            strip_shorthand_prefix("my_provider::my::nested::model", "my_provider"),
+            "my_provider::my::nested::model"
+        );
     }
 
     #[test]
@@ -1525,6 +1591,221 @@ mod tests {
         assert_eq!(
             check_new_tool_call_name("get_temperature".to_string(), &mut last_tool_name),
             Some("get_temperature".to_string())
+        );
+    }
+
+    #[test]
+    fn test_inject_extra_body_model_provider_with_shorthand() {
+        use serde_json::json;
+
+        let mut body = serde_json::json!({});
+        let config = FullExtraBodyConfig {
+            extra_body: None,
+            inference_extra_body: FilteredInferenceExtraBody {
+                data: vec![InferenceExtraBody::ModelProvider {
+                    model_name: "openai::gpt-4o".to_string(), // Using shorthand
+                    provider_name: "openai".to_string(),
+                    pointer: "/test_shorthand".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!(42)),
+                }],
+            },
+        };
+        let model_provider = ModelProviderRequestInfo {
+            provider_name: "openai".into(),
+            extra_headers: None,
+            extra_body: None,
+        };
+
+        inject_extra_request_data(
+            &config,
+            &Default::default(),
+            model_provider,
+            "gpt-4o", // expected_model_name is just the suffix
+            &mut body,
+        )
+        .unwrap();
+
+        // Should have applied the filter
+        assert_eq!(body.get("test_shorthand").unwrap(), &json!(42));
+    }
+
+    #[test]
+    fn test_inject_extra_body_model_provider_without_shorthand() {
+        use serde_json::json;
+
+        let mut body = serde_json::json!({});
+        let config = FullExtraBodyConfig {
+            extra_body: None,
+            inference_extra_body: FilteredInferenceExtraBody {
+                data: vec![InferenceExtraBody::ModelProvider {
+                    model_name: "gpt-4o".to_string(), // NOT using shorthand
+                    provider_name: "openai".to_string(),
+                    pointer: "/test_no_shorthand".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!(99)),
+                }],
+            },
+        };
+        let model_provider = ModelProviderRequestInfo {
+            provider_name: "openai".into(),
+            extra_headers: None,
+            extra_body: None,
+        };
+
+        inject_extra_request_data(
+            &config,
+            &Default::default(),
+            model_provider,
+            "gpt-4o",
+            &mut body,
+        )
+        .unwrap();
+
+        // Should have applied the filter
+        assert_eq!(body.get("test_no_shorthand").unwrap(), &json!(99));
+    }
+
+    #[test]
+    fn test_inject_extra_body_model_provider_wrong_prefix() {
+        use serde_json::json;
+
+        let mut body = serde_json::json!({});
+        let config = FullExtraBodyConfig {
+            extra_body: None,
+            inference_extra_body: FilteredInferenceExtraBody {
+                data: vec![InferenceExtraBody::ModelProvider {
+                    model_name: "anthropic::claude-3".to_string(), // Wrong prefix
+                    provider_name: "openai".to_string(),
+                    pointer: "/test_wrong".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!(1)),
+                }],
+            },
+        };
+        let model_provider = ModelProviderRequestInfo {
+            provider_name: "openai".into(),
+            extra_headers: None,
+            extra_body: None,
+        };
+
+        inject_extra_request_data(
+            &config,
+            &Default::default(),
+            model_provider,
+            "gpt-4o",
+            &mut body,
+        )
+        .unwrap();
+
+        // Should NOT have applied the filter
+        assert!(!body.as_object().unwrap().contains_key("test_wrong"));
+    }
+
+    #[test]
+    fn test_inject_extra_body_model_provider_external_model_with_colons() {
+        use serde_json::json;
+
+        let mut body = serde_json::json!({});
+        let config = FullExtraBodyConfig {
+            extra_body: None,
+            inference_extra_body: FilteredInferenceExtraBody {
+                data: vec![InferenceExtraBody::ModelProvider {
+                    // External model with :: but not a known prefix
+                    model_name: "custom::deployment::model".to_string(),
+                    provider_name: "custom".to_string(),
+                    pointer: "/test_external".to_string(),
+                    kind: ExtraBodyReplacementKind::Value(json!(7)),
+                }],
+            },
+        };
+        let model_provider = ModelProviderRequestInfo {
+            provider_name: "custom".into(),
+            extra_headers: None,
+            extra_body: None,
+        };
+
+        inject_extra_request_data(
+            &config,
+            &Default::default(),
+            model_provider,
+            "custom::deployment::model", // Full name without stripping
+            &mut body,
+        )
+        .unwrap();
+
+        // Should have applied the filter (matched exactly)
+        assert_eq!(body.get("test_external").unwrap(), &json!(7));
+    }
+
+    #[test]
+    fn test_inject_extra_headers_model_provider_with_shorthand() {
+        let mut body = serde_json::json!({});
+        let config = FullExtraBodyConfig::default();
+        let headers_config = FullExtraHeadersConfig {
+            variant_extra_headers: None,
+            inference_extra_headers: FilteredInferenceExtraHeaders {
+                data: vec![InferenceExtraHeader::ModelProvider {
+                    model_name: "openai::gpt-4o".to_string(), // Using shorthand
+                    provider_name: "openai".to_string(),
+                    name: "X-Custom-Header".to_string(),
+                    kind: ExtraHeaderKind::Value("test-value".to_string()),
+                }],
+            },
+        };
+        let model_provider = ModelProviderRequestInfo {
+            provider_name: "openai".into(),
+            extra_headers: None,
+            extra_body: None,
+        };
+
+        let headers = inject_extra_request_data(
+            &config,
+            &headers_config,
+            model_provider,
+            "gpt-4o",
+            &mut body,
+        )
+        .unwrap();
+
+        // Should have applied the header
+        assert_eq!(
+            headers.get("X-Custom-Header").unwrap().to_str().unwrap(),
+            "test-value"
+        );
+    }
+
+    #[test]
+    fn test_inject_extra_headers_model_provider_without_shorthand() {
+        let mut body = serde_json::json!({});
+        let config = FullExtraBodyConfig::default();
+        let headers_config = FullExtraHeadersConfig {
+            variant_extra_headers: None,
+            inference_extra_headers: FilteredInferenceExtraHeaders {
+                data: vec![InferenceExtraHeader::ModelProvider {
+                    model_name: "gpt-4o".to_string(), // NOT using shorthand
+                    provider_name: "openai".to_string(),
+                    name: "X-Custom-Header-2".to_string(),
+                    kind: ExtraHeaderKind::Value("test-value-2".to_string()),
+                }],
+            },
+        };
+        let model_provider = ModelProviderRequestInfo {
+            provider_name: "openai".into(),
+            extra_headers: None,
+            extra_body: None,
+        };
+
+        let headers = inject_extra_request_data(
+            &config,
+            &headers_config,
+            model_provider,
+            "gpt-4o",
+            &mut body,
+        )
+        .unwrap();
+
+        // Should have applied the header
+        assert_eq!(
+            headers.get("X-Custom-Header-2").unwrap().to_str().unwrap(),
+            "test-value-2"
         );
     }
 }
