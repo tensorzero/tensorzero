@@ -1,44 +1,9 @@
 //! Inference analysis functions for GEPA optimization
 //!
-//! This module provides functions for analyzing LLM inference outputs to identify
-//! errors, improvements, and optimal patterns. It interfaces with the built-in
-//! `tensorzero::optimization::gepa::analyze` function to generate structured feedback
-//! in XML format.
-//!
-//! # Key Functions
-//!
-//! - [`build_analyze_input`] - Constructs input JSON for the analyze function
-//! - [`parse_analysis_response`] - Extracts raw XML feedback from analyze responses
-//! - [`analyze_inferences`] - Main orchestration function for batch analysis
-//!
-//! # Analysis Output Formats
-//!
-//! The analyze function returns XML feedback in one of three mutually exclusive formats:
-//!
-//! - `<report_error>` - Critical failures or errors in the inference output
-//! - `<report_improvement>` - Suboptimal but technically correct outputs
-//! - `<report_optimal>` - High-quality aspects worth preserving
-//!
-//! # Example
-//!
-//! ```rust,ignore
-//! use tensorzero_optimizers::gepa::analyze::{analyze_inferences, build_analyze_input};
-//!
-//! // Analyze a batch of inference results
-//! let analyses = analyze_inferences(
-//!     &gateway_client,
-//!     &evaluation_infos,
-//!     &function_config,
-//!     &variant_config,
-//!     &gepa_config,
-//! ).await?;
-//!
-//! // Each analysis contains the original inference paired with XML feedback
-//! for analysis in &analyses {
-//!     println!("Inference: {:?}", analysis.inference_output);
-//!     println!("Analysis: {}", analysis.analysis);
-//! }
-//! ```
+//! This module provides functions for:
+//! - Analyzing inference outputs to identify errors, improvements, and optimal patterns
+//! - Building inputs for the built-in `tensorzero::optimization::gepa::analyze` function
+//! - Parsing XML feedback from analysis responses
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -63,19 +28,7 @@ use tensorzero_core::{
 
 use evaluations::stats::EvaluationInfo;
 
-/// Helper function to serialize values to JSON with consistent error handling
-///
-/// Wraps `serde_json::to_value` with contextual error messages for better debugging.
-///
-/// # Arguments
-///
-/// * `value` - The value to serialize
-/// * `context` - Description of what's being serialized (e.g., "inference response", "templates map")
-///
-/// # Errors
-///
-/// Returns a `tensorzero_core::error::Error` with `ErrorDetails::Serialization` if
-/// serialization fails.
+/// Serialize values to JSON with contextual error messages
 fn serialize_to_value<T: serde::Serialize>(
     value: &T,
     context: &str,
@@ -87,19 +40,7 @@ fn serialize_to_value<T: serde::Serialize>(
     })
 }
 
-/// Helper function to serialize values to JSON strings with consistent error handling
-///
-/// Wraps `serde_json::to_string` with contextual error messages for better debugging.
-///
-/// # Arguments
-///
-/// * `value` - The value to serialize
-/// * `context` - Description of what's being serialized (e.g., "analyze input", "datapoint")
-///
-/// # Errors
-///
-/// Returns a `tensorzero_core::error::Error` with `ErrorDetails::Serialization` if
-/// serialization fails.
+/// Serialize values to JSON strings with contextual error messages
 fn serialize_to_string<T: serde::Serialize>(value: &T, context: &str) -> Result<String, Error> {
     serde_json::to_string(value).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
@@ -118,38 +59,13 @@ pub struct InferenceWithAnalysis {
 
 /// Build the input JSON for the analyze function
 ///
-/// Constructs a structured JSON object containing all context needed for analyzing
-/// an inference output, including function metadata, templates, schemas, and the
-/// actual input/output pair.
-///
 /// # Arguments
-///
 /// * `eval_info` - Evaluation information containing the datapoint and inference response
 /// * `function_config` - Function configuration (schemas, tools, output_schema)
 /// * `variant_config` - Variant configuration (templates, model name)
 ///
 /// # Returns
-///
-/// A JSON object with the following structure:
-/// ```json
-/// {
-///   "function_name": "...",
-///   "model": "...",
-///   "templates": {"system": "...", "user": "...", ...},
-///   "schemas": {"system": {...}, "user": {...}, ...},
-///   "output_schema": {...},  // Optional, for JSON functions
-///   "tools": {...},          // Optional, for Chat functions with tools
-///   "tags": {...},           // Optional metadata
-///   "input": {...},          // The inference input
-///   "output": {...}          // The inference output to analyze
-/// }
-/// ```
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - Template reading fails
-/// - Serialization of any component fails
+/// * JSON object containing function metadata, templates, schemas, and the input/output pair
 pub fn build_analyze_input(
     eval_info: &EvaluationInfo,
     function_config: &FunctionConfig,
@@ -222,28 +138,9 @@ pub fn build_analyze_input(
     Ok(input)
 }
 
-/// Parse the analysis response and extract the raw XML text
+/// Extract raw XML text from the analyze function response
 ///
-/// Extracts the raw XML text content from the analyze function response.
-/// The analyze function returns Chat responses containing XML feedback in one
-/// of three formats: `<report_error>`, `<report_improvement>`, or `<report_optimal>`.
-///
-/// # Arguments
-///
-/// * `response` - The inference response from the analyze function call
-///
-/// # Returns
-///
-/// The raw XML text content as a string. This will contain one of:
-/// - `<report_error>...</report_error>`
-/// - `<report_improvement>...</report_improvement>`
-/// - `<report_optimal>...</report_optimal>`
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - The response is not a Chat response (expects Chat, not Json)
-/// - The response contains no text content blocks
+/// Returns XML feedback in one of three formats: `<report_error>`, `<report_improvement>`, or `<report_optimal>`.
 pub fn parse_analysis_response(response: &InferenceResponse) -> Result<String, Error> {
     let InferenceResponse::Chat(chat_response) = response else {
         return Err(Error::new(ErrorDetails::Inference {
@@ -271,34 +168,18 @@ pub fn parse_analysis_response(response: &InferenceResponse) -> Result<String, E
 
 /// Analyze inference outputs using the GEPA analyze function
 ///
-/// Takes evaluation results (datapoint + inference pairs) and calls the built-in
-/// `tensorzero::optimization::gepa::analyze` function to get structured feedback.
-///
-/// The analyses are executed in parallel with controlled concurrency (up to `gepa_config.max_concurrency`
-/// concurrent API calls). Uses a semaphore for concurrency control and fail-fast error handling
-/// with `try_join_all`. Progress is logged every 10 completed analyses.
+/// Calls the built-in `tensorzero::optimization::gepa::analyze` function in parallel
+/// with controlled concurrency (up to `gepa_config.max_concurrency` concurrent API calls).
 ///
 /// # Arguments
-///
 /// * `gateway_client` - TensorZero gateway client for making inference requests
 /// * `evaluation_infos` - Evaluation results containing datapoints and their inference responses
-/// * `function_config` - Configuration of the function being optimized (for schemas, tools, etc.)
-/// * `variant_config` - Configuration of the variant being analyzed (for templates, model, etc.)
+/// * `function_config` - Configuration of the function being optimized
+/// * `variant_config` - Configuration of the variant being analyzed
 /// * `gepa_config` - GEPA configuration containing analysis_model and max_concurrency settings
 ///
 /// # Returns
-///
-/// A vector of [`InferenceWithAnalysis`] containing each inference paired with its XML analysis feedback.
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - Building the analyze input fails (e.g., template read errors, serialization failures)
-/// - The analyze function call fails (e.g., network errors, model errors)
-/// - Parsing the analysis response fails (e.g., unexpected response format, missing text content)
-/// - Acquiring a semaphore permit fails
-///
-/// Note: This function is currently unused but will be called by the main GEPA optimization loop.
+/// * Vector of [`InferenceWithAnalysis`] containing each inference paired with its XML analysis feedback
 #[expect(dead_code)]
 pub async fn analyze_inferences(
     gateway_client: &Client,
