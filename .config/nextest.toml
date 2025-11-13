@@ -29,8 +29,11 @@ retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max
 default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse) | test(db::))"
 junit.path = "junit.xml"
 
-[profile.batch]
-default-filter = 'test(batch)'
+[profile.live-batch]
+default-filter = 'test(batch) and not test(mock)'
+
+[profile.mock-batch]
+default-filter = 'test(batch) and test(mock)'
 
 [profile.clickhouse]
 default-filter = 'test(test_dummy_only) | test(clickhouse) | test(db::)'
