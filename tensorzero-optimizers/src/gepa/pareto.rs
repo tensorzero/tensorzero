@@ -24,7 +24,7 @@ use super::evaluate::EvaluationResults;
 ///
 /// # Arguments
 /// * `candidates` - Candidate variants to filter
-/// * `val_scores` - Evaluation results on validation set for each candidate
+/// * `val_scores_map` - Per-datapoint scores on validation set for each candidate
 /// * `config` - GEPA configuration (for evaluation_name)
 /// * `tensorzero_config` - Full TensorZero config (for metric definitions)
 ///
@@ -46,7 +46,6 @@ use super::evaluate::EvaluationResults;
 #[expect(clippy::type_complexity)]
 pub fn update_pareto_frontier(
     candidates: HashMap<String, UninitializedChatCompletionConfig>,
-    val_scores: &HashMap<String, Option<EvaluationResults>>,
     val_scores_map: &HashMap<String, HashMap<String, HashMap<String, Option<f32>>>>,
     config: &GEPAConfig,
     tensorzero_config: &Config,
@@ -79,17 +78,33 @@ pub fn update_pareto_frontier(
         EvaluationConfig::Inference(inference_config) => &inference_config.evaluators,
     };
 
-    // Filter out candidates that failed evaluation (None)
-    let valid_scores: HashMap<&String, &EvaluationResults> = val_scores
-        .iter()
-        .filter_map(|(name, score_opt)| score_opt.as_ref().map(|score| (name, score)))
-        .collect();
-
-    if valid_scores.is_empty() {
+    // Check if we have any valid scores
+    if val_scores_map.is_empty() {
         tracing::warn!("No valid scores found for any variant");
         return Err(Error::new(ErrorDetails::InternalError {
             message: "All variants failed evaluation".to_string(),
         }));
+    }
+
+    // Check if there are any datapoints - if yes, ensure at least one valid score exists
+    let has_any_datapoint = val_scores_map
+        .values()
+        .any(|per_datapoint| !per_datapoint.is_empty());
+
+    if has_any_datapoint {
+        // We have datapoints, check if all scores are None (all evaluations failed)
+        let has_any_score = val_scores_map
+            .values()
+            .flat_map(|per_datapoint| per_datapoint.values())
+            .flat_map(|scores| scores.values())
+            .any(|score| score.is_some());
+
+        if !has_any_score {
+            tracing::warn!("All evaluation scores are None - no variant produced any valid scores");
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "All variants failed to produce valid scores".to_string(),
+            }));
+        }
     }
 
     // Get all datapoint IDs from the first valid score
@@ -113,10 +128,10 @@ pub fn update_pareto_frontier(
         // Collect scores for this datapoint across all variants
         let mut instance_scores: Vec<(String, HashMap<String, Option<f32>>)> = Vec::new();
 
-        for variant_name in valid_scores.keys() {
-            if let Some(variant_scores) = val_scores_map.get(*variant_name) {
+        for variant_name in val_scores_map.keys() {
+            if let Some(variant_scores) = val_scores_map.get(variant_name) {
                 if let Some(scores) = variant_scores.get(datapoint_id) {
-                    instance_scores.push(((*variant_name).clone(), scores.clone()));
+                    instance_scores.push((variant_name.clone(), scores.clone()));
                 }
             }
         }
@@ -185,12 +200,11 @@ pub fn update_pareto_frontier(
     let total_evaluators = evaluators.len();
 
     for variant_name in &non_dominated {
-        if let Some(_evaluation_results) = valid_scores.get(variant_name) {
+        if let Some(per_datapoint) = val_scores_map.get(variant_name) {
             let total_possible = total_datapoints * total_evaluators;
             if total_possible > 0 {
                 // Count non-None scores across all (datapoint, evaluator) pairs
-                let per_datapoint = val_scores_map.get(variant_name);
-                let non_none_count = per_datapoint
+                let non_none_count = Some(per_datapoint)
                     .into_iter()
                     .flat_map(|scores| {
                         datapoint_ids
@@ -230,7 +244,7 @@ pub fn update_pareto_frontier(
 
     tracing::info!(
         "Pareto frontier filtered: {} → {} variants",
-        valid_scores.len(),
+        val_scores_map.len(),
         filtered_candidates.len()
     );
 
@@ -508,8 +522,6 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    use crate::gepa::evaluate::EvaluationResults;
-    use evaluations::EvaluatorStats;
     use tensorzero_core::evaluations::{
         EvaluationConfig, EvaluatorConfig, ExactMatchConfig, InferenceEvaluationConfig,
         LLMJudgeConfig, LLMJudgeIncludeConfig, LLMJudgeInputFormat, LLMJudgeOptimize,
@@ -590,60 +602,6 @@ mod tests {
         }
     }
 
-    /// Create EvaluationResults from per_datapoint scores
-    ///
-    /// # Arguments
-    /// * `per_datapoint` - HashMap mapping datapoint_id -> (evaluator_name -> score)
-    fn create_test_evaluation_results(
-        per_datapoint: HashMap<String, HashMap<String, Option<f32>>>,
-    ) -> EvaluationResults {
-        // Calculate metrics stats from per_datapoint data
-        let mut metrics: HashMap<String, EvaluatorStats> = HashMap::new();
-
-        // Collect all evaluator names
-        let evaluator_names: HashSet<String> = per_datapoint
-            .values()
-            .flat_map(|scores| scores.keys().cloned())
-            .collect();
-
-        for evaluator_name in evaluator_names {
-            let values: Vec<f32> = per_datapoint
-                .values()
-                .filter_map(|scores| scores.get(&evaluator_name).and_then(|s| *s))
-                .collect();
-
-            if !values.is_empty() {
-                let count = values.len();
-                let mean = values.iter().sum::<f32>() / count as f32;
-
-                // Calculate stderr (standard error of the mean)
-                // This matches the calculation in evaluations/src/stats.rs:120-122
-                let stderr = if count > 1 {
-                    let sum_sq_diff: f32 = values.iter().map(|v| (v - mean).powi(2)).sum();
-                    let variance = sum_sq_diff / (count - 1) as f32;
-                    let std_dev = variance.sqrt();
-                    std_dev / (count as f32).sqrt()
-                } else {
-                    0.0
-                };
-
-                metrics.insert(
-                    evaluator_name,
-                    EvaluatorStats {
-                        mean,
-                        stderr,
-                        count,
-                    },
-                );
-            }
-        }
-
-        EvaluationResults {
-            evaluation_infos: vec![], // Tests don't need actual EvaluationInfo objects
-            evaluation_stats: metrics,
-        }
-    }
-
     /// Create a HashMap of test variants
     fn create_test_variants(names: &[&str]) -> HashMap<String, UninitializedChatCompletionConfig> {
         names
@@ -656,24 +614,6 @@ mod tests {
                         model: "test-model".into(),
                         ..Default::default()
                     },
-                )
-            })
-            .collect()
-    }
-
-    /// Create val_scores HashMap from nested score data
-    ///
-    /// # Arguments
-    /// * `variant_scores` - HashMap mapping variant_name -> datapoint_id -> (evaluator_name -> score)
-    fn create_test_val_scores(
-        variant_scores: HashMap<String, HashMap<String, HashMap<String, Option<f32>>>>,
-    ) -> HashMap<String, Option<EvaluationResults>> {
-        variant_scores
-            .into_iter()
-            .map(|(variant_name, per_datapoint)| {
-                (
-                    variant_name,
-                    Some(create_test_evaluation_results(per_datapoint)),
                 )
             })
             .collect()
@@ -953,17 +893,10 @@ mod tests {
             ),
         ]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let val_scores_map = variant_scores;
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &val_scores_map,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &val_scores_map, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, frequencies) = result.unwrap();
@@ -1012,16 +945,9 @@ mod tests {
             ),
         ]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, frequencies) = result.unwrap();
@@ -1103,16 +1029,9 @@ mod tests {
             ),
         ]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b", "variant_c"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1152,16 +1071,9 @@ mod tests {
             ),
         ]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1206,16 +1118,9 @@ mod tests {
             ),
         ]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1239,16 +1144,9 @@ mod tests {
             )]),
         )]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, frequencies) = result.unwrap();
@@ -1288,16 +1186,9 @@ mod tests {
             ),
         ]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1336,16 +1227,9 @@ mod tests {
             ),
         ]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b", "variant_c"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1394,16 +1278,9 @@ mod tests {
             ),
         ]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1441,16 +1318,9 @@ mod tests {
             ),
         ]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1489,16 +1359,9 @@ mod tests {
             ),
         ]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b", "variant_c"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1537,7 +1400,6 @@ mod tests {
             variant_scores.insert(variant_name, datapoint_scores);
         }
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let val_scores_map = variant_scores;
         let variant_names: Vec<&str> = (0..num_variants)
             .map(|v| Box::leak(format!("variant_{v}").into_boxed_str()) as &str)
@@ -1546,13 +1408,7 @@ mod tests {
 
         // Measure execution time
         let start = Instant::now();
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &val_scores_map,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &val_scores_map, &gepa_config, &config);
         let elapsed = start.elapsed();
 
         assert!(result.is_ok());
@@ -1581,18 +1437,11 @@ mod tests {
         let config = create_test_config("test_eval", &[("accuracy", "max")]);
         let gepa_config = create_test_gepa_config("test_eval");
 
-        let val_scores: HashMap<String, Option<EvaluationResults>> = HashMap::new();
         let val_scores_map: HashMap<String, HashMap<String, HashMap<String, Option<f32>>>> =
             HashMap::new();
         let candidates: HashMap<String, UninitializedChatCompletionConfig> = HashMap::new();
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &val_scores_map,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &val_scores_map, &gepa_config, &config);
 
         // Should return error for empty candidates
         assert!(result.is_err());
@@ -1604,21 +1453,11 @@ mod tests {
         let gepa_config = create_test_gepa_config("test_eval");
 
         // All val_scores entries are None (evaluation failed)
-        let val_scores: HashMap<String, Option<EvaluationResults>> = HashMap::from([
-            ("variant_a".to_string(), None),
-            ("variant_b".to_string(), None),
-        ]);
         let val_scores_map: HashMap<String, HashMap<String, HashMap<String, Option<f32>>>> =
             HashMap::new();
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &val_scores_map,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &val_scores_map, &gepa_config, &config);
 
         // Should return error when all evaluations failed
         assert!(result.is_err());
@@ -1661,22 +1500,16 @@ mod tests {
             ),
         ]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
-        assert!(result.is_ok());
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
 
-        let (filtered, _) = result.unwrap();
-
-        // Both variants have all None - neither dominates
-        assert_eq!(filtered.len(), 2);
+        // Should return error when all scores are None
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("All variants failed to produce valid scores"));
     }
 
     #[test]
@@ -1690,16 +1523,9 @@ mod tests {
             ("variant_b".to_string(), HashMap::new()),
         ]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, frequencies) = result.unwrap();
@@ -1771,16 +1597,9 @@ mod tests {
             ),
         ]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b", "variant_c"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, frequencies) = result.unwrap();
@@ -1831,16 +1650,9 @@ mod tests {
             ]),
         )]);
 
-        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a"]);
 
-        let result = update_pareto_frontier(
-            candidates,
-            &val_scores,
-            &variant_scores,
-            &gepa_config,
-            &config,
-        );
+        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();

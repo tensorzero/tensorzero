@@ -4,6 +4,10 @@
 //! implementations in mod.rs for cleaner organization.
 
 use std::collections::HashMap;
+use std::sync::Arc;
+
+use futures::future::join_all;
+use tokio::sync::Semaphore;
 
 use tensorzero_core::{
     client::{Client, ClientBuilder, ClientBuilderMode},
@@ -22,7 +26,9 @@ use tensorzero_core::{
 #[expect(unused_imports)]
 pub use super::analyze::{analyze_inferences, InferenceWithAnalysis};
 #[expect(unused_imports)]
-pub use super::evaluate::{create_evaluation_dataset, evaluate_variants, EvaluationResults};
+pub use super::evaluate::{
+    create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, EvaluationResults,
+};
 #[expect(unused_imports)]
 pub use super::mutate::{create_mutated_variant, mutate_templates, MutateOutput};
 #[expect(unused_imports)]
@@ -126,36 +132,93 @@ pub async fn run_gepa_optimization(
         pareto_frontier.len()
     );
 
-    let val_scores = evaluate_variants(
-        &gateway_client,
-        clickhouse_connection_info,
-        tensorzero_config.clone(),
-        config,
-        &pareto_frontier,
-        &val_dataset_name,
-    )
-    .await?;
+    // Extract evaluation config once for all variants
+    let evaluation_config = tensorzero_config
+        .evaluations
+        .get(&config.evaluation_name)
+        .ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Evaluation '{}' not found", config.evaluation_name),
+            })
+        })?
+        .clone();
 
-    tracing::info!("Initial evaluation complete");
+    // Create semaphore for concurrency control
+    let semaphore = Arc::new(Semaphore::new(config.max_concurrency as usize));
+    let evaluation_name = config.evaluation_name.clone();
 
-    // Pre-compute scores map for Pareto frontier filtering
-    let mut val_scores_map: HashMap<String, HashMap<String, HashMap<String, Option<f32>>>> =
-        HashMap::new();
-    for (name, results) in &val_scores {
-        if let Some(results) = results {
-            val_scores_map.insert(name.clone(), results.per_datapoint_scores());
+    // Create parallel evaluation futures
+    let evaluation_futures: Vec<_> = pareto_frontier
+        .iter()
+        .map(|(variant_name, variant_config)| {
+            let semaphore = Arc::clone(&semaphore);
+            let gateway_client = gateway_client.clone();
+            let clickhouse_connection_info = clickhouse_connection_info.clone();
+            let tensorzero_config = Arc::clone(&tensorzero_config);
+            let evaluation_config = Arc::clone(&evaluation_config);
+            let evaluation_name = evaluation_name.clone();
+            let variant_name = variant_name.clone();
+            let variant_config = variant_config.clone();
+            let val_dataset_name = val_dataset_name.clone();
+
+            async move {
+                let _permit = semaphore.acquire().await.map_err(|e| {
+                    Error::new(ErrorDetails::Inference {
+                        message: format!("Failed to acquire semaphore: {e}"),
+                    })
+                })?;
+
+                match evaluate_variant(EvaluateVariantParams {
+                    gateway_client,
+                    clickhouse_connection_info,
+                    tensorzero_config,
+                    evaluation_config,
+                    evaluation_name,
+                    variant_name: variant_name.clone(),
+                    variant_config,
+                    dataset_name: val_dataset_name,
+                    concurrency: config.max_concurrency as usize,
+                })
+                .await
+                {
+                    Ok(results) => {
+                        // Compute scores map inline and drop full EvaluationResults
+                        let scores_map = results.per_datapoint_scores();
+                        Ok::<_, Error>((variant_name, scores_map))
+                    }
+                    Err(e) => {
+                        tracing::warn!("Evaluation failed for variant '{}': {}", variant_name, e);
+                        Ok((variant_name, HashMap::new()))
+                    }
+                }
+            }
+        })
+        .collect();
+
+    // Execute in parallel
+    let results = join_all(evaluation_futures).await;
+
+    // Collect into val_scores_map directly (only thing needed for Pareto filtering)
+    let mut val_scores_map = HashMap::new();
+    for result in results {
+        match result {
+            Ok((variant_name, scores)) => {
+                if !scores.is_empty() {
+                    val_scores_map.insert(variant_name, scores);
+                }
+            }
+            Err(e) => {
+                tracing::error!("Unexpected error in evaluation: {}", e);
+            }
         }
     }
 
+    tracing::info!("Initial evaluation complete");
+
     // Filter initial Pareto frontier using instance-wise dominance
     #[expect(unused_mut)] // Will be mutated in step 7
-    let (pareto_frontier, mut frequencies) = update_pareto_frontier(
-        pareto_frontier,
-        &val_scores,
-        &val_scores_map,
-        config,
-        &tensorzero_config,
-    )?;
+    let (pareto_frontier, mut frequencies) =
+        update_pareto_frontier(pareto_frontier, &val_scores_map, config, &tensorzero_config)?;
 
     tracing::info!(
         "Initial Pareto frontier filtered to {} variants",
