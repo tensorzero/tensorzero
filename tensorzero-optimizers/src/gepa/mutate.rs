@@ -33,6 +33,19 @@ pub struct MutateOutput {
     pub templates: HashMap<String, String>,
 }
 
+/// Template entry from mutate function output (array format for OpenAI strict mode)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TemplateEntry {
+    name: String,
+    content: String,
+}
+
+/// Raw output from mutate function (array format)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MutateOutputRaw {
+    templates: Vec<TemplateEntry>,
+}
+
 /// Build the input Arguments for the mutate function
 pub fn build_mutate_input(
     analyses: &[InferenceWithAnalysis],
@@ -106,15 +119,18 @@ pub fn build_mutate_input(
         json!(parent_variant_config.model.as_ref()),
     );
     map.insert("templates".to_string(), json!(templates_map));
-    if !schemas_map.is_empty() {
-        map.insert("schemas".to_string(), json!(schemas_map));
-    }
-    if let Some(schema) = output_schema {
-        map.insert("output_schema".to_string(), schema);
-    }
-    if let Some(tools_value) = tools {
-        map.insert("tools".to_string(), tools_value);
-    }
+
+    // Always include optional fields (even if empty/null) so templates can check them
+    map.insert(
+        "schemas".to_string(),
+        if schemas_map.is_empty() {
+            json!(null)
+        } else {
+            json!(schemas_map)
+        },
+    );
+    map.insert("output_schema".to_string(), json!(output_schema));
+    map.insert("tools".to_string(), json!(tools));
     map.insert("analyses".to_string(), analyses_json);
 
     Ok(Arguments(map))
@@ -131,19 +147,36 @@ pub fn parse_mutate_response(response: &InferenceResponse) -> Result<MutateOutpu
         }
     };
 
-    // Extract the parsed JSON output
-    let parsed_output = json_response.output.parsed.clone().ok_or_else(|| {
-        Error::new(ErrorDetails::Inference {
-            message: "Mutate function returned no parsed output".to_string(),
+    // Try to get parsed output first, otherwise parse the raw output
+    let output_value = if let Some(parsed) = json_response.output.parsed.clone() {
+        parsed
+    } else if let Some(raw) = json_response.output.raw.as_ref() {
+        serde_json::from_str(raw).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to parse raw mutate output as JSON: {e}"),
+            })
+        })?
+    } else {
+        return Err(Error::new(ErrorDetails::Inference {
+            message: "Mutate function returned no parsed or raw output".to_string(),
+        }));
+    };
+
+    // Parse the JSON output from array format to HashMap
+    let raw_output: MutateOutputRaw = serde_json::from_value(output_value).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to deserialize mutate output: {e}"),
         })
     })?;
 
-    // Parse the JSON output into MutateOutput
-    serde_json::from_value(parsed_output).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to parse mutate output: {e}"),
-        })
-    })
+    // Convert array format to HashMap
+    let templates = raw_output
+        .templates
+        .into_iter()
+        .map(|entry| (entry.name, entry.content))
+        .collect();
+
+    Ok(MutateOutput { templates })
 }
 
 /// Generate improved templates using the GEPA mutate function
@@ -157,8 +190,10 @@ pub async fn mutate_templates(
     analyses: &[InferenceWithAnalysis],
     function_config: &FunctionConfig,
     parent_variant_config: &UninitializedChatCompletionConfig,
-    mutation_model: &str,
+    gepa_config: &tensorzero_core::optimization::gepa::GEPAConfig,
 ) -> Result<MutateOutput, Error> {
+    let mutation_model = &gepa_config.mutation_model;
+
     tracing::info!(
         "Generating improved templates using {} analyses with model '{}'",
         analyses.len(),
@@ -168,24 +203,37 @@ pub async fn mutate_templates(
     // Build input Arguments for the mutate function
     let arguments = build_mutate_input(analyses, function_config, parent_variant_config)?;
 
-    // Create dynamic variant config for the mutate function
-    let mutate_variant_config = UninitializedVariantInfo {
-        inner: UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
-            model: mutation_model.into(),
-            weight: None,
-            system_template: Some(ResolvedTomlPath::new_fake_path(
+    // Create dynamic variant config for the mutate function using new template format
+    let mut mutate_config = UninitializedChatCompletionConfig {
+        model: mutation_model.clone().into(),
+        weight: None,
+        ..Default::default()
+    };
+
+    // Populate templates.inner with the mutate function's templates
+    mutate_config.templates.inner.insert(
+        "system".to_string(),
+        UninitializedChatTemplate {
+            path: ResolvedTomlPath::new_fake_path(
                 "gepa/mutate/system.minijinja".to_string(),
                 include_str!("config/functions/mutate/baseline/system_template.minijinja")
                     .to_string(),
-            )),
-            user_template: Some(ResolvedTomlPath::new_fake_path(
+            ),
+        },
+    );
+    mutate_config.templates.inner.insert(
+        "user".to_string(),
+        UninitializedChatTemplate {
+            path: ResolvedTomlPath::new_fake_path(
                 "gepa/mutate/user.minijinja".to_string(),
                 include_str!("config/functions/mutate/baseline/user_template.minijinja")
                     .to_string(),
-            )),
-            assistant_template: None,
-            ..Default::default()
-        }),
+            ),
+        },
+    );
+
+    let mutate_variant_config = UninitializedVariantInfo {
+        inner: UninitializedVariantConfig::ChatCompletion(mutate_config),
         timeouts: None,
     };
 
@@ -622,12 +670,12 @@ mod tests {
         };
         use uuid::Uuid;
 
-        // Create valid JSON response with MutateOutput structure
+        // Create valid JSON response with MutateOutput structure (array format)
         let output_json = serde_json::json!({
-            "templates": {
-                "system": "Improved system template",
-                "user": "Improved user template"
-            }
+            "templates": [
+                {"name": "system", "content": "Improved system template"},
+                {"name": "user", "content": "Improved user template"}
+            ]
         });
 
         let json_response = JsonInferenceResponse {

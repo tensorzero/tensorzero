@@ -54,14 +54,15 @@ Read the message_templates, schemas, tools, and analyses above. Extract insights
 Return your improved templates in the following JSON format:
 
 {
-    "templates": {
-        {% for template_name in templates %}"{{template_name}}": "<your improved {{template_name}} template as a string>"{% if not loop.last %},
+    "templates": [
+        {% for template_name in templates %}{"name": "{{template_name}}", "content": "<your improved {{template_name}} template as a string>"}{% if not loop.last %},
         {% endif %}{% endfor %}
-    }
+    ]
 }
 
 Notes:
 - Return improved versions of ALL templates: {% for template_name in templates %}{{template_name}}{% if not loop.last %}, {% endif %}{% endfor %}
+- Each template must have a "name" and "content" field
 - Preserve variable placeholders exactly as they appear in the schemas
 - Ensure output format matches the required schema
 </task>

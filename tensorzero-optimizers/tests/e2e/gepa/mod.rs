@@ -158,8 +158,8 @@ pub fn create_test_gepa_config() -> GEPAConfig {
         batch_size: 5,
         max_iterations: 1,
         max_concurrency: 10,
-        analysis_model: "dummy::echo_request_messages".to_string(),
-        mutation_model: "dummy::echo_request_messages".to_string(),
+        analysis_model: "openai::gpt-4.1-nano".to_string(),
+        mutation_model: "openai::gpt-4.1-nano".to_string(),
         seed: Some(42),
         timeout: 300,
     }
@@ -244,6 +244,8 @@ pub fn create_test_inference_with_analysis(
 
     InferenceWithAnalysis {
         inference_output,
-        analysis: analysis_text.to_string(),
+        analysis: vec![ContentBlockChatOutput::Text(Text {
+            text: analysis_text.to_string(),
+        })],
     }
 }

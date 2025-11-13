@@ -264,15 +264,28 @@ fn get_gepa_mutate_function() -> Result<Arc<FunctionConfig>, Error> {
     let schemas = SchemaData { inner };
 
     // Define output schema inline
+    // Note: Using array format instead of additionalProperties to support OpenAI strict mode
     let output_schema_json = serde_json::json!({
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
         "properties": {
             "templates": {
-                "type": "object",
-                "description": "Map of template names to improved template contents",
-                "additionalProperties": {
-                    "type": "string"
+                "type": "array",
+                "description": "Array of improved templates with their names",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "The template name (e.g., 'system', 'user', 'assistant')"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "The improved template content"
+                        }
+                    },
+                    "required": ["name", "content"],
+                    "additionalProperties": false
                 }
             }
         },

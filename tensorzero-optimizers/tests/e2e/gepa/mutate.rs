@@ -49,6 +49,7 @@ async fn test_mutate_templates_success() {
     );
     template_map.insert("user".to_string(), "User: {{input}}".to_string());
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
+    let gepa_config = create_test_gepa_config();
 
     // Execute: Call mutate_templates
     let result = mutate_templates(
@@ -56,13 +57,14 @@ async fn test_mutate_templates_success() {
         &analyses,
         &function_config,
         &variant_config,
-        "dummy::echo_request_messages",
+        &gepa_config,
     )
     .await;
 
     // Assert: Should succeed
-    assert!(result.is_ok(), "mutate_templates should succeed");
-    let mutate_output = result.unwrap();
+    let mutate_output = result.unwrap_or_else(|e| {
+        panic!("mutate_templates should succeed but got error: {e}");
+    });
 
     // Verify templates HashMap is non-empty
     assert!(
@@ -96,6 +98,7 @@ async fn test_mutate_templates_single_analysis() {
         "You are a test assistant.".to_string(),
     );
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
+    let gepa_config = create_test_gepa_config();
 
     // Execute
     let result = mutate_templates(
@@ -103,16 +106,14 @@ async fn test_mutate_templates_single_analysis() {
         &analyses,
         &function_config,
         &variant_config,
-        "dummy::echo_request_messages",
+        &gepa_config,
     )
     .await;
 
     // Assert: Should still generate improved templates
-    assert!(
-        result.is_ok(),
-        "mutate_templates should succeed with single analysis"
-    );
-    let mutate_output = result.unwrap();
+    let mutate_output = result.unwrap_or_else(|e| {
+        panic!("mutate_templates should succeed with single analysis but got error: {e}");
+    });
     assert!(
         !mutate_output.templates.is_empty(),
         "Should generate templates even with single analysis"
@@ -133,6 +134,7 @@ async fn test_mutate_templates_empty_analyses() {
         "You are a helpful assistant.".to_string(),
     );
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
+    let gepa_config = create_test_gepa_config();
 
     // Execute: Should handle gracefully
     let result = mutate_templates(
@@ -140,14 +142,17 @@ async fn test_mutate_templates_empty_analyses() {
         &analyses,
         &function_config,
         &variant_config,
-        "dummy::echo_request_messages",
+        &gepa_config,
     )
     .await;
 
     // Assert: Should succeed (mutate can work with empty analyses, using templates as baseline)
+    let mutate_output = result.unwrap_or_else(|e| {
+        panic!("mutate_templates should handle empty analyses gracefully but got error: {e}");
+    });
     assert!(
-        result.is_ok(),
-        "mutate_templates should handle empty analyses gracefully"
+        !mutate_output.templates.is_empty(),
+        "Should return templates even with empty analyses"
     );
 }
 
@@ -174,13 +179,17 @@ async fn test_mutate_templates_invalid_model() {
     );
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
 
+    // Create config with invalid model
+    let mut gepa_config = create_test_gepa_config();
+    gepa_config.mutation_model = "invalid_provider::nonexistent_model".to_string();
+
     // Execute: Call with invalid model
     let result = mutate_templates(
         &client,
         &analyses,
         &function_config,
         &variant_config,
-        "invalid_provider::nonexistent_model",
+        &gepa_config,
     )
     .await;
 
@@ -224,6 +233,7 @@ async fn test_mutate_templates_with_schemas() {
     );
     template_map.insert("user".to_string(), "Greet {{name}}".to_string());
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
+    let gepa_config = create_test_gepa_config();
 
     // Execute: Should handle schemas correctly
     let result = mutate_templates(
@@ -231,13 +241,14 @@ async fn test_mutate_templates_with_schemas() {
         &analyses,
         &function_config,
         &variant_config,
-        "dummy::echo_request_messages",
+        &gepa_config,
     )
     .await;
 
     // Assert: Should succeed with schemas present
-    assert!(result.is_ok(), "mutate_templates should work with schemas");
-    let mutate_output = result.unwrap();
+    let mutate_output = result.unwrap_or_else(|e| {
+        panic!("mutate_templates should work with schemas but got error: {e}");
+    });
     assert!(
         !mutate_output.templates.is_empty(),
         "Should generate templates with schemas"
@@ -294,16 +305,14 @@ async fn test_mutate_templates_end_to_end() {
         &analyses,
         &function_config,
         &variant_config,
-        "dummy::echo_request_messages",
+        &gepa_config,
     )
     .await;
 
     // Assert: Complete flow should work
-    assert!(
-        result.is_ok(),
-        "mutate_templates should succeed in end-to-end pipeline"
-    );
-    let mutate_output = result.unwrap();
+    let mutate_output = result.unwrap_or_else(|e| {
+        panic!("mutate_templates should succeed in end-to-end pipeline but got error: {e}");
+    });
     assert!(
         !mutate_output.templates.is_empty(),
         "Should generate mutated templates from analyses"
@@ -333,6 +342,7 @@ async fn test_mutate_templates_preserves_template_names() {
     template_map.insert("custom".to_string(), "Custom template content".to_string());
 
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
+    let gepa_config = create_test_gepa_config();
 
     // Execute
     let result = mutate_templates(
@@ -340,13 +350,14 @@ async fn test_mutate_templates_preserves_template_names() {
         &analyses,
         &function_config,
         &variant_config,
-        "dummy::echo_request_messages",
+        &gepa_config,
     )
     .await;
 
     // Assert: Should preserve template names
-    assert!(result.is_ok(), "mutate_templates should succeed");
-    let mutate_output = result.unwrap();
+    let mutate_output = result.unwrap_or_else(|e| {
+        panic!("mutate_templates should succeed but got error: {e}");
+    });
 
     // Note: The dummy model may or may not preserve all template names exactly
     // but it should return at least some templates
@@ -396,6 +407,7 @@ async fn test_mutate_templates_with_new_template_format() {
     );
 
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
+    let gepa_config = create_test_gepa_config();
 
     // Verify variant config is using new format
     assert!(
@@ -421,16 +433,14 @@ async fn test_mutate_templates_with_new_template_format() {
         &analyses,
         &function_config,
         &variant_config,
-        "dummy::echo_request_messages",
+        &gepa_config,
     )
     .await;
 
     // Assert: Should work with new template format
-    assert!(
-        result.is_ok(),
-        "mutate_templates should work with new template format"
-    );
-    let mutate_output = result.unwrap();
+    let mutate_output = result.unwrap_or_else(|e| {
+        panic!("mutate_templates should work with new template format but got error: {e}");
+    });
     assert!(
         !mutate_output.templates.is_empty(),
         "Should generate templates using new format"

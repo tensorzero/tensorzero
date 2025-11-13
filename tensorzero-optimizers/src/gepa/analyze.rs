@@ -45,8 +45,8 @@ fn serialize_to_value<T: serde::Serialize>(
 #[derive(Debug, Clone, Serialize)]
 pub struct InferenceWithAnalysis {
     pub inference_output: InferenceResponse,
-    /// Raw XML text output from the analyze function
-    pub analysis: String,
+    /// Content blocks from the analyze function response
+    pub analysis: Vec<ContentBlockChatOutput>,
 }
 
 /// Build the input JSON for the analyze function
@@ -127,34 +127,6 @@ pub fn build_analyze_input(
     map.insert("output".to_string(), json!(output));
 
     Ok(Arguments(map))
-}
-
-/// Extract raw XML text from the analyze function response
-///
-/// Returns XML feedback in one of three formats: `<report_error>`, `<report_improvement>`, or `<report_optimal>`.
-pub fn parse_analysis_response(response: &InferenceResponse) -> Result<String, Error> {
-    let InferenceResponse::Chat(chat_response) = response else {
-        return Err(Error::new(ErrorDetails::Inference {
-            message: "Expected Chat response from analyze function, got Json".into(),
-        }));
-    };
-
-    // Extract text content using idiomatic iterator approach
-    chat_response
-        .content
-        .iter()
-        .find_map(|block| {
-            if let ContentBlockChatOutput::Text(text) = block {
-                Some(text.text.clone())
-            } else {
-                None
-            }
-        })
-        .ok_or_else(|| {
-            Error::new(ErrorDetails::Inference {
-                message: "No text content found in analyze response".into(),
-            })
-        })
 }
 
 /// Analyze inference outputs using the GEPA analyze function
@@ -288,8 +260,16 @@ pub async fn analyze_inferences(
                     }
                 };
 
-                // Parse the analysis from the response
-                let analysis = parse_analysis_response(&response)?;
+                // Extract content blocks from the response
+                let analysis = match &response {
+                    InferenceResponse::Chat(chat_response) => chat_response.content.clone(),
+                    InferenceResponse::Json(_) => {
+                        return Err(Error::new(ErrorDetails::Inference {
+                            message: "Expected Chat response from analyze function, got Json"
+                                .into(),
+                        }))
+                    }
+                };
 
                 // Log progress every 10 analyses
                 if (index + 1) % 10 == 0 {
@@ -372,10 +352,10 @@ mod tests {
         config::{path::ResolvedTomlPath, SchemaData},
         endpoints::{
             datasets::{StoredChatInferenceDatapoint, StoredDatapoint},
-            inference::{ChatInferenceResponse, InferenceResponse, JsonInferenceResponse},
+            inference::{ChatInferenceResponse, InferenceResponse},
         },
         function::{FunctionConfig, FunctionConfigChat},
-        inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput, Text, Usage},
+        inference::types::{ContentBlockChatOutput, Input, Text, Usage},
         jsonschema_util::{SchemaWithMetadata, StaticJSONSchema},
     };
     use uuid::Uuid;
@@ -457,35 +437,6 @@ mod tests {
             content: vec![ContentBlockChatOutput::Text(Text {
                 text: text.to_string(),
             })],
-            usage: Usage::default(),
-            original_response: None,
-            finish_reason: None,
-        })
-    }
-
-    /// Create a test Chat InferenceResponse with no text content
-    fn create_test_chat_inference_response_empty() -> InferenceResponse {
-        InferenceResponse::Chat(ChatInferenceResponse {
-            inference_id: Uuid::now_v7(),
-            episode_id: Uuid::now_v7(),
-            variant_name: "test_variant".to_string(),
-            content: vec![],
-            usage: Usage::default(),
-            original_response: None,
-            finish_reason: None,
-        })
-    }
-
-    /// Create a test Json InferenceResponse
-    fn create_test_json_inference_response() -> InferenceResponse {
-        InferenceResponse::Json(JsonInferenceResponse {
-            inference_id: Uuid::now_v7(),
-            episode_id: Uuid::now_v7(),
-            variant_name: "test_variant".to_string(),
-            output: JsonInferenceOutput {
-                raw: Some(r#"{"result": "test"}"#.to_string()),
-                parsed: Some(json!({"result": "test"})),
-            },
             usage: Usage::default(),
             original_response: None,
             finish_reason: None,
@@ -575,84 +526,6 @@ mod tests {
         let value = result.unwrap();
         assert_eq!(value["nested"]["field"], "value");
         assert_eq!(value["array"][0], 1);
-    }
-
-    // ============================================================================
-    // Unit Tests for parse_analysis_response
-    // ============================================================================
-
-    #[test]
-    fn test_parse_analysis_response_success() {
-        let response = create_test_chat_inference_response(
-            "Analysis: <report_error>Test error</report_error>",
-        );
-        let result = parse_analysis_response(&response);
-
-        assert!(result.is_ok());
-        let analysis = result.unwrap();
-        assert!(analysis.contains("Test error"));
-        assert!(analysis.contains("report_error"));
-    }
-
-    #[test]
-    fn test_parse_analysis_response_multiple_blocks() {
-        let response = InferenceResponse::Chat(ChatInferenceResponse {
-            inference_id: Uuid::now_v7(),
-            episode_id: Uuid::now_v7(),
-            variant_name: "test_variant".to_string(),
-            content: vec![
-                ContentBlockChatOutput::Text(Text {
-                    text: "First text block".to_string(),
-                }),
-                ContentBlockChatOutput::Text(Text {
-                    text: "Second text block".to_string(),
-                }),
-            ],
-            usage: Usage::default(),
-            original_response: None,
-            finish_reason: None,
-        });
-
-        let result = parse_analysis_response(&response);
-        assert!(result.is_ok());
-        // Should return the first text block
-        assert_eq!(result.unwrap(), "First text block");
-    }
-
-    #[test]
-    fn test_parse_analysis_response_json_error() {
-        let response = create_test_json_inference_response();
-        let result = parse_analysis_response(&response);
-
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error.to_string().contains("Expected Chat response"));
-    }
-
-    #[test]
-    fn test_parse_analysis_response_no_text_content() {
-        let response = create_test_chat_inference_response_empty();
-        let result = parse_analysis_response(&response);
-
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        assert!(error.to_string().contains("No text content found"));
-    }
-
-    #[test]
-    fn test_parse_analysis_response_empty_content() {
-        let response = InferenceResponse::Chat(ChatInferenceResponse {
-            inference_id: Uuid::now_v7(),
-            episode_id: Uuid::now_v7(),
-            variant_name: "test_variant".to_string(),
-            content: vec![],
-            usage: Usage::default(),
-            original_response: None,
-            finish_reason: None,
-        });
-
-        let result = parse_analysis_response(&response);
-        assert!(result.is_err());
     }
 
     // ============================================================================
