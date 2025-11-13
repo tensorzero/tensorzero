@@ -143,7 +143,7 @@ impl Default for TensorzeroHttpClient {
 }
 
 impl TensorzeroHttpClient {
-    #[cfg(any(test, feature = "e2e_tests"))]
+    #[cfg(any(test, feature = "e2e_tests", feature = "pyo3"))]
     pub fn new_testing() -> Result<Self, Error> {
         Self::new(DEFAULT_HTTP_CLIENT_TIMEOUT)
     }
