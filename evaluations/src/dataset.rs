@@ -7,12 +7,13 @@ use tensorzero_core::endpoints::datasets::{
 use tensorzero_core::{db::clickhouse::ClickHouseConnectionInfo, function::FunctionConfig};
 use tracing::{debug, info, instrument};
 
-#[instrument(skip_all, fields(dataset_name = %dataset_name, function_name = %function_name))]
+#[instrument(skip_all, fields(dataset_name = %dataset_name, function_name = %function_name, limit = ?limit))]
 pub async fn query_dataset(
     clickhouse_client: &ClickHouseConnectionInfo,
     dataset_name: &str,
     function_name: &str,
     function_config: &FunctionConfig,
+    limit: Option<usize>,
 ) -> Result<Vec<StoredDatapoint>> {
     let table_name = match function_config {
         FunctionConfig::Chat(_) => "ChatInferenceDatapoint",
@@ -21,17 +22,39 @@ pub async fn query_dataset(
     debug!(table_name = %table_name, "Determined table name for function type");
 
     // Construct the query to fetch datapoints from the appropriate table
-    let query = r"SELECT * FROM {table_name: Identifier} FINAL
+    let query = if let Some(limit_value) = limit {
+        debug!(limit = limit_value, "Applying LIMIT to dataset query");
+        r"SELECT * FROM {table_name: Identifier} FINAL
          WHERE dataset_name = {dataset_name: String}
          AND function_name = {function_name: String}
          AND staled_at IS NULL
-         FORMAT JSON";
+         LIMIT {limit: UInt64}
+         FORMAT JSON"
+    } else {
+        r"SELECT * FROM {table_name: Identifier} FINAL
+         WHERE dataset_name = {dataset_name: String}
+         AND function_name = {function_name: String}
+         AND staled_at IS NULL
+         FORMAT JSON"
+    };
 
-    let params = HashMap::from([
-        ("table_name", table_name),
-        ("dataset_name", dataset_name),
-        ("function_name", function_name),
-    ]);
+    // Need to bind limit_str to extend its lifetime beyond the HashMap creation
+    let limit_str;
+    let params = if let Some(limit_value) = limit {
+        limit_str = limit_value.to_string();
+        HashMap::from([
+            ("table_name", table_name),
+            ("dataset_name", dataset_name),
+            ("function_name", function_name),
+            ("limit", limit_str.as_str()),
+        ])
+    } else {
+        HashMap::from([
+            ("table_name", table_name),
+            ("dataset_name", dataset_name),
+            ("function_name", function_name),
+        ])
+    };
 
     debug!(query = %query, "Executing ClickHouse query");
     let result = clickhouse_client

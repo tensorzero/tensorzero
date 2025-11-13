@@ -1,19 +1,22 @@
 #![recursion_limit = "256"]
 use std::io::Write;
 use std::sync::Arc;
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use dataset::query_dataset;
-use evaluators::{evaluate_inference, EvaluateInferenceParams};
+use evaluators::{evaluate_inference, evaluate_inference_selective, EvaluateInferenceParams};
 use helpers::{get_cache_options, get_tool_params_args};
 use serde::{Deserialize, Serialize};
 
 // Public re-exports for external consumers
 pub use stats::{
     mean, std_deviation, EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate,
-    EvaluatorStats,
+    EvaluatorStats, PerEvaluatorStats,
 };
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{
@@ -88,6 +91,55 @@ pub struct Args {
 
     #[arg(long, default_value = "on")]
     pub inference_cache: CacheEnabledMode,
+}
+
+/// Stopping configuration for adaptive evaluation
+#[derive(Debug, Clone)]
+pub struct StoppingConfig {
+    /// Budget B: maximum number of inferences to run
+    /// If None, run all datapoints in the dataset (up to dataset size)
+    pub budget: Option<usize>,
+
+    /// Per-evaluator CI half-width thresholds (epsilon_k)
+    /// Key: evaluator name, Value: epsilon_k
+    /// Stopping condition for evaluator k: CI half-width <= epsilon_k (equivalently, CI width <= 2 * epsilon_k)
+    /// Only evaluators in this map have stopping conditions
+    /// Evaluators not in this map will run on all datapoints (up to budget)
+    pub epsilon: HashMap<String, f32>,
+}
+
+impl StoppingConfig {
+    /// No stopping conditions - run entire dataset
+    pub fn no_stopping() -> Self {
+        Self {
+            budget: None,
+            epsilon: HashMap::new(),
+        }
+    }
+
+    /// Budget only - run at most B inferences
+    pub fn budget_only(budget: usize) -> Self {
+        Self {
+            budget: Some(budget),
+            epsilon: HashMap::new(),
+        }
+    }
+
+    /// Epsilon only - stop each evaluator when CI is narrow enough
+    pub fn epsilon_only(epsilon: HashMap<String, f32>) -> Self {
+        Self {
+            budget: None,
+            epsilon,
+        }
+    }
+
+    /// Both budget and epsilon
+    pub fn budget_and_epsilon(budget: usize, epsilon: HashMap<String, f32>) -> Self {
+        Self {
+            budget: Some(budget),
+            epsilon,
+        }
+    }
 }
 
 pub struct Clients {
@@ -391,6 +443,7 @@ pub async fn run_evaluation_core_streaming(
         &args.dataset_name,
         &inference_evaluation_config.function_name,
         &function_config,
+        None, // No limit - load entire dataset
     )
     .await?;
     info!(dataset_size = dataset.len(), "Dataset loaded successfully");
@@ -514,6 +567,405 @@ pub async fn run_evaluation_core_streaming(
         receiver,
         run_info,
         evaluation_config: evaluators,
+    })
+}
+
+/// Core streaming evaluation function with adaptive stopping conditions.
+///
+/// This function runs an evaluation with the ability to stop evaluators independently based on
+/// confidence interval convergence criteria.
+///
+/// ## Stopping Conditions
+///
+/// - **Budget B**: If provided, limits the total number of inferences to at most B
+/// - **Epsilon (ε_k)**: Per-evaluator CI half-width thresholds. Evaluator k stops when CI half-width ≤ ε_k
+/// - Evaluators without epsilon values run on all datapoints (up to budget)
+/// - Stops spawning new inferences when all evaluators with stopping conditions have converged
+///
+/// ## How it works
+///
+/// 1. Loads dataset, truncating to budget B if provided
+/// 2. Spawns initial batch of evaluation tasks (up to concurrency limit)
+/// 3. As tasks complete:
+///    - Collects results and updates per-evaluator statistics
+///    - Checks stopping conditions for each evaluator with epsilon
+///    - Stops evaluators that have met their CI threshold
+///    - Spawns new tasks with only active evaluators
+/// 4. Stops spawning when all stoppable evaluators have converged
+/// 5. Waits for in-flight tasks to complete
+///
+/// ## Return value
+///
+/// Returns `EvaluationStreamResult` containing:
+/// - `receiver`: Channel receiver for consuming `EvaluationUpdate` messages
+/// - `run_info`: Metadata (evaluation_run_id, num_datapoints)
+/// - `evaluation_config`: The evaluation configuration
+#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant = ?args.variant, concurrency = %args.concurrency))]
+pub async fn run_evaluation_core_streaming_with_adaptive_stopping(
+    args: EvaluationCoreArgs,
+    stopping_config: StoppingConfig,
+) -> Result<EvaluationStreamResult> {
+    use stats::PerEvaluatorStats;
+
+    let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
+
+    // Setup
+    let semaphore = Semaphore::new(args.concurrency);
+    let clients = Arc::new(Clients {
+        tensorzero_client: ThrottledTensorZeroClient::new(args.tensorzero_client, semaphore),
+        clickhouse_client: args.clickhouse_client,
+    });
+
+    let evaluation_config = args
+        .config
+        .evaluations
+        .get(&args.evaluation_name)
+        .ok_or_else(|| anyhow!("evaluation '{}' not found", args.evaluation_name))?
+        .clone();
+
+    debug!(evaluation_name = %args.evaluation_name, "Evaluation config found");
+
+    let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
+    let function_config = args
+        .config
+        .get_function(&inference_evaluation_config.function_name)?
+        .into_owned();
+
+    info!(
+        function_name = %inference_evaluation_config.function_name,
+        evaluators = ?inference_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
+        "Function and evaluators configured"
+    );
+
+    // Load dataset with optional budget limit
+    info!("Querying dataset");
+    let dataset = query_dataset(
+        &clients.clickhouse_client,
+        &args.dataset_name,
+        &inference_evaluation_config.function_name,
+        &function_config,
+        stopping_config.budget,
+    )
+    .await?;
+
+    let total_dataset_size = dataset.len();
+    info!(
+        dataset_size = total_dataset_size,
+        budget = ?stopping_config.budget,
+        "Dataset loaded successfully"
+    );
+
+    // Determine which evaluators have stopping conditions
+    // Evaluators WITH epsilon_k: can stop early
+    // Evaluators WITHOUT epsilon_k: must run on all datapoints (up to budget)
+    let evaluators_with_stopping: HashSet<String> =
+        stopping_config.epsilon.keys().cloned().collect();
+
+    let evaluators_without_stopping: HashSet<String> = inference_evaluation_config
+        .evaluators
+        .keys()
+        .filter(|name| !evaluators_with_stopping.contains(*name))
+        .cloned()
+        .collect();
+
+    info!(
+        evaluators_with_stopping = ?evaluators_with_stopping,
+        evaluators_without_stopping = ?evaluators_without_stopping,
+        "Initialized evaluator stopping conditions"
+    );
+
+    // Track which evaluators with stopping conditions are still active
+    let mut active_stoppable_evaluators: HashSet<String> = evaluators_with_stopping.clone();
+
+    // Track per-evaluator statistics (only for evaluators with stopping conditions)
+    let mut evaluator_stats: HashMap<String, PerEvaluatorStats> = evaluators_with_stopping
+        .iter()
+        .map(|name| (name.clone(), PerEvaluatorStats::new()))
+        .collect();
+
+    let mut join_set = JoinSet::new();
+    let mut datapoint_iter = dataset.into_iter();
+    let mut inferences_completed = 0;
+    let mut task_id_to_datapoint_id = HashMap::new();
+
+    let dataset_name = Arc::new(args.dataset_name);
+    let variant = Arc::new(args.variant);
+    let evaluation_name = Arc::new(args.evaluation_name);
+    let evaluation_run_id = args.evaluation_run_id;
+    let inference_cache = args.inference_cache;
+
+    let run_info = RunInfo {
+        evaluation_run_id,
+        num_datapoints: total_dataset_size,
+    };
+
+    // Send the run info as the first message
+    if sender
+        .send(EvaluationUpdate::RunInfo(run_info.clone()))
+        .await
+        .is_err()
+    {
+        tracing::warn!("Failed to send RunInfo: receiver dropped before evaluation started");
+    }
+
+    // Helper to determine which evaluators should run
+    let get_active_evaluators = |active_stoppable: &HashSet<String>,
+                                 without_stopping: &HashSet<String>|
+     -> HashSet<String> {
+        // Union of: evaluators without stopping + active stoppable evaluators
+        active_stoppable.union(without_stopping).cloned().collect()
+    };
+
+    // Helper function to spawn a task for one datapoint
+    let spawn_task = |join_set: &mut JoinSet<_>,
+                      datapoint: StoredDatapoint,
+                      active_evaluators: HashSet<String>| {
+        let clients_clone = clients.clone();
+        let variant = variant.clone();
+        let function_config = function_config.clone();
+        let evaluation_config = evaluation_config.clone();
+        let dataset_name = dataset_name.clone();
+        let function_name = inference_evaluation_config.function_name.clone();
+        let evaluation_name = evaluation_name.clone();
+        let datapoint = Arc::new(datapoint);
+        let datapoint_id = datapoint.id();
+        // Skip feedback for dynamic variants (they're not production-ready)
+        // Named variants: send_feedback=true, Dynamic variants: send_feedback=false
+        let send_feedback = !matches!(variant.as_ref(), EvaluationVariant::Info(_));
+
+        let abort_handle = join_set.spawn(async move {
+            // Run inference
+            let input = Arc::new(resolved_input_to_client_input(
+                datapoint
+                    .input()
+                    .clone()
+                    .reresolve(&clients_clone.tensorzero_client)
+                    .await?,
+            )?);
+
+            let inference_response = Arc::new(
+                infer_datapoint(InferDatapointParams {
+                    clients: &clients_clone,
+                    function_name: &function_name,
+                    variant: &variant,
+                    evaluation_run_id,
+                    dataset_name: &dataset_name,
+                    datapoint: &datapoint,
+                    evaluation_name: &evaluation_name,
+                    function_config: &function_config,
+                    input: &input,
+                    inference_cache,
+                })
+                .await
+                .map_err(|e| anyhow!("Error inferring for datapoint {datapoint_id}: {e}"))?,
+            );
+
+            let inference_id = inference_response.inference_id();
+            // Run only active evaluators
+            let evaluation_result = evaluate_inference_selective(
+                EvaluateInferenceParams {
+                    inference_response: inference_response.clone(),
+                    datapoint: datapoint.clone(),
+                    input,
+                    evaluation_config,
+                    evaluation_name,
+                    clients: clients_clone.clone(),
+                    evaluation_run_id,
+                    inference_cache,
+                    send_feedback,
+                },
+                &active_evaluators,
+            )
+            .await
+            .map_err(|e| {
+                anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}")
+            })?;
+
+            debug!(
+                datapoint_id = %datapoint.id(),
+                evaluations_count = evaluation_result.len(),
+                "Evaluations completed"
+            );
+
+            Ok::<(StoredDatapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
+                Arc::into_inner(datapoint).ok_or_else(|| {
+                    anyhow!("Failed to get datapoint for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports.")
+                })?,
+                Arc::into_inner(inference_response).ok_or_else(|| {
+                    anyhow!("Failed to get inference response for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports.")
+                })?,
+                evaluation_result,
+            ))
+        });
+
+        (abort_handle, datapoint_id)
+    };
+
+    // Spawn initial batch (up to concurrency limit)
+    let initial_active =
+        get_active_evaluators(&active_stoppable_evaluators, &evaluators_without_stopping);
+    for _ in 0..args.concurrency {
+        if let Some(datapoint) = datapoint_iter.next() {
+            let (abort_handle, datapoint_id) =
+                spawn_task(&mut join_set, datapoint, initial_active.clone());
+            task_id_to_datapoint_id.insert(abort_handle.id(), datapoint_id);
+        } else {
+            break;
+        }
+    }
+
+    // Main collection loop
+    while let Some(result) = join_set.join_next_with_id().await {
+        inferences_completed += 1;
+
+        // Process result
+        let update = match result {
+            Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
+                // Update statistics for evaluators with stopping conditions
+                for (evaluator_name, eval_result) in &evaluation_result {
+                    // Only track stats for evaluators that have stopping conditions
+                    if let Some(stats) = evaluator_stats.get_mut(evaluator_name) {
+                        match eval_result {
+                            Ok(Some(serde_json::Value::Number(n))) => {
+                                if let Some(value) = n.as_f64() {
+                                    stats.push(value as f32);
+                                }
+                            }
+                            Ok(Some(serde_json::Value::Bool(b))) => {
+                                stats.push(if *b { 1.0 } else { 0.0 });
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                EvaluationUpdate::Success(EvaluationInfo::new(
+                    datapoint,
+                    inference_response,
+                    evaluation_result,
+                ))
+            }
+            Ok((task_id, Err(e))) => {
+                tracing::warn!("Task error: {}", e);
+                EvaluationUpdate::Error(EvaluationError {
+                    datapoint_id: task_id_to_datapoint_id[&task_id],
+                    message: e.to_string(),
+                })
+            }
+            Err(e) => EvaluationUpdate::Error(EvaluationError {
+                datapoint_id: task_id_to_datapoint_id[&e.id()],
+                message: e.to_string(),
+            }),
+        };
+
+        // Send update
+        if sender.send(update).await.is_err() {
+            // Receiver dropped
+            break;
+        }
+
+        // Check stopping conditions for stoppable evaluators
+        let mut newly_stopped_evaluators = Vec::new();
+
+        for evaluator_name in &active_stoppable_evaluators {
+            let Some(stats) = evaluator_stats.get(evaluator_name) else {
+                error!(
+                    evaluator_name = %evaluator_name,
+                    "Stats missing for active stoppable evaluator. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."
+                );
+                continue;
+            };
+            let Some(epsilon_k) = stopping_config.epsilon.get(evaluator_name) else {
+                error!(
+                    evaluator_name = %evaluator_name,
+                    "Epsilon missing for active stoppable evaluator. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."
+                );
+                continue;
+            };
+
+            // Check if CI half-width is <= epsilon_k
+            if let Some(ci_half_width) = stats.ci_half_width() {
+                if ci_half_width <= *epsilon_k {
+                    info!(
+                        evaluator_name = %evaluator_name,
+                        ci_half_width = ci_half_width,
+                        epsilon_k = epsilon_k,
+                        count = stats.count(),
+                        mean = ?stats.mean(),
+                        "Stopping evaluator: CI half-width <= epsilon_k"
+                    );
+                    newly_stopped_evaluators.push(evaluator_name.clone());
+                }
+            }
+        }
+
+        // Remove stopped evaluators from active set
+        for evaluator_name in newly_stopped_evaluators {
+            active_stoppable_evaluators.remove(&evaluator_name);
+        }
+
+        // Determine if we should stop spawning new inferences
+        // Stop if: all stoppable evaluators have stopped (and there are no non-stoppable evaluators)
+        let should_stop_spawning =
+            active_stoppable_evaluators.is_empty() && evaluators_without_stopping.is_empty();
+
+        if should_stop_spawning {
+            info!(
+                inferences_completed = inferences_completed,
+                "Stopping evaluation: all evaluators with stopping conditions have converged"
+            );
+
+            // Don't abort in-flight tasks, just stop spawning new ones
+            // Let remaining tasks complete naturally
+            break;
+        }
+
+        // Spawn next task if there are still datapoints
+        if let Some(datapoint) = datapoint_iter.next() {
+            let current_active =
+                get_active_evaluators(&active_stoppable_evaluators, &evaluators_without_stopping);
+            let (abort_handle, datapoint_id) = spawn_task(&mut join_set, datapoint, current_active);
+            task_id_to_datapoint_id.insert(abort_handle.id(), datapoint_id);
+        }
+    }
+
+    // Wait for any remaining in-flight tasks to complete
+    while let Some(result) = join_set.join_next_with_id().await {
+        inferences_completed += 1;
+
+        let update = match result {
+            Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
+                EvaluationUpdate::Success(EvaluationInfo::new(
+                    datapoint,
+                    inference_response,
+                    evaluation_result,
+                ))
+            }
+            Ok((task_id, Err(e))) => {
+                tracing::warn!("Task error: {}", e);
+                EvaluationUpdate::Error(EvaluationError {
+                    datapoint_id: task_id_to_datapoint_id[&task_id],
+                    message: e.to_string(),
+                })
+            }
+            Err(e) => EvaluationUpdate::Error(EvaluationError {
+                datapoint_id: task_id_to_datapoint_id[&e.id()],
+                message: e.to_string(),
+            }),
+        };
+
+        sender.send(update).await.ok();
+    }
+
+    info!(
+        total_inferences = inferences_completed,
+        "Evaluation completed"
+    );
+
+    Ok(EvaluationStreamResult {
+        receiver,
+        run_info,
+        evaluation_config,
     })
 }
 

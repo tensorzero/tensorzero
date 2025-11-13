@@ -249,3 +249,53 @@ pub fn std_deviation(data: &[f32]) -> Option<f32> {
         _ => None,
     }
 }
+
+/// Tracks statistics for a single evaluator during adaptive evaluation
+/// Used for computing stopping conditions based on confidence intervals
+#[derive(Default)]
+pub struct PerEvaluatorStats {
+    values: Vec<f32>,
+}
+
+impl PerEvaluatorStats {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn push(&mut self, value: f32) {
+        self.values.push(value);
+    }
+
+    pub fn count(&self) -> usize {
+        self.values.len()
+    }
+
+    pub fn mean(&self) -> Option<f32> {
+        mean(&self.values)
+    }
+
+    pub fn stderr(&self) -> Option<f32> {
+        if self.values.len() < 2 {
+            return None;
+        }
+
+        let data_mean = self.mean()?;
+        let variance = self
+            .values
+            .iter()
+            .map(|value| {
+                let diff = data_mean - (*value);
+                diff * diff
+            })
+            .sum::<f32>()
+            / self.values.len() as f32;
+
+        Some(variance.sqrt() / (self.values.len() as f32).sqrt())
+    }
+
+    /// Returns the 95% confidence interval half-width (1.96 * stderr)
+    /// The full CI width is 2 * ci_half_width()
+    pub fn ci_half_width(&self) -> Option<f32> {
+        self.stderr().map(|se| 1.96 * se)
+    }
+}

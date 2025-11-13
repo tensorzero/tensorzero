@@ -2209,6 +2209,7 @@ async fn test_query_skips_staled_datapoints() {
         &dataset_name,
         "extract_entities",
         &FunctionConfig::Json(FunctionConfigJson::default()),
+        None, // No limit
     )
     .await
     .unwrap();
