@@ -45,7 +45,9 @@ pub struct EvaluateInferenceParams {
 #[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), evaluation_name = %params.evaluation_name))]
 pub(crate) async fn evaluate_inference(
     params: EvaluateInferenceParams,
-    active_evaluators: Option<&std::collections::HashSet<String>>,
+    cancellation_tokens: Option<
+        &std::collections::HashMap<String, tokio_util::sync::CancellationToken>,
+    >,
 ) -> Result<EvaluationResult> {
     let EvaluateInferenceParams {
         inference_response,
@@ -60,11 +62,16 @@ pub(crate) async fn evaluate_inference(
     } = params;
     let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
 
-    // Filter evaluators if active_evaluators is provided
+    // Filter evaluators based on cancellation tokens (if provided)
     let evaluators_to_run: Vec<_> = inference_evaluation_config
         .evaluators
         .keys()
-        .filter(|name| active_evaluators.is_none_or(|active_set| active_set.contains(*name)))
+        .filter(|name| {
+            // If no cancellation tokens provided, run all evaluators
+            // Otherwise, only run evaluators whose tokens are not cancelled
+            cancellation_tokens
+                .is_none_or(|tokens| tokens.get(*name).is_none_or(|token| !token.is_cancelled()))
+        })
         .collect();
 
     info!(

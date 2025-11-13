@@ -1809,6 +1809,7 @@ dependencies = [
  "serde_json",
  "tensorzero-core",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "url",

@@ -1376,10 +1376,10 @@ impl TensorZeroGateway {
         };
 
         let result =
-            tokio_block_on_without_gil(this.py(), run_evaluation_core_streaming(core_args))
+            tokio_block_on_without_gil(this.py(), run_evaluation_core_streaming(core_args, None))
                 .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
-                })?;
+                pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
+            })?;
 
         Ok(EvaluationJobHandler {
             receiver: Mutex::new(result.receiver),
@@ -2482,7 +2482,7 @@ impl AsyncTensorZeroGateway {
                 inference_cache: inference_cache_enum,
             };
 
-            let result = run_evaluation_core_streaming(core_args)
+            let result = run_evaluation_core_streaming(core_args, None)
                 .await
                 .map_err(|e| {
                     pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))

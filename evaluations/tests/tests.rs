@@ -2297,7 +2297,7 @@ async fn test_evaluation_with_dynamic_variant() {
         concurrency: 2,
     };
 
-    let result = run_evaluation_core_streaming(core_args).await;
+    let result = run_evaluation_core_streaming(core_args, None).await;
     assert!(
         result.is_ok(),
         "Evaluation with dynamic variant should succeed"
