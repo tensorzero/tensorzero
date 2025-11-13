@@ -10,23 +10,13 @@
 {% endfor %}
 </message_templates>
 
-{% if system_schema or user_schema or assistant_schema %}
+{% if schemas %}
 <message_schemas>
-{% if system_schema %}
-<system_schema>
-{{system_schema | tojson(indent=2)}}
-</system_schema>
-{% endif %}
-{% if user_schema %}
-<user_schema>
-{{user_schema | tojson(indent=2)}}
-</user_schema>
-{% endif %}
-{% if assistant_schema %}
-<assistant_schema>
-{{assistant_schema | tojson(indent=2)}}
-</assistant_schema>
-{% endif %}
+{% for schema_name, schema_content in schemas.items() %}
+<schema name="{{schema_name}}">
+{{schema_content | tojson(indent=2)}}
+</schema>
+{% endfor %}
 </message_schemas>
 {% endif %}
 {% if output_schema %}

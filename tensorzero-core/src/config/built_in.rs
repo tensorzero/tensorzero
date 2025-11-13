@@ -130,17 +130,13 @@ fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
                 "type": ["object", "null"],
                 "description": "Optional reference JSON schema for the function output (if function type is json)"
             },
-            "system_schema": {
+            "schemas": {
                 "type": ["object", "null"],
-                "description": "Optional JSON schema specifying any arguments for the reference system template"
-            },
-            "user_schema": {
-                "type": ["object", "null"],
-                "description": "Optional JSON schema specifying any arguments for the reference user template"
-            },
-            "assistant_schema": {
-                "type": ["object", "null"],
-                "description": "Optional JSON schema specifying any arguments for the reference assistant template"
+                "description": "Optional map of schema names to their JSON schemas (e.g., 'system', 'user', 'assistant', or custom schema names)",
+                "additionalProperties": {
+                    "type": "object",
+                    "description": "JSON schema for the named template"
+                }
             },
             "tools": {
                 "type": ["object", "null"],
