@@ -115,7 +115,7 @@ impl UninitializedModelConfig {
                             .load(
                                 provider_types,
                                 provider_type_default_credentials,
-                                http_client.clone(),
+                                http_client,
                             )
                             .await
                             .map_err(|e| {
