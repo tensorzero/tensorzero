@@ -29,11 +29,8 @@ retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max
 default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse) | test(db::))"
 junit.path = "junit.xml"
 
-[profile.live-batch]
-default-filter = 'test(batch) and not test(mock)'
-
-[profile.mock-batch]
-default-filter = 'test(batch) and test(mock)'
+[profile.batch]
+default-filter = 'test(batch)'
 
 [profile.clickhouse]
 default-filter = 'test(test_dummy_only) | test(clickhouse) | test(db::)'
@@ -102,7 +99,7 @@ test-group = 'clickhouse_migration'
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::vllm::)'
-# slow-timeout = { period = "60s", terminate-after = 2 }
+slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
 # Web search is very slow
@@ -118,7 +115,7 @@ slow-timeout = { period = "60s", terminate-after = 2 }
 filter = 'binary(e2e) and test(providers::sglang::)'
 # The model we run on SGLang often fails to emit valid tool calls, so we need many retries
 retries = { backoff = "fixed", count = 8, delay = "10s", jitter = true }
-# slow-timeout = { period = "60s", terminate-after = 2 }
+slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
 filter = 'test(test_concurrent_clickhouse_migrations)'
