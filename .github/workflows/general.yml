@@ -373,6 +373,9 @@ jobs:
           done
         shell: bash
 
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Build npm workspace
         run: pnpm -r build
 
