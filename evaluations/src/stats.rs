@@ -279,18 +279,7 @@ impl PerEvaluatorStats {
             return None;
         }
 
-        let data_mean = self.mean()?;
-        let variance = self
-            .values
-            .iter()
-            .map(|value| {
-                let diff = data_mean - (*value);
-                diff * diff
-            })
-            .sum::<f32>()
-            / self.values.len() as f32;
-
-        Some(variance.sqrt() / (self.values.len() as f32).sqrt())
+        std_deviation(&self.values).map(|std_dev| std_dev / (self.values.len() as f32).sqrt())
     }
 
     /// Returns the 95% confidence interval half-width (1.96 * stderr)
