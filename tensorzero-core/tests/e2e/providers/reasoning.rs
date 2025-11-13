@@ -1,7 +1,7 @@
 #![expect(clippy::print_stdout)]
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::E2ETestProvider;
-use crate::providers::helpers::get_extra_headers;
+use crate::providers::helpers::get_modal_extra_headers;
 use futures::StreamExt;
 use reqwest::Client;
 use reqwest::StatusCode;
@@ -14,12 +14,19 @@ use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
     select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
+use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use tensorzero_core::inference::types::ContentBlockOutput;
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage, Text};
 use uuid::Uuid;
 
 pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
+    let extra_headers =
+        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
+            get_modal_extra_headers()
+        } else {
+            UnfilteredInferenceExtraHeaders::default()
+        };
 
     let payload = json!({
         "function_name": "basic_test",
@@ -34,7 +41,7 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
                     "content": "What is the capital city of Japan?"
                 }
             ]},
-        "extra_headers": get_extra_headers(),
+        "extra_headers": extra_headers,
         "stream": false,
         "tags": {"foo": "bar"},
     });
@@ -262,6 +269,12 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
 
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
+    let extra_headers =
+        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
+            get_modal_extra_headers()
+        } else {
+            UnfilteredInferenceExtraHeaders::default()
+        };
 
     let payload = json!({
         "function_name": "basic_test",
@@ -277,7 +290,7 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
                 }
             ]},
         "stream": true,
-        "extra_headers": get_extra_headers(),
+        "extra_headers": extra_headers,
         "tags": {"key": tag_value},
     });
 
@@ -535,6 +548,12 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
 
 pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
+    let extra_headers =
+        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
+            get_modal_extra_headers()
+        } else {
+            UnfilteredInferenceExtraHeaders::default()
+        };
 
     let payload = json!({
         "function_name": "json_success",
@@ -550,7 +569,7 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
                 }
             ]},
         "stream": false,
-        "extra_headers": get_extra_headers(),
+        "extra_headers": extra_headers,
     });
 
     let response = Client::new()
@@ -746,6 +765,12 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
         return;
     }
     let episode_id = Uuid::now_v7();
+    let extra_headers =
+        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
+            get_modal_extra_headers()
+        } else {
+            UnfilteredInferenceExtraHeaders::default()
+        };
 
     let payload = json!({
         "function_name": "json_success",
@@ -761,7 +786,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
                 }
             ]},
         "stream": true,
-        "extra_headers": get_extra_headers(),
+        "extra_headers": extra_headers,
     });
 
     let mut event_source = Client::new()

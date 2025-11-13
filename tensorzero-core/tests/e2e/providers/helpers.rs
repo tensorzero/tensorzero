@@ -4,11 +4,10 @@ use tensorzero_core::inference::types::extra_headers::{
     ExtraHeaderKind, InferenceExtraHeader, UnfilteredInferenceExtraHeaders,
 };
 
-/// Our self-hosted providers require modal credentials to be
+/// Our self-hosted providers (vllm and sglang) require modal credentials to be
 /// passed as extra headers alongside other credentials.
-/// We can safely pass these in lots of places since they will be filtered
-/// out by model provider name for the places where it's not needed.
-pub fn get_extra_headers() -> UnfilteredInferenceExtraHeaders {
+/// Only call this function when testing vllm or sglang providers.
+pub fn get_modal_extra_headers() -> UnfilteredInferenceExtraHeaders {
     let mut extra_headers = Vec::new();
     if let Ok(modal_key) = env::var("MODAL_KEY") {
         extra_headers.push(InferenceExtraHeader::ModelProvider {
