@@ -18,7 +18,7 @@ use tensorzero_core::{
     endpoints::inference::InferenceResponse,
     error::{Error, ErrorDetails},
     function::FunctionConfig,
-    inference::types::{Role, TextKind},
+    inference::types::{Arguments, Role, Template},
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
@@ -33,12 +33,14 @@ pub struct MutateOutput {
     pub templates: HashMap<String, String>,
 }
 
-/// Build the input JSON for the mutate function
+/// Build the input Arguments for the mutate function
 pub fn build_mutate_input(
     analyses: &[InferenceWithAnalysis],
     function_config: &FunctionConfig,
     parent_variant_config: &UninitializedChatCompletionConfig,
-) -> Result<serde_json::Value, Error> {
+) -> Result<Arguments, Error> {
+    use serde_json::json;
+
     // Extract templates from variant_config.templates.inner (new format only)
     let templates_map: HashMap<String, String> = parent_variant_config
         .templates
@@ -76,7 +78,7 @@ pub fn build_mutate_input(
             if params.tools.is_empty() {
                 None
             } else {
-                Some(serde_json::json!(params.tools))
+                Some(json!(params.tools))
             }
         }
         FunctionConfig::Json(_) => None,
@@ -96,18 +98,26 @@ pub fn build_mutate_input(
         "unknown"
     };
 
-    // Build the input object
-    let input = serde_json::json!({
-        "function_name": function_name,
-        "model": parent_variant_config.model,
-        "templates": templates_map,
-        "schemas": if schemas_map.is_empty() { None } else { Some(schemas_map) },
-        "output_schema": output_schema,
-        "tools": tools,
-        "analyses": analyses_json,
-    });
+    // Build the input Arguments using Map pattern (matching analyze.rs)
+    let mut map = serde_json::Map::new();
+    map.insert("function_name".to_string(), json!(function_name));
+    map.insert(
+        "model".to_string(),
+        json!(parent_variant_config.model.as_ref()),
+    );
+    map.insert("templates".to_string(), json!(templates_map));
+    if !schemas_map.is_empty() {
+        map.insert("schemas".to_string(), json!(schemas_map));
+    }
+    if let Some(schema) = output_schema {
+        map.insert("output_schema".to_string(), schema);
+    }
+    if let Some(tools_value) = tools {
+        map.insert("tools".to_string(), tools_value);
+    }
+    map.insert("analyses".to_string(), analyses_json);
 
-    Ok(input)
+    Ok(Arguments(map))
 }
 
 /// Parse the mutate response and extract the MutateOutput
@@ -156,8 +166,8 @@ pub async fn mutate_templates(
         mutation_model
     );
 
-    // Build input JSON for the mutate function
-    let input_data = build_mutate_input(analyses, function_config, parent_variant_config)?;
+    // Build input Arguments for the mutate function
+    let arguments = build_mutate_input(analyses, function_config, parent_variant_config)?;
 
     // Create dynamic variant config for the mutate function
     let mutate_variant_config = UninitializedVariantInfo {
@@ -188,12 +198,9 @@ pub async fn mutate_templates(
         input: ClientInput {
             messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                    text: serde_json::to_string(&input_data).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!("Failed to serialize mutate input: {e}"),
-                        })
-                    })?,
+                content: vec![ClientInputMessageContent::Template(Template {
+                    name: "user".to_string(),
+                    arguments,
                 })],
             }],
             system: None,
@@ -201,7 +208,7 @@ pub async fn mutate_templates(
         stream: None,
         params: Default::default(),
         variant_name: None,
-        dryrun: None,
+        dryrun: Some(true),
         internal: true,
         tags: HashMap::new(),
         dynamic_tool_params: Default::default(),
