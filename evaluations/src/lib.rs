@@ -605,8 +605,6 @@ pub async fn run_evaluation_core_streaming_with_adaptive_stopping(
     args: EvaluationCoreArgs,
     stopping_config: StoppingConfig,
 ) -> Result<EvaluationStreamResult> {
-    use stats::PerEvaluatorStats;
-
     let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
 
     // Setup
