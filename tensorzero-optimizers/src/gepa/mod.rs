@@ -12,6 +12,9 @@ mod sample;
 mod utils;
 mod validate;
 
+// Re-export public functions for testing
+pub use analyze::analyze_inferences;
+
 use async_trait::async_trait;
 
 use tensorzero_core::{

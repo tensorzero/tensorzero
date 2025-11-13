@@ -77,3 +77,8 @@ required-features = ["e2e_tests"]
 name = "e2e_dicl"
 path = "tests/e2e/dicl.rs"
 required-features = ["e2e_tests"]
+
+[[test]]
+name = "e2e_gepa"
+path = "tests/e2e/gepa.rs"
+required-features = ["e2e_tests"]

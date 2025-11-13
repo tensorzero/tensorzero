@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use futures::future::join_all;
 use serde::Serialize;
+use serde_json::json;
 use tokio::sync::Semaphore;
 
 use tensorzero_core::{
@@ -21,7 +22,7 @@ use tensorzero_core::{
     endpoints::{datasets::StoredDatapoint, inference::InferenceResponse},
     error::{Error, ErrorDetails},
     function::FunctionConfig,
-    inference::types::{ContentBlockChatOutput, Role, TextKind},
+    inference::types::{Arguments, ContentBlockChatOutput, Role, Template},
     optimization::gepa::GEPAConfig,
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
@@ -34,15 +35,6 @@ fn serialize_to_value<T: serde::Serialize>(
     context: &str,
 ) -> Result<serde_json::Value, Error> {
     serde_json::to_value(value).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize {context}: {e}"),
-        })
-    })
-}
-
-/// Serialize values to JSON strings with contextual error messages
-fn serialize_to_string<T: serde::Serialize>(value: &T, context: &str) -> Result<String, Error> {
-    serde_json::to_string(value).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
             message: format!("Failed to serialize {context}: {e}"),
         })
@@ -65,12 +57,12 @@ pub struct InferenceWithAnalysis {
 /// * `variant_config` - Variant configuration (templates, model name)
 ///
 /// # Returns
-/// * JSON object containing function metadata, templates, schemas, and the input/output pair
+/// * Template arguments containing function metadata, templates, schemas, and the input/output pair
 pub fn build_analyze_input(
     eval_info: &EvaluationInfo,
     function_config: &FunctionConfig,
     variant_config: &UninitializedChatCompletionConfig,
-) -> Result<serde_json::Value, Error> {
+) -> Result<Arguments, Error> {
     // Extract all templates from templates.inner HashMap using idiomatic iterators
     let templates_map: HashMap<String, String> = variant_config
         .templates
@@ -122,20 +114,19 @@ pub fn build_analyze_input(
         StoredDatapoint::Json(dp) => &dp.function_name,
     };
 
-    // Build the input object
-    let input = serde_json::json!({
-        "function_name": function_name,
-        "model": variant_config.model.as_ref(),
-        "templates": templates_map,
-        "schemas": schemas_map,
-        "output_schema": output_schema,
-        "tools": tools,
-        "tags": tags,
-        "input": eval_info.datapoint.input(),
-        "output": output,
-    });
+    // Build the input object directly as a Map
+    let mut map = serde_json::Map::new();
+    map.insert("function_name".to_string(), json!(function_name));
+    map.insert("model".to_string(), json!(variant_config.model.as_ref()));
+    map.insert("templates".to_string(), json!(templates_map));
+    map.insert("schemas".to_string(), json!(schemas_map));
+    map.insert("output_schema".to_string(), json!(output_schema));
+    map.insert("tools".to_string(), json!(tools));
+    map.insert("tags".to_string(), json!(tags));
+    map.insert("input".to_string(), json!(eval_info.datapoint.input()));
+    map.insert("output".to_string(), json!(output));
 
-    Ok(input)
+    Ok(Arguments(map))
 }
 
 /// Extract raw XML text from the analyze function response
@@ -180,7 +171,6 @@ pub fn parse_analysis_response(response: &InferenceResponse) -> Result<String, E
 ///
 /// # Returns
 /// * Vector of [`InferenceWithAnalysis`] containing each inference paired with its XML analysis feedback
-#[expect(dead_code)]
 pub async fn analyze_inferences(
     gateway_client: &Client,
     evaluation_infos: &[EvaluationInfo],
@@ -188,6 +178,11 @@ pub async fn analyze_inferences(
     variant_config: &UninitializedChatCompletionConfig,
     gepa_config: &GEPAConfig,
 ) -> Result<Vec<InferenceWithAnalysis>, Error> {
+    // Early return for empty input - nothing to analyze
+    if evaluation_infos.is_empty() {
+        return Ok(Vec::new());
+    }
+
     // Extract parameters from GEPA config
     let analysis_model = &gepa_config.analysis_model;
     let max_concurrency = gepa_config.max_concurrency as usize;
@@ -240,8 +235,8 @@ pub async fn analyze_inferences(
                     })
                 })?;
 
-                // Build input JSON for the analyze function
-                let input_data = build_analyze_input(eval_info, function_config, variant_config)?;
+                // Build input for the analyze function (returns Arguments directly)
+                let arguments = build_analyze_input(eval_info, function_config, variant_config)?;
 
                 // Create ClientInferenceParams for the analyze function
                 let params = ClientInferenceParams {
@@ -251,8 +246,9 @@ pub async fn analyze_inferences(
                     input: ClientInput {
                         messages: vec![ClientInputMessage {
                             role: Role::User,
-                            content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                                text: serialize_to_string(&input_data, "analyze input")?,
+                            content: vec![ClientInputMessageContent::Template(Template {
+                                name: "user".to_string(),
+                                arguments,
                             })],
                         }],
                         system: None,
@@ -260,7 +256,7 @@ pub async fn analyze_inferences(
                     stream: None,
                     params: Default::default(),
                     variant_name: None,
-                    dryrun: None,
+                    dryrun: Some(true), // Required when using internal_dynamic_variant_config
                     internal: true,
                     tags: HashMap::new(),
                     dynamic_tool_params: Default::default(),
@@ -334,7 +330,7 @@ pub async fn analyze_inferences(
         }
     }
 
-    // Check if all analyses failed
+    // Check if all analyses failed (empty input already handled by early return)
     if successes.is_empty() {
         return Err(Error::new(ErrorDetails::Inference {
             message: format!(
@@ -581,28 +577,6 @@ mod tests {
         assert_eq!(value["array"][0], 1);
     }
 
-    #[test]
-    fn test_serialize_to_string_success() {
-        let data = HashMap::from([("key".to_string(), "value".to_string())]);
-        let result = serialize_to_string(&data, "test data");
-
-        assert!(result.is_ok());
-        let string = result.unwrap();
-        assert!(string.contains("key"));
-        assert!(string.contains("value"));
-    }
-
-    #[test]
-    fn test_serialize_to_string_format() {
-        let data = json!({"test": "value"});
-        let result = serialize_to_string(&data, "json data");
-
-        assert!(result.is_ok());
-        let string = result.unwrap();
-        // Should be valid JSON
-        assert!(serde_json::from_str::<serde_json::Value>(&string).is_ok());
-    }
-
     // ============================================================================
     // Unit Tests for parse_analysis_response
     // ============================================================================
@@ -697,12 +671,12 @@ mod tests {
         let input = result.unwrap();
 
         // Check required fields
-        assert!(input.get("function_name").is_some());
-        assert!(input.get("model").is_some());
-        assert!(input.get("templates").is_some());
-        assert!(input.get("schemas").is_some());
-        assert!(input.get("input").is_some());
-        assert!(input.get("output").is_some());
+        assert!(input.0.get("function_name").is_some());
+        assert!(input.0.get("model").is_some());
+        assert!(input.0.get("templates").is_some());
+        assert!(input.0.get("schemas").is_some());
+        assert!(input.0.get("input").is_some());
+        assert!(input.0.get("output").is_some());
     }
 
     #[test]
@@ -717,7 +691,7 @@ mod tests {
         let input = result.unwrap();
 
         // Check schemas map exists and has entries
-        let schemas = input.get("schemas").unwrap();
+        let schemas = input.0.get("schemas").unwrap();
         assert!(schemas.is_object());
         let schemas_obj = schemas.as_object().unwrap();
         assert!(schemas_obj.contains_key("system"));
@@ -736,7 +710,7 @@ mod tests {
         let input = result.unwrap();
 
         // schemas should be an empty object
-        let schemas = input.get("schemas").unwrap();
+        let schemas = input.0.get("schemas").unwrap();
         assert!(schemas.is_object());
         assert!(schemas.as_object().unwrap().is_empty());
     }
@@ -753,7 +727,7 @@ mod tests {
         let input = result.unwrap();
 
         // Check templates field exists
-        let templates = input.get("templates").unwrap();
+        let templates = input.0.get("templates").unwrap();
         assert!(templates.is_object());
         // Note: The test variant config uses legacy templates (system_template, user_template)
         // which are converted to the new templates.inner format during variant initialization.
@@ -772,7 +746,7 @@ mod tests {
         assert!(result.is_ok());
         let input = result.unwrap();
 
-        let model = input.get("model").unwrap();
+        let model = input.0.get("model").unwrap();
         assert_eq!(model.as_str().unwrap(), "test-model");
     }
 
@@ -787,7 +761,7 @@ mod tests {
         assert!(result.is_ok());
         let input = result.unwrap();
 
-        let function_name = input.get("function_name").unwrap();
+        let function_name = input.0.get("function_name").unwrap();
         assert_eq!(function_name.as_str().unwrap(), "test_function");
     }
 }
