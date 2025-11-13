@@ -19,6 +19,7 @@ env:
   SQLX_OFFLINE: 1
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  RUST_MSRV: 1.88.0
 
 jobs:
   check-version-consistency:
@@ -328,6 +329,71 @@ jobs:
         run: |
           cargo hack --partition '${{ matrix.partition }}/${{ matrix.total_partitions }}' clippy --all-targets --each-feature -- -D warnings
 
+  validate-node:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
+      - name: Install Rust ${{ env.RUST_MSRV }}
+        run: |
+          for attempt in 1 2 3; do
+            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Print Rust version
+        run: rustc --version
+
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "24.11.0"
+
+      - name: Install pnpm
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Build npm workspace
+        run: pnpm -r build
+
+      - name: Format tensorzero-node package
+        run: pnpm --filter=tensorzero-node run format:check
+
+      - name: Lint tensorzero-node package
+        run: pnpm --filter=tensorzero-node run lint:check
+
+      - name: Typecheck tensorzero-node package
+        run: pnpm --filter=tensorzero-node run typecheck
+
+      - name: Run ESLint
+        run: pnpm --filter=tensorzero-ui run lint:check
+
+      - name: Run Prettier
+        run: pnpm --filter=tensorzero-ui run format:check
+
+      - name: pnpm TypeScript type checking
+        run: pnpm --filter=tensorzero-ui run typecheck
+
   validate:
     permissions:
       contents: read
@@ -340,14 +406,14 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust 1.88.0
+      - name: Install Rust ${{ env.RUST_MSRV }}
         run: |
           for attempt in 1 2 3; do
-            if rustup install 1.88.0 --component rustfmt && rustup default 1.88.0; then
+            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust 1.88.0 after 3 attempts"
+              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -520,27 +586,6 @@ jobs:
         working-directory: recipes
         run: |
           uv run pyright
-
-      - name: Build npm workspace
-        run: pnpm -r build
-
-      - name: Format tensorzero-node package
-        run: pnpm --filter=tensorzero-node run format:check
-
-      - name: Lint tensorzero-node package
-        run: pnpm --filter=tensorzero-node run lint:check
-
-      - name: Typecheck tensorzero-node package
-        run: pnpm --filter=tensorzero-node run typecheck
-
-      - name: Run ESLint
-        run: pnpm --filter=tensorzero-ui run lint:check
-
-      - name: Run Prettier
-        run: pnpm --filter=tensorzero-ui run format:check
-
-      - name: pnpm TypeScript type checking
-        run: pnpm --filter=tensorzero-ui run typecheck
 
       - name: Compile / validate notebooks
         run: ci/compile-check-notebooks.sh
@@ -898,6 +943,7 @@ jobs:
         build-gateway-container,
         build-gateway-e2e-container,
         validate,
+        validate-node,
         lint-rust,
         clickhouse-tests,
         ui-tests,
