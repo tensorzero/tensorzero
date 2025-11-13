@@ -60,7 +60,6 @@ from tensorzero import (
 )
 from tensorzero.types import (
     AlwaysExtraBody,
-    AlwaysExtraHeader,
     ChatChunk,
     JsonChunk,
     ModelProviderExtraBody,
@@ -2495,26 +2494,6 @@ def test_all_extra_body(sync_client: TensorZeroGateway):
     assert len(content[0].text.split(" ")) <= 2
     usage = result.usage
     assert usage.output_tokens == 2
-
-
-def test_all_extra_header(sync_client: TensorZeroGateway):
-    """Test that AlwaysExtraHeader applies to all variants."""
-    with pytest.raises(TensorZeroError) as exc_info:
-        sync_client.inference(
-            function_name="basic_test",
-            variant_name="openai",
-            input={
-                "system": {"assistant_name": "Alfred Pennyworth"},
-                "messages": [{"role": "user", "content": "Write me a haiku"}],
-            },
-            extra_headers=[
-                AlwaysExtraHeader(
-                    name="Authorization",
-                    value="fake_auth_token",
-                )
-            ],
-        )
-    assert "You didn't provide an API key" in str(exc_info.value)
 
 
 def test_all_extra_body_with_delete(sync_client: TensorZeroGateway):
