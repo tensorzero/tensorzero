@@ -1,5 +1,7 @@
 /*
 TensorZero Client (for internal use only for now)
+
+TODO(shuyangli): Figure out a way to generate the HTTP client, possibly from Schema.
 */
 
 import { z } from "zod";
@@ -10,7 +12,11 @@ import {
   type StoragePath,
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
-import type { Datapoint as TensorZeroDatapoint } from "~/types/tensorzero";
+import type {
+  Datapoint as TensorZeroDatapoint,
+  UpdateDatapointsMetadataRequest,
+  UpdateDatapointsResponse,
+} from "~/types/tensorzero";
 
 /**
  * Roles for input messages.
@@ -469,6 +475,23 @@ export class TensorZeroClient {
     }
     const body = await response.json();
     return body as TensorZeroDatapoint[];
+  }
+
+  async updateDatapointsMetadata(
+    datasetName: string,
+    datapoints: UpdateDatapointsMetadataRequest,
+  ): Promise<UpdateDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}/datapoints/metadata`;
+    const response = await this.fetch(endpoint, {
+      method: "PATCH",
+      body: JSON.stringify(datapoints),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as UpdateDatapointsResponse;
+    return body;
   }
 
   async getObject(storagePath: StoragePath): Promise<string> {
