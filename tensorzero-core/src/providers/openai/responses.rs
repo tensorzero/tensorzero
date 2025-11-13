@@ -63,8 +63,6 @@ pub struct OpenAIResponsesRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<OpenAIResponsesReasoningConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    allowed_tools: Option<Vec<&'a str>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     service_tier: Option<ServiceTier>,
     stream: bool,
 }
@@ -305,6 +303,7 @@ pub enum OpenAIResponsesToolChoiceString {
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum OpenAIResponsesAllowedToolsMode {
+    Auto,
     Required,
 }
 
@@ -363,12 +362,36 @@ impl<'a> OpenAIResponsesRequest<'a> {
             );
         }
 
+        // Check if we have allowed_tools constraint
+        let allowed_tools_list = request
+            .tool_config
+            .as_ref()
+            .and_then(|tc| tc.allowed_tools.as_dynamic_allowed_tools());
+
         // For now, we don't allow selecting any built-in tools
-        let tool_choice =
-            request
-                .tool_config
-                .as_ref()
-                .map(|tool_config| match &tool_config.tool_choice {
+        let tool_choice = request.tool_config.as_ref().map(|tool_config| {
+            // If we have allowed_tools, create an AllowedTools variant
+            if let Some(allowed_tool_names) = &allowed_tools_list {
+                let mode = match &tool_config.tool_choice {
+                    ToolChoice::Required => OpenAIResponsesAllowedToolsMode::Required,
+                    _ => OpenAIResponsesAllowedToolsMode::Auto,
+                };
+
+                let tool_refs = allowed_tool_names
+                    .iter()
+                    .map(|name| OpenAIResponsesToolReference::Function {
+                        name: name.to_string(),
+                    })
+                    .collect();
+
+                OpenAIResponsesToolChoice::AllowedTools(OpenAIResponsesAllowedTools {
+                    mode,
+                    tools: tool_refs,
+                    r#type: StaticTypeAllowedTools,
+                })
+            } else {
+                // No allowed_tools constraint, use regular tool_choice
+                match &tool_config.tool_choice {
                     ToolChoice::None => {
                         OpenAIResponsesToolChoice::String(OpenAIResponsesToolChoiceString::None)
                     }
@@ -387,7 +410,9 @@ impl<'a> OpenAIResponsesRequest<'a> {
                             r#type: StaticTypeAllowedTools,
                         })
                     }
-                });
+                }
+            }
+        });
 
         let mut parallel_tool_calls = request
             .tool_config
@@ -417,10 +442,6 @@ impl<'a> OpenAIResponsesRequest<'a> {
                 }
             }
         };
-        let allowed_tools = request
-            .tool_config
-            .as_ref()
-            .and_then(|tc| tc.allowed_tools.as_dynamic_allowed_tools());
 
         let mut openai_responses_request = Self {
             model: openai_model,
@@ -445,7 +466,6 @@ impl<'a> OpenAIResponsesRequest<'a> {
             tools,
             parallel_tool_calls,
             tool_choice,
-            allowed_tools,
             temperature: request.temperature,
             max_output_tokens: request.max_tokens,
             seed: request.seed,
