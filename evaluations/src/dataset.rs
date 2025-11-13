@@ -31,20 +31,32 @@ pub async fn query_dataset(
          ORDER BY id"
         .to_string();
 
-    // Add LIMIT and OFFSET if provided
-    if let Some(limit_value) = limit {
-        query.push_str(&format!(" LIMIT {limit_value}"));
+    // Add LIMIT and OFFSET if provided using parameterized queries
+    if limit.is_some() {
+        query.push_str(" LIMIT {limit:UInt64}");
     }
-    if let Some(offset_value) = offset {
-        query.push_str(&format!(" OFFSET {offset_value}"));
+    if offset.is_some() {
+        query.push_str(" OFFSET {offset:UInt64}");
     }
     query.push_str(" FORMAT JSON");
 
-    let params = HashMap::from([
+    // Convert limit and offset to strings so they live long enough for the params HashMap
+    let limit_str = limit.map(|l| l.to_string());
+    let offset_str = offset.map(|o| o.to_string());
+
+    let mut params = HashMap::from([
         ("table_name", table_name),
         ("dataset_name", dataset_name),
         ("function_name", function_name),
     ]);
+
+    // Add limit and offset to params if provided
+    if let Some(ref limit_value) = limit_str {
+        params.insert("limit", limit_value.as_str());
+    }
+    if let Some(ref offset_value) = offset_str {
+        params.insert("offset", offset_value.as_str());
+    }
 
     debug!(query = %query, "Executing ClickHouse query");
     let result = clickhouse_client
