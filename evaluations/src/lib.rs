@@ -9,7 +9,7 @@ use std::{
 use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use dataset::query_dataset;
-use evaluators::{evaluate_inference, evaluate_inference_selective, EvaluateInferenceParams};
+use evaluators::{evaluate_inference, EvaluateInferenceParams};
 use helpers::{get_cache_options, get_tool_params_args};
 use serde::{Deserialize, Serialize};
 
@@ -513,7 +513,9 @@ pub async fn run_evaluation_core_streaming(
                     evaluation_run_id: evaluation_run_id_clone,
                     inference_cache,
                     send_feedback,
-                })
+                },
+                None,  // No filter: run all evaluators
+            )
                 .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
             debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
 
@@ -760,7 +762,7 @@ pub async fn run_evaluation_core_streaming_with_adaptive_stopping(
 
             let inference_id = inference_response.inference_id();
             // Run only active evaluators
-            let evaluation_result = evaluate_inference_selective(
+            let evaluation_result = evaluate_inference(
                 EvaluateInferenceParams {
                     inference_response: inference_response.clone(),
                     datapoint: datapoint.clone(),
@@ -772,7 +774,7 @@ pub async fn run_evaluation_core_streaming_with_adaptive_stopping(
                     inference_cache,
                     send_feedback,
                 },
-                &active_evaluators,
+                Some(&active_evaluators),  // Run only active evaluators
             )
             .await
             .map_err(|e| {

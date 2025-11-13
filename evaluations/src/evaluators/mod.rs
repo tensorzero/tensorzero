@@ -33,7 +33,10 @@ pub struct EvaluateInferenceParams {
     pub send_feedback: bool,
 }
 
-/// Evaluates the inference response for the given datapoint using all the evaluators specified in the evaluation config.
+/// Evaluates the inference response for the given datapoint using the evaluators specified in the evaluation config.
+/// If `active_evaluators` is provided, only runs evaluators in that set (used for adaptive stopping).
+/// If `active_evaluators` is None, runs all evaluators in the config.
+///
 /// Returns a map from evaluator name to Result<Option<Value>>.
 /// The semantics of the Result<Option<Value>> are as follows:
 /// - Ok(Some(value)): The evaluator was run successfully and the result was a valid value.
@@ -42,6 +45,7 @@ pub struct EvaluateInferenceParams {
 #[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), evaluation_name = %params.evaluation_name))]
 pub(crate) async fn evaluate_inference(
     params: EvaluateInferenceParams,
+    active_evaluators: Option<&std::collections::HashSet<String>>,
 ) -> Result<EvaluationResult> {
     let EvaluateInferenceParams {
         inference_response,
@@ -55,161 +59,21 @@ pub(crate) async fn evaluate_inference(
         send_feedback,
     } = params;
     let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
+
+    // Filter evaluators if active_evaluators is provided
+    let evaluators_to_run: Vec<_> = inference_evaluation_config
+        .evaluators
+        .keys()
+        .filter(|name| active_evaluators.is_none_or(|active_set| active_set.contains(*name)))
+        .collect();
+
     info!(
-        evaluators = ?inference_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
+        evaluators = ?evaluators_to_run,
         "Starting evaluation with evaluators"
     );
 
     let results: EvaluationResult =
-        FuturesUnordered::from_iter(inference_evaluation_config.evaluators.keys().map(
-            |evaluator_name| async {
-                let inference_response = inference_response.clone();
-                let evaluation_config = evaluation_config.clone();
-                let evaluator_name = evaluator_name.clone();
-                debug!(evaluator_name = %evaluator_name, "Starting evaluator");
-                let datapoint = datapoint.clone();
-                let input = input.clone();
-                let evaluation_name = evaluation_name.clone();
-                let clients = clients.clone();
-                let evaluator_name_clone = evaluator_name.clone();
-
-                let result = run_evaluator(RunEvaluatorParams {
-                    evaluation_config: &evaluation_config,
-                    evaluator_name: evaluator_name_clone,
-                    inference_response: &inference_response,
-                    clients: &clients,
-                    datapoint: &datapoint,
-                    evaluation_name: &evaluation_name,
-                    evaluation_run_id,
-                    input: &input,
-                    inference_cache,
-                })
-                .await;
-
-                debug!(
-                    evaluator_name = %evaluator_name,
-                    success = result.is_ok(),
-                    "Evaluator completed"
-                );
-
-                let evaluation_result = match result {
-                    Ok(result) => {
-                        if let Some(value) = result.value() {
-                            debug!(evaluator_name = %evaluator_name, value = ?value, "Evaluator produced value, sending feedback");
-                            // If there is a valid result, send feedback to TensorZero
-                            let mut tags = HashMap::from([
-                                (
-                                    "tensorzero::evaluation_run_id".to_string(),
-                                    evaluation_run_id.to_string(),
-                                ),
-                                (
-                                    "tensorzero::datapoint_id".to_string(),
-                                    datapoint.id().to_string(),
-                                ),
-                                (
-                                    "tensorzero::evaluation_name".to_string(),
-                                    evaluation_name.to_string(),
-                                ),
-                                (
-                                    "tensorzero::evaluator_name".to_string(),
-                                    evaluator_name.to_string(),
-                                ),
-                            ]);
-                            if let Some(evaluator_inference_id) = result.evaluator_inference_id() {
-                                tags.insert(
-                                    "tensorzero::evaluator_inference_id".to_string(),
-                                    evaluator_inference_id.to_string(),
-                                );
-                            }
-                            tags.extend(result.tags());
-                            // Only send feedback when send_feedback is true
-                            // Dynamic variants have send_feedback=false and skip feedback persistence
-                            if send_feedback {
-                                match clients
-                                    .tensorzero_client
-                                    .feedback(FeedbackParams {
-                                        metric_name: get_evaluator_metric_name(
-                                            &evaluation_name,
-                                            &evaluator_name,
-                                        ),
-                                        value: value.clone(),
-                                        inference_id: Some(inference_response.inference_id()),
-                                        dryrun: Some(false),
-                                        episode_id: None,
-                                        internal: true,
-                                        tags,
-                                    })
-                                    .await
-                                {
-                                    #[expect(clippy::ignored_unit_patterns)]
-                                    Ok(_) => {
-                                        debug!(evaluator_name = %evaluator_name, "Feedback sent successfully");
-                                    },
-                                    Err(e) => {
-                                        error!(evaluator_name = %evaluator_name, error = %e, "Failed to send feedback");
-                                        return (evaluator_name, Err(e));
-                                    }
-                                }
-                            }
-                        } else {
-                            debug!(evaluator_name = %evaluator_name, "Evaluator produced no value");
-                        }
-                        Ok(result.value_owned())
-                    }
-                    Err(e) => {
-                        tracing::warn!(evaluator_name = %evaluator_name, error = %e, "Evaluator failed");
-                        Err(e)
-                    }
-                };
-
-                (evaluator_name, evaluation_result)
-            },
-        ))
-        .collect()
-        .await;
-    Ok(results)
-}
-
-/// Evaluates the inference response for the given datapoint using only the specified subset of evaluators.
-/// This is used for adaptive evaluation where some evaluators may have stopped based on stopping conditions.
-///
-/// Returns a map from evaluator name to Result<Option<Value>>.
-/// The semantics of the Result<Option<Value>> are as follows:
-/// - Ok(Some(value)): The evaluator was run successfully and the result was a valid value.
-/// - Ok(None): The evaluator was run successfully but the result was None (if for example the evaluator requires a reference output but none is present).
-/// - Err(e): The evaluator failed to run due to some error (like the LLM Judge failed to infer).
-#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), evaluation_name = %params.evaluation_name))]
-pub(crate) async fn evaluate_inference_selective(
-    params: EvaluateInferenceParams,
-    active_evaluators: &std::collections::HashSet<String>,
-) -> Result<EvaluationResult> {
-    let EvaluateInferenceParams {
-        inference_response,
-        datapoint,
-        input,
-        evaluation_config,
-        evaluation_name,
-        clients,
-        evaluation_run_id,
-        inference_cache,
-        send_feedback,
-    } = params;
-    let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
-
-    // Filter to only active evaluators
-    let active_evaluator_list: Vec<_> = inference_evaluation_config
-        .evaluators
-        .keys()
-        .filter(|name| active_evaluators.contains(*name))
-        .collect();
-
-    info!(
-        evaluators = ?active_evaluator_list,
-        "Starting evaluation with active evaluators"
-    );
-
-    let results: EvaluationResult =
-        FuturesUnordered::from_iter(active_evaluator_list.into_iter().map(
+        FuturesUnordered::from_iter(evaluators_to_run.into_iter().map(
             |evaluator_name| async {
                 let inference_response = inference_response.clone();
                 let evaluation_config = evaluation_config.clone();
