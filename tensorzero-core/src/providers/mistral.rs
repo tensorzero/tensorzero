@@ -958,7 +958,7 @@ mod tests {
             parallel_tool_calls: Some(false),
             allowed_tools: AllowedTools {
                 tools: vec![WEATHER_TOOL.name().to_string()].into_iter().collect(),
-                choice: AllowedToolsChoice::OnlyAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
         };
 

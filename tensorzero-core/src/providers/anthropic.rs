@@ -3397,7 +3397,7 @@ mod tests {
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
                 tools: vec!["get_temperature".to_string()].into_iter().collect(),
-                choice: AllowedToolsChoice::OnlyAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
         };
 

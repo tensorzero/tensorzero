@@ -307,7 +307,7 @@ impl AllowedTools {
         #[expect(deprecated)]
         match self.choice {
             AllowedToolsChoice::FunctionDefault => None,
-            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::OnlyAllowedTools => {
+            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::Explicit => {
                 Some(self.tools.into_iter().collect())
             }
         }
@@ -317,7 +317,7 @@ impl AllowedTools {
         #[expect(deprecated)]
         match self.choice {
             AllowedToolsChoice::FunctionDefault => None,
-            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::OnlyAllowedTools => {
+            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::Explicit => {
                 Some(self.tools.iter().map(|s| s.as_str()).collect())
             }
         }
@@ -338,7 +338,7 @@ pub enum AllowedToolsChoice {
     #[deprecated]
     DynamicAllowedTools,
     // Currently, we match OpenAI in that if allowed tools is set we only allow the tools that are in it.
-    OnlyAllowedTools,
+    Explicit,
 }
 
 /// Contains all information required to tell an LLM what tools it can call
@@ -439,17 +439,27 @@ impl ToolCallConfig {
             dynamic_parallel_tool_calls,
             dynamic_provider_tools,
         } = args;
-        // If `allowed_tools` is not provided, use the function's configured tools.
+        // If `allowed_tools` is not provided, use the function's configured tools plus any dynamic tools.
         // This means we allow all tools for the function.
         let allowed_tools = match dynamic_allowed_tools {
             Some(allowed_tools) => AllowedTools {
                 tools: allowed_tools.into_iter().collect(),
-                choice: AllowedToolsChoice::OnlyAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
-            None => AllowedTools {
-                tools: function_tools.iter().cloned().collect(),
-                choice: AllowedToolsChoice::FunctionDefault,
-            },
+            None => {
+                // Collect function tools
+                let mut tools: HashSet<String> = function_tools.iter().cloned().collect();
+
+                // Add dynamic tool names in FunctionDefault mode
+                if let Some(additional_tools) = &dynamic_additional_tools {
+                    tools.extend(additional_tools.iter().map(|t| t.name().to_string()));
+                }
+
+                AllowedTools {
+                    tools,
+                    choice: AllowedToolsChoice::FunctionDefault,
+                }
+            }
         };
 
         // Build set of all available tool names (static + dynamic)
@@ -578,7 +588,7 @@ impl ToolCallConfig {
                 // Return all tools (lenient mode)
                 Box::new(self.tools_available())
             }
-            AllowedToolsChoice::OnlyAllowedTools => {
+            AllowedToolsChoice::Explicit => {
                 // Filter to only allowed tools (strict mode)
                 Box::new(
                     self.tools_available()
@@ -1142,7 +1152,7 @@ impl ToolCallConfigDatabaseInsert {
                     .map(str::to_string)
                     .collect::<Vec<_>>()
             }
-            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::OnlyAllowedTools => {
+            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::Explicit => {
                 // Use the dynamically specified tool names
                 self.allowed_tools.tools.iter().cloned().collect::<Vec<_>>()
             }
@@ -2561,7 +2571,7 @@ mod tests {
             .contains("get_temperature"));
         assert!(matches!(
             tool_call_config.allowed_tools.choice,
-            AllowedToolsChoice::OnlyAllowedTools
+            AllowedToolsChoice::Explicit
         ));
 
         // strict_tools_available should filter to only allowed_tools (AllAllowedTools mode)
@@ -3088,7 +3098,7 @@ mod tests {
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
                 tools: vec!["get_temperature".to_string()].into_iter().collect(),
-                choice: AllowedToolsChoice::OnlyAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
         };
 
@@ -3201,7 +3211,7 @@ mod tests {
         // Verify choice is AllAllowedTools
         assert!(matches!(
             tool_call_config.allowed_tools.choice,
-            AllowedToolsChoice::OnlyAllowedTools
+            AllowedToolsChoice::Explicit
         ));
     }
 

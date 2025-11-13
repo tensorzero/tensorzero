@@ -248,7 +248,7 @@ pub async fn test_render_samples_normal() {
                 vec![],
                 AllowedTools {
                     tools: ["get_temperature".to_string()].into_iter().collect(),
-                    choice: AllowedToolsChoice::OnlyAllowedTools,
+                    choice: AllowedToolsChoice::Explicit,
                 },
                 ToolChoice::Auto,
                 None,
@@ -803,7 +803,7 @@ pub async fn test_render_datapoints_normal() {
                 vec![],
                 AllowedTools {
                     tools: ["get_temperature".to_string()].into_iter().collect(),
-                    choice: AllowedToolsChoice::OnlyAllowedTools,
+                    choice: AllowedToolsChoice::Explicit,
                 },
                 ToolChoice::Auto,
                 None,
