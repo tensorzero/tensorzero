@@ -34,24 +34,49 @@ use tensorzero_core::{
 };
 
 use evaluations::{
-    EvaluationCoreArgs, EvaluationStats, EvaluationUpdate, EvaluationVariant, EvaluatorStats,
-    OutputFormat,
+    stats::EvaluationInfo, EvaluationCoreArgs, EvaluationStats, EvaluationUpdate,
+    EvaluationVariant, EvaluatorStats, OutputFormat,
 };
 
 /// Holds the results of evaluating variants on a dataset
-/// This matches the EvaluationResults structure from planning.md
 #[derive(Clone, Debug)]
 pub struct EvaluationResults {
-    /// Per-datapoint evaluation results
-    /// Outer key: datapoint_id (String)
-    /// Inner key: evaluator_name (String)
-    /// Value: Option<f32> - None if evaluation failed for that datapoint
-    pub per_datapoint: HashMap<String, HashMap<String, Option<f32>>>,
+    /// Full evaluation info for each datapoint
+    /// Compatible with analyze_inferences(&[EvaluationInfo])
+    pub evaluation_infos: Vec<EvaluationInfo>,
 
     /// Aggregated statistics across all datapoints
     /// Key: evaluator_name
     /// Value: EvaluatorStats with mean/stderr/count
-    pub metrics: HashMap<String, EvaluatorStats>,
+    pub evaluation_stats: HashMap<String, EvaluatorStats>,
+}
+
+impl EvaluationResults {
+    /// Extract per-datapoint scores for Pareto frontier analysis
+    ///
+    /// Returns a HashMap mapping datapoint_id to a HashMap of evaluator scores.
+    /// Scores are extracted from evaluation_infos on-demand.
+    pub fn per_datapoint_scores(&self) -> HashMap<String, HashMap<String, Option<f32>>> {
+        let mut score_map = HashMap::new();
+
+        for info in &self.evaluation_infos {
+            let datapoint_id = info.datapoint.id().to_string();
+            let mut datapoint_scores = HashMap::new();
+
+            for (evaluator_name, result_opt) in &info.evaluations {
+                let score = result_opt.as_ref().and_then(|value| match value {
+                    serde_json::Value::Number(n) => n.as_f64().map(|f| f as f32),
+                    serde_json::Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
+                    _ => None,
+                });
+                datapoint_scores.insert(evaluator_name.clone(), score);
+            }
+
+            score_map.insert(datapoint_id, datapoint_scores);
+        }
+
+        score_map
+    }
 }
 
 /// Evaluate multiple variants on a dataset
@@ -215,27 +240,8 @@ pub async fn consume_evaluation_stream(
         })?;
     }
 
-    // Aggregate per-datapoint results (needed for Pareto frontier analysis)
-    let mut per_datapoint: HashMap<String, HashMap<String, Option<f32>>> = HashMap::new();
-
-    for info in &evaluation_stats.evaluation_infos {
-        let datapoint_id = info.datapoint.id().to_string();
-        let mut datapoint_scores = HashMap::new();
-
-        for (evaluator_name, result_opt) in &info.evaluations {
-            let score = result_opt.as_ref().and_then(|value| match value {
-                serde_json::Value::Number(n) => n.as_f64().map(|f| f as f32),
-                serde_json::Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
-                _ => None,
-            });
-            datapoint_scores.insert(evaluator_name.clone(), score);
-        }
-
-        per_datapoint.insert(datapoint_id, datapoint_scores);
-    }
-
     // Compute aggregated statistics using EvaluationStats
-    let metrics = {
+    let evaluation_stats_map = {
         let evaluators = match &**evaluation_config {
             EvaluationConfig::Inference(inference_config) => &inference_config.evaluators,
         };
@@ -243,8 +249,8 @@ pub async fn consume_evaluation_stream(
     };
 
     Ok(EvaluationResults {
-        per_datapoint,
-        metrics,
+        evaluation_infos: evaluation_stats.evaluation_infos,
+        evaluation_stats: evaluation_stats_map,
     })
 }
 

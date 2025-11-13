@@ -138,10 +138,24 @@ pub async fn run_gepa_optimization(
 
     tracing::info!("Initial evaluation complete");
 
+    // Pre-compute scores map for Pareto frontier filtering
+    let mut val_scores_map: HashMap<String, HashMap<String, HashMap<String, Option<f32>>>> =
+        HashMap::new();
+    for (name, results) in &val_scores {
+        if let Some(results) = results {
+            val_scores_map.insert(name.clone(), results.per_datapoint_scores());
+        }
+    }
+
     // Filter initial Pareto frontier using instance-wise dominance
     #[expect(unused_mut)] // Will be mutated in step 7
-    let (pareto_frontier, mut frequencies) =
-        update_pareto_frontier(pareto_frontier, &val_scores, config, &tensorzero_config)?;
+    let (pareto_frontier, mut frequencies) = update_pareto_frontier(
+        pareto_frontier,
+        &val_scores,
+        &val_scores_map,
+        config,
+        &tensorzero_config,
+    )?;
 
     tracing::info!(
         "Initial Pareto frontier filtered to {} variants",

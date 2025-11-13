@@ -47,6 +47,7 @@ use super::evaluate::EvaluationResults;
 pub fn update_pareto_frontier(
     candidates: HashMap<String, UninitializedChatCompletionConfig>,
     val_scores: &HashMap<String, Option<EvaluationResults>>,
+    val_scores_map: &HashMap<String, HashMap<String, HashMap<String, Option<f32>>>>,
     config: &GEPAConfig,
     tensorzero_config: &Config,
 ) -> Result<
@@ -92,10 +93,10 @@ pub fn update_pareto_frontier(
     }
 
     // Get all datapoint IDs from the first valid score
-    let datapoint_ids: Vec<String> = valid_scores
+    let datapoint_ids: Vec<String> = val_scores_map
         .values()
         .next()
-        .map(|scores| scores.per_datapoint.keys().cloned().collect())
+        .map(|scores| scores.keys().cloned().collect())
         .unwrap_or_default();
 
     tracing::debug!(
@@ -112,9 +113,11 @@ pub fn update_pareto_frontier(
         // Collect scores for this datapoint across all variants
         let mut instance_scores: Vec<(String, HashMap<String, Option<f32>>)> = Vec::new();
 
-        for (variant_name, evaluation_results) in &valid_scores {
-            if let Some(scores) = evaluation_results.per_datapoint.get(datapoint_id) {
-                instance_scores.push((variant_name.to_string(), scores.clone()));
+        for variant_name in valid_scores.keys() {
+            if let Some(variant_scores) = val_scores_map.get(*variant_name) {
+                if let Some(scores) = variant_scores.get(datapoint_id) {
+                    instance_scores.push(((*variant_name).clone(), scores.clone()));
+                }
             }
         }
 
@@ -162,17 +165,11 @@ pub fn update_pareto_frontier(
 
     for variant_a in &candidate_set {
         for variant_b in &candidate_set {
-            if variant_a != variant_b && non_dominated.contains(variant_b) {
-                // Get evaluation results for both variants
-                let (Some(results_a), Some(results_b)) =
-                    (valid_scores.get(variant_a), valid_scores.get(variant_b))
-                else {
-                    continue;
-                };
-
-                if global_dominates(results_a, results_b, evaluators) {
-                    non_dominated.remove(variant_b);
-                }
+            if variant_a != variant_b
+                && non_dominated.contains(variant_b)
+                && global_dominates(variant_a, variant_b, val_scores_map, evaluators)
+            {
+                non_dominated.remove(variant_b);
             }
         }
     }
@@ -188,13 +185,18 @@ pub fn update_pareto_frontier(
     let total_evaluators = evaluators.len();
 
     for variant_name in &non_dominated {
-        if let Some(evaluation_results) = valid_scores.get(variant_name) {
+        if let Some(_evaluation_results) = valid_scores.get(variant_name) {
             let total_possible = total_datapoints * total_evaluators;
             if total_possible > 0 {
                 // Count non-None scores across all (datapoint, evaluator) pairs
-                let non_none_count = datapoint_ids
-                    .iter()
-                    .filter_map(|datapoint_id| evaluation_results.per_datapoint.get(datapoint_id))
+                let per_datapoint = val_scores_map.get(variant_name);
+                let non_none_count = per_datapoint
+                    .into_iter()
+                    .flat_map(|scores| {
+                        datapoint_ids
+                            .iter()
+                            .filter_map(|datapoint_id| scores.get(datapoint_id))
+                    })
                     .flat_map(|scores| {
                         evaluators.keys().filter_map(move |evaluator_name| {
                             scores.get(evaluator_name).and_then(|s| s.as_ref())
@@ -296,18 +298,27 @@ fn calculate_frequencies(
 /// This compares variants across the full (D×E)-dimensional space where D=datapoints, E=evaluators.
 /// Missing scores are imputed as worst-case (-inf for max, +inf for min).
 pub fn global_dominates(
-    variant_a_results: &EvaluationResults,
-    variant_b_results: &EvaluationResults,
+    variant_a_name: &str,
+    variant_b_name: &str,
+    val_scores_map: &HashMap<String, HashMap<String, HashMap<String, Option<f32>>>>,
     evaluators: &HashMap<String, EvaluatorConfig>,
 ) -> bool {
     let mut better_or_equal_on_all = true;
     let mut strictly_better_on_at_least_one = false;
 
+    // Get scores for both variants
+    let variant_a_scores = val_scores_map.get(variant_a_name);
+    let variant_b_scores = val_scores_map.get(variant_b_name);
+
     // Get all (datapoint_id, evaluator_name) pairs from both variants
-    let all_pairs: HashSet<_> = variant_a_results
-        .per_datapoint
-        .keys()
-        .chain(variant_b_results.per_datapoint.keys())
+    let all_pairs: HashSet<_> = variant_a_scores
+        .into_iter()
+        .flat_map(|scores| scores.keys())
+        .chain(
+            variant_b_scores
+                .into_iter()
+                .flat_map(|scores| scores.keys()),
+        )
         .flat_map(|datapoint_id| {
             evaluators
                 .keys()
@@ -322,14 +333,12 @@ pub fn global_dominates(
         let optimize = evaluator_config.optimize();
 
         // Get scores for this (datapoint, evaluator) pair
-        let score_a = variant_a_results
-            .per_datapoint
-            .get(&datapoint_id)
+        let score_a = variant_a_scores
+            .and_then(|scores| scores.get(&datapoint_id))
             .and_then(|scores| scores.get(&evaluator_name).and_then(|s| *s));
 
-        let score_b = variant_b_results
-            .per_datapoint
-            .get(&datapoint_id)
+        let score_b = variant_b_scores
+            .and_then(|scores| scores.get(&datapoint_id))
             .and_then(|scores| scores.get(&evaluator_name).and_then(|s| *s));
 
         // Impute missing values as worst-case
@@ -460,8 +469,8 @@ pub fn is_improvement(
     // Compare on each metric
     for (evaluator_name, evaluator_config) in evaluators {
         // Get metric stats for both variants
-        let original_stats = original_scores.metrics.get(evaluator_name);
-        let mutation_stats = mutation_scores.metrics.get(evaluator_name);
+        let original_stats = original_scores.evaluation_stats.get(evaluator_name);
+        let mutation_stats = mutation_scores.evaluation_stats.get(evaluator_name);
 
         // Skip if either variant doesn't have stats for this evaluator
         let (original_mean, mutation_mean) = match (original_stats, mutation_stats) {
@@ -630,8 +639,8 @@ mod tests {
         }
 
         EvaluationResults {
-            per_datapoint,
-            metrics,
+            evaluation_infos: vec![], // Tests don't need actual EvaluationInfo objects
+            evaluation_stats: metrics,
         }
     }
 
@@ -784,30 +793,37 @@ mod tests {
         let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // A dominates B on both datapoints
-        let a_results = create_test_evaluation_results(HashMap::from([
+        let val_scores_map = HashMap::from([
             (
-                "dp1".to_string(),
-                HashMap::from([("accuracy".to_string(), Some(0.9))]),
+                "a".to_string(),
+                HashMap::from([
+                    (
+                        "dp1".to_string(),
+                        HashMap::from([("accuracy".to_string(), Some(0.9))]),
+                    ),
+                    (
+                        "dp2".to_string(),
+                        HashMap::from([("accuracy".to_string(), Some(0.8))]),
+                    ),
+                ]),
             ),
             (
-                "dp2".to_string(),
-                HashMap::from([("accuracy".to_string(), Some(0.8))]),
+                "b".to_string(),
+                HashMap::from([
+                    (
+                        "dp1".to_string(),
+                        HashMap::from([("accuracy".to_string(), Some(0.7))]),
+                    ),
+                    (
+                        "dp2".to_string(),
+                        HashMap::from([("accuracy".to_string(), Some(0.6))]),
+                    ),
+                ]),
             ),
-        ]));
+        ]);
 
-        let b_results = create_test_evaluation_results(HashMap::from([
-            (
-                "dp1".to_string(),
-                HashMap::from([("accuracy".to_string(), Some(0.7))]),
-            ),
-            (
-                "dp2".to_string(),
-                HashMap::from([("accuracy".to_string(), Some(0.6))]),
-            ),
-        ]));
-
-        assert!(global_dominates(&a_results, &b_results, &evaluators));
-        assert!(!global_dominates(&b_results, &a_results, &evaluators));
+        assert!(global_dominates("a", "b", &val_scores_map, &evaluators));
+        assert!(!global_dominates("b", "a", &val_scores_map, &evaluators));
     }
 
     #[test]
@@ -815,30 +831,37 @@ mod tests {
         let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // A better on dp1, B better on dp2 - no global dominance
-        let a_results = create_test_evaluation_results(HashMap::from([
+        let val_scores_map = HashMap::from([
             (
-                "dp1".to_string(),
-                HashMap::from([("accuracy".to_string(), Some(0.9))]),
+                "a".to_string(),
+                HashMap::from([
+                    (
+                        "dp1".to_string(),
+                        HashMap::from([("accuracy".to_string(), Some(0.9))]),
+                    ),
+                    (
+                        "dp2".to_string(),
+                        HashMap::from([("accuracy".to_string(), Some(0.6))]),
+                    ),
+                ]),
             ),
             (
-                "dp2".to_string(),
-                HashMap::from([("accuracy".to_string(), Some(0.6))]),
+                "b".to_string(),
+                HashMap::from([
+                    (
+                        "dp1".to_string(),
+                        HashMap::from([("accuracy".to_string(), Some(0.7))]),
+                    ),
+                    (
+                        "dp2".to_string(),
+                        HashMap::from([("accuracy".to_string(), Some(0.8))]),
+                    ),
+                ]),
             ),
-        ]));
+        ]);
 
-        let b_results = create_test_evaluation_results(HashMap::from([
-            (
-                "dp1".to_string(),
-                HashMap::from([("accuracy".to_string(), Some(0.7))]),
-            ),
-            (
-                "dp2".to_string(),
-                HashMap::from([("accuracy".to_string(), Some(0.8))]),
-            ),
-        ]));
-
-        assert!(!global_dominates(&a_results, &b_results, &evaluators));
-        assert!(!global_dominates(&b_results, &a_results, &evaluators));
+        assert!(!global_dominates("a", "b", &val_scores_map, &evaluators));
+        assert!(!global_dominates("b", "a", &val_scores_map, &evaluators));
     }
 
     #[test]
@@ -901,7 +924,7 @@ mod tests {
         let gepa_config = create_test_gepa_config("test_eval");
 
         // Variant A dominates B: A has higher scores on all datapoints
-        let val_scores = create_test_val_scores(HashMap::from([
+        let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
                 HashMap::from([
@@ -928,11 +951,19 @@ mod tests {
                     ),
                 ]),
             ),
-        ]));
+        ]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
+        let val_scores_map = variant_scores;
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &val_scores_map,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, frequencies) = result.unwrap();
@@ -952,7 +983,7 @@ mod tests {
         let gepa_config = create_test_gepa_config("test_eval");
 
         // A is better on dp1, B is better on dp2 - neither dominates
-        let val_scores = create_test_val_scores(HashMap::from([
+        let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
                 HashMap::from([
@@ -979,11 +1010,18 @@ mod tests {
                     ),
                 ]),
             ),
-        ]));
+        ]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, frequencies) = result.unwrap();
@@ -1005,7 +1043,7 @@ mod tests {
 
         // C is never instance-wise Pareto-optimal, so it should be filtered early
         // A and B are each optimal on different instances
-        let val_scores = create_test_val_scores(HashMap::from([
+        let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
                 HashMap::from([
@@ -1063,11 +1101,18 @@ mod tests {
                     ),
                 ]),
             ),
-        ]));
+        ]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b", "variant_c"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1084,7 +1129,7 @@ mod tests {
         let gepa_config = create_test_gepa_config("test_eval");
 
         // A has higher accuracy (max) and lower latency (min) - dominates B
-        let val_scores = create_test_val_scores(HashMap::from([
+        let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
                 HashMap::from([(
@@ -1105,11 +1150,18 @@ mod tests {
                     ]),
                 )]),
             ),
-        ]));
+        ]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1125,7 +1177,7 @@ mod tests {
         let gepa_config = create_test_gepa_config("test_eval");
 
         // A has None on dp1, B has None on dp2 - they're incomparable
-        let val_scores = create_test_val_scores(HashMap::from([
+        let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
                 HashMap::from([
@@ -1152,11 +1204,18 @@ mod tests {
                     ),
                 ]),
             ),
-        ]));
+        ]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1172,17 +1231,24 @@ mod tests {
         let config = create_test_config("test_eval", &[("accuracy", "max")]);
         let gepa_config = create_test_gepa_config("test_eval");
 
-        let val_scores = create_test_val_scores(HashMap::from([(
+        let variant_scores = HashMap::from([(
             "variant_a".to_string(),
             HashMap::from([(
                 "dp1".to_string(),
                 HashMap::from([("accuracy".to_string(), Some(0.9))]),
             )]),
-        )]));
+        )]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, frequencies) = result.unwrap();
@@ -1199,7 +1265,7 @@ mod tests {
         let gepa_config = create_test_gepa_config("test_eval");
 
         // B has an error on dp1 (represented as missing datapoint)
-        let val_scores = create_test_val_scores(HashMap::from([
+        let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
                 HashMap::from([
@@ -1220,11 +1286,18 @@ mod tests {
                     HashMap::from([("accuracy".to_string(), Some(0.6))]),
                 )]),
             ),
-        ]));
+        ]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1239,7 +1312,7 @@ mod tests {
         let config = create_test_config("test_eval", &[("accuracy", "max")]);
         let gepa_config = create_test_gepa_config("test_eval");
 
-        let val_scores = create_test_val_scores(HashMap::from([
+        let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
                 HashMap::from([(
@@ -1261,11 +1334,18 @@ mod tests {
                     HashMap::from([("accuracy".to_string(), Some(0.8))]),
                 )]),
             ),
-        ]));
+        ]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b", "variant_c"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1285,7 +1365,7 @@ mod tests {
         // Test scenario: variants evaluated on different datapoints
         // This tests the edge case where GEPA's datapoint collection from first variant matters
         // Both variants have data on both datapoints, but missing (None) on different ones
-        let val_scores = create_test_val_scores(HashMap::from([
+        let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
                 HashMap::from([
@@ -1312,11 +1392,18 @@ mod tests {
                     ),
                 ]),
             ),
-        ]));
+        ]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1337,7 +1424,7 @@ mod tests {
         let gepa_config = create_test_gepa_config("test_eval");
 
         // A has True (1.0), B has False (0.0) for bool evaluator
-        let val_scores = create_test_val_scores(HashMap::from([
+        let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
                 HashMap::from([(
@@ -1352,11 +1439,18 @@ mod tests {
                     HashMap::from([("exact_match".to_string(), Some(0.0))]),
                 )]),
             ),
-        ]));
+        ]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1371,7 +1465,7 @@ mod tests {
         let config = create_test_config("test_eval", &[("accuracy", "max")]);
         let gepa_config = create_test_gepa_config("test_eval");
 
-        let val_scores = create_test_val_scores(HashMap::from([
+        let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
                 HashMap::from([(
@@ -1393,11 +1487,18 @@ mod tests {
                     HashMap::from([("accuracy".to_string(), Some(0.5))]),
                 )]),
             ),
-        ]));
+        ]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b", "variant_c"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1436,7 +1537,8 @@ mod tests {
             variant_scores.insert(variant_name, datapoint_scores);
         }
 
-        let val_scores = create_test_val_scores(variant_scores);
+        let val_scores = create_test_val_scores(variant_scores.clone());
+        let val_scores_map = variant_scores;
         let variant_names: Vec<&str> = (0..num_variants)
             .map(|v| Box::leak(format!("variant_{v}").into_boxed_str()) as &str)
             .collect();
@@ -1444,7 +1546,13 @@ mod tests {
 
         // Measure execution time
         let start = Instant::now();
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &val_scores_map,
+            &gepa_config,
+            &config,
+        );
         let elapsed = start.elapsed();
 
         assert!(result.is_ok());
@@ -1474,9 +1582,17 @@ mod tests {
         let gepa_config = create_test_gepa_config("test_eval");
 
         let val_scores: HashMap<String, Option<EvaluationResults>> = HashMap::new();
+        let val_scores_map: HashMap<String, HashMap<String, HashMap<String, Option<f32>>>> =
+            HashMap::new();
         let candidates: HashMap<String, UninitializedChatCompletionConfig> = HashMap::new();
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &val_scores_map,
+            &gepa_config,
+            &config,
+        );
 
         // Should return error for empty candidates
         assert!(result.is_err());
@@ -1492,10 +1608,17 @@ mod tests {
             ("variant_a".to_string(), None),
             ("variant_b".to_string(), None),
         ]);
-
+        let val_scores_map: HashMap<String, HashMap<String, HashMap<String, Option<f32>>>> =
+            HashMap::new();
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &val_scores_map,
+            &gepa_config,
+            &config,
+        );
 
         // Should return error when all evaluations failed
         assert!(result.is_err());
@@ -1509,7 +1632,7 @@ mod tests {
         let gepa_config = create_test_gepa_config("test_eval");
 
         // Every per_datapoint score is None
-        let val_scores = create_test_val_scores(HashMap::from([
+        let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
                 HashMap::from([
@@ -1536,11 +1659,18 @@ mod tests {
                     ),
                 ]),
             ),
-        ]));
+        ]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
@@ -1555,14 +1685,21 @@ mod tests {
         let gepa_config = create_test_gepa_config("test_eval");
 
         // Empty per_datapoint HashMap
-        let val_scores = create_test_val_scores(HashMap::from([
+        let variant_scores = HashMap::from([
             ("variant_a".to_string(), HashMap::new()),
             ("variant_b".to_string(), HashMap::new()),
-        ]));
+        ]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, frequencies) = result.unwrap();
@@ -1580,7 +1717,7 @@ mod tests {
         let gepa_config = create_test_gepa_config("test_eval");
 
         // A wins on dp1 and dp2, B wins on dp3, C never wins
-        let val_scores = create_test_val_scores(HashMap::from([
+        let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
                 HashMap::from([
@@ -1632,11 +1769,18 @@ mod tests {
                     ),
                 ]),
             ),
-        ]));
+        ]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a", "variant_b", "variant_c"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, frequencies) = result.unwrap();
@@ -1661,7 +1805,7 @@ mod tests {
         let gepa_config = create_test_gepa_config("test_eval");
 
         // variant_a has 60% missing data (3 out of 5 datapoints have scores)
-        let val_scores = create_test_val_scores(HashMap::from([(
+        let variant_scores = HashMap::from([(
             "variant_a".to_string(),
             HashMap::from([
                 (
@@ -1685,11 +1829,18 @@ mod tests {
                     HashMap::from([("accuracy".to_string(), None)]),
                 ),
             ]),
-        )]));
+        )]);
 
+        let val_scores = create_test_val_scores(variant_scores.clone());
         let candidates = create_test_variants(&["variant_a"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(
+            candidates,
+            &val_scores,
+            &variant_scores,
+            &gepa_config,
+            &config,
+        );
         assert!(result.is_ok());
 
         let (filtered, _) = result.unwrap();
