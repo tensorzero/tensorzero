@@ -122,7 +122,7 @@ mod tests {
             vec![],
             AllowedTools {
                 tools: HashSet::new(), // Explicitly empty (no static tools)
-                choice: AllowedToolsChoice::AllAllowedTools,
+                choice: AllowedToolsChoice::OnlyAllowedTools,
             },
             ToolChoice::Specific("tool_1".to_string()),
             None,
@@ -162,7 +162,7 @@ mod tests {
             vec![],
             AllowedTools {
                 tools: ["tool_1".to_string()].into_iter().collect(),
-                choice: AllowedToolsChoice::AllAllowedTools, // Explicit list
+                choice: AllowedToolsChoice::OnlyAllowedTools, // Explicit list
             },
             ToolChoice::Required,
             None,

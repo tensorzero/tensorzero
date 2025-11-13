@@ -2492,7 +2492,7 @@ mod tool_call_storage_tests {
                     tools: ["static_tool_1".to_string(), "static_tool_2".to_string()]
                         .into_iter()
                         .collect(),
-                    choice: AllowedToolsChoice::AllAllowedTools,
+                    choice: AllowedToolsChoice::OnlyAllowedTools,
                 },
                 ToolChoice::Auto,
                 None,
@@ -2538,7 +2538,7 @@ mod tool_call_storage_tests {
             assert!(tool_params.allowed_tools.tools.contains("static_tool_2"));
             assert_eq!(
                 tool_params.allowed_tools.choice,
-                AllowedToolsChoice::AllAllowedTools
+                AllowedToolsChoice::OnlyAllowedTools
             );
 
             assert_eq!(tool_params.tool_choice, ToolChoice::Auto);
@@ -2580,7 +2580,7 @@ mod tool_call_storage_tests {
                 vec![],             // No provider tools
                 AllowedTools {
                     tools: HashSet::new(), // Empty static tools
-                    choice: AllowedToolsChoice::AllAllowedTools,
+                    choice: AllowedToolsChoice::OnlyAllowedTools,
                 },
                 ToolChoice::Required,
                 Some(true),
@@ -2624,7 +2624,7 @@ mod tool_call_storage_tests {
             assert!(tool_params.allowed_tools.tools.is_empty());
             assert_eq!(
                 tool_params.allowed_tools.choice,
-                AllowedToolsChoice::AllAllowedTools
+                AllowedToolsChoice::OnlyAllowedTools
             );
 
             assert_eq!(tool_params.tool_choice, ToolChoice::Required);
@@ -2668,7 +2668,7 @@ mod tool_call_storage_tests {
                     tools: ["static_a".to_string(), "static_b".to_string()]
                         .into_iter()
                         .collect(),
-                    choice: AllowedToolsChoice::AllAllowedTools,
+                    choice: AllowedToolsChoice::OnlyAllowedTools,
                 },
                 ToolChoice::Auto,
                 None,
@@ -2894,7 +2894,7 @@ mod tool_call_storage_tests {
                     tools: ["explicit_tool_1".to_string(), "explicit_tool_2".to_string()]
                         .into_iter()
                         .collect(),
-                    choice: AllowedToolsChoice::AllAllowedTools, // Explicit list
+                    choice: AllowedToolsChoice::OnlyAllowedTools, // Explicit list
                 },
                 ToolChoice::Specific("explicit_tool_1".to_string()),
                 None,
@@ -2929,7 +2929,7 @@ mod tool_call_storage_tests {
             // DynamicAllowedTools should preserve the explicit list
             assert_eq!(
                 tool_params.allowed_tools.choice,
-                AllowedToolsChoice::AllAllowedTools
+                AllowedToolsChoice::OnlyAllowedTools
             );
             assert_eq!(tool_params.allowed_tools.tools.len(), 2);
             assert!(tool_params.allowed_tools.tools.contains("explicit_tool_1"));
@@ -3048,7 +3048,7 @@ mod tool_call_storage_tests {
                     tools: ["static_1".to_string(), "static_2".to_string()]
                         .into_iter()
                         .collect(),
-                    choice: AllowedToolsChoice::AllAllowedTools,
+                    choice: AllowedToolsChoice::OnlyAllowedTools,
                 },
                 ToolChoice::Required,
                 Some(true),

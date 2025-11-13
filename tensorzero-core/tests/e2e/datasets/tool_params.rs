@@ -83,7 +83,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
             tools: [get_temp_tool.name.clone(), custom_tool.name.clone()]
                 .into_iter()
                 .collect(),
-            choice: AllowedToolsChoice::AllAllowedTools,
+            choice: AllowedToolsChoice::OnlyAllowedTools,
         },
         ToolChoice::Specific("get_temperature".to_string()),
         Some(false),
@@ -216,7 +216,7 @@ async fn test_datapoint_update_tool_params() {
         vec![],
         AllowedTools {
             tools: [get_temp_tool.name.clone()].into_iter().collect(),
-            choice: AllowedToolsChoice::AllAllowedTools,
+            choice: AllowedToolsChoice::OnlyAllowedTools,
         },
         ToolChoice::Auto,
         Some(false),
@@ -417,7 +417,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![],
             AllowedTools {
                 tools: [base_tool.name.clone()].into_iter().collect(),
-                choice: AllowedToolsChoice::AllAllowedTools,
+                choice: AllowedToolsChoice::OnlyAllowedTools,
             },
             ToolChoice::Auto,
             None,
@@ -453,7 +453,7 @@ async fn test_list_datapoints_with_tool_params() {
                 tools: [base_tool.name.clone(), custom_tool_1.name.clone()]
                     .into_iter()
                     .collect(),
-                choice: AllowedToolsChoice::AllAllowedTools,
+                choice: AllowedToolsChoice::OnlyAllowedTools,
             },
             ToolChoice::Required,
             Some(false),
@@ -487,7 +487,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![],
             AllowedTools {
                 tools: [custom_tool_2.name.clone()].into_iter().collect(),
-                choice: AllowedToolsChoice::AllAllowedTools,
+                choice: AllowedToolsChoice::OnlyAllowedTools,
             },
             ToolChoice::None,
             Some(true),
@@ -710,7 +710,7 @@ async fn test_datapoint_only_dynamic_tools() {
                 tools: [static_tool.name.clone(), dynamic_tool.name.clone()]
                     .into_iter()
                     .collect(),
-                choice: AllowedToolsChoice::AllAllowedTools,
+                choice: AllowedToolsChoice::OnlyAllowedTools,
             },
             ToolChoice::Auto,
             None,
@@ -802,7 +802,7 @@ async fn test_datapoint_tool_params_three_states() {
             vec![],
             AllowedTools {
                 tools: [tool.name.clone()].into_iter().collect(),
-                choice: AllowedToolsChoice::AllAllowedTools,
+                choice: AllowedToolsChoice::OnlyAllowedTools,
             },
             ToolChoice::Auto,
             None,

@@ -2922,7 +2922,7 @@ mod tests {
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
                 tools: vec!["get_temperature".to_string()].into_iter().collect(),
-                choice: AllowedToolsChoice::AllAllowedTools,
+                choice: AllowedToolsChoice::OnlyAllowedTools,
             },
         };
         let tool_config =
@@ -2948,7 +2948,7 @@ mod tests {
                 tools: vec!["tool1".to_string(), "tool2".to_string()]
                     .into_iter()
                     .collect(),
-                choice: AllowedToolsChoice::AllAllowedTools,
+                choice: AllowedToolsChoice::OnlyAllowedTools,
             },
         };
         let tool_config =
@@ -2973,7 +2973,7 @@ mod tests {
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
                 tools: vec!["allowed_tool".to_string()].into_iter().collect(),
-                choice: AllowedToolsChoice::AllAllowedTools,
+                choice: AllowedToolsChoice::OnlyAllowedTools,
             },
         };
         let tool_config =

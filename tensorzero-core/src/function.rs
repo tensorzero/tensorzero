@@ -424,7 +424,7 @@ impl FunctionConfig {
         #[expect(deprecated)]
         let allowed_tools = match allowed_tools.choice {
             AllowedToolsChoice::FunctionDefault => None,
-            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::AllAllowedTools => {
+            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::OnlyAllowedTools => {
                 Some(allowed_tools.tools.into_iter().collect())
             }
         };
@@ -2470,7 +2470,7 @@ mod tests {
                     tools: ["tool1".to_string(), "tool2".to_string()]
                         .into_iter()
                         .collect(),
-                    choice: AllowedToolsChoice::AllAllowedTools, // Explicit list
+                    choice: AllowedToolsChoice::OnlyAllowedTools, // Explicit list
                 },
                 ToolChoice::Required,
                 Some(false),
@@ -2522,7 +2522,7 @@ mod tests {
                 vec![],
                 AllowedTools {
                     tools: ["a".to_string(), "b".to_string()].into_iter().collect(), // Only static tools
-                    choice: AllowedToolsChoice::AllAllowedTools,
+                    choice: AllowedToolsChoice::OnlyAllowedTools,
                 },
                 ToolChoice::Auto,
                 None,
@@ -2594,7 +2594,7 @@ mod tests {
                     vec![],
                     AllowedTools {
                         tools: ["tool1".to_string()].into_iter().collect(),
-                        choice: AllowedToolsChoice::AllAllowedTools,
+                        choice: AllowedToolsChoice::OnlyAllowedTools,
                     },
                     choice.clone(),
                     None,
@@ -2610,7 +2610,7 @@ mod tests {
                     vec![],
                     AllowedTools {
                         tools: ["tool1".to_string()].into_iter().collect(),
-                        choice: AllowedToolsChoice::AllAllowedTools,
+                        choice: AllowedToolsChoice::OnlyAllowedTools,
                     },
                     ToolChoice::Auto,
                     ptc,
@@ -2625,7 +2625,7 @@ mod tests {
                 vec![], // Empty provider tools
                 AllowedTools {
                     tools: ["tool1".to_string()].into_iter().collect(),
-                    choice: AllowedToolsChoice::AllAllowedTools,
+                    choice: AllowedToolsChoice::OnlyAllowedTools,
                 },
                 ToolChoice::Auto,
                 None,

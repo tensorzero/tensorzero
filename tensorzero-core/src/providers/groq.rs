@@ -41,8 +41,8 @@ use crate::providers::helpers::{
 // Import unified OpenAI types for allowed_tools support
 use super::openai::{
     AllowedToolsChoice as OpenAIAllowedToolsChoice,
-    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode,
-    OpenAIToolType, SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
+    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode, OpenAIToolType,
+    SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
 };
 
 const PROVIDER_NAME: &str = "Groq";
@@ -2094,7 +2094,7 @@ mod tests {
             parallel_tool_calls: Some(false),
             allowed_tools: AllowedTools {
                 tools: vec![WEATHER_TOOL.name().to_string()].into_iter().collect(),
-                choice: AllowedToolsChoice::AllAllowedTools,
+                choice: AllowedToolsChoice::OnlyAllowedTools,
             },
         };
 
@@ -2131,7 +2131,10 @@ mod tests {
         match tool_choice {
             GroqToolChoice::AllowedTools(allowed_tools_choice) => {
                 assert_eq!(allowed_tools_choice.r#type, "allowed_tools");
-                assert_eq!(allowed_tools_choice.allowed_tools.mode, AllowedToolsMode::Auto);
+                assert_eq!(
+                    allowed_tools_choice.allowed_tools.mode,
+                    AllowedToolsMode::Auto
+                );
                 assert_eq!(allowed_tools_choice.allowed_tools.tools.len(), 1);
                 assert_eq!(
                     allowed_tools_choice.allowed_tools.tools[0].function.name,

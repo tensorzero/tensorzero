@@ -307,7 +307,7 @@ impl AllowedTools {
         #[expect(deprecated)]
         match self.choice {
             AllowedToolsChoice::FunctionDefault => None,
-            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::AllAllowedTools => {
+            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::OnlyAllowedTools => {
                 Some(self.tools.into_iter().collect())
             }
         }
@@ -317,7 +317,7 @@ impl AllowedTools {
         #[expect(deprecated)]
         match self.choice {
             AllowedToolsChoice::FunctionDefault => None,
-            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::AllAllowedTools => {
+            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::OnlyAllowedTools => {
                 Some(self.tools.iter().map(|s| s.as_str()).collect())
             }
         }
@@ -338,7 +338,7 @@ pub enum AllowedToolsChoice {
     #[deprecated]
     DynamicAllowedTools,
     // Currently, we match OpenAI in that if allowed tools is set we only allow the tools that are in it.
-    AllAllowedTools,
+    OnlyAllowedTools,
 }
 
 /// Contains all information required to tell an LLM what tools it can call
@@ -444,7 +444,7 @@ impl ToolCallConfig {
         let allowed_tools = match dynamic_allowed_tools {
             Some(allowed_tools) => AllowedTools {
                 tools: allowed_tools.into_iter().collect(),
-                choice: AllowedToolsChoice::AllAllowedTools,
+                choice: AllowedToolsChoice::OnlyAllowedTools,
             },
             None => AllowedTools {
                 tools: function_tools.iter().cloned().collect(),
@@ -480,7 +480,9 @@ impl ToolCallConfig {
         // Then, add any tools from allowed_tools that exist in static_tools but not in function_tools
         // This ensures that all allowed tools from the config are actually available
         for tool_name in &allowed_tools.tools {
-            if static_tools.contains_key(tool_name) && !static_tool_names.contains(&tool_name.as_str()) {
+            if static_tools.contains_key(tool_name)
+                && !static_tool_names.contains(&tool_name.as_str())
+            {
                 static_tool_names.push(tool_name);
             }
         }
@@ -576,7 +578,7 @@ impl ToolCallConfig {
                 // Return all tools (lenient mode)
                 Box::new(self.tools_available())
             }
-            AllowedToolsChoice::AllAllowedTools => {
+            AllowedToolsChoice::OnlyAllowedTools => {
                 // Filter to only allowed tools (strict mode)
                 Box::new(
                     self.tools_available()
@@ -1140,7 +1142,7 @@ impl ToolCallConfigDatabaseInsert {
                     .map(str::to_string)
                     .collect::<Vec<_>>()
             }
-            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::AllAllowedTools => {
+            AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::OnlyAllowedTools => {
                 // Use the dynamically specified tool names
                 self.allowed_tools.tools.iter().cloned().collect::<Vec<_>>()
             }
@@ -2559,7 +2561,7 @@ mod tests {
             .contains("get_temperature"));
         assert!(matches!(
             tool_call_config.allowed_tools.choice,
-            AllowedToolsChoice::AllAllowedTools
+            AllowedToolsChoice::OnlyAllowedTools
         ));
 
         // strict_tools_available should filter to only allowed_tools (AllAllowedTools mode)
@@ -3086,7 +3088,7 @@ mod tests {
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
                 tools: vec!["get_temperature".to_string()].into_iter().collect(),
-                choice: AllowedToolsChoice::AllAllowedTools,
+                choice: AllowedToolsChoice::OnlyAllowedTools,
             },
         };
 
@@ -3199,7 +3201,7 @@ mod tests {
         // Verify choice is AllAllowedTools
         assert!(matches!(
             tool_call_config.allowed_tools.choice,
-            AllowedToolsChoice::AllAllowedTools
+            AllowedToolsChoice::OnlyAllowedTools
         ));
     }
 

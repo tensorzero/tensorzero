@@ -2384,7 +2384,7 @@ mod tests {
                 vec![],
                 AllowedTools {
                     tools: ["weather_tool".to_string()].into_iter().collect(),
-                    choice: AllowedToolsChoice::AllAllowedTools,
+                    choice: AllowedToolsChoice::OnlyAllowedTools,
                 },
                 ToolChoice::Required,
                 Some(true),
