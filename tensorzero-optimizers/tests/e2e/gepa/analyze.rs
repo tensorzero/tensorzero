@@ -1,190 +1,15 @@
-//! E2E tests for GEPA optimizer functions
+//! E2E tests for GEPA analyze function
 //!
-//! These tests exercise the GEPA optimization components (analyze, mutate, evaluate)
-//! using real gateway clients and the full inference pipeline.
+//! These tests exercise the analyze_inferences component using real gateway clients
+//! and the full inference pipeline.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::collections::HashMap;
-
-use evaluations::EvaluationInfo;
 use tensorzero::test_helpers::make_embedded_gateway;
-use tensorzero_core::{
-    config::{path::ResolvedTomlPath, SchemaData},
-    endpoints::{
-        datasets::{StoredChatInferenceDatapoint, StoredDatapoint},
-        inference::{ChatInferenceResponse, InferenceResponse},
-    },
-    function::{FunctionConfig, FunctionConfigChat},
-    inference::types::{ContentBlockChatOutput, FinishReason, Input, Text, Usage},
-    jsonschema_util::{SchemaWithMetadata, StaticJSONSchema},
-    optimization::gepa::GEPAConfig,
-    variant::chat_completion::UninitializedChatCompletionConfig,
-};
+use tensorzero_core::{endpoints::inference::InferenceResponse, function::FunctionConfig};
 use tensorzero_optimizers::gepa::analyze_inferences;
-use uuid::Uuid;
 
-// ============================================================================
-// Test Helper Functions
-// ============================================================================
-
-/// Create a minimal Chat FunctionConfig for testing
-fn create_test_function_config() -> FunctionConfig {
-    FunctionConfig::Chat(FunctionConfigChat {
-        variants: HashMap::new(),
-        schemas: SchemaData::default(),
-        tools: vec![],
-        tool_choice: tensorzero_core::tool::ToolChoice::None,
-        parallel_tool_calls: None,
-        description: Some("Test function for GEPA e2e tests".to_string()),
-        all_explicit_templates_names: std::collections::HashSet::new(),
-        experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
-    })
-}
-
-/// Create a Chat FunctionConfig with schemas for validation tests
-fn create_test_function_config_with_schemas() -> FunctionConfig {
-    let system_schema = StaticJSONSchema::from_value(serde_json::json!({
-        "type": "object",
-        "properties": {
-            "greeting": {"type": "string"}
-        }
-    }))
-    .expect("Failed to create system schema");
-
-    let user_schema = StaticJSONSchema::from_value(serde_json::json!({
-        "type": "object",
-        "properties": {
-            "name": {"type": "string"}
-        }
-    }))
-    .expect("Failed to create user schema");
-
-    let mut schema_inner = HashMap::new();
-    schema_inner.insert(
-        "system".to_string(),
-        SchemaWithMetadata {
-            schema: system_schema,
-            legacy_definition: false,
-        },
-    );
-    schema_inner.insert(
-        "user".to_string(),
-        SchemaWithMetadata {
-            schema: user_schema,
-            legacy_definition: false,
-        },
-    );
-
-    let schemas = SchemaData {
-        inner: schema_inner,
-    };
-
-    FunctionConfig::Chat(FunctionConfigChat {
-        variants: HashMap::new(),
-        schemas,
-        tools: vec![],
-        tool_choice: tensorzero_core::tool::ToolChoice::None,
-        parallel_tool_calls: None,
-        description: Some("Test function with schemas for GEPA e2e tests".to_string()),
-        all_explicit_templates_names: std::collections::HashSet::new(),
-        experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
-    })
-}
-
-/// Create a test UninitializedChatCompletionConfig with simple templates
-fn create_test_variant_config() -> UninitializedChatCompletionConfig {
-    UninitializedChatCompletionConfig {
-        model: "dummy::echo_request_messages".into(),
-        weight: None,
-        system_template: Some(ResolvedTomlPath::new_fake_path(
-            "system.minijinja".to_string(),
-            "You are a helpful assistant for testing.".to_string(),
-        )),
-        user_template: Some(ResolvedTomlPath::new_fake_path(
-            "user.minijinja".to_string(),
-            "User: {{input}}".to_string(),
-        )),
-        assistant_template: None,
-        ..Default::default()
-    }
-}
-
-/// Create a test GEPAConfig with reasonable defaults
-fn create_test_gepa_config() -> GEPAConfig {
-    GEPAConfig {
-        function_name: "test_function".to_string(),
-        evaluation_name: "test_eval".to_string(),
-        initial_variants: None,
-        variant_prefix: Some("test".to_string()),
-        batch_size: 5,
-        max_iterations: 1,
-        max_concurrency: 10,
-        analysis_model: "dummy::echo_request_messages".to_string(),
-        mutation_model: "dummy::echo_request_messages".to_string(),
-        seed: Some(42),
-        timeout: 300,
-    }
-}
-
-/// Create a test EvaluationInfo with simple text input/output
-fn create_test_evaluation_info(
-    function_name: &str,
-    input_text: &str,
-    output_text: &str,
-) -> EvaluationInfo {
-    let input = Input {
-        messages: vec![],
-        system: None,
-    };
-
-    // Convert Input to StoredInput via JSON round-trip
-    let stored_input =
-        serde_json::from_value(serde_json::to_value(&input).expect("Failed to serialize input"))
-            .expect("Failed to deserialize stored input");
-
-    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
-        dataset_name: "test_dataset".to_string(),
-        function_name: function_name.to_string(),
-        id: Uuid::now_v7(),
-        episode_id: Some(Uuid::now_v7()),
-        input: stored_input,
-        output: Some(vec![ContentBlockChatOutput::Text(Text {
-            text: output_text.to_string(),
-        })]),
-        tool_params: None,
-        tags: Some(HashMap::from([(
-            "test_input".to_string(),
-            input_text.to_string(),
-        )])),
-        auxiliary: String::new(),
-        is_deleted: false,
-        is_custom: false,
-        source_inference_id: None,
-        staled_at: None,
-        updated_at: "2025-01-01T00:00:00Z".to_string(),
-        name: None,
-    });
-
-    let response = InferenceResponse::Chat(ChatInferenceResponse {
-        inference_id: Uuid::now_v7(),
-        episode_id: Uuid::now_v7(),
-        variant_name: "test_variant".to_string(),
-        content: vec![ContentBlockChatOutput::Text(Text {
-            text: output_text.to_string(),
-        })],
-        usage: Usage::default(),
-        original_response: None,
-        finish_reason: Some(FinishReason::Stop),
-    });
-
-    EvaluationInfo {
-        datapoint,
-        response,
-        evaluations: HashMap::new(),
-        evaluator_errors: HashMap::new(),
-    }
-}
+use super::*;
 
 // ============================================================================
 // Basic Functionality Tests
@@ -558,6 +383,10 @@ async fn test_analyze_inferences_with_tools() {
     )];
 
     // Create function config with tools
+    use std::collections::HashMap;
+    use tensorzero_core::config::SchemaData;
+    use tensorzero_core::function::FunctionConfigChat;
+
     let function_config = FunctionConfig::Chat(FunctionConfigChat {
         variants: HashMap::new(),
         schemas: SchemaData::default(),

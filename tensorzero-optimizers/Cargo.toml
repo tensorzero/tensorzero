@@ -80,5 +80,5 @@ required-features = ["e2e_tests"]
 
 [[test]]
 name = "e2e_gepa"
-path = "tests/e2e/gepa.rs"
+path = "tests/e2e/gepa/mod.rs"
 required-features = ["e2e_tests"]

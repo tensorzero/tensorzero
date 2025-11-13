@@ -152,7 +152,6 @@ pub fn parse_mutate_response(response: &InferenceResponse) -> Result<MutateOutpu
 /// function to synthesize improved prompt templates.
 ///
 /// Returns MutateOutput with improved templates.
-#[expect(dead_code)]
 pub async fn mutate_templates(
     gateway_client: &Client,
     analyses: &[InferenceWithAnalysis],
@@ -479,6 +478,228 @@ mod tests {
         assert_eq!(
             new_system_content, "New system",
             "new_config system template should contain the mutated content"
+        );
+    }
+
+    #[test]
+    fn test_build_mutate_input_with_schemas() {
+        use tensorzero_core::{
+            config::SchemaData,
+            function::{FunctionConfig, FunctionConfigChat},
+            jsonschema_util::{SchemaWithMetadata, StaticJSONSchema},
+        };
+
+        // Create function config with schemas
+        let system_schema = StaticJSONSchema::from_value(serde_json::json!({
+            "type": "object",
+            "properties": {
+                "greeting": {"type": "string"}
+            }
+        }))
+        .expect("Failed to create system schema");
+
+        let mut schema_inner = HashMap::new();
+        schema_inner.insert(
+            "system".to_string(),
+            SchemaWithMetadata {
+                schema: system_schema,
+                legacy_definition: false,
+            },
+        );
+
+        let schemas = SchemaData {
+            inner: schema_inner,
+        };
+
+        let function_config = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas,
+            tools: vec![],
+            tool_choice: tensorzero_core::tool::ToolChoice::None,
+            parallel_tool_calls: None,
+            description: Some("Test function with schemas".to_string()),
+            all_explicit_templates_names: std::collections::HashSet::new(),
+            experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+        });
+
+        // Create variant config with templates
+        let mut variant_config = UninitializedChatCompletionConfig {
+            model: "test-model".into(),
+            ..Default::default()
+        };
+
+        variant_config.templates.inner.insert(
+            "system".to_string(),
+            UninitializedChatTemplate {
+                path: ResolvedTomlPath::new_fake_path(
+                    "system.minijinja".to_string(),
+                    "Test system template".to_string(),
+                ),
+            },
+        );
+
+        // Create empty analyses
+        let analyses: Vec<InferenceWithAnalysis> = vec![];
+
+        // Call build_mutate_input
+        let result = build_mutate_input(&analyses, &function_config, &variant_config);
+
+        // Assert: Should succeed
+        assert!(result.is_ok(), "build_mutate_input should succeed");
+        let arguments = result.unwrap();
+
+        // Verify schemas are included in the Arguments map
+        assert!(
+            arguments.0.contains_key("schemas"),
+            "Arguments should contain schemas key"
+        );
+
+        // Verify schema structure
+        let schemas_value = arguments.0.get("schemas").unwrap();
+        assert!(
+            schemas_value.is_object(),
+            "schemas value should be an object"
+        );
+        let schemas_obj = schemas_value.as_object().unwrap();
+        assert!(
+            schemas_obj.contains_key("system"),
+            "schemas should contain system schema"
+        );
+    }
+
+    #[test]
+    fn test_build_mutate_input_empty_templates_error() {
+        use tensorzero_core::function::{FunctionConfig, FunctionConfigChat};
+
+        // Create function config
+        let function_config = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: tensorzero_core::config::SchemaData::default(),
+            tools: vec![],
+            tool_choice: tensorzero_core::tool::ToolChoice::None,
+            parallel_tool_calls: None,
+            description: Some("Test function".to_string()),
+            all_explicit_templates_names: std::collections::HashSet::new(),
+            experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+        });
+
+        // Create variant config with EMPTY templates.inner
+        let variant_config = UninitializedChatCompletionConfig {
+            model: "test-model".into(),
+            ..Default::default()
+        };
+
+        // Verify templates.inner is empty
+        assert!(
+            variant_config.templates.inner.is_empty(),
+            "templates.inner should be empty for this test"
+        );
+
+        // Create empty analyses
+        let analyses: Vec<InferenceWithAnalysis> = vec![];
+
+        // Call build_mutate_input
+        let result = build_mutate_input(&analyses, &function_config, &variant_config);
+
+        // Assert: Should return Config error
+        assert!(
+            result.is_err(),
+            "build_mutate_input should error with empty templates"
+        );
+        let error = result.unwrap_err();
+        let error_msg = error.to_string();
+        assert!(
+            error_msg.contains("Cannot mutate variant with no templates"),
+            "Error message should indicate empty templates, got: {error_msg}"
+        );
+    }
+
+    #[test]
+    fn test_parse_mutate_response_valid_json() {
+        use tensorzero_core::{
+            endpoints::inference::{InferenceResponse, JsonInferenceResponse},
+            inference::types::{JsonInferenceOutput, Usage},
+        };
+        use uuid::Uuid;
+
+        // Create valid JSON response with MutateOutput structure
+        let output_json = serde_json::json!({
+            "templates": {
+                "system": "Improved system template",
+                "user": "Improved user template"
+            }
+        });
+
+        let json_response = JsonInferenceResponse {
+            inference_id: Uuid::now_v7(),
+            episode_id: Uuid::now_v7(),
+            variant_name: "test_variant".to_string(),
+            output: JsonInferenceOutput {
+                raw: Some("{}".to_string()),
+                parsed: Some(output_json.clone()),
+            },
+            usage: Usage::default(),
+            original_response: None,
+            finish_reason: None,
+        };
+
+        let response = InferenceResponse::Json(json_response);
+
+        // Call parse_mutate_response
+        let result = parse_mutate_response(&response);
+
+        // Assert: Should succeed
+        assert!(result.is_ok(), "parse_mutate_response should succeed");
+        let mutate_output = result.unwrap();
+
+        // Verify templates were extracted correctly
+        assert_eq!(mutate_output.templates.len(), 2, "Should have 2 templates");
+        assert_eq!(
+            mutate_output.templates.get("system").unwrap(),
+            "Improved system template"
+        );
+        assert_eq!(
+            mutate_output.templates.get("user").unwrap(),
+            "Improved user template"
+        );
+    }
+
+    #[test]
+    fn test_parse_mutate_response_chat_response_error() {
+        use tensorzero_core::{
+            endpoints::inference::{ChatInferenceResponse, InferenceResponse},
+            inference::types::{ContentBlockChatOutput, Text, Usage},
+        };
+        use uuid::Uuid;
+
+        // Create Chat response (wrong type - should be Json)
+        let chat_response = ChatInferenceResponse {
+            inference_id: Uuid::now_v7(),
+            episode_id: Uuid::now_v7(),
+            variant_name: "test_variant".to_string(),
+            content: vec![ContentBlockChatOutput::Text(Text {
+                text: "This is chat text, not JSON".to_string(),
+            })],
+            usage: Usage::default(),
+            original_response: None,
+            finish_reason: None,
+        };
+
+        let response = InferenceResponse::Chat(chat_response);
+
+        // Call parse_mutate_response
+        let result = parse_mutate_response(&response);
+
+        // Assert: Should return Inference error
+        assert!(
+            result.is_err(),
+            "parse_mutate_response should error with Chat response"
+        );
+        let error = result.unwrap_err();
+        let error_msg = error.to_string();
+        assert!(
+            error_msg.contains("Expected Json response") || error_msg.contains("got Chat"),
+            "Error message should indicate wrong response type, got: {error_msg}"
         );
     }
 }

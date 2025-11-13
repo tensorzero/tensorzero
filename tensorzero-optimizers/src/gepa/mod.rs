@@ -12,8 +12,9 @@ mod sample;
 mod utils;
 mod validate;
 
-// Re-export public functions for testing
-pub use analyze::analyze_inferences;
+// Re-export public functions and types for testing
+pub use analyze::{analyze_inferences, InferenceWithAnalysis};
+pub use mutate::mutate_templates;
 
 use async_trait::async_trait;
 
