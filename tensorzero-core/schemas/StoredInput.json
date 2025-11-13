@@ -1,0 +1,440 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StoredInput",
+  "description": "The input type that we directly store in ClickHouse.\nThis is almost identical to `ResolvedInput`, but without `File` data.\nOnly the object-storage path is actually stored in clickhouse\n(which can be used to re-fetch the file and produce a `ResolvedInput`).\n\n`StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.",
+  "type": "object",
+  "properties": {
+    "system": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/System"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "messages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/StoredInputMessage"
+      },
+      "default": []
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "System": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    },
+    "StoredInputMessage": {
+      "description": "`StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).",
+      "type": "object",
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/Role"
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StoredInputMessageContent"
+          }
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ]
+    },
+    "Role": {
+      "type": "string",
+      "enum": [
+        "user",
+        "assistant"
+      ]
+    },
+    "StoredInputMessageContent": {
+      "oneOf": [
+        {
+          "title": "StoredInputMessageContentText",
+          "description": "InputMessages are validated against the input schema of the Function\nand then templated and transformed into RequestMessages for a particular Variant.\nThey might contain tool calls or tool results along with text.\nThe abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.\nContentBlocks are collected into RequestMessages.\nThese RequestMessages are collected into a ModelInferenceRequest,\nwhich should contain all information needed by a ModelProvider to perform the\ninference that is called for.",
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "text"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text"
+          ]
+        },
+        {
+          "title": "StoredInputMessageContentTemplate",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "arguments": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "type": {
+              "type": "string",
+              "const": "template"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name",
+            "arguments"
+          ]
+        },
+        {
+          "title": "StoredInputMessageContentToolCall",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "tool_call"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/$defs/ToolCall"
+            }
+          ]
+        },
+        {
+          "title": "StoredInputMessageContentToolResult",
+          "description": "A ToolResult is the outcome of a ToolCall, which we may want to present back to the model",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "result": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "tool_result"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name",
+            "result",
+            "id"
+          ]
+        },
+        {
+          "title": "StoredInputMessageContentRawText",
+          "description": "Struct that represents raw text content that should be passed directly to the model\nwithout any template processing or validation",
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "raw_text"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ]
+        },
+        {
+          "title": "StoredInputMessageContentThought",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "thought"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/$defs/Thought"
+            }
+          ]
+        },
+        {
+          "title": "StoredInputMessageContentFile",
+          "description": "A file stored in an object storage backend, without data.\nThis struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).\nNote: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.",
+          "type": "object",
+          "properties": {
+            "source_url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "mime_type": {
+              "type": "string"
+            },
+            "storage_path": {
+              "$ref": "#/$defs/StoragePath"
+            },
+            "detail": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Detail"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "filename": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "file"
+            }
+          },
+          "required": [
+            "type",
+            "mime_type",
+            "storage_path"
+          ]
+        },
+        {
+          "title": "StoredInputMessageContentUnknown",
+          "description": "Struct that represents an unknown provider-specific content block.\nWe pass this along as-is without any validation or transformation.",
+          "type": "object",
+          "properties": {
+            "data": {
+              "description": "The underlying content block to be passed to the model provider."
+            },
+            "model_provider_name": {
+              "description": "A fully-qualified name specifying when this content block should\nbe included in the model provider input.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "unknown"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        }
+      ]
+    },
+    "ToolCall": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "arguments": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "arguments"
+      ]
+    },
+    "ThoughtSummaryBlock": {
+      "oneOf": [
+        {
+          "title": "ThoughtSummaryBlockSummaryText",
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "summary_text"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ]
+        }
+      ]
+    },
+    "Thought": {
+      "description": "Struct that represents a model's reasoning",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "signature": {
+          "description": "An optional signature - currently, this is only used with Anthropic,\nand is ignored by other providers.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ThoughtSummaryBlock"
+          }
+        },
+        "_internal_provider_type": {
+          "description": "When set, this 'Thought' block will only be used for providers\nmatching this type (e.g. `anthropic`). Other providers will emit\na warning and discard the block.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "StoragePath": {
+      "description": "Path to a file in an object storage backend.\nThis is part of the public API for `File`s. In particular, this is useful for roundtripping\nunresolved inputs from stored inferences or datapoints, without requiring clients to fetch\nfile data first.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/StorageKind"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "path"
+      ]
+    },
+    "StorageKind": {
+      "description": "Configuration for the object storage backend\nCurrently, we only support S3-compatible object storage and local filesystem storage\nWe test against Amazon S3, GCS, Cloudflare R2, and Minio",
+      "oneOf": [
+        {
+          "title": "StorageKindS3Compatible",
+          "type": "object",
+          "properties": {
+            "bucket_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "region": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "endpoint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "allow_http": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "prefix": {
+              "description": "An extra prefix to prepend to the object key.\nThis is only enabled in e2e tests, to prevent clashes between concurrent test runs.",
+              "type": "string",
+              "default": ""
+            },
+            "type": {
+              "type": "string",
+              "const": "s3_compatible"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "title": "StorageKindFilesystem",
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "filesystem"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ]
+        },
+        {
+          "title": "StorageKindDisabled",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "disabled"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    },
+    "Detail": {
+      "description": "Detail level for input images (affects fidelity and token cost)",
+      "type": "string",
+      "enum": [
+        "low",
+        "high",
+        "auto"
+      ]
+    }
+  }
+}

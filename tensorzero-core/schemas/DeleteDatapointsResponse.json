@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeleteDatapointsResponse",
+  "description": "Response containing the number of deleted datapoints.",
+  "type": "object",
+  "properties": {
+    "num_deleted_datapoints": {
+      "description": "The number of deleted datapoints.",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "num_deleted_datapoints"
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Thought",
+  "description": "Struct that represents a model's reasoning",
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "signature": {
+      "description": "An optional signature - currently, this is only used with Anthropic,\nand is ignored by other providers.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "summary": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/ThoughtSummaryBlock"
+      }
+    },
+    "_internal_provider_type": {
+      "description": "When set, this 'Thought' block will only be used for providers\nmatching this type (e.g. `anthropic`). Other providers will emit\na warning and discard the block.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "$defs": {
+    "ThoughtSummaryBlock": {
+      "oneOf": [
+        {
+          "title": "ThoughtSummaryBlockSummaryText",
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "summary_text"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ]
+        }
+      ]
+    }
+  }
+}

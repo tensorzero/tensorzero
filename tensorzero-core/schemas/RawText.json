@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RawText",
+  "description": "Struct that represents raw text content that should be passed directly to the model\nwithout any template processing or validation",
+  "type": "object",
+  "properties": {
+    "value": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "value"
+  ]
+}

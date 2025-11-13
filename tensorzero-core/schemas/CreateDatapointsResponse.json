@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CreateDatapointsResponse",
+  "description": "Response from creating datapoints.",
+  "type": "object",
+  "properties": {
+    "ids": {
+      "description": "The IDs of the newly-generated datapoints.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    }
+  },
+  "required": [
+    "ids"
+  ]
+}

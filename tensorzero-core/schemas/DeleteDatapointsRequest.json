@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeleteDatapointsRequest",
+  "description": "Request to delete datapoints from a dataset.",
+  "type": "object",
+  "properties": {
+    "ids": {
+      "description": "The IDs of the datapoints to delete.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    }
+  },
+  "required": [
+    "ids"
+  ]
+}

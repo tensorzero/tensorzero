@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProviderToolScope",
+  "anyOf": [
+    {
+      "type": "null"
+    },
+    {
+      "title": "ProviderToolScopeModelProvider",
+      "type": "object",
+      "properties": {
+        "model_name": {
+          "type": "string"
+        },
+        "model_provider_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "model_name",
+        "model_provider_name"
+      ]
+    }
+  ]
+}

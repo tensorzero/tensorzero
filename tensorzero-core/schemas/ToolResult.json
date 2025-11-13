@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ToolResult",
+  "description": "A ToolResult is the outcome of a ToolCall, which we may want to present back to the model",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "result": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "result",
+    "id"
+  ]
+}

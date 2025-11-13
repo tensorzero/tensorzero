@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UpdateDatapointsMetadataRequest",
+  "description": "Request to update metadata for one or more datapoints in a dataset.\nUsed by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.",
+  "type": "object",
+  "properties": {
+    "datapoints": {
+      "description": "The datapoints to update metadata for.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/UpdateDatapointMetadataRequest"
+      }
+    }
+  },
+  "required": [
+    "datapoints"
+  ],
+  "$defs": {
+    "UpdateDatapointMetadataRequest": {
+      "description": "A request to update the metadata of a single datapoint.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The ID of the datapoint to update. Required.",
+          "type": "string",
+          "format": "uuid"
+        },
+        "metadata": {
+          "description": "Metadata fields to update.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/DatapointMetadataUpdate"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "metadata"
+      ]
+    },
+    "DatapointMetadataUpdate": {
+      "description": "A request to update the metadata of a datapoint.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "x-double-option": true,
+          "default": null
+        }
+      }
+    }
+  }
+}

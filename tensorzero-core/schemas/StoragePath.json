@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StoragePath",
+  "description": "Path to a file in an object storage backend.\nThis is part of the public API for `File`s. In particular, this is useful for roundtripping\nunresolved inputs from stored inferences or datapoints, without requiring clients to fetch\nfile data first.",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "$ref": "#/$defs/StorageKind"
+    },
+    "path": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "path"
+  ],
+  "$defs": {
+    "StorageKind": {
+      "description": "Configuration for the object storage backend\nCurrently, we only support S3-compatible object storage and local filesystem storage\nWe test against Amazon S3, GCS, Cloudflare R2, and Minio",
+      "oneOf": [
+        {
+          "title": "StorageKindS3Compatible",
+          "type": "object",
+          "properties": {
+            "bucket_name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "region": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "endpoint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "allow_http": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "prefix": {
+              "description": "An extra prefix to prepend to the object key.\nThis is only enabled in e2e tests, to prevent clashes between concurrent test runs.",
+              "type": "string",
+              "default": ""
+            },
+            "type": {
+              "type": "string",
+              "const": "s3_compatible"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "title": "StorageKindFilesystem",
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "filesystem"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ]
+        },
+        {
+          "title": "StorageKindDisabled",
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "disabled"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        }
+      ]
+    }
+  }
+}
