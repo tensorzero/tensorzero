@@ -1,7 +1,10 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::export_schema;
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
+#[export_schema]
 pub struct Usage {
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,

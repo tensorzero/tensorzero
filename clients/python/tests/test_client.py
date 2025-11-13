@@ -1018,7 +1018,7 @@ async def test_async_feedback(async_client: AsyncTensorZeroGateway):
 
     result = await async_client.feedback(metric_name="user_rating", value=5, episode_id=episode_id)
     assert isinstance(result, FeedbackResponse)
-    assert isinstance(result.feedback_id, UUID)
+    assert isinstance(result.feedback_id, str)
 
     result = await async_client.feedback(metric_name="task_success", value=True, inference_id=inference_id)
     assert isinstance(result, FeedbackResponse)
@@ -2080,7 +2080,7 @@ def test_sync_feedback(sync_client: TensorZeroGateway):
 
     result = sync_client.feedback(metric_name="task_success", value=True, inference_id=inference_id)
     assert isinstance(result, FeedbackResponse)
-    assert isinstance(result.feedback_id, UUID)
+    assert isinstance(result.feedback_id, str)
 
     result = sync_client.feedback(
         metric_name="demonstration",

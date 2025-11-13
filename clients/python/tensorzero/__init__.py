@@ -13,6 +13,7 @@ from .client import (
 
 # Generated dataclasses
 from .generated_types import (
+    ChatInferenceResponse,
     ContentBlockChatOutput,
     ContentBlockChatOutputText,
     ContentBlockChatOutputToolCall,
@@ -23,6 +24,7 @@ from .generated_types import (
     CreateDatapointsResponse,
     DatapointMetadataUpdate,
     DeleteDatapointsResponse,
+    FeedbackResponse,
     FunctionTool,
     GetDatapointsResponse,
     GetInferencesRequest,
@@ -35,12 +37,14 @@ from .generated_types import (
     InferenceFilterOr,
     InferenceFilterTag,
     InferenceFilterTime,
+    InferenceResponse,
     Input,
     InputMessage,
     InputMessageContentTemplate,
     InputMessageContentText,
     JsonDatapointOutputUpdate,
     JsonInferenceOutput,
+    JsonInferenceResponse,
     ListDatapointsRequest,
     ListInferencesRequest,
     StorageKind,
@@ -96,13 +100,11 @@ from .types import (
     BaseTensorZeroError,
     BooleanMetricFilter,  # pyright: ignore[reportDeprecated]
     ChatDatapointInsert,
-    ChatInferenceResponse,
     ContentBlock,
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
     DynamicEvaluationRunResponse,  # DEPRECATED
     EvaluatorStatsDict,
     ExtraBody,
-    FeedbackResponse,
     FileBase64,
     FileUrl,
     FinishReason,
@@ -111,9 +113,7 @@ from .types import (
     ImageUrl,
     InferenceChunk,
     InferenceInput,
-    InferenceResponse,
     JsonDatapointInsert,
-    JsonInferenceResponse,
     Message,
     NotFilter,  # pyright: ignore[reportDeprecated]
     OrderBy,

@@ -3,7 +3,7 @@ from abc import ABC
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from json import JSONEncoder
-from typing import Any, Dict, List, Literal, Optional, Protocol, Union, cast
+from typing import Any, Dict, List, Literal, Optional, Protocol, Union
 from uuid import UUID
 
 import httpx
@@ -180,34 +180,6 @@ class FinishReason(str, Enum):
     UNKNOWN = "unknown"
 
 
-@dataclass
-class JsonInferenceOutput:
-    raw: Optional[str] = None
-    parsed: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class ChatInferenceResponse:
-    inference_id: UUID
-    episode_id: UUID
-    variant_name: str
-    content: List[ContentBlock]
-    usage: Usage
-    finish_reason: Optional[FinishReason] = None
-    original_response: Optional[str] = None
-
-
-@dataclass
-class JsonInferenceResponse:
-    inference_id: UUID
-    episode_id: UUID
-    variant_name: str
-    output: JsonInferenceOutput
-    usage: Usage
-    finish_reason: Optional[FinishReason] = None
-    original_response: Optional[str] = None
-
-
 class Message(TypedDict):
     role: Literal["user", "assistant"]
     content: Any
@@ -227,41 +199,6 @@ class EvaluatorStatsDict(TypedDict):
     mean: float
     stderr: float
     count: int
-
-
-InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
-
-
-def parse_inference_response(data: Dict[str, Any]) -> InferenceResponse:
-    if "content" in data and isinstance(data["content"], list):
-        finish_reason = data.get("finish_reason")
-        finish_reason_enum = FinishReason(finish_reason) if finish_reason else None
-
-        return ChatInferenceResponse(
-            inference_id=UUID(data["inference_id"]),
-            episode_id=UUID(data["episode_id"]),
-            variant_name=data["variant_name"],
-            content=[parse_content_block(block) for block in data["content"]],  # type: ignore
-            usage=Usage(**data["usage"]),
-            finish_reason=finish_reason_enum,
-            original_response=data.get("original_response"),
-        )
-    elif "output" in data and isinstance(data["output"], dict):
-        output = cast(Dict[str, Any], data["output"])
-        finish_reason = data.get("finish_reason")
-        finish_reason_enum = FinishReason(finish_reason) if finish_reason else None
-
-        return JsonInferenceResponse(
-            inference_id=UUID(data["inference_id"]),
-            episode_id=UUID(data["episode_id"]),
-            variant_name=data["variant_name"],
-            output=JsonInferenceOutput(**output),
-            usage=Usage(**data["usage"]),
-            finish_reason=finish_reason_enum,
-            original_response=data.get("original_response"),
-        )
-    else:
-        raise ValueError("Unable to determine response type")
 
 
 def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
@@ -434,12 +371,6 @@ def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
 
     else:
         raise ValueError(f"Unknown content block type: {block}")
-
-
-# Types for feedback
-@dataclass
-class FeedbackResponse:
-    feedback_id: UUID
 
 
 class BaseTensorZeroError(Exception):

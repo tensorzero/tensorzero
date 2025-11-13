@@ -25,10 +25,8 @@ from tensorzero import (
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
     DynamicEvaluationRunResponse,  # DEPRECATED
     ExtraBody,
-    FeedbackResponse,
     InferenceChunk,
     InferenceInput,
-    InferenceResponse,
     JsonDatapointInsert,
     OptimizationConfig,
     WorkflowEvaluationRunEpisodeResponse,
@@ -39,7 +37,6 @@ from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 # TODO: clean these up.
 from tensorzero.types import (
     EvaluatorStatsDict,
-    JsonInferenceOutput,
     OrderBy,
 )
 
@@ -51,9 +48,12 @@ from .generated_types import (
     CreateDatapointsResponse,
     Datapoint,
     DeleteDatapointsResponse,
+    FeedbackResponse,
     GetDatapointsResponse,
     GetInferencesResponse,
     InferenceFilter,
+    InferenceResponse,
+    JsonInferenceOutput,
     ListDatapointsRequest,
     ListInferencesRequest,
     StoredInference,

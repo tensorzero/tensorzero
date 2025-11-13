@@ -20,8 +20,8 @@ use pyo3::{
     IntoPyObjectExt,
 };
 use python_helpers::{
-    convert_response_to_python_dataclass, parse_feedback_response, parse_inference_chunk,
-    parse_inference_response, parse_tool, parse_workflow_evaluation_run_episode_response,
+    convert_response_to_python_dataclass, parse_inference_chunk, parse_inference_response,
+    parse_tool, parse_workflow_evaluation_run_episode_response,
     parse_workflow_evaluation_run_response, python_uuid_to_uuid,
 };
 
@@ -66,8 +66,8 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
     Datapoint, DynamicToolParams, FeedbackParams, FunctionTool, InferenceOutput, InferenceParams,
-    InferenceStream, LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams,
-    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
+    InferenceResponse, InferenceStream, LaunchOptimizationParams, ListDatapointsRequest,
+    ListInferencesParams, OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
     WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
@@ -727,7 +727,13 @@ impl TensorZeroGateway {
         // We're in the synchronous `TensorZeroGateway` class, so we need to block on the Rust future,
         // and then return the result to the Python caller directly (not wrapped in a Python `Future`).
         match tokio_block_on_without_gil(py, fut) {
-            Ok(resp) => Ok(parse_feedback_response(py, resp)?.into_any()),
+            Ok(resp) => Ok(convert_response_to_python_dataclass(
+                py,
+                resp,
+                "tensorzero.generated_types",
+                "FeedbackResponse",
+            )?
+            .into_any()),
             Err(e) => Err(convert_error(py, e)),
         }
     }
@@ -829,7 +835,13 @@ impl TensorZeroGateway {
         // and then return the result to the Python caller directly (not wrapped in a Python `Future`).
         let resp = tokio_block_on_without_gil(py, fut).map_err(|e| convert_error(py, e))?;
         match resp {
-            InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
+            InferenceOutput::NonStreaming(data) => {
+                let python_dataclass = match &data {
+                    InferenceResponse::Chat(_) => "InferenceResponseChat",
+                    InferenceResponse::Json(_) => "InferenceResponseJson",
+                };
+                convert_response_to_python_dataclass(py, data, "tensorzero", python_dataclass)
+            }
             InferenceOutput::Streaming(stream) => Ok(StreamWrapper {
                 stream: Arc::new(Mutex::new(stream)),
                 _gateway: this.into_pyobject(py)?.into_any().unbind(),
@@ -1978,7 +1990,13 @@ impl AsyncTensorZeroGateway {
             // We need to interact with Python objects here (to build up a Python feedback response),
             // so we need the GIL
             Python::attach(|py| match res {
-                Ok(resp) => Ok(parse_feedback_response(py, resp)?.into_any()),
+                Ok(resp) => Ok(convert_response_to_python_dataclass(
+                    py,
+                    resp,
+                    "tensorzero.generated_types",
+                    "FeedbackResponse",
+                )?
+                .into_any()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })

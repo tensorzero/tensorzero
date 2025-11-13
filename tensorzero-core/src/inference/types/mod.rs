@@ -1336,7 +1336,8 @@ impl ModelInput {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
+#[export_schema]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum FinishReason {

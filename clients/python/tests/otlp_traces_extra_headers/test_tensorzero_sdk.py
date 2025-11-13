@@ -9,8 +9,7 @@ import asyncio
 import time
 
 import pytest
-from tensorzero import AsyncTensorZeroGateway, TensorZeroGateway
-from tensorzero.types import ChatInferenceResponse
+from tensorzero import AsyncTensorZeroGateway, ChatInferenceResponse, TensorZeroGateway
 from uuid_utils.compat import uuid7
 
 from .helpers import verify_otlp_header_in_tempo

@@ -206,6 +206,15 @@ ProviderToolScope = ProviderToolScopeModelProvider | None
 
 
 @dataclass(kw_only=True)
+class Usage:
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
+FinishReason = Literal["stop", "stop_sequence", "length", "tool_call", "content_filter", "unknown"]
+
+
+@dataclass(kw_only=True)
 class InputMessageContentText:
     text: str
     type: Literal["text"] = "text"
@@ -341,6 +350,17 @@ InferenceOutputSource = str
 
 
 @dataclass(kw_only=True)
+class JsonInferenceResponse:
+    inference_id: str
+    episode_id: str
+    variant_name: str
+    output: JsonInferenceOutput
+    usage: Usage
+    original_response: str | None = None
+    finish_reason: FinishReason | None = None
+
+
+@dataclass(kw_only=True)
 class TagDatapointFilter(TagFilter):
     type: Literal["tag"] = "tag"
 
@@ -407,6 +427,11 @@ class DeleteDatapointsResponse:
     """
     The number of deleted datapoints.
     """
+
+
+@dataclass(kw_only=True)
+class FeedbackResponse:
+    feedback_id: str
 
 
 @dataclass(kw_only=True)
@@ -598,6 +623,17 @@ class InferenceFilterTime(TimeFilter):
 
 
 @dataclass(kw_only=True)
+class ChatInferenceResponse:
+    inference_id: str
+    episode_id: str
+    variant_name: str
+    content: list[ContentBlockChatOutput]
+    usage: Usage
+    original_response: str | None = None
+    finish_reason: FinishReason | None = None
+
+
+@dataclass(kw_only=True)
 class OrderByTimestamp:
     direction: OrderDirection
     """
@@ -689,6 +725,9 @@ class DynamicToolParams:
     """
     Provider-specific tool configurations
     """
+
+
+InferenceResponse = ChatInferenceResponse | JsonInferenceResponse
 
 
 @dataclass(kw_only=True)
