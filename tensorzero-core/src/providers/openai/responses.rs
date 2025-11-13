@@ -420,8 +420,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
         let allowed_tools = request
             .tool_config
             .as_ref()
-            .map(|tc| tc.allowed_tools.as_dynamic_allowed_tools())
-            .flatten();
+            .and_then(|tc| tc.allowed_tools.as_dynamic_allowed_tools());
 
         let mut openai_responses_request = Self {
             model: openai_model,

@@ -41,6 +41,13 @@ use crate::providers::helpers::{
 const PROVIDER_NAME: &str = "Groq";
 pub const PROVIDER_TYPE: &str = "groq";
 
+type PreparedToolsResult<'a> = (
+    Option<Vec<GroqTool<'a>>>,
+    Option<GroqToolChoice<'a>>,
+    Option<bool>,
+    Option<Vec<&'a str>>,
+);
+
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct GroqProvider {
@@ -555,12 +562,7 @@ pub(super) async fn prepare_groq_messages<'a>(
 /// NOTE: parallel tool calls are unreliable, and specific tool choice doesn't work
 pub(super) fn prepare_groq_tools<'a>(
     request: &'a ModelInferenceRequest,
-) -> (
-    Option<Vec<GroqTool<'a>>>,
-    Option<GroqToolChoice<'a>>,
-    Option<bool>,
-    Option<Vec<&'a str>>,
-) {
+) -> PreparedToolsResult<'a> {
     match &request.tool_config {
         None => (None, None, None, None),
         Some(tool_config) => {

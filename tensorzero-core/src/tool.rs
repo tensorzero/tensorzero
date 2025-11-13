@@ -3027,4 +3027,48 @@ mod tests {
         // 4. Empty values results in None
         assert_deserialize_to_none(json, "only_empty_arrays");
     }
+
+    #[test]
+    fn test_strict_tools_available_with_function_default() {
+        // Test that FunctionDefault returns all available tools
+        let config = ToolCallConfig {
+            static_tools_available: vec![
+                ToolConfig::Static(TOOLS.get("get_temperature").unwrap().clone()),
+                ToolConfig::Static(TOOLS.get("query_articles").unwrap().clone()),
+            ],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(), // FunctionDefault
+        };
+
+        let tools: Vec<_> = config.strict_tools_available().collect();
+        assert_eq!(tools.len(), 2);
+        assert_eq!(tools[0].name(), "get_temperature");
+        assert_eq!(tools[1].name(), "query_articles");
+    }
+
+    #[test]
+    fn test_strict_tools_available_with_all_allowed_tools() {
+        // Test that AllAllowedTools filters to the specified subset
+        let config = ToolCallConfig {
+            static_tools_available: vec![
+                ToolConfig::Static(TOOLS.get("get_temperature").unwrap().clone()),
+                ToolConfig::Static(TOOLS.get("query_articles").unwrap().clone()),
+            ],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools {
+                tools: vec!["get_temperature".to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::AllAllowedTools,
+            },
+        };
+
+        let tools: Vec<_> = config.strict_tools_available().collect();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name(), "get_temperature");
+    }
 }

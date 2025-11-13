@@ -59,6 +59,13 @@ lazy_static! {
 const PROVIDER_NAME: &str = "OpenRouter";
 pub const PROVIDER_TYPE: &str = "openrouter";
 
+type PreparedOpenRouterToolsResult<'a> = (
+    Option<Vec<OpenRouterTool<'a>>>,
+    Option<OpenRouterToolChoice<'a>>,
+    Option<bool>,
+    Option<Vec<&'a str>>,
+);
+
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct OpenRouterProvider {
@@ -666,12 +673,7 @@ pub(super) async fn prepare_openrouter_messages<'a>(
 /// Otherwise convert the tool choice and tools to OpenRouter format
 pub(super) fn prepare_openrouter_tools<'a>(
     request: &'a ModelInferenceRequest,
-) -> (
-    Option<Vec<OpenRouterTool<'a>>>,
-    Option<OpenRouterToolChoice<'a>>,
-    Option<bool>,
-    Option<Vec<&'a str>>,
-) {
+) -> PreparedOpenRouterToolsResult<'a> {
     match &request.tool_config {
         None => (None, None, None, None),
         Some(tool_config) => {

@@ -55,6 +55,15 @@ lazy_static! {
 const PROVIDER_NAME: &str = "Mistral";
 pub const PROVIDER_TYPE: &str = "mistral";
 
+type PreparedMistralToolsResult<'a> = Result<
+    (
+        Option<Vec<MistralTool<'a>>>,
+        Option<MistralToolChoice<'a>>,
+        Option<Vec<&'a str>>,
+    ),
+    Error,
+>;
+
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct MistralProvider {
@@ -463,14 +472,7 @@ impl<'a> From<OpenAITool<'a>> for MistralTool<'a> {
 
 fn prepare_mistral_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
-) -> Result<
-    (
-        Option<Vec<MistralTool<'a>>>,
-        Option<MistralToolChoice<'a>>,
-        Option<Vec<&'a str>>,
-    ),
-    Error,
-> {
+) -> PreparedMistralToolsResult<'a> {
     match &request.tool_config {
         None => Ok((None, None, None)),
         Some(tool_config) => {

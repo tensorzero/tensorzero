@@ -82,6 +82,13 @@ lazy_static! {
 const PROVIDER_NAME: &str = "OpenAI";
 pub const PROVIDER_TYPE: &str = "openai";
 
+type PreparedOpenAIToolsResult<'a> = (
+    Option<Vec<OpenAITool<'a>>>,
+    Option<OpenAIToolChoice<'a>>,
+    Option<bool>,
+    Option<Vec<&'a str>>,
+);
+
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 #[derive(ts_rs::TS)]
@@ -1503,12 +1510,7 @@ pub async fn prepare_openai_messages<'a>(
 /// Otherwise convert the tool choice and tools to OpenAI format
 pub(super) fn prepare_openai_tools<'a>(
     request: &'a ModelInferenceRequest,
-) -> (
-    Option<Vec<OpenAITool<'a>>>,
-    Option<OpenAIToolChoice<'a>>,
-    Option<bool>,
-    Option<Vec<&'a str>>,
-) {
+) -> PreparedOpenAIToolsResult<'a> {
     match &request.tool_config {
         None => (None, None, None, None),
         Some(tool_config) => {
@@ -3526,7 +3528,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls, allowed_tools) = prepare_openai_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls, allowed_tools) =
+            prepare_openai_tools(&request_with_tools);
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
