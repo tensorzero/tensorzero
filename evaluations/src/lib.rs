@@ -91,55 +91,6 @@ pub struct Args {
     pub inference_cache: CacheEnabledMode,
 }
 
-/// Stopping configuration for adaptive evaluation
-#[derive(Debug, Clone)]
-pub struct StoppingConfig {
-    /// Budget B: maximum number of inferences to run
-    /// If None, run all datapoints in the dataset (up to dataset size)
-    pub budget: Option<usize>,
-
-    /// Per-evaluator CI half-width thresholds (epsilon_k)
-    /// Key: evaluator name, Value: epsilon_k
-    /// Stopping condition for evaluator k: CI half-width <= epsilon_k (equivalently, CI width <= 2 * epsilon_k)
-    /// Only evaluators in this map have stopping conditions
-    /// Evaluators not in this map will run on all datapoints (up to budget)
-    pub epsilon: HashMap<String, f32>,
-}
-
-impl StoppingConfig {
-    /// No stopping conditions - run entire dataset
-    pub fn no_stopping() -> Self {
-        Self {
-            budget: None,
-            epsilon: HashMap::new(),
-        }
-    }
-
-    /// Budget only - run at most B inferences
-    pub fn budget_only(budget: usize) -> Self {
-        Self {
-            budget: Some(budget),
-            epsilon: HashMap::new(),
-        }
-    }
-
-    /// Epsilon only - stop each evaluator when CI is narrow enough
-    pub fn epsilon_only(epsilon: HashMap<String, f32>) -> Self {
-        Self {
-            budget: None,
-            epsilon,
-        }
-    }
-
-    /// Both budget and epsilon
-    pub fn budget_and_epsilon(budget: usize, epsilon: HashMap<String, f32>) -> Self {
-        Self {
-            budget: Some(budget),
-            epsilon,
-        }
-    }
-}
-
 pub struct Clients {
     pub tensorzero_client: ThrottledTensorZeroClient,
     pub clickhouse_client: ClickHouseConnectionInfo,
@@ -289,7 +240,7 @@ pub async fn run_evaluation(
     };
 
     let output_format = args.format.clone();
-    let result = run_evaluation_core_streaming(core_args, None).await?; // No adaptive stopping
+    let result = run_evaluation_core_streaming(core_args, None, None).await?; // No budget, no adaptive stopping
 
     let mut receiver = result.receiver;
     let dataset_len = result.run_info.num_datapoints;
@@ -387,19 +338,19 @@ pub async fn run_evaluation(
 ///    - Closes the channel when all tasks complete
 /// 8. Returns immediately with the receiver, run_info, and evaluation_config
 ///
-/// ## Adaptive Stopping (Optional)
+/// ## Budget and Adaptive Stopping (Optional)
 ///
-/// When `stopping_config` is `Some(config)`:
-/// - **Budget (B)**: Limits dataset to at most B datapoints
-/// - **Epsilon (ε_k)**: Per-evaluator CI half-width thresholds
+/// **Budget (B)**: When `budget` is `Some(B)`, limits dataset to at most B datapoints.
+///
+/// **Adaptive Stopping**: When `epsilon` is `Some(map)`:
+/// - **Epsilon (ε_k)**: Per-evaluator CI half-width thresholds (HashMap<String, f32>)
 ///   - Evaluator k stops when: `1.96 * stderr ≤ ε_k`
 ///   - Implemented via cancellation tokens that skip the evaluator on subsequent datapoints
-/// - **Evaluators without epsilon**: Run on all datapoints (up to budget)
+/// - **Evaluators not in epsilon map**: Run on all datapoints (up to budget)
 /// - All datapoint tasks are spawned upfront for maximum concurrency
 ///
-/// When `stopping_config` is `None`:
+/// When both `budget` and `epsilon` are `None`:
 /// - All evaluators run on all datapoints
-/// - No budget limit
 /// - Standard evaluation behavior
 ///
 /// ## Return value
@@ -420,7 +371,8 @@ pub async fn run_evaluation(
 #[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant = ?args.variant, concurrency = %args.concurrency))]
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
-    stopping_config: Option<StoppingConfig>,
+    budget: Option<usize>,
+    epsilon: Option<HashMap<String, f32>>,
 ) -> Result<EvaluationStreamResult> {
     let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
 
@@ -461,7 +413,7 @@ pub async fn run_evaluation_core_streaming(
         &args.dataset_name,
         &inference_evaluation_config.function_name,
         &function_config,
-        stopping_config.as_ref().and_then(|c| c.budget), // Apply budget limit if provided
+        budget, // Apply budget limit if provided
     )
     .await?;
     info!(dataset_size = dataset.len(), "Dataset loaded successfully");
@@ -473,7 +425,7 @@ pub async fn run_evaluation_core_streaming(
 
     // Setup for adaptive stopping (if enabled)
     let cancellation_tokens: Option<Arc<HashMap<String, CancellationToken>>> =
-        stopping_config.as_ref().map(|_| {
+        epsilon.as_ref().map(|_| {
             Arc::new(
                 inference_evaluation_config
                     .evaluators
@@ -484,9 +436,8 @@ pub async fn run_evaluation_core_streaming(
         });
 
     let mut evaluator_stats: Option<HashMap<String, PerEvaluatorStats>> =
-        stopping_config.as_ref().map(|config| {
-            config
-                .epsilon
+        epsilon.as_ref().map(|eps_map| {
+            eps_map
                 .keys()
                 .map(|name| (name.clone(), PerEvaluatorStats::new()))
                 .collect()
@@ -573,7 +524,7 @@ pub async fn run_evaluation_core_streaming(
 
     // Spawn a task to collect results and stream them
     let sender_clone = sender.clone();
-    let stopping_config_clone = stopping_config.clone();
+    let epsilon_clone = epsilon.clone();
     // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
     #[expect(clippy::disallowed_methods)]
     tokio::spawn(async move {
@@ -581,8 +532,8 @@ pub async fn run_evaluation_core_streaming(
             let update = match result {
                 Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
                     // Update statistics for adaptive stopping (if enabled)
-                    if let (Some(stats), Some(config)) =
-                        (evaluator_stats.as_mut(), stopping_config_clone.as_ref())
+                    if let (Some(stats), Some(eps_map)) =
+                        (evaluator_stats.as_mut(), epsilon_clone.as_ref())
                     {
                         for (evaluator_name, eval_result) in &evaluation_result {
                             // Only track stats for evaluators with stopping conditions
@@ -604,7 +555,7 @@ pub async fn run_evaluation_core_streaming(
                         // Check stopping conditions and cancel tokens if needed
                         if let Some(tokens) = cancellation_tokens.as_ref() {
                             for (evaluator_name, evaluator_stats) in stats.iter() {
-                                if let Some(epsilon_k) = config.epsilon.get(evaluator_name) {
+                                if let Some(epsilon_k) = eps_map.get(evaluator_name) {
                                     if let Some(ci_half_width) = evaluator_stats.ci_half_width() {
                                         if ci_half_width <= *epsilon_k {
                                             if let Some(token) = tokens.get(evaluator_name) {
