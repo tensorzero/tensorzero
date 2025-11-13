@@ -91,22 +91,35 @@ pub fn create_test_function_config_with_schemas() -> FunctionConfig {
     })
 }
 
-/// Create a test UninitializedChatCompletionConfig with simple templates (legacy format)
+/// Create a test UninitializedChatCompletionConfig with simple templates (new format)
 pub fn create_test_variant_config() -> UninitializedChatCompletionConfig {
-    UninitializedChatCompletionConfig {
+    let mut config = UninitializedChatCompletionConfig {
         model: "dummy::echo_request_messages".into(),
         weight: None,
-        system_template: Some(ResolvedTomlPath::new_fake_path(
-            "system.minijinja".to_string(),
-            "You are a helpful assistant for testing.".to_string(),
-        )),
-        user_template: Some(ResolvedTomlPath::new_fake_path(
-            "user.minijinja".to_string(),
-            "User: {{input}}".to_string(),
-        )),
-        assistant_template: None,
         ..Default::default()
-    }
+    };
+
+    // Use new format: populate templates.inner
+    config.templates.inner.insert(
+        "system".to_string(),
+        UninitializedChatTemplate {
+            path: ResolvedTomlPath::new_fake_path(
+                "system.minijinja".to_string(),
+                "You are a helpful assistant for testing.".to_string(),
+            ),
+        },
+    );
+    config.templates.inner.insert(
+        "user".to_string(),
+        UninitializedChatTemplate {
+            path: ResolvedTomlPath::new_fake_path(
+                "user.minijinja".to_string(),
+                "User: {{input}}".to_string(),
+            ),
+        },
+    );
+
+    config
 }
 
 /// Create a test UninitializedChatCompletionConfig with new template format (templates.inner)
