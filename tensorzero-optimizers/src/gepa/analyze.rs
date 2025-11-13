@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use futures::future::try_join_all;
+use futures::future::join_all;
 use serde::Serialize;
 use tokio::sync::Semaphore;
 
@@ -312,15 +312,58 @@ pub async fn analyze_inferences(
         })
         .collect();
 
-    // Execute all analyses in parallel with fail-fast error handling
-    let results = try_join_all(analysis_futures).await?;
+    // Execute all analyses in parallel (graceful degradation on failures)
+    let results = join_all(analysis_futures).await;
 
-    tracing::info!(
-        "Successfully completed all {} analyses",
-        evaluation_infos.len()
-    );
+    // Partition into successes and failures
+    let mut successes = Vec::new();
+    let mut failures = Vec::new();
 
-    Ok(results)
+    for (index, result) in results.into_iter().enumerate() {
+        match result {
+            Ok(analysis) => successes.push(analysis),
+            Err(e) => {
+                tracing::warn!(
+                    "Analysis failed for inference {}/{}: {}",
+                    index + 1,
+                    evaluation_infos.len(),
+                    e
+                );
+                failures.push(e);
+            }
+        }
+    }
+
+    // Check if all analyses failed
+    if successes.is_empty() {
+        return Err(Error::new(ErrorDetails::Inference {
+            message: format!(
+                "All {} analyses failed. First error: {}",
+                evaluation_infos.len(),
+                failures
+                    .first()
+                    .map(|e| e.to_string())
+                    .unwrap_or_else(|| "Unknown error".to_string())
+            ),
+        }));
+    }
+
+    // Log summary
+    if failures.is_empty() {
+        tracing::info!(
+            "Successfully completed all {} analyses",
+            evaluation_infos.len()
+        );
+    } else {
+        tracing::warn!(
+            "Completed {}/{} analyses successfully ({} failed)",
+            successes.len(),
+            evaluation_infos.len(),
+            failures.len()
+        );
+    }
+
+    Ok(successes)
 }
 
 #[cfg(test)]
