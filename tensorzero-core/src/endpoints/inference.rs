@@ -1601,7 +1601,7 @@ async fn validate_model_provider_filter(
         if !model_config.providers.contains_key(provider_name) {
             return Err(ErrorDetails::InvalidInferenceTarget {
                 message: format!(
-                    "Invalid model provider filter: provider `{provider_name}` not found in model `{model_name}.`",
+                    "Invalid model provider filter: provider `{provider_name}` not found in model `{model_name}`.",
                 ),
             }
             .into());
