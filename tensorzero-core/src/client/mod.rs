@@ -235,7 +235,6 @@ impl ClientBuilder {
             verbose_errors: false,
             api_key: None,
             timeout: None,
-            #[cfg(feature = "pyo3")]
             drop_wrapper: None,
         }
     }
