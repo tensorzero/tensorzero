@@ -203,7 +203,7 @@ impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
         {
             Some(model_name) => model_name.to_string(),
             None => {
-                tracing::warn!("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'");
+                crate::utils::deprecation_warning("Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'");
                 params.model
             }
         };
@@ -1052,7 +1052,7 @@ fn convert_openai_message_content(
                     Ok(OpenAICompatibleContentBlock::Template(template)) => InputMessageContent::Template(template),
                     Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => InputMessageContent::Text(Text { text }),
                     Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => {
-                        tracing::warn!("Deprecation Warning: Using `tensorzero::arguments` in text content blocks is deprecated. Please use `{{\"type\": \"tensorzero::template\", \"name\": \"role\", \"arguments\": {{...}}}}` instead.");
+                        crate::utils::deprecation_warning("Using `tensorzero::arguments` in text content blocks is deprecated. Please use `{{\"type\": \"tensorzero::template\", \"name\": \"role\", \"arguments\": {{...}}}}` instead.");
                         InputMessageContent::Template(Template { name: role.clone(), arguments: tensorzero_arguments })
                     }
                     Ok(OpenAICompatibleContentBlock::ImageUrl { image_url }) => {
@@ -1154,7 +1154,7 @@ fn convert_openai_message_content(
                                 }));
                             }
                         }
-                        tracing::warn!(r#"Deprecation Warning: Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "tensorzero::template", "name": "role", "arguments": {{"custom": "data"}}}}` to pass arbitrary JSON values to TensorZero: {e}"#);
+                        crate::utils::deprecation_warning(&format!(r#"Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "tensorzero::template", "name": "role", "arguments": {{"custom": "data"}}}}` to pass arbitrary JSON values to TensorZero: {e}"#));
                         if let Value::Object(obj) = val {
                             InputMessageContent::Template(Template { name: role.clone(), arguments: Arguments(obj) })
                         } else {
@@ -2674,7 +2674,7 @@ mod tests {
         assert_eq!(param.model_name, "text-embedding-ada-002");
         assert_eq!(param.dimensions, Some(15));
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
-        assert!(logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
+        assert!(logs_contain("Deprecation warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
     }
     #[test]
     fn test_try_from_embedding_params_strip() {
@@ -2692,7 +2692,7 @@ mod tests {
         assert_eq!(param.model_name, "text-embedding-ada-002");
         assert_eq!(param.dimensions, Some(15));
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
-        assert!(!logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
+        assert!(!logs_contain("Deprecation warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
     }
 
     #[test]

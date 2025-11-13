@@ -30,7 +30,7 @@ impl<'de> Deserialize<'de> for MessageContent {
                 ))])
             })
             .map(|map| {
-                tracing::warn!("Deprecation Warning: passing in an object for `content` is deprecated. Please use an array of content blocks instead.");
+                crate::utils::deprecation_warning("passing in an object for `content` is deprecated. Please use an array of content blocks instead.");
                 let object: Map<String, Value> = map.deserialize()?;
                 Ok(vec![IntermediaryInputMessageContent::TemplateFromArguments(
                     Arguments(object),
