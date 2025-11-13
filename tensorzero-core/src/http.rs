@@ -133,6 +133,15 @@ pub struct TensorzeroHttpClient {
     global_outbound_http_timeout: Duration,
 }
 
+#[cfg(any(test, feature = "e2e_tests"))]
+impl Default for TensorzeroHttpClient {
+    fn default() -> Self {
+        // This is only available in tests and e2e tests, so it's fine to unwrap here
+        #[expect(clippy::unwrap_used)]
+        Self::new_testing().unwrap()
+    }
+}
+
 impl TensorzeroHttpClient {
     #[cfg(any(test, feature = "e2e_tests"))]
     pub fn new_testing() -> Result<Self, Error> {
