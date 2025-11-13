@@ -215,11 +215,11 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     last_inference_id
                 FROM (
                     SELECT
-                        uint_to_uuid(episode_id_uint) as episode_id,
+                        tensorzero_uint_to_uuid(episode_id_uint) as episode_id,
                         count() as count,
-                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(min(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-                        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-                        uint_to_uuid(max(id_uint)) as last_inference_id,
+                        formatDateTime(UUIDv7ToDateTime(tensorzero_uint_to_uuid(min(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+                        formatDateTime(UUIDv7ToDateTime(tensorzero_uint_to_uuid(max(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+                        tensorzero_uint_to_uuid(max(id_uint)) as last_inference_id,
                         episode_id_uint
                     FROM InferenceByEpisodeId
                     WHERE episode_id_uint IN (SELECT episode_id_uint FROM potentially_duplicated_episode_ids)
@@ -242,11 +242,11 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     LIMIT {limit_overestimate}
                 )
                 SELECT
-                    uint_to_uuid(episode_id_uint) as episode_id,
+                    tensorzero_uint_to_uuid(episode_id_uint) as episode_id,
                     count() as count,
-                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(min(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
-                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
-                    uint_to_uuid(max(id_uint)) as last_inference_id
+                    formatDateTime(UUIDv7ToDateTime(tensorzero_uint_to_uuid(min(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as start_time,
+                    formatDateTime(UUIDv7ToDateTime(tensorzero_uint_to_uuid(max(id_uint))), '%Y-%m-%dT%H:%i:%SZ') as end_time,
+                    tensorzero_uint_to_uuid(max(id_uint)) as last_inference_id
                 FROM InferenceByEpisodeId
                 WHERE episode_id_uint IN (SELECT episode_id_uint FROM potentially_duplicated_episode_ids)
                 GROUP BY episode_id_uint
@@ -277,8 +277,8 @@ impl SelectQueries for ClickHouseConnectionInfo {
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error> {
         let query = r"
             SELECT
-                uint_to_uuid(min(episode_id_uint)) as first_id,
-                uint_to_uuid(max(episode_id_uint)) as last_id,
+                tensorzero_uint_to_uuid(min(episode_id_uint)) as first_id,
+                tensorzero_uint_to_uuid(max(episode_id_uint)) as last_id,
                 count() as count
             FROM EpisodeById
             FORMAT JSONEachRow"

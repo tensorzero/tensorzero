@@ -72,7 +72,7 @@ async fn main() -> Result<()> {
     let clickhouse_connection = get_clickhouse().await;
     let inference_id_response: InferenceIdInfo = clickhouse_connection
         .run_query_synchronous_no_params_de(format!(
-            "SELECT uint_to_uuid(id_uint) as id FROM InferenceById LIMIT {} FORMAT JSONColumns",
+            "SELECT tensorzero_uint_to_uuid(id_uint) as id FROM InferenceById LIMIT {} FORMAT JSONColumns",
             args.num_distinct_inferences
         ))
         .await?;

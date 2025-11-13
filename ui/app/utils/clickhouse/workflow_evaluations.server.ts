@@ -25,12 +25,12 @@ export async function getWorkflowEvaluationRuns(
     WITH FilteredDynamicEvaluationRuns AS (
       SELECT
           run_display_name as name,
-          uint_to_uuid(run_id_uint) as id,
+          tensorzero_uint_to_uuid(run_id_uint) as id,
           run_id_uint,
           variant_pins,
           tags,
           project_name,
-          formatDateTime(UUIDv7ToDateTime(uint_to_uuid(run_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp
+          formatDateTime(UUIDv7ToDateTime(tensorzero_uint_to_uuid(run_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp
       FROM DynamicEvaluationRun
       ${run_id ? `WHERE toUInt128(toUUID({run_id:String})) = run_id_uint` : ""}
       ${project_name ? `WHERE project_name = {project_name:String}` : ""}
@@ -83,12 +83,12 @@ export async function getWorkflowEvaluationRunsByIds(
   const query = `
     SELECT
       run_display_name AS name,
-      uint_to_uuid(run_id_uint) AS id,
+      tensorzero_uint_to_uuid(run_id_uint) AS id,
       variant_pins,
       tags,
       project_name,
       formatDateTime(
-        UUIDv7ToDateTime(uint_to_uuid(run_id_uint)),
+        UUIDv7ToDateTime(tensorzero_uint_to_uuid(run_id_uint)),
         '%Y-%m-%dT%H:%i:%SZ'
       ) AS timestamp
     FROM DynamicEvaluationRun
@@ -161,7 +161,7 @@ export async function getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
           argMax(toString(value), toUInt128(id)) AS value
         FROM FloatMetricFeedbackByTargetId
         WHERE target_id IN (
-          SELECT uint_to_uuid(episode_id_uint) FROM episodes
+          SELECT tensorzero_uint_to_uuid(episode_id_uint) FROM episodes
         )
         GROUP BY target_id, metric_name
         UNION ALL
@@ -171,7 +171,7 @@ export async function getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
           argMax(toString(value), toUInt128(id)) AS value
         FROM BooleanMetricFeedbackByTargetId
         WHERE target_id IN (
-          SELECT uint_to_uuid(episode_id_uint) FROM episodes
+          SELECT tensorzero_uint_to_uuid(episode_id_uint) FROM episodes
         )
         GROUP BY target_id, metric_name
         UNION ALL
@@ -181,16 +181,16 @@ export async function getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
           value
         FROM CommentFeedbackByTargetId
         WHERE target_id IN (
-          SELECT uint_to_uuid(episode_id_uint) FROM episodes
+          SELECT tensorzero_uint_to_uuid(episode_id_uint) FROM episodes
         )
       )
     SELECT
-      uint_to_uuid(e.episode_id_uint) AS episode_id,
+      tensorzero_uint_to_uuid(e.episode_id_uint) AS episode_id,
       formatDateTime(
         min(e.updated_at), -- when did the episode start?
         '%Y-%m-%dT%H:%i:%SZ'
       ) AS timestamp,
-      uint_to_uuid(e.run_id_uint) AS run_id,
+      tensorzero_uint_to_uuid(e.run_id_uint) AS run_id,
       e.tags,
       e.task_name,
       -- 1) pack into [(name,value),…]
@@ -215,7 +215,7 @@ export async function getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
 
     FROM episodes AS e
     LEFT JOIN feedback_union AS f
-      ON f.target_id = uint_to_uuid(e.episode_id_uint)
+      ON f.target_id = tensorzero_uint_to_uuid(e.episode_id_uint)
     GROUP BY
       e.episode_id_uint,
       e.run_id_uint,
@@ -260,7 +260,7 @@ export async function getWorkflowEvaluationRunStatisticsByMetricName(
       1.96 * (stddevSamp(value) / sqrt(count())) AS ci_error
     FROM FloatMetricFeedbackByTargetId
     WHERE target_id IN (
-      SELECT uint_to_uuid(episode_id_uint) FROM episodes
+      SELECT tensorzero_uint_to_uuid(episode_id_uint) FROM episodes
     )
     ${metric_name ? `AND metric_name = {metric_name:String}` : ""}
     GROUP BY metric_name
@@ -273,7 +273,7 @@ export async function getWorkflowEvaluationRunStatisticsByMetricName(
       1.96 * (stddevSamp(value) / sqrt(count())) AS ci_error
     FROM BooleanMetricFeedbackByTargetId
     WHERE target_id IN (
-      SELECT uint_to_uuid(episode_id_uint) FROM episodes
+      SELECT tensorzero_uint_to_uuid(episode_id_uint) FROM episodes
     )
     ${metric_name ? `AND metric_name = {metric_name:String}` : ""}
       GROUP BY metric_name
@@ -364,7 +364,7 @@ export async function searchWorkflowEvaluationRuns(
   if (search_query) {
     predicates.push(`(
       positionCaseInsensitive(run_display_name, {search_query:String}) > 0
-      OR positionCaseInsensitive(toString(uint_to_uuid(run_id_uint)), {search_query:String}) > 0
+      OR positionCaseInsensitive(toString(tensorzero_uint_to_uuid(run_id_uint)), {search_query:String}) > 0
     )`);
   }
 
@@ -377,7 +377,7 @@ export async function searchWorkflowEvaluationRuns(
   const query = `
     SELECT
       run_display_name as name,
-      uint_to_uuid(run_id_uint) as id,
+      tensorzero_uint_to_uuid(run_id_uint) as id,
       variant_pins,
       tags,
       project_name,
@@ -456,7 +456,7 @@ export async function getWorkflowEvaluationRunEpisodesByTaskName(
                argMax(toString(value), toUInt128(id)) AS value
         FROM FloatMetricFeedbackByTargetId
         WHERE target_id IN (
-          SELECT uint_to_uuid(episode_id_uint) FROM episodes
+          SELECT tensorzero_uint_to_uuid(episode_id_uint) FROM episodes
         )
         GROUP BY target_id, metric_name
 
@@ -466,7 +466,7 @@ export async function getWorkflowEvaluationRunEpisodesByTaskName(
                argMax(toString(value), toUInt128(id)) AS value
         FROM BooleanMetricFeedbackByTargetId
         WHERE target_id IN (
-          SELECT uint_to_uuid(episode_id_uint) FROM episodes
+          SELECT tensorzero_uint_to_uuid(episode_id_uint) FROM episodes
         )
         GROUP BY target_id, metric_name
 
@@ -477,15 +477,15 @@ export async function getWorkflowEvaluationRunEpisodesByTaskName(
                value
         FROM CommentFeedbackByTargetId
         WHERE target_id IN (
-          SELECT uint_to_uuid(episode_id_uint) FROM episodes
+          SELECT tensorzero_uint_to_uuid(episode_id_uint) FROM episodes
         )
       )
 
     SELECT
       e.group_key as group_key,
-      uint_to_uuid(e.episode_id_uint) AS episode_id,
+      tensorzero_uint_to_uuid(e.episode_id_uint) AS episode_id,
       formatDateTime(min(e.updated_at), '%Y-%m-%dT%H:%i:%SZ') AS timestamp,
-      uint_to_uuid(e.run_id_uint) AS run_id,
+      tensorzero_uint_to_uuid(e.run_id_uint) AS run_id,
       e.tags,
       e.task_name,
       arrayMap(t -> t.1,
@@ -502,7 +502,7 @@ export async function getWorkflowEvaluationRunEpisodesByTaskName(
     -- rejoin the group_keys CTE to get the last_updated timestamp
     JOIN group_keys AS g USING group_key
     LEFT JOIN feedback_union AS f
-      ON f.target_id = uint_to_uuid(e.episode_id_uint)
+      ON f.target_id = tensorzero_uint_to_uuid(e.episode_id_uint)
     GROUP BY
       e.group_key,
       e.episode_id_uint,

@@ -424,7 +424,7 @@ export async function getFunctionThroughputByVariant(
       : `
     SELECT
         -- Truncate timestamp to period boundaries (day/week/month) and format as ISO string
-        formatDateTime(dateTrunc({timeWindow:String}, UUIDv7ToDateTime(uint_to_uuid(i.id_uint))), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
+        formatDateTime(dateTrunc({timeWindow:String}, UUIDv7ToDateTime(tensorzero_uint_to_uuid(i.id_uint))), '%Y-%m-%dT%H:%i:%S.000Z') AS period_start,
         i.variant_name AS variant_name,
         -- Count inferences per (period, variant) combination
         toUInt32(count()) AS count

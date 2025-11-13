@@ -418,7 +418,7 @@ export async function getEvaluationRunInfo(
         any(inference_function_name) AS function_name,
         any(variant_name) AS variant_name,
         any(dataset_name) AS dataset_name,
-        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(max(max_inference_id))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
+        formatDateTime(UUIDv7ToDateTime(tensorzero_uint_to_uuid(max(max_inference_id))), '%Y-%m-%dT%H:%i:%SZ') AS last_inference_timestamp
     FROM (
         SELECT
             maxIf(value, key = 'tensorzero::evaluation_run_id') AS evaluation_run_id,
