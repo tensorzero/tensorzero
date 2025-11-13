@@ -60,7 +60,6 @@ import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { logger } from "~/utils/logger";
-import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -188,31 +187,11 @@ export async function action({ request }: Route.ActionArgs) {
       const dataset_name = formData.get("dataset_name") as string;
       const newName = formData.get("newName") as string;
 
-      // We need to get the datapoint to pass to renameDatapoint
-      const datapoint = await getDatapoint({
-        dataset_name,
-        datapoint_id,
-        allow_stale: true,
-      });
-      if (!datapoint) {
-        return data(
-          {
-            success: false,
-            error:
-              "Datapoint not found; please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
-          },
-          { status: 404 },
-        );
-      }
-
-      // A bit of a hack in the evaluation page, we don't have the function type in the datapoint, so we check if the datapoint contains an output schema (which indicates it's JSON).
-      const functionType = "output_schema" in datapoint ? "json" : "chat";
       await renameDatapoint({
-        functionType,
         datasetName: dataset_name,
-        // TODO: convert to Rust-generated bindings
-        datapoint,
-        newName,
+        datapointId: datapoint_id,
+        // Explicitly set to null to unset the name
+        name: newName ?? null,
       });
 
       return data({ success: true });

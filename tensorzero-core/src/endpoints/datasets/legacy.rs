@@ -1150,7 +1150,7 @@ pub struct InsertDatapointResponse {
 /// This one should be used in all public interfaces.
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "Datapoint"))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "LegacyDatapoint"))]
 #[ts(export)]
 #[export_schema]
 pub enum Datapoint {

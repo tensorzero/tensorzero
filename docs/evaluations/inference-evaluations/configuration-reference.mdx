@@ -199,7 +199,7 @@ Therefore, all the variant types that are available for a normal TensorZero func
 
 You can include a standard [variant configuration](/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) in this block, with two modifications:
 
-- Instead of assigning `weight` to each variant, you simply mark a single variant as `active`.
+- You must mark a single variant as `active`.
 - For `chat_completion` variants, instead of a `system_template` we require `system_instructions` as a text file and take no other templates.
 
 Here we list only the configuration for variants that differs from the configuration for a normal TensorZero function. Please refer the [variant configuration reference](/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) for the remaining options.
