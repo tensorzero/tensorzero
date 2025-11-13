@@ -161,8 +161,10 @@ async fn test_datapoint_full_tool_params_round_trip() {
     // Static tool (from function config) should be in allowed_tools
     let allowed_tools = dp["allowed_tools"].as_array().unwrap();
     assert_eq!(allowed_tools.len(), 2);
-    assert_eq!(allowed_tools[0], "get_temperature");
-    assert_eq!(allowed_tools[1], "custom_weather_tool");
+    let allowed_tools_set: std::collections::HashSet<&str> =
+        allowed_tools.iter().map(|v| v.as_str().unwrap()).collect();
+    assert!(allowed_tools_set.contains("get_temperature"));
+    assert!(allowed_tools_set.contains("custom_weather_tool"));
 
     // Dynamic tool should be in additional_tools
     let additional_tools = dp["additional_tools"].as_array().unwrap();
@@ -543,10 +545,15 @@ async fn test_list_datapoints_with_tool_params() {
 
     // Verify DP2: Static + one dynamic (flattened)
     let dp2_json = find_dp(&dp2_id);
-    assert_eq!(
-        dp2_json["allowed_tools"],
-        json!(["get_temperature", "tool_1"])
-    );
+    let allowed_tools: std::collections::HashSet<&str> = dp2_json["allowed_tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    let expected_tools: std::collections::HashSet<&str> =
+        ["get_temperature", "tool_1"].into_iter().collect();
+    assert_eq!(allowed_tools, expected_tools);
     let add_tools_2 = dp2_json["additional_tools"].as_array().unwrap();
     assert_eq!(add_tools_2.len(), 1);
     assert_eq!(add_tools_2[0]["name"], "tool_1");
@@ -746,8 +753,10 @@ async fn test_datapoint_only_dynamic_tools() {
     // Static + dynamic tool should be in allowed_tools
     let allowed_tools = dp["allowed_tools"].as_array().unwrap();
     assert_eq!(allowed_tools.len(), 2);
-    assert_eq!(allowed_tools[0], "runtime_tool");
-    assert_eq!(allowed_tools[1], "get_temperature");
+    let allowed_tools_set: std::collections::HashSet<&str> =
+        allowed_tools.iter().map(|v| v.as_str().unwrap()).collect();
+    assert!(allowed_tools_set.contains("runtime_tool"));
+    assert!(allowed_tools_set.contains("get_temperature"));
 
     // Dynamic tool should be in additional_tools (flattened)
     let additional_tools = dp["additional_tools"].as_array().unwrap();

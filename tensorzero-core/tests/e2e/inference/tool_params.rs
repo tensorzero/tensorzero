@@ -634,17 +634,21 @@ async fn test_allowed_tools_restriction() {
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();
 
-    // Should only have get_temperature in storage
+    // We still send all tools as available
     let tools_available = tool_params
         .get("tools_available")
         .unwrap()
         .as_array()
         .unwrap();
-    assert_eq!(tools_available.len(), 1);
-    assert_eq!(
-        tools_available[0].get("name").unwrap().as_str().unwrap(),
-        "get_temperature"
-    );
+    assert_eq!(tools_available.len(), 2);
+
+    // Verify both tools are present in some order
+    let tool_names: Vec<&str> = tools_available
+        .iter()
+        .map(|t| t.get("name").unwrap().as_str().unwrap())
+        .collect();
+    assert!(tool_names.contains(&"get_temperature"));
+    assert!(tool_names.contains(&"get_humidity"));
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
