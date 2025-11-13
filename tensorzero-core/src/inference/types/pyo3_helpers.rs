@@ -367,6 +367,7 @@ pub fn deserialize_from_stored_sample<'a>(
     // Try deserializing into named types first
     let generated_types_module = py.import("tensorzero.generated_types")?;
     let stored_inference_type = generated_types_module.getattr("StoredInference")?;
+    let datapoint_type = generated_types_module.getattr("Datapoint")?;
 
     if obj.is_instance(&stored_inference_type)? {
         let wire = deserialize_from_pyobj::<StoredInference>(py, obj)?;
@@ -377,9 +378,10 @@ pub fn deserialize_from_stored_sample<'a>(
         return Ok(StoredSampleItem::StoredInference(storage));
     }
 
-    if obj.is_instance_of::<Datapoint>() {
-        // Extract wire type and convert to storage type
-        let wire: Datapoint = obj.extract()?;
+    // Check if the object is an instance of the generated dataclass
+    if obj.is_instance(&datapoint_type)? {
+        // Deserialize from Python dataclass to Rust type
+        let wire = deserialize_from_pyobj::<Datapoint>(py, obj)?;
         return match wire {
             Datapoint::Chat(chat_wire) => {
                 let function_config = match config.get_function(&chat_wire.function_name) {
@@ -419,11 +421,7 @@ pub fn deserialize_from_rendered_sample<'a>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,
 ) -> PyResult<RenderedSample> {
-    if obj.is_instance_of::<RenderedSample>() {
-        Ok(obj.extract()?)
-    } else {
-        deserialize_from_pyobj(py, obj)
-    }
+    deserialize_from_pyobj(py, obj)
 }
 
 pub fn deserialize_optimization_config(

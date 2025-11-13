@@ -17,7 +17,6 @@ export type ChatInferenceDatapoint = {
   input: Input;
   output?: Array<ContentBlockChatOutput>;
   tags?: Record<string, string>;
-  auxiliary?: string;
   is_deleted: boolean;
   is_custom: boolean;
   source_inference_id?: string;

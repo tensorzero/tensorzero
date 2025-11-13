@@ -12,7 +12,6 @@ export type JsonInferenceDatapoint = {
   output?: JsonInferenceOutput;
   output_schema: JsonValue;
   tags?: Record<string, string>;
-  auxiliary: string;
   is_deleted: boolean;
   is_custom: boolean;
   source_inference_id?: string;

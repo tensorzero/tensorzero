@@ -1532,8 +1532,7 @@ pub struct LegacyToolCallConfigDatabaseInsert {
 /// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
-#[ts(optional_fields, export)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[ts(export, optional_fields, export)]
 #[export_schema]
 pub struct DynamicToolParams {
     /// A subset of static tools configured for the function that the inference is allowed to use. Optional.
@@ -1564,38 +1563,6 @@ impl std::fmt::Display for DynamicToolParams {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl DynamicToolParams {
-    #[getter]
-    pub fn allowed_tools(&self) -> Option<Vec<String>> {
-        self.allowed_tools.clone()
-    }
-
-    #[getter]
-    pub fn additional_tools(&self) -> Option<Vec<Tool>> {
-        self.additional_tools.clone()
-    }
-
-    // TODO: Add tool_choice getter when we decide how to handle it.
-    // Mixed enums (with unit and tuple variants) aren't well supported in PyO3,
-    // and we need to decide on the proper Python representation.
-
-    #[getter]
-    pub fn parallel_tool_calls(&self) -> Option<bool> {
-        self.parallel_tool_calls
-    }
-
-    #[getter]
-    pub fn provider_tools(&self) -> Vec<ProviderTool> {
-        self.provider_tools.clone()
-    }
-
-    pub fn __repr__(&self) -> String {
-        self.to_string()
     }
 }
 

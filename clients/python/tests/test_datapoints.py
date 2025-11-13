@@ -28,11 +28,12 @@ from tensorzero import (
     ChatDatapoint,
     ChatDatapointInsert,
     InputMessageContentTemplate,
+    InputMessageContentText,
     JsonDatapoint,
     JsonDatapointInsert,
+    ResolvedContentBlockText,
     TensorZeroError,
     TensorZeroGateway,
-    Text,
 )
 from uuid_utils import uuid7
 
@@ -278,11 +279,12 @@ async def test_async_insert_delete_datapoints(
     assert isinstance(datapoint, ChatDatapoint)
     assert datapoint.function_name == "basic_test"
     assert datapoint.input.system == {"assistant_name": "foo"}
-    assert datapoint.input.messages is not None and len(datapoint.input.messages) == 1
+    assert datapoint.input.messages is not None
+    assert len(datapoint.input.messages) == 1
     assert datapoint.input.messages[0].role == "user"
     assert len(datapoint.input.messages[0].content) == 1
     assert datapoint.input.messages[0].content[0].type == "text"
-    assert isinstance(datapoint.input.messages[0].content[0], Text)
+    assert isinstance(datapoint.input.messages[0].content[0], InputMessageContentText)
     assert datapoint.input.messages[0].content[0].text == "bar"
     assert datapoint.output is None
 
@@ -291,7 +293,8 @@ async def test_async_insert_delete_datapoints(
     assert isinstance(datapoint, JsonDatapoint)
     assert datapoint.function_name == "json_success"
     assert datapoint.input.system == {"assistant_name": "foo"}
-    assert datapoint.input.messages is not None and len(datapoint.input.messages) == 1
+    assert datapoint.input.messages is not None
+    assert len(datapoint.input.messages) == 1
     assert datapoint.input.messages[0].role == "user"
     assert len(datapoint.input.messages[0].content) == 1
     assert datapoint.input.messages[0].content[0].type == "template"
@@ -403,7 +406,7 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
     assert len(chat_sample.input.messages) == 1
     assert chat_sample.input.messages[0].role == "user"
     assert len(chat_sample.input.messages[0].content) == 1
-    assert isinstance(chat_sample.input.messages[0].content[0], Text)
+    assert isinstance(chat_sample.input.messages[0].content[0], ResolvedContentBlockText)
     assert chat_sample.input.messages[0].content[0].text == "Hello, world!"
 
     # Verify the json datapoint was rendered correctly
@@ -415,7 +418,7 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
     assert len(json_sample.input.messages) == 1
     assert json_sample.input.messages[0].role == "user"
     assert len(json_sample.input.messages[0].content) == 1
-    assert isinstance(json_sample.input.messages[0].content[0], Text)
+    assert isinstance(json_sample.input.messages[0].content[0], ResolvedContentBlockText)
     assert json_sample.input.messages[0].content[0].text == "What is the name of the capital city of France?"
 
     # Clean up
@@ -494,7 +497,7 @@ async def test_async_render_datapoints(
     assert len(chat_sample.input.messages) == 1
     assert chat_sample.input.messages[0].role == "user"
     assert len(chat_sample.input.messages[0].content) == 1
-    assert isinstance(chat_sample.input.messages[0].content[0], Text)
+    assert isinstance(chat_sample.input.messages[0].content[0], ResolvedContentBlockText)
     assert chat_sample.input.messages[0].content[0].text == "What's the weather like?"
 
     # Verify the json datapoint was rendered correctly
@@ -506,7 +509,7 @@ async def test_async_render_datapoints(
     assert len(json_sample.input.messages) == 1
     assert json_sample.input.messages[0].role == "user"
     assert len(json_sample.input.messages[0].content) == 1
-    assert isinstance(json_sample.input.messages[0].content[0], Text)
+    assert isinstance(json_sample.input.messages[0].content[0], ResolvedContentBlockText)
     assert json_sample.input.messages[0].content[0].text == "What is the name of the capital city of Italy?"
 
     # Clean up

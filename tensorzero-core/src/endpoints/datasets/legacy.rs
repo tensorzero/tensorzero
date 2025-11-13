@@ -1,13 +1,6 @@
 use axum::extract::{Path, Query, State};
 use axum::Json;
 use chrono::Utc;
-#[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
-#[cfg(feature = "pyo3")]
-use pyo3::{
-    types::{PyDict, PyModule},
-    IntoPyObjectExt,
-};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -49,11 +42,6 @@ use crate::{
     },
     utils::gateway::{AppState, StructuredJson},
     utils::uuid::validate_tensorzero_uuid,
-};
-
-#[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::{
-    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
 };
 
 #[cfg(debug_assertions)]
@@ -1157,7 +1145,6 @@ pub struct InsertDatapointResponse {
 /// This one should be used in all public interfaces.
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "LegacyDatapoint"))]
 #[ts(export)]
 #[export_schema]
 pub enum Datapoint {
@@ -1360,137 +1347,6 @@ impl JsonInferenceDatapoint {
     }
 }
 
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl Datapoint {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-
-    #[getter]
-    pub fn get_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        uuid_to_python(py, self.id())
-    }
-
-    #[getter]
-    pub fn get_input<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        // This is python_helpers.rs convert_response_to_python_dataclass, but we can't import it across crates.
-        // We will remove the whole Datapoint type and replace with generated types soon.
-
-        // Serialize Rust response to JSON dict
-
-        let dict = serialize_to_dict(py, self.input().clone())?;
-
-        // Import the target dataclass
-        let module = PyModule::import(py, "tensorzero")?;
-        let data_class = module.getattr("Input")?;
-
-        // Use dacite.from_dict to construct the dataclass, so that it can handle nested dataclass construction.
-        let dacite = PyModule::import(py, "dacite")?;
-        let from_dict = dacite.getattr("from_dict")?;
-
-        // Call dacite.from_dict(data_class=TargetClass, data=dict)
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("data_class", data_class)?;
-        kwargs.set_item("data", dict)?;
-
-        from_dict.call((), Some(&kwargs))
-    }
-
-    #[getter]
-    pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(match self {
-            Datapoint::Chat(datapoint) => match &datapoint.output {
-                Some(output) => output
-                    .iter()
-                    .map(|x| content_block_chat_output_to_python(py, x.clone()))
-                    .collect::<PyResult<Vec<_>>>()?
-                    .into_bound_py_any(py)?,
-                None => py.None().into_bound(py),
-            },
-            Datapoint::Json(datapoint) => datapoint.output.clone().into_bound_py_any(py)?,
-        })
-    }
-
-    #[getter]
-    pub fn get_dataset_name(&self) -> String {
-        self.dataset_name().to_string()
-    }
-
-    #[getter]
-    pub fn get_function_name(&self) -> String {
-        self.function_name().to_string()
-    }
-
-    #[getter]
-    pub fn get_allowed_tools(&self) -> Option<Vec<String>> {
-        match self {
-            Datapoint::Chat(datapoint) => datapoint.tool_params.allowed_tools.clone(),
-            Datapoint::Json(_) => None,
-        }
-    }
-
-    #[getter]
-    pub fn get_additional_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match self {
-            Datapoint::Chat(datapoint) => datapoint
-                .tool_params
-                .additional_tools
-                .clone()
-                .into_bound_py_any(py),
-            Datapoint::Json(_) => Ok(py.None().into_bound(py)),
-        }
-    }
-
-    // Note: We're intentionally skipping tool_choice as it's not exposed in the Python API
-
-    #[getter]
-    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
-        match self {
-            Datapoint::Chat(datapoint) => datapoint.tool_params.parallel_tool_calls,
-            Datapoint::Json(_) => None,
-        }
-    }
-
-    #[getter]
-    pub fn get_provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match self {
-            Datapoint::Chat(datapoint) => datapoint
-                .tool_params
-                .provider_tools
-                .clone()
-                .into_bound_py_any(py),
-            Datapoint::Json(_) => Ok(py.None().into_bound(py)),
-        }
-    }
-
-    #[getter]
-    pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(match self {
-            Datapoint::Chat(_) => py.None().into_bound(py),
-            Datapoint::Json(datapoint) => {
-                serialize_to_dict(py, &datapoint.output_schema)?.into_bound(py)
-            }
-        })
-    }
-
-    #[getter]
-    pub fn get_is_custom(&self) -> bool {
-        match self {
-            Datapoint::Chat(datapoint) => datapoint.is_custom,
-            Datapoint::Json(datapoint) => datapoint.is_custom,
-        }
-    }
-
-    #[getter]
-    pub fn get_name(&self) -> Option<String> {
-        match self {
-            Datapoint::Chat(datapoint) => datapoint.name.clone(),
-            Datapoint::Json(datapoint) => datapoint.name.clone(),
-        }
-    }
-}
-
 /// Storage variant of Datapoint enum for database operations (no Python/TypeScript bindings)
 /// Convert to Datapoint with `.into_datapoint(config)`
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1587,7 +1443,6 @@ pub struct JsonDatapointInsert {
 /// Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
 #[ts(export)]
 #[export_schema]
 pub struct ChatInferenceDatapoint {
@@ -1610,7 +1465,7 @@ pub struct ChatInferenceDatapoint {
     #[serde(default)]
     #[cfg_attr(test, ts(type = "Record<string, string>"), ts(optional))]
     pub tags: Option<HashMap<String, String>>,
-    #[serde(skip_serializing, default)]
+    #[serde(skip, default)]
     pub auxiliary: String,
     pub is_deleted: bool,
     #[serde(default)]
@@ -1726,7 +1581,6 @@ impl From<StoredChatInferenceDatapoint> for ChatInferenceDatapointInsert {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
 #[export_schema]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct JsonInferenceDatapoint {
@@ -1749,7 +1603,7 @@ pub struct JsonInferenceDatapoint {
     #[serde(default)]
     #[cfg_attr(test, ts(type = "Record<string, string>"), ts(optional))]
     pub tags: Option<HashMap<String, String>>,
-    #[serde(skip_serializing, default)] // this will become an object
+    #[serde(skip, default)] // this will become an object
     pub auxiliary: String,
     pub is_deleted: bool,
     #[serde(default)]
