@@ -36,8 +36,8 @@ use crate::tool::ToolCallChunk;
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, OpenAIRequestMessage,
-    OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice, OpenAIUsage,
-    StreamOptions, SystemOrDeveloper,
+    OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice, OpenAIUsage, StreamOptions,
+    SystemOrDeveloper,
 };
 
 const PROVIDER_NAME: &str = "SGLang";

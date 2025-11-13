@@ -428,27 +428,27 @@ enum MistralResponseFormat {
 
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(untagged)]
-enum MistralToolChoice<'a> {
+pub(super) enum MistralToolChoice<'a> {
     String(MistralToolChoiceString),
     Specific(MistralSpecificToolChoice<'a>),
 }
 
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-enum MistralToolChoiceString {
+pub(super) enum MistralToolChoiceString {
     Auto,
     None,
     Any,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
-struct MistralSpecificToolChoice<'a> {
+pub(super) struct MistralSpecificToolChoice<'a> {
     r#type: &'static str,
     function: MistralSpecificToolFunction<'a>,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
-struct MistralSpecificToolFunction<'a> {
+pub(super) struct MistralSpecificToolFunction<'a> {
     name: &'a str,
 }
 
@@ -469,7 +469,7 @@ impl<'a> From<&'a ToolChoice> for MistralToolChoice<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-struct MistralTool<'a> {
+pub(super) struct MistralTool<'a> {
     r#type: OpenAIToolType,
     function: OpenAIFunction<'a>,
 }

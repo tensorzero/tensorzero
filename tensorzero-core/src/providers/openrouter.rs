@@ -49,8 +49,8 @@ use crate::providers::helpers::{
 // Import unified OpenAI types for allowed_tools support
 use super::openai::{
     AllowedToolsChoice as OpenAIAllowedToolsChoice,
-    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode,
-    OpenAIToolType, SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
+    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode, OpenAIToolType,
+    SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
 };
 
 use crate::inference::TensorZeroEventError;
@@ -2267,7 +2267,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openrouter_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_openrouter_tools(&request_with_tools);
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -2309,7 +2310,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openrouter_tools(&request_without_tools);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_openrouter_tools(&request_without_tools);
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());
