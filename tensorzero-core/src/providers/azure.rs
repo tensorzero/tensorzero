@@ -1189,6 +1189,7 @@ mod tests {
             stream: false,
             response_format: None,
             tools: None,
+            allowed_tools: None,
             tool_choice: None,
             reasoning_effort: None,
             service_tier: None,

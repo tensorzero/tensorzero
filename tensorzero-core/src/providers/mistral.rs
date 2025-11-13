@@ -888,7 +888,8 @@ mod tests {
     use super::*;
 
     use crate::inference::types::{FunctionType, RequestMessage, Role};
-    use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use crate::tool::{AllowedTools, ToolCallConfig};
     #[tokio::test]
     async fn test_mistral_request_new() {
         let request_with_tools = ModelInferenceRequest {
@@ -1005,6 +1006,15 @@ mod tests {
     #[test]
     fn test_prepare_mistral_tools_auto_mode() {
         // Test Auto mode with default allowed_tools
+        let tool_config = ToolCallConfig {
+            static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
@@ -1020,7 +1030,7 @@ mod tests {
             seed: None,
             stream: false,
             json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            tool_config: Some(Cow::Borrowed(&tool_config)),
             function_type: FunctionType::Chat,
             output_schema: None,
             extra_body: Default::default(),
@@ -1189,10 +1199,8 @@ mod tests {
             })
         );
 
-        // Verify allowed_tools contains the specific tool
-        let allowed_tools = allowed_tools.unwrap();
-        assert_eq!(allowed_tools.len(), 1);
-        assert_eq!(allowed_tools[0], "get_temperature");
+        // Verify allowed_tools is None (WEATHER_TOOL_CONFIG doesn't set allowed_tools)
+        assert!(allowed_tools.is_none());
     }
 
     #[test]
