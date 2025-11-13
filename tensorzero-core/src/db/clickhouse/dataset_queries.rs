@@ -1095,6 +1095,10 @@ mod tests {
         ChatInferenceDatapointInsert, JsonInferenceDatapointInsert, MetricFilter,
     };
     use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput, Text};
+    use crate::tool::{
+        AllowedTools, AllowedToolsChoice, ClientSideFunctionTool, Tool,
+        ToolCallConfigDatabaseInsert, ToolChoice,
+    };
 
     use super::*;
 
@@ -2315,12 +2319,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_insert_chat_datapoint_with_all_allowed_tools_executes_successfully() {
-        use crate::tool::{
-            AllowedTools, AllowedToolsChoice, ClientSideFunctionTool, Tool,
-            ToolCallConfigDatabaseInsert, ToolChoice,
-        };
-
+    async fn test_insert_chat_datapoint_with_explicit_allowed_tools_executes_successfully() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
         mock_clickhouse_client
             .expect_run_query_with_external_data()
@@ -2399,7 +2398,7 @@ mod tests {
             conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
                 .await
                 .is_ok(),
-            "Should insert chat datapoint with AllAllowedTools successfully"
+            "Should insert chat datapoint with Explicit allowed tool successfully"
         );
     }
 
