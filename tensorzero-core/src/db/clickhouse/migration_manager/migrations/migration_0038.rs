@@ -9,6 +9,9 @@ use std::time::Duration;
 /*
  * This migration sets up the EpisodeById table.
  * This should allow consumers to easily query episode data by id.
+ * Note: this migration contains a silent syntax error in the materialized view:
+ * `groupArrayState()(id)` in the EpisodeByIdChatView and EpisodeByIdJsonView creation queries should be `groupArrayState(id)`.
+ * We address this in Migration 0041.
  */
 
 pub struct Migration0038<'a> {

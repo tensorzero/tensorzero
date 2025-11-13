@@ -63,9 +63,9 @@ use tensorzero_core::{
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
-    Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
-    InferenceStream, LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams,
-    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
+    ClientSideFunctionTool, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
+    InferenceParams, InferenceStream, LaunchOptimizationParams, ListDatapointsRequest,
+    ListInferencesParams, OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
     WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
@@ -438,16 +438,17 @@ impl BaseTensorZeroGateway {
             None
         };
 
-        let additional_tools: Option<Vec<Tool>> = if let Some(tools) = additional_tools {
-            Some(
-                tools
-                    .into_iter()
-                    .map(|key_vals| parse_tool(py, key_vals))
-                    .collect::<Result<Vec<Tool>, PyErr>>()?,
-            )
-        } else {
-            None
-        };
+        let additional_tools: Option<Vec<ClientSideFunctionTool>> =
+            if let Some(tools) = additional_tools {
+                Some(
+                    tools
+                        .into_iter()
+                        .map(|key_vals| parse_tool(py, key_vals))
+                        .collect::<Result<Vec<ClientSideFunctionTool>, PyErr>>()?,
+                )
+            } else {
+                None
+            };
 
         let provider_tools: Option<Vec<ProviderTool>> = if let Some(provider_tools) = provider_tools
         {
@@ -525,7 +526,7 @@ impl BaseTensorZeroGateway {
                 parallel_tool_calls,
                 additional_tools,
                 tool_choice,
-                provider_tools,
+                provider_tools: provider_tools.unwrap_or_default(),
             },
             input,
             credentials: credentials.unwrap_or_default(),

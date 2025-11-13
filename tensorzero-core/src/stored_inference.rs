@@ -11,9 +11,9 @@ use crate::inference::types::pyo3_helpers::{
 };
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{RequestMessage, ResolvedRequestMessage, Text};
-use crate::tool::{DynamicToolParams, StaticToolConfig};
+use crate::tool::{deserialize_tool_info, DynamicToolParams, StaticToolConfig};
 #[cfg(feature = "pyo3")]
-use crate::tool::{ProviderTool, Tool, ToolChoice};
+use crate::tool::{ClientSideFunctionTool, ProviderTool, ToolChoice};
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
@@ -208,7 +208,7 @@ impl StoredInference {
                         .transpose()?;
 
                 // Build DynamicToolParams from flattened fields
-                let additional_tools: Option<Vec<Tool>> = additional_tools
+                let additional_tools: Option<Vec<ClientSideFunctionTool>> = additional_tools
                     .as_ref()
                     .map(|x| deserialize_from_pyobj(py, x))
                     .transpose()?;
@@ -216,10 +216,11 @@ impl StoredInference {
                     .as_ref()
                     .map(|x| deserialize_from_pyobj(py, x))
                     .transpose()?;
-                let provider_tools: Option<Vec<ProviderTool>> = provider_tools
+                let provider_tools: Vec<ProviderTool> = provider_tools
                     .as_ref()
                     .map(|x| deserialize_from_pyobj(py, x))
-                    .transpose()?;
+                    .transpose()?
+                    .unwrap_or_default();
 
                 let tool_params = DynamicToolParams {
                     allowed_tools,
@@ -579,7 +580,7 @@ pub struct StoredChatInferenceDatabase {
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    #[serde(default)]
+    #[serde(flatten, deserialize_with = "deserialize_tool_info")]
     pub tool_params: ToolCallConfigDatabaseInsert,
     #[serde(default)]
     pub tags: HashMap<String, String>,
