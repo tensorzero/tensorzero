@@ -15,7 +15,6 @@ use tensorzero_core::{
 
 /// Sample a variant name proportional to its frequency
 /// Uses weighted random sampling from the `rand` crate
-#[cfg_attr(not(test), expect(dead_code))]
 pub fn sample_by_frequency(frequencies: &HashMap<String, usize>) -> Result<String, Error> {
     if frequencies.is_empty() {
         return Err(Error::new(ErrorDetails::InternalError {
@@ -46,7 +45,6 @@ pub fn sample_by_frequency(frequencies: &HashMap<String, usize>) -> Result<Strin
 
 /// Sample a random subset of examples from a dataset without replacement
 /// Uses random sampling from the `rand` crate
-#[cfg_attr(not(test), expect(dead_code))]
 pub fn random_sample(examples: &[RenderedSample], n: usize) -> Vec<RenderedSample> {
     let mut rng = rand::rng();
     examples.choose_multiple(&mut rng, n).cloned().collect()

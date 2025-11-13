@@ -43,7 +43,6 @@ use super::evaluate::EvaluationResults;
 /// non-dominated variants per instance, which naturally generalizes the single-objective case.
 ///
 /// Returns (filtered variants, frequency map) where frequencies are used for weighted sampling.
-#[cfg_attr(not(test), expect(dead_code))]
 #[expect(clippy::type_complexity)]
 pub fn update_pareto_frontier(
     candidates: HashMap<String, UninitializedChatCompletionConfig>,

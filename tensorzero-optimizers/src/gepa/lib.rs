@@ -27,7 +27,6 @@ pub use super::evaluate::{create_evaluation_dataset, evaluate_variants, Evaluati
 pub use super::mutate::{create_mutated_variant, mutate_templates, MutateOutput};
 #[expect(unused_imports)]
 pub use super::pareto::{is_improvement, update_pareto_frontier};
-#[expect(unused_imports)]
 pub use super::sample::{random_sample, sample_by_frequency};
 
 // Import utils module for config extraction
@@ -78,7 +77,7 @@ pub async fn run_gepa_optimization(
 
     // Build the gateway client ONCE for the entire optimization run
     // This avoids creating ~201 gateway instances (each with background tasks)
-    let _gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
+    let gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
         config: tensorzero_config.clone(),
         clickhouse_connection_info: clickhouse_connection_info.clone(),
         postgres_connection_info: PostgresConnectionInfo::Disabled,
@@ -121,27 +120,73 @@ pub async fn run_gepa_optimization(
 
     tracing::info!("Validation dataset created successfully");
 
-    // TODO: Evaluate initial variants on validation set and get val_scores
-    // let val_scores = evaluate_variants(..., &val_examples, ...)?;
+    // Evaluate initial variants on validation set
+    tracing::info!(
+        "Evaluating {} initial variants on validation dataset",
+        pareto_frontier.len()
+    );
 
-    // TODO: Initial Pareto frontier filtering
-    // let (mut pareto_frontier, mut frequencies) = update_pareto_frontier(
-    //     pareto_frontier,
-    //     &val_scores,
-    //     config,
-    //     tensorzero_config,
-    // )?;
+    let val_scores = evaluate_variants(
+        &gateway_client,
+        clickhouse_connection_info,
+        tensorzero_config.clone(),
+        config,
+        &pareto_frontier,
+        &val_dataset_name,
+    )
+    .await?;
+
+    tracing::info!("Initial evaluation complete");
+
+    // Filter initial Pareto frontier using instance-wise dominance
+    #[expect(unused_mut)] // Will be mutated in step 7
+    let (pareto_frontier, mut frequencies) =
+        update_pareto_frontier(pareto_frontier, &val_scores, config, &tensorzero_config)?;
+
+    tracing::info!(
+        "Initial Pareto frontier filtered to {} variants",
+        pareto_frontier.len()
+    );
 
     // Main GEPA loop
     for iteration in 0..config.max_iterations {
         tracing::info!("GEPA iteration {}/{}", iteration + 1, config.max_iterations);
 
-        // TODO: 1. Sample mini-batch from train_examples
-        // TODO: 2. Sample variant to mutate (proportional to frequency)
-        // TODO: 3. Generate mutation using mutate() function (which does analysis internally)
-        // TODO: 4. Evaluate mutation on batch
-        // TODO: 5. If improvement, evaluate on validation set and add to val_scores
-        // TODO: 6. Update Pareto frontier using instance-wise dominance on val_scores
+        // Step 1: Sample mini-batch from train_examples
+        let batch_examples = random_sample(&train_examples, config.batch_size);
+
+        tracing::info!(
+            "Sampled mini-batch of {} examples from {} training examples",
+            batch_examples.len(),
+            train_examples.len()
+        );
+
+        // Step 2: Evaluate parent on mini-batch
+        // (This step is implicit - parent evaluation happens during mutation analysis in Step 4)
+
+        // Step 3: Sample variant to mutate (proportional to frequency)
+        let parent_variant_name = sample_by_frequency(&frequencies)?;
+
+        let _parent_variant_config =
+            pareto_frontier.get(&parent_variant_name).ok_or_else(|| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!(
+                        "Sampled variant '{parent_variant_name}' not found in Pareto frontier"
+                    ),
+                })
+            })?;
+
+        tracing::info!(
+            "Sampled variant '{}' for mutation (frequency: {}/{})",
+            parent_variant_name,
+            frequencies.get(&parent_variant_name).unwrap_or(&0),
+            val_examples.len()
+        );
+
+        // TODO: 4. Generate mutation using mutate() function (which does analysis internally)
+        // TODO: 5. Evaluate mutation on batch
+        // TODO: 6. If improvement, evaluate on validation set and add to val_scores
+        // TODO: 7. Update Pareto frontier using instance-wise dominance on val_scores
 
         tracing::info!(
             "GEPA iteration {} complete. Pareto frontier size: {}",

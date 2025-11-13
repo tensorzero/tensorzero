@@ -15,20 +15,18 @@ use tensorzero_core::{
     client::Client,
     config::{Config, UninitializedVariantConfig, UninitializedVariantInfo},
     db::clickhouse::ClickHouseConnectionInfo,
-    endpoints::{
-        datasets::v1::{
-            create_datapoints,
-            types::{
-                CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest,
-                CreateJsonDatapointRequest, JsonDatapointOutputUpdate,
-            },
+    endpoints::datasets::v1::{
+        create_datapoints,
+        types::{
+            CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest,
+            CreateJsonDatapointRequest, JsonDatapointOutputUpdate,
         },
-        inference::InferenceCredentials,
     },
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
     http::TensorzeroHttpClient,
     inference::types::Input,
+    optimization::gepa::GEPAConfig,
     stored_inference::{RenderedSample, StoredOutput},
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
@@ -57,29 +55,27 @@ pub struct EvaluationResults {
 /// Evaluate multiple variants on a dataset
 /// Returns HashMap<variant_name, Option<evaluation_results>>
 /// None indicates evaluation failure for that variant (graceful degradation)
-#[expect(dead_code)]
-#[expect(clippy::too_many_arguments)]
 pub async fn evaluate_variants(
     gateway_client: &Client,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     tensorzero_config: std::sync::Arc<Config>,
-    _credentials: &InferenceCredentials,
-    _function_name: &str,
-    evaluation_name: &str,
+    config: &GEPAConfig,
     variant_configs: &HashMap<String, UninitializedChatCompletionConfig>,
     dataset_name: &str,
-    max_concurrency: u32,
 ) -> Result<HashMap<String, Option<EvaluationResults>>, Error> {
     let mut results = HashMap::new();
-    let concurrency = max_concurrency as usize;
+    let concurrency = config.max_concurrency as usize;
 
     // Get evaluation config for later use
     let evaluation_config = tensorzero_config
         .evaluations
-        .get(evaluation_name)
+        .get(&config.evaluation_name)
         .ok_or_else(|| {
             Error::new(ErrorDetails::Config {
-                message: format!("Evaluation '{evaluation_name}' not found in config"),
+                message: format!(
+                    "Evaluation '{}' not found in config",
+                    config.evaluation_name
+                ),
             })
         })?
         .clone();
@@ -104,7 +100,7 @@ pub async fn evaluate_variants(
             tensorzero_client: gateway_client.clone(),
             clickhouse_client: clickhouse_connection_info.clone(),
             config: tensorzero_config.clone(),
-            evaluation_name: evaluation_name.to_string(),
+            evaluation_name: config.evaluation_name.clone(),
             evaluation_run_id,
             dataset_name: dataset_name.to_string(),
             variant: EvaluationVariant::Info(Box::new(dynamic_variant_config)),
