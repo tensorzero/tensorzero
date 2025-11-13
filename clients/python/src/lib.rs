@@ -24,6 +24,8 @@ use python_helpers::{
     parse_inference_response, parse_tool, parse_workflow_evaluation_run_episode_response,
     parse_workflow_evaluation_run_response, python_uuid_to_uuid,
 };
+
+use crate::gil_helpers::in_tokio_runtime_no_gil;
 use tensorzero_core::{
     config::{ConfigPyClass, FunctionsConfigPyClass, UninitializedVariantInfo},
     db::clickhouse::query_builder::OrderBy,
@@ -197,7 +199,10 @@ fn _start_http_gateway(
 // TODO - this should extend the python `ABC` class once pyo3 supports it: https://github.com/PyO3/pyo3/issues/991
 #[pyclass(subclass, frozen)]
 struct BaseTensorZeroGateway {
-    client: DropInTokio<Client>,
+    // Note - `Client` is cloneable, so we don't wrap in `DropInTokio`
+    // Instead, the stored `GatewayHandle` has customizable drop behavior,
+    // which we configure with `.with_drop_wrapper` when we build an embedded gateway for PyO3
+    client: Client,
 }
 
 #[pyclass(frozen)]
@@ -291,12 +296,6 @@ impl Drop for StreamWrapper {
     fn drop(&mut self) {
         check_stream_terminated(self.stream.clone());
     }
-}
-
-/// Constructs a dummy embedded client. We use this so that we can move out of the real 'client'
-/// field of `BaseTensorZeroGateway` when it is dropped.
-fn make_dummy_client() -> Client {
-    ClientBuilder::build_dummy()
 }
 
 #[pymethods]
@@ -611,10 +610,8 @@ impl TensorZeroGateway {
                 )?);
             }
         };
-        let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-            client: DropInTokio::new(client, make_dummy_client),
-        })
-        .add_subclass(TensorZeroGateway {});
+        let instance = PyClassInitializer::from(BaseTensorZeroGateway { client })
+            .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
     }
 
@@ -668,6 +665,9 @@ impl TensorZeroGateway {
             verify_credentials: true,
             allow_batch_writes: false,
         })
+        // When the underlying `GatewayHandle` is dropped, we need to be in the Tokio runtime
+        // with the GIL released (since we might block on the ClickHouse batcher shutting down)
+        .with_drop_wrapper(in_tokio_runtime_no_gil)
         .build();
         let client = tokio_block_on_without_gil(cls.py(), client_fut);
         let client = match client {
@@ -680,10 +680,8 @@ impl TensorZeroGateway {
             }
         };
         // Construct an instance of `TensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
-        let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-            client: DropInTokio::new(client, make_dummy_client),
-        })
-        .add_subclass(TensorZeroGateway {});
+        let instance = PyClassInitializer::from(BaseTensorZeroGateway { client })
+            .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
     }
 
@@ -1365,7 +1363,7 @@ impl TensorZeroGateway {
             construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
 
         let core_args = EvaluationCoreArgs {
-            tensorzero_client: (*client).clone(),
+            tensorzero_client: client.clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
             config: app_state.config.clone(),
             evaluation_name,
@@ -1645,10 +1643,8 @@ impl AsyncTensorZeroGateway {
                 };
 
                 // Construct an instance of `AsyncTensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
-                let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-                    client: DropInTokio::new(client, make_dummy_client),
-                })
-                .add_subclass(AsyncTensorZeroGateway {});
+                let instance = PyClassInitializer::from(BaseTensorZeroGateway { client })
+                    .add_subclass(AsyncTensorZeroGateway {});
                 Py::new(py, instance)
             })
         };
@@ -1717,6 +1713,9 @@ impl AsyncTensorZeroGateway {
             verify_credentials: true,
             allow_batch_writes: false,
         })
+        // When the underlying `GatewayHandle` is dropped, we need to be in the Tokio runtime
+        // with the GIL released (since we might block on the ClickHouse batcher shutting down)
+        .with_drop_wrapper(in_tokio_runtime_no_gil)
         .build();
         let fut = async move {
             let client = client_fut.await;
@@ -1734,10 +1733,8 @@ impl AsyncTensorZeroGateway {
                 };
 
                 // Construct an instance of `AsyncTensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
-                let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-                    client: DropInTokio::new(client, make_dummy_client),
-                })
-                .add_subclass(AsyncTensorZeroGateway {});
+                let instance = PyClassInitializer::from(BaseTensorZeroGateway { client })
+                    .add_subclass(AsyncTensorZeroGateway {});
                 Py::new(py, instance)
             })
         };
@@ -2472,7 +2469,7 @@ impl AsyncTensorZeroGateway {
             let evaluation_run_id = uuid::Uuid::now_v7();
 
             let core_args = EvaluationCoreArgs {
-                tensorzero_client: (*client).clone(),
+                tensorzero_client: client.clone(),
                 clickhouse_client: app_state.clickhouse_connection_info.clone(),
                 config: app_state.config.clone(),
                 evaluation_name,
