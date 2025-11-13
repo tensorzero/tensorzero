@@ -60,43 +60,35 @@ retries = { num_retries = 4, max_delay_s = 10 }
 ## Variant Fallbacks
 
 If we specify multiple variants for a function, the gateway will try different variants until one succeeds or all fail.
-The sampling behavior depends on how the weights are specified:
 
-- If no weights are specified for any variants, the gateway will sample between them uniformly.
-- If a variant's weight is set to zero, it will never be sampled unless explicitly pinned at inference time using `variant_name`.
-- If you mix variants with positive and unspecified weights, the gateway will sample the positive weighted variants first, and only use the unspecified weighted variants as fallbacks.
+By default, the gateway will sample between all variants uniformly.
+You can customize the sampling behavior, including fallback-only variants, using the `experimentation` section.
 
-In the example below, the gateway will first sample and attempt the variants with positive weights (`gpt_4o_mini` or `claude_3_5_haiku`).
-If all of those variants fail, the gateway will sample and attempt the variants with unspecified weights (`gemini_1_5_flash_8b` or `ministral_8b`).
-The gateway will never sample the variants with zero weights (`ministral_8b`), unless explicitly pinned at inference time.
+For example, the configuration below would instruct the gateway to try `gpt_5_mini` and `claude_haiku_4_5` first (with 90/10 sampling probability), and finally `grok_4` if all previous variants fail.
 
 ```toml
-[functions.extract_data]
+[functions.draft_email]
 type = "chat"
 
-[functions.extract_data.variants.gpt_4o_mini]
+[functions.draft_email.variants.gpt_5_mini]
 type = "chat_completion"
-model = "openai::gpt-4o-mini-2024-07-18"
-weight = 0.7
+model = "openai::gpt-5-mini"
 
-[functions.extract_data.variants.claude_3_5_haiku]
+[functions.draft_email.variants.claude_haiku_4_5]
 type = "chat_completion"
-model = "anthropic::claude-3-5-haiku-20241022"
-weight = 0.3
+model = "anthropic::claude-haiku-4-5"
 
-[functions.extract_data.variants.gemini_1_5_flash_8b]
+[functions.draft_email.variants.grok_4]
 type = "chat_completion"
-model = "google_ai_studio_gemini::gemini-1.5-flash-8b"
+model = "xai::grok-4-0709"
 
-[functions.extract_data.variants.grok_2]
-type = "chat_completion"
-model = "xai::grok-2-1212"
-
-[functions.extract_data.variants.ministral_8b]
-type = "chat_completion"
-model = "mistral::ministral-8b-2410"
-weight = 0
+[functions.draft_email.experimentation]
+type = "static_weights"
+candidate_variants = {"gpt_5_mini" = 0.9, "claude_haiku_4_5" = 0.1}
+fallback_variants = ["grok_4"]
 ```
+
+See [Run adaptive A/B tests](/experimentation/run-adaptive-ab-tests) and [Run static A/B tests](/experimentation/run-static-ab-tests) for more information.
 
 ## Combining Strategies
 
@@ -112,7 +104,6 @@ In other words, the gateway will follow a strategy like the pseudocode below.
 
 ```python
 while variants:
-    # First sample variants with non-zero weight, then variants with zero weight
     variant = sample_variant(variants)  # sampling without replacement
 
     for _ in range(num_retries + 1):
@@ -155,12 +146,14 @@ type = "chat"
 [functions.extract_data.variants.gpt_4o_mini_api_key_A]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
-weight = 0.5
 
 [functions.extract_data.variants.gpt_4o_mini_api_key_B]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
-weight = 0.5
+
+[functions.extract_data.experimentation]
+type = "static_weights"
+candidate_variants = {"gpt_4o_mini_api_key_A" = 0.5, "gpt_4o_mini_api_key_B" = 0.5}
 ```
 
 ## Timeouts

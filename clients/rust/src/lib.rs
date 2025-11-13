@@ -342,7 +342,7 @@ pub trait ClientExt {
     /// # Errors
     ///
     /// Returns a `TensorZeroError` if the request fails.
-    async fn create_from_inferences(
+    async fn create_datapoints_from_inferences(
         &self,
         dataset_name: String,
         params: CreateDatapointsFromInferenceRequestParams,
@@ -957,7 +957,7 @@ impl ClientExt for Client {
         }
     }
 
-    async fn create_from_inferences(
+    async fn create_datapoints_from_inferences(
         &self,
         dataset_name: String,
         params: CreateDatapointsFromInferenceRequestParams,
