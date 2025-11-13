@@ -63,6 +63,8 @@ pub struct OpenAIResponsesRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<OpenAIResponsesReasoningConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_tools: Option<Vec<&'a str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     service_tier: Option<ServiceTier>,
     stream: bool,
 }
@@ -415,6 +417,11 @@ impl<'a> OpenAIResponsesRequest<'a> {
                 }
             }
         };
+        let allowed_tools = request
+            .tool_config
+            .as_ref()
+            .map(|tc| tc.allowed_tools.as_dynamic_allowed_tools())
+            .flatten();
 
         let mut openai_responses_request = Self {
             model: openai_model,
@@ -439,6 +446,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
             tools,
             parallel_tool_calls,
             tool_choice,
+            allowed_tools,
             temperature: request.temperature,
             max_output_tokens: request.max_tokens,
             seed: request.seed,

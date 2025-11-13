@@ -1507,17 +1507,19 @@ pub(super) fn prepare_openai_tools<'a>(
     Option<Vec<OpenAITool<'a>>>,
     Option<OpenAIToolChoice<'a>>,
     Option<bool>,
+    Option<Vec<&'a str>>,
 ) {
     match &request.tool_config {
-        None => (None, None, None),
+        None => (None, None, None, None),
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None, None);
+                return (None, None, None, None);
             }
             let tools = Some(tool_config.tools_available().map(Into::into).collect());
             let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
-            (tools, tool_choice, parallel_tool_calls)
+            let allowed_tools = tool_config.allowed_tools.as_dynamic_allowed_tools();
+            (tools, tool_choice, parallel_tool_calls, allowed_tools)
         }
     }
 }
@@ -2131,6 +2133,8 @@ struct OpenAIRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_tools: Option<Vec<&'a str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
@@ -2169,7 +2173,8 @@ impl<'a> OpenAIRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openai_tools(request);
+        let (tools, tool_choice, mut parallel_tool_calls, allowed_tools) =
+            prepare_openai_tools(request);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
@@ -2202,6 +2207,7 @@ impl<'a> OpenAIRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
+            allowed_tools,
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None, // handled below
             service_tier: None,     // handled below

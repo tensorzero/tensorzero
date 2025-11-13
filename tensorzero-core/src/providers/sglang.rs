@@ -560,6 +560,8 @@ struct SGLangRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_tools: Option<Vec<&'a str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
@@ -629,7 +631,8 @@ impl<'a> SGLangRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls, allowed_tools) =
+            prepare_openai_tools(request);
         let mut sglang_request = SGLangRequest {
             messages,
             model,
@@ -643,6 +646,7 @@ impl<'a> SGLangRequest<'a> {
             stream_options,
             response_format,
             tools,
+            allowed_tools,
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),

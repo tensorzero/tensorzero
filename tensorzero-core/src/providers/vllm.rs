@@ -329,7 +329,10 @@ struct VLLMRequest<'a> {
     seed: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -394,7 +397,8 @@ impl<'a> VLLMRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls, allowed_tools) =
+            prepare_openai_tools(request);
 
         let mut vllm_request = VLLMRequest {
             messages,
@@ -410,6 +414,7 @@ impl<'a> VLLMRequest<'a> {
             seed: request.seed,
             stop: request.borrow_stop_sequences(),
             tools,
+            allowed_tools,
             tool_choice,
             parallel_tool_calls,
         };

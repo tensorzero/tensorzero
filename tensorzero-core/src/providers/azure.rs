@@ -612,6 +612,8 @@ struct AzureRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_tools: Option<Vec<&'a str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<AzureToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
@@ -682,7 +684,7 @@ impl<'a> AzureRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
+        let (tools, tool_choice, _, allowed_tools) = prepare_openai_tools(request);
         let mut azure_request = AzureRequest {
             messages,
             temperature: request.temperature,
@@ -695,6 +697,7 @@ impl<'a> AzureRequest<'a> {
             response_format,
             seed: request.seed,
             tools,
+            allowed_tools,
             tool_choice: tool_choice.map(AzureToolChoice::from),
             reasoning_effort: None,
             service_tier: None, // handled below

@@ -670,17 +670,19 @@ pub(super) fn prepare_openrouter_tools<'a>(
     Option<Vec<OpenRouterTool<'a>>>,
     Option<OpenRouterToolChoice<'a>>,
     Option<bool>,
+    Option<Vec<&'a str>>,
 ) {
     match &request.tool_config {
-        None => (None, None, None),
+        None => (None, None, None, None),
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None, None);
+                return (None, None, None, None);
             }
             let tools = Some(tool_config.tools_available().map(Into::into).collect());
             let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
-            (tools, tool_choice, parallel_tool_calls)
+            let allowed_tools = tool_config.allowed_tools.as_dynamic_allowed_tools();
+            (tools, tool_choice, parallel_tool_calls, allowed_tools)
         }
     }
 }
@@ -1071,6 +1073,8 @@ struct OpenRouterRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenRouterTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_tools: Option<Vec<&'a str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenRouterToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
@@ -1130,7 +1134,8 @@ impl<'a> OpenRouterRequest<'a> {
         };
         let mut messages = prepare_openrouter_messages(request).await?;
 
-        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openrouter_tools(request);
+        let (tools, tool_choice, mut parallel_tool_calls, allowed_tools) =
+            prepare_openrouter_tools(request);
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
@@ -1161,6 +1166,7 @@ impl<'a> OpenRouterRequest<'a> {
             stream_options,
             response_format,
             tools,
+            allowed_tools,
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),

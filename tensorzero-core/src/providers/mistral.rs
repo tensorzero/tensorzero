@@ -421,11 +421,29 @@ enum MistralResponseFormat {
 }
 
 #[derive(Debug, Serialize, PartialEq)]
+#[serde(untagged)]
+enum MistralToolChoice<'a> {
+    String(MistralToolChoiceString),
+    Specific(MistralSpecificToolChoice<'a>),
+}
+
+#[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-enum MistralToolChoice {
+enum MistralToolChoiceString {
     Auto,
     None,
     Any,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+struct MistralSpecificToolChoice<'a> {
+    r#type: &'static str,
+    function: MistralSpecificToolFunction<'a>,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+struct MistralSpecificToolFunction<'a> {
+    name: &'a str,
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -445,42 +463,62 @@ impl<'a> From<OpenAITool<'a>> for MistralTool<'a> {
 
 fn prepare_mistral_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
-) -> Result<(Option<Vec<MistralTool<'a>>>, Option<MistralToolChoice>), Error> {
+) -> Result<
+    (
+        Option<Vec<MistralTool<'a>>>,
+        Option<MistralToolChoice<'a>>,
+        Option<Vec<&'a str>>,
+    ),
+    Error,
+> {
     match &request.tool_config {
-        None => Ok((None, None)),
-        Some(tool_config) => match &tool_config.tool_choice {
-            ToolChoice::Specific(tool_name) => {
-                let tool = tool_config
-                    .tools_available()
-                    .find(|t| t.name() == tool_name)
-                    .ok_or_else(|| {
-                        Error::new(ErrorDetails::ToolNotFound {
-                            name: tool_name.clone(),
-                        })
-                    })?;
-                let tools = vec![MistralTool::from(OpenAITool::from(tool))];
-                Ok((Some(tools), Some(MistralToolChoice::Any)))
-            }
-            ToolChoice::Auto | ToolChoice::Required => {
-                let tools = tool_config
-                    .tools_available()
-                    .map(|t| MistralTool::from(OpenAITool::from(t)))
-                    .collect();
-                let tool_choice = match tool_config.tool_choice {
-                    ToolChoice::Auto => MistralToolChoice::Auto,
-                    ToolChoice::Required => MistralToolChoice::Any,
-                    _ => {
-                        return Err(ErrorDetails::InvalidTool {
-                            message: "Tool choice must be Auto or Required. This is impossible."
-                                .to_string(),
+        None => Ok((None, None, None)),
+        Some(tool_config) => {
+            let tools = tool_config
+                .tools_available()
+                .map(|x| MistralTool::from(OpenAITool::from(x)))
+                .collect();
+            let allowed_tools = tool_config.allowed_tools.as_dynamic_allowed_tools();
+
+            match &tool_config.tool_choice {
+                ToolChoice::Specific(tool_name) => Ok((
+                    Some(tools),
+                    Some(MistralToolChoice::Specific(MistralSpecificToolChoice {
+                        r#type: "function",
+                        function: MistralSpecificToolFunction { name: tool_name },
+                    })),
+                    allowed_tools,
+                )),
+                ToolChoice::Auto | ToolChoice::Required => {
+                    let tools = tool_config
+                        .tools_available()
+                        .map(|t| MistralTool::from(OpenAITool::from(t)))
+                        .collect();
+                    let tool_choice = match tool_config.tool_choice {
+                        ToolChoice::Auto => {
+                            MistralToolChoice::String(MistralToolChoiceString::Auto)
                         }
-                        .into())
-                    }
-                };
-                Ok((Some(tools), Some(tool_choice)))
+                        ToolChoice::Required => {
+                            MistralToolChoice::String(MistralToolChoiceString::Any)
+                        }
+                        _ => {
+                            return Err(ErrorDetails::InvalidTool {
+                                message:
+                                    "Tool choice must be Auto or Required. This is impossible."
+                                        .to_string(),
+                            }
+                            .into())
+                        }
+                    };
+                    Ok((Some(tools), Some(tool_choice), allowed_tools))
+                }
+                ToolChoice::None => Ok((
+                    Some(tools),
+                    Some(MistralToolChoice::String(MistralToolChoiceString::None)),
+                    allowed_tools,
+                )),
             }
-            ToolChoice::None => Ok((None, Some(MistralToolChoice::None))),
-        },
+        }
     }
 }
 
@@ -513,7 +551,9 @@ struct MistralRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<MistralTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<MistralToolChoice>,
+    tool_choice: Option<MistralToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
 }
@@ -567,7 +607,7 @@ impl<'a> MistralRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice) = prepare_mistral_tools(request)?;
+        let (tools, tool_choice, allowed_tools) = prepare_mistral_tools(request)?;
 
         let mut mistral_request = MistralRequest {
             messages,
@@ -582,6 +622,7 @@ impl<'a> MistralRequest<'a> {
             response_format,
             tools,
             tool_choice,
+            allowed_tools,
             stop: request.borrow_stop_sequences(),
         };
 
@@ -890,7 +931,268 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
-        assert_eq!(mistral_request.tool_choice, Some(MistralToolChoice::Any));
+        assert_eq!(
+            mistral_request.tool_choice,
+            Some(MistralToolChoice::Specific(MistralSpecificToolChoice {
+                r#type: "function",
+                function: MistralSpecificToolFunction {
+                    name: "get_temperature"
+                },
+            }))
+        );
+    }
+
+    #[test]
+    fn test_prepare_mistral_tools_with_allowed_tools() {
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+
+        // Test with allowed_tools specified
+        let tool_config = ToolCallConfig {
+            static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: Some(false),
+            allowed_tools: AllowedTools {
+                tools: vec![WEATHER_TOOL.name().to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::AllAllowedTools,
+            },
+        };
+
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, allowed_tools) = prepare_mistral_tools(&request).unwrap();
+
+        // Verify tools are returned (all tools, not just allowed ones)
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 2);
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+        assert_eq!(tools[1].function.name, QUERY_TOOL.name());
+
+        // Verify tool_choice
+        let tool_choice = tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            MistralToolChoice::String(MistralToolChoiceString::Auto)
+        );
+
+        // Verify allowed_tools contains only the weather tool
+        let allowed_tools = allowed_tools.unwrap();
+        assert_eq!(allowed_tools.len(), 1);
+        assert_eq!(allowed_tools[0], WEATHER_TOOL.name());
+    }
+
+    #[test]
+    fn test_prepare_mistral_tools_auto_mode() {
+        // Test Auto mode with default allowed_tools
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: Some(Cow::Borrowed(&MULTI_TOOL_CONFIG)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, allowed_tools) = prepare_mistral_tools(&request).unwrap();
+
+        // Verify tools
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 2);
+
+        // Verify tool_choice is Auto
+        let tool_choice = tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            MistralToolChoice::String(MistralToolChoiceString::Auto)
+        );
+
+        // Verify allowed_tools is None (default behavior)
+        assert!(allowed_tools.is_none());
+    }
+
+    #[test]
+    fn test_prepare_mistral_tools_required_mode() {
+        use crate::tool::AllowedTools;
+
+        let tool_config = ToolCallConfig {
+            static_tools_available: vec![WEATHER_TOOL.clone()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, allowed_tools) = prepare_mistral_tools(&request).unwrap();
+
+        // Verify tools
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 1);
+
+        // Verify tool_choice is Any (Required maps to Any)
+        let tool_choice = tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            MistralToolChoice::String(MistralToolChoiceString::Any)
+        );
+
+        // Verify allowed_tools is None
+        assert!(allowed_tools.is_none());
+    }
+
+    #[test]
+    fn test_prepare_mistral_tools_none_mode() {
+        let tool_config = ToolCallConfig {
+            static_tools_available: vec![WEATHER_TOOL.clone()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: Some(Cow::Borrowed(&tool_config)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, allowed_tools) = prepare_mistral_tools(&request).unwrap();
+
+        // Verify tools are still returned
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 1);
+
+        // Verify tool_choice is None
+        let tool_choice = tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            MistralToolChoice::String(MistralToolChoiceString::None)
+        );
+
+        // Verify allowed_tools is None
+        assert!(allowed_tools.is_none());
+    }
+
+    #[test]
+    fn test_prepare_mistral_tools_specific_mode() {
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["What's the weather?".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: Some(Cow::Borrowed(&WEATHER_TOOL_CONFIG)),
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, allowed_tools) = prepare_mistral_tools(&request).unwrap();
+
+        // Verify tools
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+
+        // Verify tool_choice is Specific
+        let tool_choice = tool_choice.unwrap();
+        assert_eq!(
+            tool_choice,
+            MistralToolChoice::Specific(MistralSpecificToolChoice {
+                r#type: "function",
+                function: MistralSpecificToolFunction {
+                    name: "get_temperature"
+                },
+            })
+        );
+
+        // Verify allowed_tools contains the specific tool
+        let allowed_tools = allowed_tools.unwrap();
+        assert_eq!(allowed_tools.len(), 1);
+        assert_eq!(allowed_tools[0], "get_temperature");
     }
 
     #[test]
@@ -946,6 +1248,7 @@ mod tests {
             response_format: Some(MistralResponseFormat::JsonObject),
             tools: None,
             tool_choice: None,
+            allowed_tools: None,
             stop: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
@@ -1040,6 +1343,7 @@ mod tests {
             response_format: Some(MistralResponseFormat::JsonObject),
             tools: None,
             tool_choice: None,
+            allowed_tools: None,
             stop: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
@@ -1101,6 +1405,7 @@ mod tests {
             response_format: Some(MistralResponseFormat::JsonObject),
             tools: None,
             tool_choice: None,
+            allowed_tools: None,
             stop: None,
         };
         let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
@@ -1153,6 +1458,7 @@ mod tests {
             response_format: Some(MistralResponseFormat::JsonObject),
             tools: None,
             tool_choice: None,
+            allowed_tools: None,
             stop: None,
         };
         let result = ProviderInferenceResponse::try_from(MistralResponseWithMetadata {
@@ -1306,6 +1612,7 @@ mod tests {
             response_format: None,
             tools: None,
             tool_choice: None,
+            allowed_tools: None,
             stop: None,
         };
 

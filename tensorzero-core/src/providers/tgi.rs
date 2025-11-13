@@ -450,6 +450,8 @@ struct TGIRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_tools: Option<Vec<&'a str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
@@ -520,7 +522,8 @@ impl<'a> TGIRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls, allowed_tools) =
+            prepare_openai_tools(request);
 
         let mut tgi_request = TGIRequest {
             messages,
@@ -534,6 +537,7 @@ impl<'a> TGIRequest<'a> {
             stream: request.stream,
             stream_options,
             tools,
+            allowed_tools,
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),

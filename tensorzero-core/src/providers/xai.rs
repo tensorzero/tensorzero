@@ -343,7 +343,11 @@ struct XAIRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_tools: Option<Vec<&'a str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -423,7 +427,8 @@ impl<'a> XAIRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls, allowed_tools) =
+            prepare_openai_tools(request);
         let mut xai_request = XAIRequest {
             messages,
             model,
@@ -437,6 +442,8 @@ impl<'a> XAIRequest<'a> {
             stream,
             stream_options,
             tools,
+            allowed_tools,
+            parallel_tool_calls,
             tool_choice,
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None,

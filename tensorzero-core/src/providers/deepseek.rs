@@ -367,6 +367,8 @@ struct DeepSeekRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_tools: Option<Vec<&'a str>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<DeepSeekResponseFormat>,
@@ -445,7 +447,7 @@ impl<'a> DeepSeekRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
+        let (tools, tool_choice, _, allowed_tools) = prepare_openai_tools(request);
 
         let mut deepseek_request = DeepSeekRequest {
             messages,
@@ -462,6 +464,7 @@ impl<'a> DeepSeekRequest<'a> {
             response_format,
             tools,
             tool_choice,
+            allowed_tools,
         };
 
         apply_inference_params(&mut deepseek_request, &request.inference_params_v2);
