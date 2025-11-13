@@ -84,26 +84,27 @@ impl EvaluationStats {
         evaluators: &HashMap<String, EvaluatorConfig>,
     ) -> HashMap<String, EvaluatorStats> {
         info!("Computing evaluation statistics");
-        let mut data: HashMap<String, Vec<f32>> = evaluators
+        let mut per_evaluator_stats: HashMap<String, PerEvaluatorStats> = evaluators
             .keys()
-            .map(|key| (key.clone(), Vec::new()))
+            .map(|key| (key.clone(), PerEvaluatorStats::new()))
             .collect();
         debug!(evaluators = ?evaluators.keys().collect::<Vec<_>>(), "Initialized data collectors for evaluators");
-        // Collect evaluation inference data into vectors by evaluation (all as floats)
+
+        // Collect evaluation inference data using PerEvaluatorStats
         debug!("Processing evaluation results into statistics");
         for evaluation_info in &self.evaluation_infos {
             for (evaluation_name, evaluation_result) in &evaluation_info.evaluations {
                 match evaluation_result {
                     Some(Value::Number(n)) => {
-                        if let Some(data_vec) = data.get_mut(evaluation_name) {
+                        if let Some(stats) = per_evaluator_stats.get_mut(evaluation_name) {
                             if let Some(num) = n.as_f64() {
-                                data_vec.push(num as f32);
+                                stats.push(num as f32);
                             }
                         }
                     }
                     Some(Value::Bool(b)) => {
-                        if let Some(data_vec) = data.get_mut(evaluation_name) {
-                            data_vec.push(if *b { 1.0 } else { 0.0 });
+                        if let Some(stats) = per_evaluator_stats.get_mut(evaluation_name) {
+                            stats.push(if *b { 1.0 } else { 0.0 });
                         }
                     }
                     _ => {}
@@ -111,32 +112,22 @@ impl EvaluationStats {
             }
         }
 
-        // Compute stats
+        // Convert PerEvaluatorStats to EvaluatorStats
         debug!("Computing final statistics");
-        let mut stats = HashMap::new();
-        for (evaluator_name, data_vec) in data.into_iter() {
-            let count = data_vec.len();
-            let mean = mean(&data_vec).unwrap_or(0.0);
-            let stderr = match std_deviation(&data_vec) {
-                Some(std_dev) if !data_vec.is_empty() => std_dev / (data_vec.len() as f32).sqrt(),
-                _ => 0.0,
-            };
-            debug!(
-                evaluator_name = %evaluator_name,
-                count = count,
-                mean = mean,
-                stderr = stderr,
-                "Computed statistics for evaluator"
-            );
-            stats.insert(
-                evaluator_name.clone(),
-                EvaluatorStats {
-                    mean,
-                    stderr,
-                    count,
-                },
-            );
-        }
+        let stats: HashMap<String, EvaluatorStats> = per_evaluator_stats
+            .into_iter()
+            .map(|(evaluator_name, per_eval_stats)| {
+                let eval_stats = per_eval_stats.to_evaluator_stats();
+                debug!(
+                    evaluator_name = %evaluator_name,
+                    count = eval_stats.count,
+                    mean = eval_stats.mean,
+                    stderr = eval_stats.stderr,
+                    "Computed statistics for evaluator"
+                );
+                (evaluator_name, eval_stats)
+            })
+            .collect();
         info!(
             computed_stats = stats.len(),
             "Statistics computation completed"
@@ -286,5 +277,14 @@ impl PerEvaluatorStats {
     /// The full CI width is 2 * ci_half_width()
     pub fn ci_half_width(&self) -> Option<f32> {
         self.stderr().map(|se| 1.96 * se)
+    }
+
+    /// Converts to an EvaluatorStats snapshot for output/serialization
+    pub fn to_evaluator_stats(&self) -> EvaluatorStats {
+        EvaluatorStats {
+            mean: self.mean().unwrap_or(0.0),
+            stderr: self.stderr().unwrap_or(0.0),
+            count: self.count(),
+        }
     }
 }
