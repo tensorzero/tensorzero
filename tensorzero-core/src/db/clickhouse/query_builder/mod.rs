@@ -405,7 +405,6 @@ mod tests {
     // TODO(shuyangli): Cleanly separate tests for ListInferences SQL generation from the filter generation tests.
     use chrono::DateTime;
     use serde_json::json;
-
     use std::path::Path;
     use uuid::Uuid;
 
