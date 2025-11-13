@@ -619,7 +619,16 @@ class OrderByMetric:
     by: Literal["metric"] = "metric"
 
 
-OrderBy = OrderByTimestamp | OrderByMetric
+@dataclass(kw_only=True)
+class OrderBySearchRelevance:
+    direction: OrderDirection
+    """
+    The ordering direction.
+    """
+    by: Literal["search_relevance"] = "search_relevance"
+
+
+OrderBy = OrderByTimestamp | OrderByMetric | OrderBySearchRelevance
 
 
 @dataclass(kw_only=True)
@@ -1200,4 +1209,19 @@ class ListInferencesRequest:
     """
     Optional ordering criteria for the results.
     Supports multiple sort criteria (e.g., sort by timestamp then by metric).
+    """
+    search_query_experimental: str | None = None
+    """
+    Text query to filter. Case-insensitive substring search over the inferences' input and output.
+
+    THIS FEATURE IS EXPERIMENTAL, and we may change or remove it at any time.
+    We recommend against depending on this feature for critical use cases.
+
+    Important limitations:
+    - This requires an exact substring match; we do not tokenize this query string.
+    - This doesn't search for any content in the template itself.
+    - Quality is based on term frequency > 0, without any relevance scoring.
+    - There are no performance guarantees (it's best effort only). Today, with no other
+      filters, it will perform a full table scan, which may be extremely slow depending
+      on the data volume.
     """
