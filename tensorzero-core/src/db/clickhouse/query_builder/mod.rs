@@ -405,7 +405,7 @@ mod tests {
     // TODO(shuyangli): Cleanly separate tests for ListInferences SQL generation from the filter generation tests.
     use chrono::DateTime;
     use serde_json::json;
-    use std::collections::HashSet;
+
     use std::path::Path;
     use uuid::Uuid;
 
@@ -2021,7 +2021,7 @@ FORMAT JSONEachRow";
                 vec![],
                 vec![],
                 AllowedTools {
-                    tools: HashSet::new(),
+                    tools: vec![],
                     choice: AllowedToolsChoice::FunctionDefault,
                 },
                 ToolChoice::None,
@@ -2067,7 +2067,7 @@ FORMAT JSONEachRow";
                 vec![],
                 vec![],
                 AllowedTools {
-                    tools: HashSet::new(),
+                    tools: vec![],
                     choice: AllowedToolsChoice::FunctionDefault,
                 },
                 ToolChoice::None,

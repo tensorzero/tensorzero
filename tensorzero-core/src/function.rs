@@ -2493,7 +2493,7 @@ mod tests {
                 ],
                 vec![],
                 AllowedTools {
-                    tools: HashSet::new(), // Empty, will use function's defaults (static1)
+                    tools: vec![], // Empty, will use function's defaults (static1)
                     choice: AllowedToolsChoice::FunctionDefault, // Use function defaults
                 },
                 ToolChoice::None,
@@ -2546,7 +2546,7 @@ mod tests {
                 vec![],
                 vec![],
                 AllowedTools {
-                    tools: HashSet::new(),
+                    tools: vec![],
                     choice: AllowedToolsChoice::FunctionDefault,
                 },
                 ToolChoice::None,
@@ -2566,7 +2566,7 @@ mod tests {
                 ],
                 vec![],
                 AllowedTools {
-                    tools: HashSet::new(), // Function has no defaults
+                    tools: vec![], // Function has no defaults
                     choice: AllowedToolsChoice::FunctionDefault,
                 },
                 ToolChoice::Auto,
@@ -2652,7 +2652,7 @@ mod tests {
                 vec![Tool::ClientSideFunction(tool.clone())],
                 vec![],
                 AllowedTools {
-                    tools: HashSet::new(), // Function has no defaults
+                    tools: vec![], // Function has no defaults
                     choice: AllowedToolsChoice::FunctionDefault,
                 },
                 ToolChoice::Auto,

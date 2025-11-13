@@ -1,5 +1,5 @@
 use serde_json::json;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use object_store::path::Path as ObjectStorePath;
@@ -2534,8 +2534,16 @@ mod tool_call_storage_tests {
 
             // Allowed tools should contain static tools
             assert_eq!(tool_params.allowed_tools.tools.len(), 2);
-            assert!(tool_params.allowed_tools.tools.contains("static_tool_1"));
-            assert!(tool_params.allowed_tools.tools.contains("static_tool_2"));
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .iter()
+                .any(|t| t == "static_tool_1"));
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .iter()
+                .any(|t| t == "static_tool_2"));
             assert_eq!(
                 tool_params.allowed_tools.choice,
                 AllowedToolsChoice::Explicit
@@ -2579,7 +2587,7 @@ mod tool_call_storage_tests {
                 vec![dynamic_tool], // Dynamic tool
                 vec![],             // No provider tools
                 AllowedTools {
-                    tools: HashSet::new(), // Empty static tools
+                    tools: vec![], // Empty static tools
                     choice: AllowedToolsChoice::Explicit,
                 },
                 ToolChoice::Required,
@@ -2703,8 +2711,16 @@ mod tool_call_storage_tests {
             // Verify both static and dynamic tools
             assert_eq!(tool_params.dynamic_tools.len(), 1);
             assert_eq!(tool_params.allowed_tools.tools.len(), 2);
-            assert!(tool_params.allowed_tools.tools.contains("static_a"));
-            assert!(tool_params.allowed_tools.tools.contains("static_b"));
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .iter()
+                .any(|t| t == "static_a"));
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .iter()
+                .any(|t| t == "static_b"));
         } else {
             panic!("Expected chat datapoint");
         }
@@ -2744,7 +2760,7 @@ mod tool_call_storage_tests {
                 vec![],
                 vec![provider_tool],
                 AllowedTools {
-                    tools: HashSet::new(),
+                    tools: vec![],
                     choice: AllowedToolsChoice::FunctionDefault,
                 },
                 ToolChoice::Auto,
@@ -2822,7 +2838,7 @@ mod tool_call_storage_tests {
                 vec![],
                 vec![],
                 AllowedTools {
-                    tools: ["func_tool_1".to_string()].into_iter().collect(),
+                    tools: vec!["func_tool_1".to_string()],
                     choice: AllowedToolsChoice::FunctionDefault, // Key: use function defaults
                 },
                 ToolChoice::None,
@@ -2932,8 +2948,16 @@ mod tool_call_storage_tests {
                 AllowedToolsChoice::Explicit
             );
             assert_eq!(tool_params.allowed_tools.tools.len(), 2);
-            assert!(tool_params.allowed_tools.tools.contains("explicit_tool_1"));
-            assert!(tool_params.allowed_tools.tools.contains("explicit_tool_2"));
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .iter()
+                .any(|t| t == "explicit_tool_1"));
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .iter()
+                .any(|t| t == "explicit_tool_2"));
 
             if let ToolChoice::Specific(tool_name) = tool_params.tool_choice {
                 assert_eq!(tool_name, "explicit_tool_1");
@@ -3085,8 +3109,16 @@ mod tool_call_storage_tests {
             assert_eq!(tool_params.dynamic_provider_tools.len(), 1);
 
             assert_eq!(tool_params.allowed_tools.tools.len(), 2);
-            assert!(tool_params.allowed_tools.tools.contains("static_1"));
-            assert!(tool_params.allowed_tools.tools.contains("static_2"));
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .iter()
+                .any(|t| t == "static_1"));
+            assert!(tool_params
+                .allowed_tools
+                .tools
+                .iter()
+                .any(|t| t == "static_2"));
 
             assert_eq!(tool_params.tool_choice, ToolChoice::Required);
             assert_eq!(tool_params.parallel_tool_calls, Some(true));

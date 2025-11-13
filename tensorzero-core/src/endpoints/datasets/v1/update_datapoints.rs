@@ -731,7 +731,7 @@ mod tests {
                     vec![],
                     vec![],
                     AllowedTools {
-                        tools: HashSet::new(),
+                        tools: vec![],
                         choice: AllowedToolsChoice::FunctionDefault,
                     },
                     ToolChoice::Auto,
@@ -868,7 +868,7 @@ mod tests {
                     vec![],
                     vec![],
                     AllowedTools {
-                        tools: HashSet::new(),
+                        tools: vec![],
                         choice: AllowedToolsChoice::FunctionDefault,
                     },
                     ToolChoice::Auto,

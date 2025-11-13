@@ -298,7 +298,7 @@ pub struct DynamicImplicitToolConfig {
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct AllowedTools {
-    pub tools: HashSet<String>,
+    pub tools: Vec<String>,
     pub choice: AllowedToolsChoice,
 }
 
@@ -443,12 +443,12 @@ impl ToolCallConfig {
         // This means we allow all tools for the function.
         let allowed_tools = match dynamic_allowed_tools {
             Some(allowed_tools) => AllowedTools {
-                tools: allowed_tools.into_iter().collect(),
+                tools: allowed_tools,
                 choice: AllowedToolsChoice::Explicit,
             },
             None => {
                 // Collect function tools
-                let mut tools: HashSet<String> = function_tools.iter().cloned().collect();
+                let mut tools: Vec<String> = function_tools.to_vec();
 
                 // Add dynamic tool names in FunctionDefault mode
                 if let Some(additional_tools) = &dynamic_additional_tools {
@@ -593,7 +593,7 @@ impl ToolCallConfig {
                 // Filter to only allowed tools (strict mode)
                 Box::new(
                     self.tools_available()
-                        .filter(|tool| self.allowed_tools.tools.contains(tool.name())),
+                        .filter(|tool| self.allowed_tools.tools.iter().any(|t| t == tool.name())),
                 )
             }
         }
@@ -1155,7 +1155,7 @@ impl ToolCallConfigDatabaseInsert {
             }
             AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::Explicit => {
                 // Use the dynamically specified tool names
-                self.allowed_tools.tools.iter().cloned().collect::<Vec<_>>()
+                self.allowed_tools.tools.to_vec()
             }
         };
 
@@ -2569,7 +2569,8 @@ mod tests {
         assert!(tool_call_config
             .allowed_tools
             .tools
-            .contains("get_temperature"));
+            .iter()
+            .any(|t| t == "get_temperature"));
         assert!(matches!(
             tool_call_config.allowed_tools.choice,
             AllowedToolsChoice::Explicit
@@ -2629,7 +2630,7 @@ mod tests {
         assert_eq!(tool_info.dynamic_provider_tools.len(), 0);
         assert_eq!(
             tool_info.allowed_tools.tools,
-            ["ragged_tool".to_string()].into_iter().collect()
+            vec!["ragged_tool".to_string()]
         );
         assert_eq!(
             tool_info.tool_choice,
@@ -3098,7 +3099,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
-                tools: vec!["get_temperature".to_string()].into_iter().collect(),
+                tools: vec!["get_temperature".to_string()],
                 choice: AllowedToolsChoice::Explicit,
             },
         };
