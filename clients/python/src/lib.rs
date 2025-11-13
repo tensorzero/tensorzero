@@ -100,7 +100,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TensorZeroGateway>()?;
     m.add_class::<LocalHttpGateway>()?;
     m.add_class::<RenderedSample>()?;
-    m.add_class::<StoredInference>()?;
     m.add_class::<EvaluationJobHandler>()?;
     m.add_class::<AsyncEvaluationJobHandler>()?;
     m.add_class::<UninitializedOpenAIRFTConfig>()?;
@@ -1429,7 +1428,7 @@ impl TensorZeroGateway {
         order_by: Option<Bound<'_, PyAny>>,
         limit: Option<u32>,
         offset: Option<u32>,
-    ) -> PyResult<Vec<StoredInference>> {
+    ) -> PyResult<Py<PyList>> {
         let client = this.as_super().client.clone();
         let filters = filters
             .as_ref()
@@ -1457,9 +1456,26 @@ impl TensorZeroGateway {
             ..Default::default()
         };
         let fut = client.experimental_list_inferences(params);
-        let wires: Vec<StoredInference> =
+        let wires =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        Ok(wires)
+
+        // Convert each StoredInference to the appropriate Python dataclass
+        let py_objects: Vec<_> = wires
+            .iter()
+            .map(|inference| {
+                convert_response_to_python_dataclass(
+                    this.py(),
+                    inference,
+                    "tensorzero",
+                    match inference {
+                        StoredInference::Chat(_) => "StoredInferenceChat",
+                        StoredInference::Json(_) => "StoredInferenceJson",
+                    },
+                )
+            })
+            .collect::<PyResult<_>>()?;
+
+        Ok(PyList::new(this.py(), py_objects)?.unbind())
     }
 
     /// Get specific inferences by their IDs.
@@ -2587,7 +2603,25 @@ impl AsyncTensorZeroGateway {
             };
             let res = client.experimental_list_inferences(params).await;
             Python::attach(|py| match res {
-                Ok(wire_inferences) => Ok(PyList::new(py, wire_inferences)?.unbind()),
+                Ok(wire_inferences) => {
+                    // Convert each StoredInference to the appropriate Python dataclass
+                    let py_objects: Vec<_> = wire_inferences
+                        .iter()
+                        .map(|inference| {
+                            convert_response_to_python_dataclass(
+                                py,
+                                inference,
+                                "tensorzero",
+                                match inference {
+                                    StoredInference::Chat(_) => "StoredInferenceChat",
+                                    StoredInference::Json(_) => "StoredInferenceJson",
+                                },
+                            )
+                        })
+                        .collect::<PyResult<_>>()?;
+
+                    Ok(PyList::new(py, py_objects)?.unbind())
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })
