@@ -56,8 +56,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const dbClient = await getNativeDatabaseClient();
 
   // If there is a freshly inserted feedback, ClickHouse may take some time to
-  // update the feedback table as it is eventually consistent.
+  // update the feedback table and materialized views as it is eventually consistent.
   // In this case, we poll for the feedback item until it is found but time out and log a warning.
+  // When polling for new feedback, we also need to query feedbackBounds and latestFeedbackByMetric
+  // AFTER the polling completes to ensure the materialized views have caught up.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(episode_id, newFeedbackId, limit)
     : dbClient.queryFeedbackByTargetId({
@@ -67,34 +69,71 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         limit,
       });
 
-  const [
-    inferences,
+  let inferences,
     inference_bounds,
     feedbacks,
     feedbackBounds,
     num_inferences,
     num_feedbacks,
-    latestFeedbackByMetric,
-  ] = await Promise.all([
-    queryInferenceTableByEpisodeId({
-      episode_id,
-      before: beforeInference ?? undefined,
-      after: afterInference ?? undefined,
-      limit,
-    }),
-    queryInferenceTableBoundsByEpisodeId({
-      episode_id,
-    }),
-    feedbackDataPromise,
-    dbClient.queryFeedbackBoundsByTargetId({
-      target_id: episode_id,
-    }),
-    countInferencesForEpisode(episode_id),
-    dbClient.countFeedbackByTargetId({
-      target_id: episode_id,
-    }),
-    queryLatestFeedbackIdByMetric({ target_id: episode_id }),
-  ]);
+    latestFeedbackByMetric;
+
+  if (newFeedbackId) {
+    // When there's new feedback, wait for polling to complete before querying
+    // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
+    [inferences, inference_bounds, feedbacks, num_inferences, num_feedbacks] =
+      await Promise.all([
+        queryInferenceTableByEpisodeId({
+          episode_id,
+          before: beforeInference ?? undefined,
+          after: afterInference ?? undefined,
+          limit,
+        }),
+        queryInferenceTableBoundsByEpisodeId({
+          episode_id,
+        }),
+        feedbackDataPromise,
+        countInferencesForEpisode(episode_id),
+        dbClient.countFeedbackByTargetId({
+          target_id: episode_id,
+        }),
+      ]);
+
+    // Query these after polling completes to avoid race condition with materialized views
+    [feedbackBounds, latestFeedbackByMetric] = await Promise.all([
+      dbClient.queryFeedbackBoundsByTargetId({ target_id: episode_id }),
+      queryLatestFeedbackIdByMetric({ target_id: episode_id }),
+    ]);
+  } else {
+    // Normal case: execute all queries in parallel
+    [
+      inferences,
+      inference_bounds,
+      feedbacks,
+      feedbackBounds,
+      num_inferences,
+      num_feedbacks,
+      latestFeedbackByMetric,
+    ] = await Promise.all([
+      queryInferenceTableByEpisodeId({
+        episode_id,
+        before: beforeInference ?? undefined,
+        after: afterInference ?? undefined,
+        limit,
+      }),
+      queryInferenceTableBoundsByEpisodeId({
+        episode_id,
+      }),
+      feedbackDataPromise,
+      dbClient.queryFeedbackBoundsByTargetId({
+        target_id: episode_id,
+      }),
+      countInferencesForEpisode(episode_id),
+      dbClient.countFeedbackByTargetId({
+        target_id: episode_id,
+      }),
+      queryLatestFeedbackIdByMetric({ target_id: episode_id }),
+    ]);
+  }
   if (inferences.length === 0) {
     throw data(`No inferences found for episode ${episode_id}.`, {
       status: 404,
