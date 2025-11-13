@@ -35,9 +35,9 @@ use crate::providers::openai::{check_api_base_suffix, OpenAIMessagesConfig};
 use crate::tool::ToolCallChunk;
 
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_messages, prepare_openai_tools,
-    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
-    OpenAIUsage, StreamOptions, SystemOrDeveloper,
+    get_chat_url, handle_openai_error, prepare_openai_messages, OpenAIRequestMessage,
+    OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice, OpenAIUsage,
+    StreamOptions, SystemOrDeveloper,
 };
 
 const PROVIDER_NAME: &str = "SGLang";
@@ -572,6 +572,38 @@ struct SGLangRequest<'a> {
     reasoning_effort: Option<String>,
 }
 
+type PreparedSGLangToolsResult<'a> = (
+    Option<Vec<OpenAITool<'a>>>,
+    Option<OpenAIToolChoice<'a>>,
+    Option<bool>,
+);
+
+/// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
+/// Otherwise convert the tool choice and tools to SGLang format
+pub(super) fn prepare_sglang_tools<'a>(
+    request: &'a ModelInferenceRequest,
+) -> PreparedSGLangToolsResult<'a> {
+    match &request.tool_config {
+        None => (None, None, None),
+        Some(tool_config) => {
+            if !tool_config.any_tools_available() {
+                return (None, None, None);
+            }
+            let tools = Some(
+                tool_config
+                    .strict_tools_available()
+                    .map(Into::into)
+                    .collect(),
+            );
+            let parallel_tool_calls = tool_config.parallel_tool_calls;
+
+            // SGLang does not support allowed_tools constraint, use regular tool_choice
+            let tool_choice = Some((&tool_config.tool_choice).into());
+            (tools, tool_choice, parallel_tool_calls)
+        }
+    }
+}
+
 fn apply_inference_params(
     request: &mut SGLangRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
@@ -632,7 +664,7 @@ impl<'a> SGLangRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_sglang_tools(request);
         let mut sglang_request = SGLangRequest {
             messages,
             model,

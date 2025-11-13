@@ -9,9 +9,9 @@ use tokio::time::Instant;
 use url::Url;
 
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_tools, stream_openai,
-    tensorzero_to_openai_messages, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice,
-    OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, StreamOptions,
+    get_chat_url, handle_openai_error, stream_openai, tensorzero_to_openai_messages,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAISystemRequestMessage,
+    OpenAITool, OpenAIToolChoice, StreamOptions,
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
@@ -340,6 +340,38 @@ struct VLLMRequest<'a> {
     parallel_tool_calls: Option<bool>,
 }
 
+type PreparedVLLMToolsResult<'a> = (
+    Option<Vec<OpenAITool<'a>>>,
+    Option<OpenAIToolChoice<'a>>,
+    Option<bool>,
+);
+
+/// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
+/// Otherwise convert the tool choice and tools to vLLM format
+pub(super) fn prepare_vllm_tools<'a>(
+    request: &'a ModelInferenceRequest,
+) -> PreparedVLLMToolsResult<'a> {
+    match &request.tool_config {
+        None => (None, None, None),
+        Some(tool_config) => {
+            if !tool_config.any_tools_available() {
+                return (None, None, None);
+            }
+            let tools = Some(
+                tool_config
+                    .strict_tools_available()
+                    .map(Into::into)
+                    .collect(),
+            );
+            let parallel_tool_calls = tool_config.parallel_tool_calls;
+
+            // vLLM does not support allowed_tools constraint, use regular tool_choice
+            let tool_choice = Some((&tool_config.tool_choice).into());
+            (tools, tool_choice, parallel_tool_calls)
+        }
+    }
+}
+
 fn apply_inference_params(
     _request: &mut VLLMRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
@@ -398,7 +430,7 @@ impl<'a> VLLMRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_vllm_tools(request);
 
         let mut vllm_request = VLLMRequest {
             messages,
