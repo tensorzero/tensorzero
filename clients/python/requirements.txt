@@ -257,6 +257,10 @@ colorama==0.4.6 ; sys_platform == 'win32' \
     #   click
     #   pytest
     #   tqdm
+dacite==1.9.2 \
+    --hash=sha256:053f7c3f5128ca2e9aceb66892b1a3c8936d02c686e707bee96e19deef4bc4a0 \
+    --hash=sha256:6ccc3b299727c7aa17582f0021f6ae14d5de47c7227932c47fec4cdfefd26f09
+    # via tensorzero
 datamodel-code-generator==0.35.0 \
     --hash=sha256:46805fa2515d3871f6bfafce9aa63128e735a7a6a4cfcbf9c27b3794ee4ea846 \
     --hash=sha256:c356d1e4a555f86667a4262db03d4598a30caeda8f51786555fd269c8abb806b

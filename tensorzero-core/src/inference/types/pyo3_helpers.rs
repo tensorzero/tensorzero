@@ -482,8 +482,9 @@ impl StoredSample for StoredSampleItem {
     }
 }
 
-/// Converts a Python dictionary/list to json with `json.dumps`,
-/// then deserializes to a Rust type via serde
+/// Converts a Python dataclass / dictionary / list to json with `json.dumps`,
+/// then deserializes to a Rust type via serde. This handles UNSET values correctly by calling a custom
+/// `TensorZeroTypeEncoder` class from Python.
 pub fn deserialize_from_pyobj<'a, T: serde::de::DeserializeOwned>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,
