@@ -28,15 +28,17 @@ use crate::inference::types::{
 };
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::model::{Credential, EndpointLocation, ModelProvider};
+use crate::providers::common::prepare_chat_completion_tools;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::providers::openai::OpenAIMessagesConfig;
 
+use super::common::{ChatCompletionTool, ChatCompletionToolChoice};
 use super::openai::{
-    handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
-    AllowedToolsChoice, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
-    OpenAIToolChoice, OpenAIToolChoiceString, OpenAIUsage, SpecificToolChoice, SystemOrDeveloper,
+    handle_openai_error, prepare_openai_messages, stream_openai, AllowedToolsChoice,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAIUsage, SpecificToolChoice,
+    SystemOrDeveloper,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -563,25 +565,54 @@ pub(super) enum AzureToolChoiceString {
     // Note: Azure doesn't support required tool choice.
 }
 
-impl<'a> From<OpenAIToolChoice<'a>> for AzureToolChoice<'a> {
-    fn from(tool_choice: OpenAIToolChoice<'a>) -> Self {
+impl<'a> From<ChatCompletionToolChoice<'a>> for AzureToolChoice<'a> {
+    fn from(tool_choice: ChatCompletionToolChoice<'a>) -> Self {
         match tool_choice {
-            OpenAIToolChoice::String(tool_choice) => {
-                match tool_choice {
-                    OpenAIToolChoiceString::None => {
-                        AzureToolChoice::String(AzureToolChoiceString::None)
-                    }
-                    OpenAIToolChoiceString::Auto => {
-                        AzureToolChoice::String(AzureToolChoiceString::Auto)
-                    }
-                    OpenAIToolChoiceString::Required => {
-                        AzureToolChoice::String(AzureToolChoiceString::Auto)
-                    } // Azure doesn't support required
+            ChatCompletionToolChoice::String(tool_choice) => match tool_choice {
+                crate::providers::common::ChatCompletionToolChoiceString::None => {
+                    AzureToolChoice::String(AzureToolChoiceString::None)
                 }
+                crate::providers::common::ChatCompletionToolChoiceString::Auto => {
+                    AzureToolChoice::String(AzureToolChoiceString::Auto)
+                }
+                crate::providers::common::ChatCompletionToolChoiceString::Required => {
+                    AzureToolChoice::String(AzureToolChoiceString::Auto)
+                } // Azure doesn't support required
+            },
+            ChatCompletionToolChoice::Specific(tool_choice) => {
+                AzureToolChoice::Specific(SpecificToolChoice {
+                    r#type: super::openai::OpenAIToolType::Function,
+                    function: super::openai::SpecificToolFunction {
+                        name: tool_choice.function.name,
+                    },
+                })
             }
-            OpenAIToolChoice::Specific(tool_choice) => AzureToolChoice::Specific(tool_choice),
-            OpenAIToolChoice::AllowedTools(allowed_tools) => {
-                AzureToolChoice::AllowedTools(allowed_tools)
+            ChatCompletionToolChoice::AllowedTools(allowed_tools_choice) => {
+                // Convert from common ChatCompletionAllowedToolsChoice to Azure/OpenAI AllowedToolsChoice
+                AzureToolChoice::AllowedTools(AllowedToolsChoice {
+                    r#type: allowed_tools_choice.r#type,
+                    allowed_tools: super::openai::AllowedToolsConstraint {
+                        mode: match allowed_tools_choice.allowed_tools.mode {
+                            crate::providers::common::ChatCompletionAllowedToolsMode::Auto => {
+                                super::openai::AllowedToolsMode::Auto
+                            }
+                            crate::providers::common::ChatCompletionAllowedToolsMode::Required => {
+                                super::openai::AllowedToolsMode::Required
+                            }
+                        },
+                        tools: allowed_tools_choice
+                            .allowed_tools
+                            .tools
+                            .into_iter()
+                            .map(|tool_ref| super::openai::ToolReference {
+                                r#type: super::openai::OpenAIToolType::Function,
+                                function: super::openai::SpecificToolFunction {
+                                    name: tool_ref.function.name,
+                                },
+                            })
+                            .collect(),
+                    },
+                })
             }
         }
     }
@@ -614,7 +645,7 @@ struct AzureRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<AzureResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
+    tools: Option<Vec<ChatCompletionTool<'a>>>,
     // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
     // #[serde(skip_serializing_if = "Option::is_none")]
     // allowed_tools: Option<Vec<&'a str>>,
@@ -689,7 +720,7 @@ impl<'a> AzureRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
+        let (tools, tool_choice, _) = prepare_chat_completion_tools(request, true);
         let mut azure_request = AzureRequest {
             messages,
             temperature: request.temperature,

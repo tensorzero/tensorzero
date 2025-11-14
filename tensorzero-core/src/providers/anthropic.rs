@@ -42,7 +42,7 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::tool::{
-    ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig,
+    ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice,
 };
 
 use super::helpers::convert_stream_error;

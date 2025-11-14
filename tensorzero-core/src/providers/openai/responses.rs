@@ -262,13 +262,18 @@ pub(super) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {
 
 impl<'a> OpenAITool<'a> {
     pub fn into_openai_responses_tool(self) -> OpenAIResponsesTool<'a> {
-        OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool {
-            r#type: self.r#type,
-            name: self.function.name,
-            description: self.function.description,
-            parameters: self.function.parameters,
-            strict: self.strict,
-        })
+        match self {
+            OpenAITool::Function { function, strict } => {
+                OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool {
+                    r#type: super::OpenAIToolType::Function,
+                    name: function.name,
+                    description: function.description,
+                    parameters: function.parameters,
+                    strict,
+                })
+            }
+            OpenAITool::Custom(custom_tool) => OpenAIResponsesTool::Custom(custom_tool),
+        }
     }
 }
 

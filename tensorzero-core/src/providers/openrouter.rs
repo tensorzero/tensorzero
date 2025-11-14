@@ -41,6 +41,7 @@ use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::tool::{ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 
+use crate::providers::common::prepare_chat_completion_tools;
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
     inject_extra_request_data_and_send_eventsource,
@@ -688,50 +689,15 @@ pub(super) async fn prepare_openrouter_messages<'a>(
 pub(super) fn prepare_openrouter_tools<'a>(
     request: &'a ModelInferenceRequest,
 ) -> PreparedOpenRouterToolsResult<'a> {
-    match &request.tool_config {
-        None => (None, None, None),
-        Some(tool_config) => {
-            if !tool_config.any_tools_available() {
-                return (None, None, None);
-            }
-            let tools = Some(tool_config.tools_available().map(Into::into).collect());
-            let parallel_tool_calls = tool_config.parallel_tool_calls;
+    let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(request, true);
 
-            // Check if we need to construct an AllowedToolsChoice variant
-            let allowed_tools_list = tool_config.allowed_tools.as_dynamic_allowed_tools();
+    // Convert from ChatCompletionTool to OpenRouterTool
+    let openrouter_tools = tools.map(|t| t.into_iter().map(OpenRouterTool::from).collect());
 
-            let tool_choice = if let Some(allowed_tool_names) = allowed_tools_list {
-                // Construct the OpenAI spec-compliant allowed_tools structure
-                let mode = match &tool_config.tool_choice {
-                    ToolChoice::Required => AllowedToolsMode::Required,
-                    _ => AllowedToolsMode::Auto,
-                };
+    // Convert from ChatCompletionToolChoice to OpenRouterToolChoice
+    let openrouter_tool_choice = tool_choice.map(OpenRouterToolChoice::from);
 
-                let tool_refs: Vec<ToolReference> = allowed_tool_names
-                    .iter()
-                    .map(|name| ToolReference {
-                        r#type: OpenAIToolType::Function,
-                        function: OpenAISpecificToolFunction { name },
-                    })
-                    .collect();
-
-                Some(OpenRouterToolChoice::AllowedTools(
-                    OpenAIAllowedToolsChoice {
-                        r#type: "allowed_tools",
-                        allowed_tools: OpenAIAllowedToolsConstraint {
-                            mode,
-                            tools: tool_refs,
-                        },
-                    },
-                ))
-            } else {
-                // No allowed_tools constraint, use regular tool_choice
-                Some((&tool_config.tool_choice).into())
-            };
-
-            (tools, tool_choice, parallel_tool_calls)
-        }
-    }
+    (openrouter_tools, openrouter_tool_choice, parallel_tool_calls)
 }
 
 /// This function is complicated only by the fact that OpenRouter and Azure require
@@ -1037,6 +1003,20 @@ impl<'a> From<&'a ClientSideFunctionToolConfig> for OpenRouterTool<'a> {
     }
 }
 
+impl<'a> From<super::common::ChatCompletionTool<'a>> for OpenRouterTool<'a> {
+    fn from(tool: super::common::ChatCompletionTool<'a>) -> Self {
+        OpenRouterTool {
+            r#type: OpenRouterToolType::Function,
+            function: OpenRouterFunction {
+                name: tool.function.name,
+                description: tool.function.description,
+                parameters: tool.function.parameters,
+            },
+            strict: tool.strict,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
 pub(super) enum OpenRouterToolChoice<'a> {
@@ -1082,6 +1062,59 @@ impl<'a> From<&'a ToolChoice> for OpenRouterToolChoice<'a> {
                 r#type: OpenRouterToolType::Function,
                 function: SpecificToolFunction { name: tool_name },
             }),
+        }
+    }
+}
+
+impl<'a> From<super::common::ChatCompletionToolChoice<'a>> for OpenRouterToolChoice<'a> {
+    fn from(tool_choice: super::common::ChatCompletionToolChoice<'a>) -> Self {
+        match tool_choice {
+            super::common::ChatCompletionToolChoice::String(tc_string) => match tc_string {
+                super::common::ChatCompletionToolChoiceString::None => {
+                    OpenRouterToolChoice::String(OpenRouterToolChoiceString::None)
+                }
+                super::common::ChatCompletionToolChoiceString::Auto => {
+                    OpenRouterToolChoice::String(OpenRouterToolChoiceString::Auto)
+                }
+                super::common::ChatCompletionToolChoiceString::Required => {
+                    OpenRouterToolChoice::String(OpenRouterToolChoiceString::Required)
+                }
+            },
+            super::common::ChatCompletionToolChoice::Specific(specific) => {
+                OpenRouterToolChoice::Specific(SpecificToolChoice {
+                    r#type: OpenRouterToolType::Function,
+                    function: SpecificToolFunction {
+                        name: specific.function.name,
+                    },
+                })
+            }
+            super::common::ChatCompletionToolChoice::AllowedTools(allowed_tools) => {
+                // Convert from common ChatCompletionAllowedToolsChoice to OpenAI AllowedToolsChoice
+                OpenRouterToolChoice::AllowedTools(OpenAIAllowedToolsChoice {
+                    r#type: allowed_tools.r#type,
+                    allowed_tools: OpenAIAllowedToolsConstraint {
+                        mode: match allowed_tools.allowed_tools.mode {
+                            super::common::ChatCompletionAllowedToolsMode::Auto => {
+                                AllowedToolsMode::Auto
+                            }
+                            super::common::ChatCompletionAllowedToolsMode::Required => {
+                                AllowedToolsMode::Required
+                            }
+                        },
+                        tools: allowed_tools
+                            .allowed_tools
+                            .tools
+                            .into_iter()
+                            .map(|tool_ref| ToolReference {
+                                r#type: OpenAIToolType::Function,
+                                function: OpenAISpecificToolFunction {
+                                    name: tool_ref.function.name,
+                                },
+                            })
+                            .collect(),
+                    },
+                })
+            }
         }
     }
 }

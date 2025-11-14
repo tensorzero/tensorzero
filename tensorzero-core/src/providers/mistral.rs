@@ -476,9 +476,16 @@ pub(super) struct MistralTool<'a> {
 
 impl<'a> From<OpenAITool<'a>> for MistralTool<'a> {
     fn from(tool: OpenAITool<'a>) -> Self {
-        MistralTool {
-            r#type: tool.r#type,
-            function: tool.function,
+        match tool {
+            OpenAITool::Function { function, strict: _ } => MistralTool {
+                r#type: OpenAIToolType::Function,
+                function,
+            },
+            OpenAITool::Custom(_) => {
+                // Mistral doesn't support custom tools, so this shouldn't happen
+                // But if it does, we'll just skip it by panicking
+                panic!("Mistral provider does not support custom tools")
+            }
         }
     }
 }

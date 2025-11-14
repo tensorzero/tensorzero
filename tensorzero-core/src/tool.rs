@@ -794,9 +794,6 @@ impl ToolCallConfig {
 
     /// Returns tools filtered by allowed_tools list and tool type filter.
     ///
-    /// # Arguments
-    /// * `filter` - Specifies which tool types to include
-    ///
     /// # Behavior
     /// - For FunctionDefault and DynamicAllowedTools modes: returns tools based on type filter
     /// - For Explicit mode: applies allowed_tools filtering first, then tool type filtering

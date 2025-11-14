@@ -541,9 +541,16 @@ impl<'a> From<&'a ClientSideFunctionTool> for FireworksTool<'a> {
 
 impl<'a> From<OpenAITool<'a>> for FireworksTool<'a> {
     fn from(tool: OpenAITool<'a>) -> Self {
-        FireworksTool {
-            r#type: tool.r#type,
-            function: tool.function,
+        match tool {
+            OpenAITool::Function { function, strict: _ } => FireworksTool {
+                r#type: OpenAIToolType::Function,
+                function,
+            },
+            OpenAITool::Custom(_) => {
+                // Fireworks doesn't support custom tools, so this shouldn't happen
+                // But if it does, we'll just skip it by panicking
+                panic!("Fireworks provider does not support custom tools")
+            }
         }
     }
 }

@@ -1518,9 +1518,7 @@ pub async fn prepare_openai_messages<'a>(
 
 /// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
 /// Otherwise convert the tool choice and tools to OpenAI format
-pub(super) fn prepare_openai_tools<'a>(
-    request: &'a ModelInferenceRequest,
-) -> PreparedOpenAIToolsResult<'a> {
+pub(super) fn prepare_openai_tools<'a>(request: &'a ModelInferenceRequest) -> PreparedOpenAIToolsResult<'a> {
     match &request.tool_config {
         None => (None, None, None),
         Some(tool_config) => {

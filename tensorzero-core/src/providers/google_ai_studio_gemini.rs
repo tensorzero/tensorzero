@@ -41,7 +41,7 @@ use crate::model::{fully_qualified_name, Credential, ModelProvider};
 use crate::tool::ClientSideFunctionToolConfig;
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
-use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
+use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
 
 use super::gcp_vertex_gemini::process_jsonschema_for_gcp_vertex_gemini;
 use super::helpers::{convert_stream_error, inject_extra_request_data_and_send};

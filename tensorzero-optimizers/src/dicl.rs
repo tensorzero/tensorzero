@@ -27,7 +27,6 @@ use tensorzero_core::{
     },
     rate_limiting::ScopeInfo,
     stored_inference::RenderedSample,
-    tool::ToolTypeFilter,
     variant::dicl::UninitializedDiclConfig,
 };
 
@@ -221,7 +220,7 @@ fn validate_function_config(
             // JSON functions should have exactly one implicit tool for schema validation
             if json_config
                 .implicit_tool_call_config
-                .tools_available(ToolTypeFilter::FunctionOnly)
+                .tools_available()
                 .count()
                 != 1
             {
@@ -229,7 +228,7 @@ fn validate_function_config(
                     message: format!(
                         "DICL optimization expected JSON function '{}' to have exactly 1 implicit tool, but found {}. This indicates a configuration issue.",
                         function_name,
-                        json_config.implicit_tool_call_config.tools_available(ToolTypeFilter::FunctionOnly).count()
+                        json_config.implicit_tool_call_config.tools_available().count()
                     ),
                 }));
             }
