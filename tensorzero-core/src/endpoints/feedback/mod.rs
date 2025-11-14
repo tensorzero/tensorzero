@@ -23,8 +23,8 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::tool::{
-    deserialize_optional_tool_info, StaticToolConfig, ToolCall, ToolCallConfig,
-    ToolCallConfigDatabaseInsert,
+    deserialize_optional_tool_info, ClientSideFunctionToolConfig, StaticToolConfig, ToolCall,
+    ToolCallConfig, ToolCallConfigDatabaseInsert, ToolConfig,
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
@@ -1359,7 +1359,7 @@ mod tests {
         let value = json!("Hello, world!");
         let dynamic_demonstration_info =
             DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
-                tools.values().cloned().map(ToolConfig::Static).collect(),
+                tools.values().cloned().map(|t| ClientSideFunctionToolConfig::Static(t)).collect(),
                 vec![],
             )));
         let parsed_value = serde_json::to_string(
@@ -1383,7 +1383,7 @@ mod tests {
         );
         let dynamic_demonstration_info =
             DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
-                tools.values().cloned().map(ToolConfig::Static).collect(),
+                tools.values().cloned().map(|t| ClientSideFunctionToolConfig::Static(t)).collect(),
                 vec![],
             )));
         let parsed_value = serde_json::to_string(
@@ -1416,7 +1416,7 @@ mod tests {
         );
         let dynamic_demonstration_info =
             DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
-                tools.values().cloned().map(ToolConfig::Static).collect(),
+                tools.values().cloned().map(|t| ClientSideFunctionToolConfig::Static(t)).collect(),
                 vec![],
             )));
         let err = validate_parse_demonstration(
@@ -1439,7 +1439,7 @@ mod tests {
         );
         let dynamic_demonstration_info =
             DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
-                tools.values().cloned().map(ToolConfig::Static).collect(),
+                tools.values().cloned().map(|t| ClientSideFunctionToolConfig::Static(t)).collect(),
                 vec![],
             )));
         let err = validate_parse_demonstration(
@@ -1537,7 +1537,7 @@ mod tests {
         });
         let dynamic_demonstration_info =
             DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
-                tools.values().cloned().map(ToolConfig::Static).collect(),
+                tools.values().cloned().map(|t| ClientSideFunctionToolConfig::Static(t)).collect(),
                 vec![],
             )));
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)

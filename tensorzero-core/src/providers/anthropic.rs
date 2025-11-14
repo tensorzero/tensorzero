@@ -1630,7 +1630,7 @@ mod tests {
             },
             "required": ["location", "unit"]
         });
-        let tool = ToolConfig::Dynamic(DynamicToolConfig {
+        let tool = ClientSideFunctionToolConfig::Dynamic(DynamicToolConfig {
             name: "test".to_string(),
             description: "test".to_string(),
             parameters: DynamicJSONSchema::new(parameters.clone()),

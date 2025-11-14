@@ -99,8 +99,9 @@ use crate::rate_limiting::{
 };
 use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::tool::{
-    deserialize_optional_tool_info, InferenceResponseToolCall, ToolCall, ToolCallConfig,
-    ToolCallConfigDatabaseInsert, ToolCallWrapper, ToolResult,
+    deserialize_optional_tool_info, ClientSideFunctionToolConfig, DynamicToolConfig,
+    InferenceResponseToolCall, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
+    ToolConfig, ToolCallWrapper, ToolResult,
 };
 use crate::variant::{InferenceConfig, JsonMode};
 
@@ -2635,7 +2636,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             ..ToolCallConfig::with_tools_available(
                 vec![],
-                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                vec![ClientSideFunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "custom_tool".to_string(),
                     description: "A custom tool".to_string(),
                     parameters: DynamicJSONSchema::new(
@@ -2758,7 +2759,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             ..ToolCallConfig::with_tools_available(
                 vec![],
-                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                vec![ClientSideFunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "weather_tool".to_string(),
                     description: "Get weather information".to_string(),
                     parameters: DynamicJSONSchema::new(

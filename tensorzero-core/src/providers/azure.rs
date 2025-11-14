@@ -885,9 +885,13 @@ mod tests {
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
     use crate::model::EndpointLocation;
+    use crate::providers::common::{
+        ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
+        ChatCompletionToolChoice, ChatCompletionToolChoiceString, ChatCompletionToolType,
+    };
     use crate::providers::openai::{
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType,
-        OpenAIUsage, SpecificToolFunction,
+        OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
@@ -995,7 +999,8 @@ mod tests {
     #[test]
     fn test_azure_tool_choice_from() {
         // Required is converted to Auto
-        let tool_choice = OpenAIToolChoice::String(OpenAIToolChoiceString::Required);
+        let tool_choice =
+            ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::Required);
         let azure_tool_choice = AzureToolChoice::from(tool_choice);
         assert_eq!(
             azure_tool_choice,
@@ -1003,9 +1008,9 @@ mod tests {
         );
 
         // Specific tool choice is converted to Specific
-        let specific_tool_choice = OpenAIToolChoice::Specific(SpecificToolChoice {
-            r#type: OpenAIToolType::Function,
-            function: SpecificToolFunction {
+        let specific_tool_choice = ChatCompletionToolChoice::Specific(ChatCompletionSpecificToolChoice {
+            r#type: ChatCompletionToolType::Function,
+            function: ChatCompletionSpecificToolFunction {
                 name: "test_function",
             },
         });
@@ -1021,7 +1026,7 @@ mod tests {
         );
 
         // None is converted to None
-        let none_tool_choice = OpenAIToolChoice::String(OpenAIToolChoiceString::None);
+        let none_tool_choice = ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::None);
         let azure_none_tool_choice = AzureToolChoice::from(none_tool_choice);
         assert_eq!(
             azure_none_tool_choice,
@@ -1029,7 +1034,7 @@ mod tests {
         );
 
         // Auto is converted to Auto
-        let auto_tool_choice = OpenAIToolChoice::String(OpenAIToolChoiceString::Auto);
+        let auto_tool_choice = ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::Auto);
         let azure_auto_tool_choice = AzureToolChoice::from(auto_tool_choice);
         assert_eq!(
             azure_auto_tool_choice,

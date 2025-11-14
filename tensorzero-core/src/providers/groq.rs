@@ -2125,6 +2125,7 @@ mod tests {
             static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(false),
             allowed_tools: AllowedTools {

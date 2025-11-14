@@ -614,8 +614,13 @@ mod tests {
         let tools = xai_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        match &tools[0] {
+            crate::providers::openai::OpenAITool::Function { function, .. } => {
+                assert_eq!(function.name, WEATHER_TOOL.name());
+                assert_eq!(function.parameters, WEATHER_TOOL.parameters());
+            }
+            _ => panic!("Expected Function tool"),
+        }
         assert_eq!(
             xai_request.tool_choice,
             Some(OpenAIToolChoice::Specific(SpecificToolChoice {
@@ -665,8 +670,13 @@ mod tests {
         let tools = xai_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
 
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        match &tools[0] {
+            crate::providers::openai::OpenAITool::Function { function, .. } => {
+                assert_eq!(function.name, WEATHER_TOOL.name());
+                assert_eq!(function.parameters, WEATHER_TOOL.parameters());
+            }
+            _ => panic!("Expected Function tool"),
+        }
         assert_eq!(
             xai_request.tool_choice,
             Some(OpenAIToolChoice::Specific(SpecificToolChoice {

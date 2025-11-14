@@ -38,7 +38,7 @@ use crate::inference::types::{
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::InferenceProvider;
 use crate::model::{fully_qualified_name, Credential, ModelProvider};
-use crate::tool::ClientSideFunctionToolConfig;
+use crate::tool::{ClientSideFunctionToolConfig, ToolConfig};
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
@@ -1615,7 +1615,7 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
+        let tools_vec: Vec<&ClientSideFunctionToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
         let tool = GeminiTool {
             function_declarations: tools_vec
                 .iter()
@@ -1648,6 +1648,7 @@ mod tests {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools::default(),
@@ -1667,6 +1668,7 @@ mod tests {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools::default(),
@@ -1686,6 +1688,7 @@ mod tests {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Specific("get_temperature".to_string()),
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
@@ -1709,6 +1712,7 @@ mod tests {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
@@ -1735,6 +1739,7 @@ mod tests {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
@@ -1757,6 +1762,7 @@ mod tests {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools::default(),

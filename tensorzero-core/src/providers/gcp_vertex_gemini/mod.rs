@@ -2848,8 +2848,8 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
-        let tools_vec_owned: Vec<ToolConfig> = tools_vec.iter().map(|&t| t.clone()).collect();
+        let tools_vec: Vec<&ClientSideFunctionToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
+        let tools_vec_owned: Vec<ClientSideFunctionToolConfig> = tools_vec.iter().map(|&t| t.clone()).collect();
         let tool = GCPVertexGeminiTool::from(&tools_vec_owned);
         assert_eq!(
             tool,
@@ -4064,7 +4064,7 @@ mod tests {
             strict: false,
         };
 
-        let tool_config = ToolConfig::Static(Arc::new(static_tool));
+        let tool_config = ClientSideFunctionToolConfig::Static(Arc::new(static_tool));
 
         // Convert the tool config to GCPVertexGeminiFunctionDeclaration
         let function_declaration = GCPVertexGeminiFunctionDeclaration::from(&tool_config);

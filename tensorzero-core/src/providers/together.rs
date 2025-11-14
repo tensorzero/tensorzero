@@ -909,8 +909,13 @@ mod tests {
         assert!(!together_request.stream);
         let tools = together_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        match &tools[0] {
+            crate::providers::openai::OpenAITool::Function { function, .. } => {
+                assert_eq!(function.name, WEATHER_TOOL.name());
+                assert_eq!(function.parameters, WEATHER_TOOL.parameters());
+            }
+            _ => panic!("Expected Function tool"),
+        }
         assert_eq!(
             together_request.tool_choice,
             Some(OpenAIToolChoice::Specific(SpecificToolChoice {

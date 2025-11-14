@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use crate::jsonschema_util::StaticJSONSchema;
-use crate::tool::{StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
+use crate::tool::{
+    ClientSideFunctionToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
+};
 use lazy_static::lazy_static;
 use serde_json::json;
 
@@ -20,12 +22,12 @@ lazy_static! {
         })).unwrap(),
         strict: false,
     });
-    pub static ref WEATHER_TOOL: ToolConfig = ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone());
+    pub static ref WEATHER_TOOL: ClientSideFunctionToolConfig = ClientSideFunctionToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone());
     pub static ref WEATHER_TOOL_CHOICE: ToolChoice = ToolChoice::Specific("get_temperature".to_string());
     pub static ref WEATHER_TOOL_CONFIG: ToolCallConfig = ToolCallConfig {
         tool_choice: ToolChoice::Specific("get_temperature".to_string()),
         ..ToolCallConfig::with_tools_available(
-            vec![ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone())],
+            vec![ClientSideFunctionToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone())],
             vec![],
         )
     };
@@ -42,15 +44,15 @@ lazy_static! {
         })).unwrap(),
         strict: true,
     });
-    pub static ref QUERY_TOOL: ToolConfig = ToolConfig::Static(QUERY_TOOL_CONFIG_STATIC.clone());
+    pub static ref QUERY_TOOL: ClientSideFunctionToolConfig = ClientSideFunctionToolConfig::Static(QUERY_TOOL_CONFIG_STATIC.clone());
     pub static ref ANY_TOOL_CHOICE: ToolChoice = ToolChoice::Required;
     pub static ref MULTI_TOOL_CONFIG: ToolCallConfig = ToolCallConfig {
         tool_choice: ToolChoice::Required,
         parallel_tool_calls: Some(true),
         ..ToolCallConfig::with_tools_available(
             vec![
-                ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone()),
-                ToolConfig::Static(QUERY_TOOL_CONFIG_STATIC.clone())
+                ClientSideFunctionToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone()),
+                ClientSideFunctionToolConfig::Static(QUERY_TOOL_CONFIG_STATIC.clone())
             ],
             vec![],
         )
@@ -59,7 +61,7 @@ lazy_static! {
 
 // For use in tests which need a mutable tool config.
 pub fn get_temperature_tool_config() -> ToolCallConfig {
-    let weather_tool = ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone());
+    let weather_tool = ClientSideFunctionToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone());
     ToolCallConfig {
         tool_choice: ToolChoice::Specific("get_temperature".to_string()),
         parallel_tool_calls: Some(false),

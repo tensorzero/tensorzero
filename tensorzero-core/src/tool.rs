@@ -834,8 +834,8 @@ impl ToolCallConfig {
 
     #[cfg(test)]
     pub fn with_tools_available(
-        static_tools_available: Vec<ToolConfig>,
-        dynamic_tools_available: Vec<ToolConfig>,
+        static_tools_available: Vec<ClientSideFunctionToolConfig>,
+        dynamic_tools_available: Vec<ClientSideFunctionToolConfig>,
     ) -> Self {
         Self {
             static_tools_available,
@@ -1736,7 +1736,7 @@ impl ToolCallConfig {
     #[expect(clippy::missing_panics_doc)]
     pub fn implicit_from_value(value: &Value) -> Self {
         let parameters = StaticJSONSchema::from_value(value.clone()).unwrap();
-        let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });
+        let implicit_tool_config = ClientSideFunctionToolConfig::Implicit(ImplicitToolConfig { parameters });
         Self {
             static_tools_available: vec![implicit_tool_config],
             dynamic_tools_available: vec![],
@@ -3334,8 +3334,8 @@ mod tests {
         // Test that FunctionDefault returns all available tools
         let config = ToolCallConfig {
             static_tools_available: vec![
-                ToolConfig::Static(TOOLS.get("get_temperature").unwrap().clone()),
-                ToolConfig::Static(TOOLS.get("query_articles").unwrap().clone()),
+                ClientSideFunctionToolConfig::Static(TOOLS.get("get_temperature").unwrap().clone()),
+                ClientSideFunctionToolConfig::Static(TOOLS.get("query_articles").unwrap().clone()),
             ],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
@@ -3356,8 +3356,8 @@ mod tests {
         // Test that AllAllowedTools filters to the specified subset
         let config = ToolCallConfig {
             static_tools_available: vec![
-                ToolConfig::Static(TOOLS.get("get_temperature").unwrap().clone()),
-                ToolConfig::Static(TOOLS.get("query_articles").unwrap().clone()),
+                ClientSideFunctionToolConfig::Static(TOOLS.get("get_temperature").unwrap().clone()),
+                ClientSideFunctionToolConfig::Static(TOOLS.get("query_articles").unwrap().clone()),
             ],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
@@ -3903,20 +3903,19 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        // tools_available() should return all tools (function + custom)
-        let all_tools: Vec<_> = tool_call_config.tools_available().collect();
-        assert_eq!(all_tools.len(), 4); // get_temperature, query_articles, dynamic_func, dynamic_custom
-
         // Verify we have both function and custom tools
-        let function_tools = all_tools.iter().filter(|t| t.is_function()).count();
-        let custom_tools = all_tools.iter().filter(|t| t.is_custom()).count();
-        assert_eq!(function_tools, 3);
-        assert_eq!(custom_tools, 1);
+        let function_tools_count = tool_call_config.tools_available().count();
+        let custom_tools_count = tool_call_config.openai_custom_tools.len();
+        assert_eq!(function_tools_count, 3); // get_temperature, query_articles, dynamic_func
+        assert_eq!(custom_tools_count, 1); // dynamic_custom
 
-        // Verify the custom tool is accessible by name
-        let custom_tool = tool_call_config.get_tool("dynamic_custom").unwrap();
-        assert!(custom_tool.is_custom());
-        assert_eq!(custom_tool.name(), "dynamic_custom");
+        // Verify the function tool is accessible by name
+        let func_tool = tool_call_config.get_function_tool("dynamic_func").unwrap();
+        assert_eq!(func_tool.name(), "dynamic_func");
+
+        // Verify the custom tool is in the custom tools list
+        let custom_tool = &tool_call_config.openai_custom_tools[0];
+        assert_eq!(custom_tool.name, "dynamic_custom");
     }
 
     /// Test ToolCallConfig strict filtering with custom tools
@@ -3947,18 +3946,15 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        // strict_tools_available() should return only allowed tools (both function and custom)
-        let strict_all: Vec<_> = tool_call_config.strict_tools_available().collect();
-        assert_eq!(strict_all.len(), 2); // get_temperature + dynamic_custom
-        let names: Vec<_> = strict_all.iter().map(|t| t.name()).collect();
+        // strict_tools_available() should return only allowed function tools
+        let strict_function_tools: Vec<_> = tool_call_config.strict_tools_available().collect();
+        assert_eq!(strict_function_tools.len(), 1); // get_temperature
+        let names: Vec<_> = strict_function_tools.iter().map(|t| t.name()).collect();
         assert!(names.contains(&"get_temperature"));
-        assert!(names.contains(&"dynamic_custom"));
 
-        // Verify we have both types in the allowed list
-        let strict_function = strict_all.iter().filter(|t| t.is_function()).count();
-        let strict_custom = strict_all.iter().filter(|t| t.is_custom()).count();
-        assert_eq!(strict_function, 1);
-        assert_eq!(strict_custom, 1);
+        // Custom tools are separate - check that the custom tool is in the list
+        assert_eq!(tool_call_config.openai_custom_tools.len(), 1);
+        assert_eq!(tool_call_config.openai_custom_tools[0].name, "dynamic_custom");
     }
 
     /// Test ToolCallConfig construction creates correct ToolConfig variants
@@ -3995,16 +3991,14 @@ mod tests {
         .unwrap();
 
         // Verify function tool became DynamicToolConfig
-        let func_config = tool_call_config.get_tool("dynamic_func").unwrap();
-        assert!(matches!(func_config, ToolConfig::Dynamic(_)));
-        assert!(func_config.is_function());
-        assert!(!func_config.is_custom());
+        let func_config = tool_call_config.get_function_tool("dynamic_func").unwrap();
+        assert!(matches!(func_config, ClientSideFunctionToolConfig::Dynamic(_)));
 
-        // Verify custom tool became DynamicCustomToolConfig
-        let custom_config = tool_call_config.get_tool("dynamic_custom").unwrap();
-        assert!(matches!(custom_config, ToolConfig::OpenAICustom(_)));
-        assert!(custom_config.is_custom());
-        assert!(!custom_config.is_function());
+        // Verify custom tool is in the custom tools list
+        let custom_config = tool_call_config.openai_custom_tools.iter()
+            .find(|t| t.name == "dynamic_custom")
+            .expect("dynamic_custom should be in openai_custom_tools");
+        assert_eq!(custom_config.description, Some("Custom".to_string()));
     }
 
     /// Test ToolCallConfigDatabaseInsert with custom tools

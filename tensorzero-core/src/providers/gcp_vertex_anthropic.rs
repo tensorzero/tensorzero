@@ -892,8 +892,8 @@ mod tests {
         ContentBlock, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
     use crate::jsonschema_util::DynamicJSONSchema;
+    use crate::tool::{ClientSideFunctionToolConfig, DynamicToolConfig, ToolConfig, ToolResult};
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
-    use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
 
     fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropic {
         let input_tokens = usage_info
@@ -956,7 +956,7 @@ mod tests {
             },
             "required": ["location", "unit"]
         });
-        let tool = ToolConfig::Dynamic(DynamicToolConfig {
+        let tool = ClientSideFunctionToolConfig::Dynamic(DynamicToolConfig {
             name: "test".to_string(),
             description: "test".to_string(),
             parameters: DynamicJSONSchema::new(parameters.clone()),
