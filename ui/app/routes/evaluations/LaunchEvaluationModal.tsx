@@ -132,9 +132,9 @@ function EvaluationForm({
       );
       const newLimits: Record<string, string> = {};
 
-      // Initialize all evaluators with 0.0 or keep existing values
+      // Always initialize all evaluators with 0.0 (reset when evaluation changes)
       for (const evaluatorName of currentEvaluatorNames) {
-        newLimits[evaluatorName] = precisionLimits[evaluatorName] ?? "0.0";
+        newLimits[evaluatorName] = "0.0";
       }
 
       // Only update if the structure changed
