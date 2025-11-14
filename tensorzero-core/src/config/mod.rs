@@ -395,20 +395,26 @@ impl OtlpConfig {
         if self.traces.enabled {
             match self.traces.format {
                 OtlpTracesFormat::OpenTelemetry => {
-                    span.set_attribute("gen_ai.usage.input_tokens", usage.input_tokens as i64);
-                    span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens as i64);
-                    span.set_attribute(
-                        "gen_ai.usage.total_tokens",
-                        (usage.input_tokens + usage.output_tokens) as i64,
-                    );
+                    if let Some(input_tokens) = usage.input_tokens {
+                        span.set_attribute("gen_ai.usage.input_tokens", input_tokens as i64);
+                    }
+                    if let Some(output_tokens) = usage.output_tokens {
+                        span.set_attribute("gen_ai.usage.output_tokens", output_tokens as i64);
+                    }
+                    if let Some(total_tokens) = usage.total_tokens() {
+                        span.set_attribute("gen_ai.usage.total_tokens", total_tokens as i64);
+                    }
                 }
                 OtlpTracesFormat::OpenInference => {
-                    span.set_attribute("llm.token_count.prompt", usage.input_tokens as i64);
-                    span.set_attribute("llm.token_count.completion", usage.output_tokens as i64);
-                    span.set_attribute(
-                        "llm.token_count.total",
-                        (usage.input_tokens + usage.output_tokens) as i64,
-                    );
+                    if let Some(input_tokens) = usage.input_tokens {
+                        span.set_attribute("llm.token_count.prompt", input_tokens as i64);
+                    }
+                    if let Some(output_tokens) = usage.output_tokens {
+                        span.set_attribute("llm.token_count.completion", output_tokens as i64);
+                    }
+                    if let Some(total_tokens) = usage.total_tokens() {
+                        span.set_attribute("llm.token_count.total", total_tokens as i64);
+                    }
                 }
             }
         }

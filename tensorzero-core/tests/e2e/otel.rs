@@ -263,9 +263,9 @@ async fn make_non_streaming_inference(client: &Client) -> ResponseData {
         streaming: false,
         inference_id: response.inference_id,
         episode_id: response.episode_id,
-        input_tokens: response.usage.input_tokens as i64,
-        output_tokens: response.usage.output_tokens as i64,
-        total_tokens: (response.usage.input_tokens + response.usage.output_tokens) as i64,
+        input_tokens: response.usage.input_tokens.unwrap() as i64,
+        output_tokens: response.usage.output_tokens.unwrap() as i64,
+        total_tokens: response.usage.total_tokens().unwrap() as i64,
         underestimate: false,
         estimated_tokens: 1009,
     }
@@ -317,9 +317,9 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
         inference_id = Some(response.inference_id);
         episode_id = Some(response.episode_id);
         if let Some(usage) = response.usage {
-            input_tokens += usage.input_tokens as i64;
-            output_tokens += usage.output_tokens as i64;
-            total_tokens += (usage.input_tokens + usage.output_tokens) as i64;
+            input_tokens += usage.input_tokens.unwrap() as i64;
+            output_tokens += usage.output_tokens.unwrap() as i64;
+            total_tokens += (usage.total_tokens().unwrap()) as i64;
         }
     }
 
@@ -407,9 +407,9 @@ async fn test_stream_fatal_error_usage() {
                 inference_id = Some(response.inference_id);
                 episode_id = Some(response.episode_id);
                 if let Some(usage) = response.usage {
-                    input_tokens += usage.input_tokens as i64;
-                    output_tokens += usage.output_tokens as i64;
-                    total_tokens += (usage.input_tokens + usage.output_tokens) as i64;
+                    input_tokens += usage.input_tokens.unwrap() as i64;
+                    output_tokens += usage.output_tokens.unwrap() as i64;
+                    total_tokens += (usage.total_tokens().unwrap()) as i64;
                 }
             }
             Ok(_) => panic!("Expected chat response, got: {chunk:#?}"),

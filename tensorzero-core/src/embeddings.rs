@@ -387,9 +387,16 @@ pub struct EmbeddingProviderResponse {
 
 impl RateLimitedResponse for EmbeddingProviderResponse {
     fn resource_usage(&self) -> RateLimitResourceUsage {
-        RateLimitResourceUsage::Exact {
-            model_inferences: 1,
-            tokens: self.usage.total_tokens() as u64,
+        if let Some(tokens) = self.usage.total_tokens() {
+            RateLimitResourceUsage::Exact {
+                model_inferences: 1,
+                tokens: tokens as u64,
+            }
+        } else {
+            RateLimitResourceUsage::UnderEstimate {
+                model_inferences: 1,
+                tokens: 0,
+            }
         }
     }
 }
@@ -439,8 +446,8 @@ impl EmbeddingModelResponse {
     pub fn usage_considering_cached(&self) -> Usage {
         if self.cached {
             Usage {
-                input_tokens: 0,
-                output_tokens: 0,
+                input_tokens: Some(0),
+                output_tokens: Some(0),
             }
         } else {
             self.usage

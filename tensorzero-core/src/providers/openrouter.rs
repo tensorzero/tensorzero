@@ -1174,11 +1174,10 @@ impl<'a> OpenRouterRequest<'a> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(super) struct OpenRouterUsage {
-    pub prompt_tokens: u32,
-    #[serde(default)]
-    pub completion_tokens: u32,
+    pub prompt_tokens: Option<u32>,
+    pub completion_tokens: Option<u32>,
 }
 
 impl From<OpenRouterUsage> for Usage {
@@ -1899,8 +1898,8 @@ mod tests {
                 finish_reason: OpenRouterFinishReason::Stop,
             }],
             usage: OpenRouterUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1961,8 +1960,8 @@ mod tests {
             inference_response.output,
             vec!["Hello, world!".to_string().into()]
         );
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             inference_response.latency,
@@ -1998,8 +1997,8 @@ mod tests {
                 },
             }],
             usage: OpenRouterUsage {
-                prompt_tokens: 15,
-                completion_tokens: 25,
+                prompt_tokens: Some(15),
+                completion_tokens: Some(25),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -2063,8 +2062,8 @@ mod tests {
                 arguments: "{}".to_string(),
             })]
         );
-        assert_eq!(inference_response.usage.input_tokens, 15);
-        assert_eq!(inference_response.usage.output_tokens, 25);
+        assert_eq!(inference_response.usage.input_tokens, Some(15));
+        assert_eq!(inference_response.usage.output_tokens, Some(25));
         assert_eq!(
             inference_response.finish_reason,
             Some(FinishReason::ToolCall)
@@ -2089,8 +2088,8 @@ mod tests {
         let invalid_response_no_choices = OpenRouterResponse {
             choices: vec![],
             usage: OpenRouterUsage {
-                prompt_tokens: 5,
-                completion_tokens: 0,
+                prompt_tokens: Some(5),
+                completion_tokens: Some(0),
             },
         };
         let request_body = OpenRouterRequest {
@@ -2147,8 +2146,8 @@ mod tests {
                 },
             ],
             usage: OpenRouterUsage {
-                prompt_tokens: 10,
-                completion_tokens: 10,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(10),
             },
         };
 
@@ -2474,8 +2473,8 @@ mod tests {
         let chunk = OpenRouterChatChunk {
             choices: vec![],
             usage: Some(OpenRouterUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             }),
         };
         let message = openrouter_to_tensorzero_chunk(
@@ -2489,8 +2488,8 @@ mod tests {
         assert_eq!(
             message.usage,
             Some(Usage {
-                input_tokens: 10,
-                output_tokens: 20,
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             })
         );
     }

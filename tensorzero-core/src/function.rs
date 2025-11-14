@@ -1818,8 +1818,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec!["Hello, world!".to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -1885,8 +1885,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"name": "Jerry", "age": 30}"#.to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -1938,8 +1938,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"name": "Jerry", "age": "thirty"}"#.to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -1994,8 +1994,8 @@ mod tests {
         };
         let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2047,8 +2047,8 @@ mod tests {
         };
         let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2100,8 +2100,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = Vec::new();
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 0,
+            input_tokens: Some(10),
+            output_tokens: Some(0),
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2171,8 +2171,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2218,8 +2218,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"response": "forty-two"}"#.to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2273,8 +2273,8 @@ mod tests {
         };
         let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2325,8 +2325,8 @@ mod tests {
         };
         let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2383,8 +2383,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),

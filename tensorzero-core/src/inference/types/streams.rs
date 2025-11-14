@@ -287,10 +287,22 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
 
     for chunk in value {
         if let Some(chunk_usage) = chunk.usage() {
-            usage.input_tokens = usage.input_tokens.saturating_add(chunk_usage.input_tokens);
-            usage.output_tokens = usage
-                .output_tokens
-                .saturating_add(chunk_usage.output_tokens);
+            if let Some(chunk_input_tokens) = chunk_usage.input_tokens {
+                usage.input_tokens = Some(
+                    usage
+                        .input_tokens
+                        .unwrap_or(0)
+                        .saturating_add(chunk_input_tokens),
+                );
+            }
+            if let Some(chunk_output_tokens) = chunk_usage.output_tokens {
+                usage.output_tokens = Some(
+                    usage
+                        .output_tokens
+                        .unwrap_or(0)
+                        .saturating_add(chunk_output_tokens),
+                );
+            }
         }
         match chunk {
             InferenceResultChunk::Chat(chunk) => {
@@ -887,8 +899,8 @@ mod tests {
                 })],
                 created,
                 usage: Some(Usage {
-                    input_tokens: 2,
-                    output_tokens: 4,
+                    input_tokens: Some(2),
+                    output_tokens: Some(4),
                 }),
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
@@ -966,12 +978,12 @@ mod tests {
             experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
-            input_tokens: 10,
-            output_tokens: 5,
+            input_tokens: Some(10),
+            output_tokens: Some(5),
         };
         let usage2 = Usage {
-            input_tokens: 5,
-            output_tokens: 10,
+            input_tokens: Some(5),
+            output_tokens: Some(10),
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1019,8 +1031,8 @@ mod tests {
         assert_eq!(
             response.usage_considering_cached(),
             Usage {
-                input_tokens: 15,
-                output_tokens: 15,
+                input_tokens: Some(15),
+                output_tokens: Some(15),
             }
         );
         match response {
@@ -1051,8 +1063,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let created = current_timestamp();
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 5,
+            input_tokens: Some(10),
+            output_tokens: Some(5),
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1131,8 +1143,8 @@ mod tests {
         let episode_id = Uuid::now_v7();
         let created = current_timestamp();
         let usage = Usage {
-            input_tokens: 15,
-            output_tokens: 10,
+            input_tokens: Some(15),
+            output_tokens: Some(10),
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1252,12 +1264,12 @@ mod tests {
             experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
-            input_tokens: 10,
-            output_tokens: 5,
+            input_tokens: Some(10),
+            output_tokens: Some(5),
         };
         let usage2 = Usage {
-            input_tokens: 5,
-            output_tokens: 10,
+            input_tokens: Some(5),
+            output_tokens: Some(10),
         };
         let chunks = vec![
             InferenceResultChunk::Json(JsonInferenceResultChunk {
@@ -1305,8 +1317,8 @@ mod tests {
         assert_eq!(
             response.usage_considering_cached(),
             Usage {
-                input_tokens: 15,
-                output_tokens: 15,
+                input_tokens: Some(15),
+                output_tokens: Some(15),
             }
         );
         match response {
@@ -1353,12 +1365,12 @@ mod tests {
             experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
-            input_tokens: 10,
-            output_tokens: 5,
+            input_tokens: Some(10),
+            output_tokens: Some(5),
         };
         let usage2 = Usage {
-            input_tokens: 5,
-            output_tokens: 10,
+            input_tokens: Some(5),
+            output_tokens: Some(10),
         };
         let dynamic_output_schema = DynamicJSONSchema::new(serde_json::json!({
             "type": "object",
@@ -1415,8 +1427,8 @@ mod tests {
         assert_eq!(
             response.usage_considering_cached(),
             Usage {
-                input_tokens: 15,
-                output_tokens: 15,
+                input_tokens: Some(15),
+                output_tokens: Some(15),
             }
         );
         match response {
@@ -1541,8 +1553,8 @@ mod tests {
                 })],
                 created,
                 usage: Some(Usage {
-                    input_tokens: 2,
-                    output_tokens: 4,
+                    input_tokens: Some(2),
+                    output_tokens: Some(4),
                 }),
                 raw_response: ", world!\"}".to_string(),
                 latency: Duration::from_millis(250),
@@ -1590,8 +1602,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 2,
-                output_tokens: 4,
+                input_tokens: Some(2),
+                output_tokens: Some(4),
             }
         );
         let chat_result = match result {
@@ -1688,8 +1700,8 @@ mod tests {
                 })],
                 created,
                 usage: Some(Usage {
-                    input_tokens: 10,
-                    output_tokens: 20,
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
                 }),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
@@ -1775,8 +1787,8 @@ mod tests {
                 ],
                 created,
                 usage: Some(Usage {
-                    input_tokens: 15,
-                    output_tokens: 25,
+                    input_tokens: Some(15),
+                    output_tokens: Some(25),
                 }),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
@@ -1853,8 +1865,8 @@ mod tests {
                 })],
                 created,
                 usage: Some(Usage {
-                    input_tokens: 5,
-                    output_tokens: 10,
+                    input_tokens: Some(5),
+                    output_tokens: Some(10),
                 }),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
@@ -1935,8 +1947,8 @@ mod tests {
                 ],
                 created,
                 usage: Some(Usage {
-                    input_tokens: 20,
-                    output_tokens: 15,
+                    input_tokens: Some(20),
+                    output_tokens: Some(15),
                 }),
                 raw_response: "chunk2".to_string(),
                 latency: Duration::from_millis(250),
@@ -2002,8 +2014,8 @@ mod tests {
             })],
             created,
             usage: Some(Usage {
-                input_tokens: 5,
-                output_tokens: 5,
+                input_tokens: Some(5),
+                output_tokens: Some(5),
             }),
             raw_response: "chunk1".to_string(),
             latency,
@@ -2119,8 +2131,8 @@ mod tests {
                 ],
                 created,
                 usage: Some(Usage {
-                    input_tokens: 20,
-                    output_tokens: 30,
+                    input_tokens: Some(20),
+                    output_tokens: Some(30),
                 }),
                 raw_response: "chunk3".to_string(),
                 latency: Duration::from_millis(250),
@@ -2197,8 +2209,8 @@ mod tests {
             })],
             created: 1234567890,
             usage: Some(Usage {
-                input_tokens: 10,
-                output_tokens: 20,
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             }),
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(1),
@@ -2214,8 +2226,8 @@ mod tests {
         assert_eq!(
             result.usage,
             Some(Usage {
-                input_tokens: 10,
-                output_tokens: 20
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             })
         );
         assert_eq!(result.finish_reason, Some(FinishReason::ToolCall));

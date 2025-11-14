@@ -117,6 +117,7 @@ mod role;
 pub mod storage;
 pub mod stored_input;
 pub mod streams;
+pub mod usage;
 
 pub use resolved_input::ResolvedRequestMessage;
 pub use role::Role;
@@ -129,6 +130,7 @@ pub use streams::{
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk, UnknownChunk,
 };
+pub use usage::Usage;
 
 /*
  * Data flow in TensorZero
@@ -1358,23 +1360,16 @@ pub struct ProviderInferenceResponse {
 
 impl ProviderInferenceResponse {
     pub fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
-        Ok(RateLimitResourceUsage::Exact {
-            model_inferences: 1,
-            tokens: self.usage.total_tokens() as u64,
-        })
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-pub struct Usage {
-    pub input_tokens: u32,
-    pub output_tokens: u32,
-}
-
-impl Usage {
-    pub fn total_tokens(&self) -> u32 {
-        self.input_tokens + self.output_tokens
+        match self.usage.total_tokens() {
+            Some(tokens) => Ok(RateLimitResourceUsage::Exact {
+                model_inferences: 1,
+                tokens: tokens as u64,
+            }),
+            None => Ok(RateLimitResourceUsage::UnderEstimate {
+                model_inferences: 1,
+                tokens: 0,
+            }),
+        }
     }
 }
 
@@ -1457,8 +1452,8 @@ impl ModelInferenceResponseWithMetadata {
     pub fn usage_considering_cached(&self) -> Usage {
         if self.cached {
             Usage {
-                input_tokens: 0,
-                output_tokens: 0,
+                input_tokens: Some(0),
+                output_tokens: Some(0),
             }
         } else {
             self.usage
@@ -1778,15 +1773,13 @@ impl ModelInferenceDatabaseInsert {
         // should always consume and produce at least one token.
         // We store this as `null` in ClickHouse, so that we can easily filter
         // out these values from aggregation queries.
-        let input_tokens = if result.usage.input_tokens > 0 {
-            Some(result.usage.input_tokens)
-        } else {
-            None
+        let input_tokens = match result.usage.input_tokens {
+            Some(tokens) if tokens > 0 => Some(tokens),
+            _ => None,
         };
-        let output_tokens = if result.usage.output_tokens > 0 {
-            Some(result.usage.output_tokens)
-        } else {
-            None
+        let output_tokens = match result.usage.output_tokens {
+            Some(tokens) if tokens > 0 => Some(tokens),
+            _ => None,
         };
 
         let stored_input_messages = match result.input_messages {
@@ -2188,9 +2181,19 @@ impl From<JsonMode> for ModelInferenceRequestJsonMode {
 impl Add for Usage {
     type Output = Usage;
     fn add(self, other: Usage) -> Usage {
+        let summed_input_tokens = match (self.input_tokens, other.input_tokens) {
+            (_, Some(b)) => Some(self.input_tokens.unwrap_or_default() + b),
+            _ => None,
+        };
+
+        let summed_output_tokens = match (self.output_tokens, other.output_tokens) {
+            (_, Some(b)) => Some(self.output_tokens.unwrap_or_default() + b),
+            _ => None,
+        };
+
         Usage {
-            input_tokens: self.input_tokens.saturating_add(other.input_tokens),
-            output_tokens: self.output_tokens.saturating_add(other.output_tokens),
+            input_tokens: summed_input_tokens,
+            output_tokens: summed_output_tokens,
         }
     }
 }
@@ -2265,8 +2268,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content = vec!["Hello, world!".to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 20,
+            input_tokens: Some(10),
+            output_tokens: Some(20),
         };
         let raw_request = "raw request".to_string();
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {

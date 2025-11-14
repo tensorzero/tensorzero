@@ -2622,11 +2622,11 @@ pub async fn check_base64_pdf_response(
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     if should_be_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert_eq!(input_tokens, Some(0));
+        assert_eq!(output_tokens, Some(0));
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.unwrap() > 0);
+        assert!(output_tokens.unwrap() > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -2775,11 +2775,11 @@ pub async fn check_base64_image_response(
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     if should_be_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert_eq!(input_tokens, Some(0));
+        assert_eq!(output_tokens, Some(0));
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.unwrap() > 0);
+        assert!(output_tokens.unwrap() > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -2929,11 +2929,11 @@ pub async fn check_url_image_response(
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     if should_be_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert_eq!(input_tokens, Some(0));
+        assert_eq!(output_tokens, Some(0));
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.unwrap() > 0);
+        assert!(output_tokens.unwrap() > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)

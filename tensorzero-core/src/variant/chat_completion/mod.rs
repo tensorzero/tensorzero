@@ -1634,8 +1634,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -1718,8 +1718,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -1815,8 +1815,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -1919,8 +1919,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -2052,8 +2052,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -2178,8 +2178,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -2503,8 +2503,8 @@ mod tests {
                 assert_eq!(
                     chunk.usage(),
                     Some(&Usage {
-                        input_tokens: 10,
-                        output_tokens: 16
+                        input_tokens: Some(10),
+                        output_tokens: Some(16),
                     })
                 );
                 break;

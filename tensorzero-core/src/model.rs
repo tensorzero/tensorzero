@@ -640,8 +640,8 @@ async fn wrap_provider_stream(
         let mut buffer = vec![];
         let mut errored = false;
         let mut total_usage = Usage {
-            input_tokens: 0,
-            output_tokens: 0,
+            input_tokens: None,
+            output_tokens: None,
         };
         while let Some(chunk) = stream.next().await {
             if let Ok(chunk) = chunk.as_ref() {
@@ -673,15 +673,18 @@ async fn wrap_provider_stream(
         otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
-            let usage = if errored {
-                RateLimitResourceUsage::UnderEstimate {
-                    model_inferences: 1,
-                    tokens: total_usage.total_tokens() as u64,
+            let usage = match (total_usage.total_tokens(), errored) {
+                (Some(tokens), false) => {
+                    RateLimitResourceUsage::Exact {
+                        model_inferences: 1,
+                        tokens: tokens as u64,
+                    }
                 }
-             } else {
-                RateLimitResourceUsage::Exact {
-                    model_inferences: 1,
-                    tokens: total_usage.total_tokens() as u64,
+                _ => {
+                    RateLimitResourceUsage::UnderEstimate {
+                        model_inferences: 1,
+                        tokens: total_usage.total_tokens().unwrap_or(0) as u64,
+                    }
                 }
             };
 
@@ -2537,8 +2540,8 @@ mod tests {
         assert_eq!(
             usage,
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -2789,8 +2792,8 @@ mod tests {
         assert_eq!(
             usage,
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");

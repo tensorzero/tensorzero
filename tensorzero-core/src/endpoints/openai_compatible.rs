@@ -225,7 +225,7 @@ pub enum OpenAIEmbeddingResponse {
     List {
         data: Vec<OpenAIEmbedding>,
         model: String,
-        usage: OpenAIEmbeddingUsage,
+        usage: Option<OpenAIEmbeddingUsage>,
     },
 }
 
@@ -237,8 +237,8 @@ pub enum OpenAIEmbedding {
 
 #[derive(Debug, Serialize)]
 pub struct OpenAIEmbeddingUsage {
-    prompt_tokens: u32,
-    total_tokens: u32,
+    prompt_tokens: Option<u32>,
+    total_tokens: Option<u32>,
 }
 
 impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
@@ -254,10 +254,10 @@ impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
                 })
                 .collect(),
             model: format!("{TENSORZERO_EMBEDDING_MODEL_NAME_PREFIX}{}", response.model),
-            usage: OpenAIEmbeddingUsage {
+            usage: Some(OpenAIEmbeddingUsage {
                 prompt_tokens: response.usage.input_tokens,
                 total_tokens: response.usage.input_tokens,
-            },
+            }),
         }
     }
 }
@@ -604,9 +604,12 @@ pub struct OpenAICompatibleParams {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct OpenAICompatibleUsage {
-    prompt_tokens: u32,
-    completion_tokens: u32,
-    total_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prompt_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completion_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total_tokens: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1249,7 +1252,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                 usage: OpenAICompatibleUsage {
                     prompt_tokens: response.usage.input_tokens,
                     completion_tokens: response.usage.output_tokens,
-                    total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+                    total_tokens: response.usage.total_tokens(),
                 },
                 episode_id: response.episode_id.to_string(),
             },
@@ -1311,7 +1314,7 @@ impl From<Usage> for OpenAICompatibleUsage {
         OpenAICompatibleUsage {
             prompt_tokens: usage.input_tokens,
             completion_tokens: usage.output_tokens,
-            total_tokens: usage.input_tokens + usage.output_tokens,
+            total_tokens: usage.total_tokens(),
         }
     }
 }
@@ -1460,15 +1463,15 @@ fn prepare_serialized_openai_compatible_events(
         let mut tool_id_to_index = HashMap::new();
         let mut is_first_chunk = true;
         let mut total_usage = OpenAICompatibleUsage {
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
+            prompt_tokens: None,
+            completion_tokens: None,
+            total_tokens: None,
         };
         let mut inference_id = None;
         let mut episode_id = None;
         let mut variant_name = None;
         while let Some(chunk) = stream.next().await {
-            // NOTE - in the future, we may want to end the stream early if we get an error
+            // NOTE: in the future, we may want to end the stream early if we get an error
             // For now, we just ignore the error and try to get more chunks
             let Ok(chunk) = chunk else {
                 continue;
@@ -1485,9 +1488,15 @@ fn prepare_serialized_openai_compatible_events(
                 }
             };
             if let Some(chunk_usage) = chunk_usage {
-                total_usage.prompt_tokens += chunk_usage.input_tokens;
-                total_usage.completion_tokens += chunk_usage.output_tokens;
-                total_usage.total_tokens += chunk_usage.input_tokens + chunk_usage.output_tokens;
+                if let Some(chunk_input_tokens) = chunk_usage.input_tokens {
+                    total_usage.prompt_tokens = Some(total_usage.prompt_tokens.unwrap_or(0) + chunk_input_tokens);
+                }
+                if let Some(chunk_output_tokens) = chunk_usage.output_tokens {
+                    total_usage.completion_tokens = Some(total_usage.completion_tokens.unwrap_or(0) + chunk_output_tokens);
+                }
+                if let Some(chunk_total_tokens) = chunk_usage.total_tokens() {
+                    total_usage.total_tokens = Some(total_usage.total_tokens.unwrap_or(0) + chunk_total_tokens);
+                }
             }
             let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index, &response_model_prefix);
             for chunk in openai_compatible_chunks {

@@ -449,7 +449,7 @@ pub enum RateLimitResourceUsage {
     /// rate limiting resources, depending on whether our initial estimate was too high or too low
     Exact { model_inferences: u64, tokens: u64 },
     /// We were only able to estimate the usage (e.g. if an error occurred in an inference stream,
-    /// and there might have bene additional usage chunks that we missed)
+    /// and there might have bene additional usage chunks that we missed; or the provider did not report token usage).
     /// We'll still consume tokens/inferences if we went over the initial estimate, but we will *not*
     /// return tickets if our initial estimate seems to be too high (since the error could have
     /// hidden the actual usage).

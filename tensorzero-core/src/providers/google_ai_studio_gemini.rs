@@ -1226,7 +1226,7 @@ struct GeminiResponseCandidate {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GeminiUsageMetadata {
-    prompt_token_count: u32,
+    prompt_token_count: Option<u32>,
     // Gemini doesn't return output tokens in certain edge cases (e.g. generation blocked by safety settings)
     #[serde(skip_serializing_if = "Option::is_none")]
     candidates_token_count: Option<u32>,
@@ -1236,7 +1236,7 @@ impl From<GeminiUsageMetadata> for Usage {
     fn from(usage_metadata: GeminiUsageMetadata) -> Self {
         Usage {
             input_tokens: usage_metadata.prompt_token_count,
-            output_tokens: usage_metadata.candidates_token_count.unwrap_or(0),
+            output_tokens: usage_metadata.candidates_token_count,
         }
     }
 }
@@ -1473,7 +1473,7 @@ mod tests {
                 finish_reason: Some(GeminiFinishReason::Stop),
             }],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 10,
+                prompt_token_count: Some(10),
                 candidates_token_count: Some(5),
             }),
         };
@@ -1900,7 +1900,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 10,
+                prompt_token_count: Some(10),
                 candidates_token_count: Some(10),
             }),
         };
@@ -1955,8 +1955,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 10,
-                output_tokens: 10,
+                input_tokens: Some(10),
+                output_tokens: Some(10),
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -2002,7 +2002,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 15,
+                prompt_token_count: Some(15),
                 candidates_token_count: Some(20),
             }),
         };
@@ -2066,8 +2066,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 15,
-                output_tokens: 20,
+                input_tokens: Some(15),
+                output_tokens: Some(20),
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -2134,7 +2134,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 25,
+                prompt_token_count: Some(25),
                 candidates_token_count: Some(40),
             }),
         };
@@ -2188,8 +2188,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 25,
-                output_tokens: 40,
+                input_tokens: Some(25),
+                output_tokens: Some(40),
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -2438,7 +2438,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 10,
+                prompt_token_count: Some(10),
                 candidates_token_count: Some(20),
             }),
         };
@@ -2478,8 +2478,8 @@ mod tests {
         // Verify usage is included when finish_reason is set
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, 10);
-        assert_eq!(usage.output_tokens, 20);
+        assert_eq!(usage.input_tokens, Some(10));
+        assert_eq!(usage.output_tokens, Some(20));
 
         // Verify finish reason
         assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
@@ -2503,7 +2503,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 10,
+                prompt_token_count: Some(10),
                 candidates_token_count: Some(15),
             }),
         };
@@ -2572,7 +2572,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 5,
+                prompt_token_count: Some(5),
                 candidates_token_count: Some(3),
             }),
         };
@@ -2631,7 +2631,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 15,
+                prompt_token_count: Some(15),
                 candidates_token_count: Some(10),
             }),
         };
@@ -2687,7 +2687,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![candidate],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 8,
+                prompt_token_count: Some(8),
                 candidates_token_count: None, // No output tokens when blocked
             }),
         };
@@ -2721,8 +2721,8 @@ mod tests {
         // Verify usage is included (with zero output tokens)
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, 8);
-        assert_eq!(usage.output_tokens, 0);
+        assert_eq!(usage.input_tokens, Some(8));
+        assert_eq!(usage.output_tokens, Some(0));
 
         // Verify finish reason for safety blocks
         assert_eq!(chunk.finish_reason, Some(FinishReason::ContentFilter));
@@ -2734,7 +2734,7 @@ mod tests {
         let response = GeminiResponse {
             candidates: vec![],
             usage_metadata: Some(GeminiUsageMetadata {
-                prompt_token_count: 5,
+                prompt_token_count: Some(5),
                 candidates_token_count: Some(0),
             }),
         };
@@ -2813,7 +2813,7 @@ mod tests {
             let response = GeminiResponse {
                 candidates: vec![candidate],
                 usage_metadata: Some(GeminiUsageMetadata {
-                    prompt_token_count: 1,
+                    prompt_token_count: Some(1),
                     candidates_token_count: Some(1),
                 }),
             };

@@ -2541,8 +2541,8 @@ struct GCPVertexGeminiUsageMetadata {
 impl From<GCPVertexGeminiUsageMetadata> for Usage {
     fn from(usage_metadata: GCPVertexGeminiUsageMetadata) -> Self {
         Usage {
-            input_tokens: usage_metadata.prompt_token_count.unwrap_or(0),
-            output_tokens: usage_metadata.candidates_token_count.unwrap_or(0),
+            input_tokens: usage_metadata.prompt_token_count,
+            output_tokens: usage_metadata.candidates_token_count,
         }
     }
 }
@@ -3235,8 +3235,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 0,
-                output_tokens: 0,
+                input_tokens: Some(0),
+                output_tokens: Some(0),
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -3346,8 +3346,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 15,
-                output_tokens: 20,
+                input_tokens: Some(15),
+                output_tokens: Some(20),
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -3469,8 +3469,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 25,
-                output_tokens: 40,
+                input_tokens: Some(25),
+                output_tokens: Some(40),
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -4145,8 +4145,8 @@ mod tests {
         // Check that usage was captured
         assert!(result.usage.is_some());
         let usage = result.usage.unwrap();
-        assert_eq!(usage.input_tokens, 10);
-        assert_eq!(usage.output_tokens, 5);
+        assert_eq!(usage.input_tokens, Some(10));
+        assert_eq!(usage.output_tokens, Some(5));
     }
 
     #[test]

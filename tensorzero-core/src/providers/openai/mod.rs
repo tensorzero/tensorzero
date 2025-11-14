@@ -2256,12 +2256,10 @@ impl<'a> OpenAIBatchRequest<'a> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(super) struct OpenAIUsage {
-    #[serde(default)]
-    pub prompt_tokens: u32,
-    #[serde(default)]
-    pub completion_tokens: u32,
+    pub prompt_tokens: Option<u32>,
+    pub completion_tokens: Option<u32>,
 }
 
 impl From<OpenAIUsage> for Usage {
@@ -2593,7 +2591,7 @@ impl<'a> OpenAIEmbeddingRequest<'a> {
 #[derive(Debug, Deserialize, Serialize)]
 struct OpenAIEmbeddingResponse {
     data: Vec<OpenAIEmbeddingData>,
-    usage: OpenAIUsage,
+    usage: Option<OpenAIUsage>,
 }
 
 struct OpenAIEmbeddingResponseWithMetadata<'a> {
@@ -2640,7 +2638,7 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
             request.input.clone(),
             raw_request,
             raw_response,
-            response.usage.into(),
+            response.usage.map(|usage| usage.into()).unwrap_or_default(),
             latency,
         ))
     }
@@ -3235,8 +3233,8 @@ mod tests {
                 finish_reason: OpenAIFinishReason::Stop,
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -3290,8 +3288,8 @@ mod tests {
             inference_response.output,
             vec!["Hello, world!".to_string().into()]
         );
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             inference_response.latency,
@@ -3328,8 +3326,8 @@ mod tests {
                 },
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 15,
-                completion_tokens: 25,
+                prompt_tokens: Some(15),
+                completion_tokens: Some(25),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -3386,8 +3384,8 @@ mod tests {
                 arguments: "{}".to_string(),
             })]
         );
-        assert_eq!(inference_response.usage.input_tokens, 15);
-        assert_eq!(inference_response.usage.output_tokens, 25);
+        assert_eq!(inference_response.usage.input_tokens, Some(15));
+        assert_eq!(inference_response.usage.output_tokens, Some(25));
         assert_eq!(
             inference_response.finish_reason,
             Some(FinishReason::ToolCall)
@@ -3412,8 +3410,8 @@ mod tests {
         let invalid_response_no_choices = OpenAIResponse {
             choices: vec![],
             usage: OpenAIUsage {
-                prompt_tokens: 5,
-                completion_tokens: 0,
+                prompt_tokens: Some(5),
+                completion_tokens: Some(0),
             },
         };
         let request_body = OpenAIRequest {
@@ -3465,8 +3463,8 @@ mod tests {
                 },
             ],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 10,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(10),
             },
         };
 
@@ -3808,8 +3806,8 @@ mod tests {
         let chunk = OpenAIChatChunk {
             choices: vec![],
             usage: Some(OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             }),
         };
         let message = openai_to_tensorzero_chunk(
@@ -3823,8 +3821,8 @@ mod tests {
         assert_eq!(
             message.usage,
             Some(Usage {
-                input_tokens: 10,
-                output_tokens: 20,
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             })
         );
     }
