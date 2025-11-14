@@ -598,9 +598,8 @@ pub async fn create_datapoints_handler(
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
-    tracing::warn!(
-        "DEPRECATION WARNING: The `/datasets/{dataset_name}/datapoints` endpoint is deprecated. Please use `/v1/datasets/{dataset_name}/datapoints` instead.",
-        dataset_name = path_params.dataset_name
+    crate::utils::deprecation_warning(
+        &format!("The `/datasets/{}/datapoints` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.", path_params.dataset_name, path_params.dataset_name)
     );
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
@@ -624,9 +623,8 @@ pub async fn bulk_insert_datapoints_handler(
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
-    tracing::warn!(
-        "DEPRECATION WARNING: The `/datasets/{dataset_name}/datapoints/bulk` endpoint is deprecated. Please use `/v1/datasets/{dataset_name}/datapoints` instead.",
-        dataset_name = path_params.dataset_name
+    crate::utils::deprecation_warning(
+        &format!("The `/datasets/{}/datapoints/bulk` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.", path_params.dataset_name, path_params.dataset_name)
     );
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,

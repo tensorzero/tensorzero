@@ -42,8 +42,9 @@ pub use tensorzero_core::client::input_handling;
 // Re-export other commonly used types from tensorzero-core
 pub use tensorzero_core::config::Config;
 pub use tensorzero_core::db::clickhouse::query_builder::{
-    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
-    TagComparisonOperator, TagFilter, TimeComparisonOperator, TimeFilter,
+    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter, OrderBy,
+    OrderByTerm, OrderDirection, TagComparisonOperator, TagFilter, TimeComparisonOperator,
+    TimeFilter,
 };
 pub use tensorzero_core::db::datasets::{
     AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
@@ -72,6 +73,9 @@ pub use tensorzero_core::endpoints::inference::{
     InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
 };
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
+pub use tensorzero_core::endpoints::stored_inferences::v1::types::{
+    GetInferencesRequest, GetInferencesResponse, ListInferencesRequest,
+};
 pub use tensorzero_core::endpoints::variant_probabilities::{
     GetVariantSamplingProbabilitiesParams, GetVariantSamplingProbabilitiesResponse,
 };
@@ -375,10 +379,51 @@ pub trait ClientExt {
         TensorZeroError,
     >;
 
+    #[deprecated(since = "2025.11.4", note = "Use `list_inferences` instead.")]
     async fn experimental_list_inferences(
         &self,
         params: ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInference>, TensorZeroError>;
+
+    /// Gets specific inferences by their IDs.
+    ///
+    /// # Arguments
+    ///
+    /// * `inference_ids` - The IDs of the inferences to retrieve.
+    /// * `function_name` - Optional function name to filter by (improves query performance).
+    /// * `output_source` - Whether to return inference or demonstration output.
+    ///
+    /// # Returns
+    ///
+    /// A `GetInferencesResponse` containing the requested inferences.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn get_inferences(
+        &self,
+        inference_ids: Vec<Uuid>,
+        function_name: Option<String>,
+        output_source: InferenceOutputSource,
+    ) -> Result<GetInferencesResponse, TensorZeroError>;
+
+    /// Lists inferences with optional filtering, pagination, and sorting.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The request parameters for listing inferences.
+    ///
+    /// # Returns
+    ///
+    /// A `GetInferencesResponse` containing the inferences that match the criteria.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn list_inferences(
+        &self,
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroError>;
 
     // ================================================================
     // Optimization operations
@@ -1036,6 +1081,73 @@ impl ClientExt for Client {
             .collect();
 
         wire_inferences.map_err(|e| TensorZeroError::Other { source: e.into() })
+    }
+
+    async fn get_inferences(
+        &self,
+        inference_ids: Vec<Uuid>,
+        function_name: Option<String>,
+        output_source: InferenceOutputSource,
+    ) -> Result<GetInferencesResponse, TensorZeroError> {
+        let request = GetInferencesRequest {
+            ids: inference_ids,
+            function_name,
+            output_source,
+        };
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("v1/inferences/get_inferences").map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /v1/inferences/get_inferences endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.post(url).json(&request);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::stored_inferences::v1::get_inferences(
+                        &gateway.handle.app_state.config,
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        request,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
+            }
+        }
+    }
+
+    async fn list_inferences(
+        &self,
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("v1/inferences/list_inferences").map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /v1/inferences/list_inferences endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.post(url).json(&request);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::stored_inferences::v1::list_inferences(
+                        &gateway.handle.app_state.config,
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        request,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
+            }
+        }
     }
 
     /// There are two things that need to happen in this function:

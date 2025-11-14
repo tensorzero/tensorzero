@@ -118,14 +118,15 @@ impl UninitializedEmbeddingModelConfig {
         self,
         provider_types: &ProviderTypesConfig,
         default_credentials: &ProviderTypeDefaultCredentials,
+        http_client: TensorzeroHttpClient,
     ) -> Result<EmbeddingModelConfig, Error> {
         // Handle timeout deprecation
         let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
             (Some(timeout_ms), None) => Some(timeout_ms),
             (None, Some(old_timeout)) => {
-                tracing::warn!(
-                    "Deprecation Warning: `timeouts` is deprecated for embedding models. \
-                    Please use `timeout_ms` instead."
+                crate::utils::deprecation_warning(
+                    "`timeouts` is deprecated for embedding models. \
+                    Please use `timeout_ms` instead.",
                 );
                 Some(old_timeout)
             }
@@ -140,7 +141,12 @@ impl UninitializedEmbeddingModelConfig {
 
         let providers = try_join_all(self.providers.into_iter().map(|(name, config)| async {
             let provider_config = config
-                .load(provider_types, name.clone(), default_credentials)
+                .load(
+                    provider_types,
+                    name.clone(),
+                    default_credentials,
+                    http_client.clone(),
+                )
                 .await?;
             Ok::<_, Error>((name, provider_config))
         }))
@@ -649,18 +655,19 @@ impl UninitializedEmbeddingProviderConfig {
         provider_types: &ProviderTypesConfig,
         provider_name: Arc<str>,
         default_credentials: &ProviderTypeDefaultCredentials,
+        http_client: TensorzeroHttpClient,
     ) -> Result<EmbeddingProviderInfo, Error> {
         let provider_config = self
             .config
-            .load(provider_types, default_credentials)
+            .load(provider_types, default_credentials, http_client)
             .await?;
         // Handle timeout deprecation
         let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
             (Some(timeout_ms), None) => Some(timeout_ms),
             (None, Some(old_timeout)) => {
-                tracing::warn!(
-                    "Deprecation Warning: `timeouts` is deprecated for embedding providers. \
-                    Please use `timeout_ms` instead."
+                crate::utils::deprecation_warning(
+                    "`timeouts` is deprecated for embedding providers. \
+                    Please use `timeout_ms` instead.",
                 );
                 Some(old_timeout)
             }
@@ -891,6 +898,7 @@ mod tests {
                 &ProviderTypesConfig::default(),
                 Arc::from("test_provider"),
                 &ProviderTypeDefaultCredentials::default(),
+                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();

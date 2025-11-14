@@ -98,19 +98,25 @@ impl UninitializedModelConfig {
         model_name: &str,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
+        http_client: TensorzeroHttpClient,
     ) -> Result<ModelConfig, Error> {
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
         // build `ModelProvider`s using the name keys from the map.
-        let providers = try_join_all(self.providers.into_iter().map(
-            |(name, provider)| async move {
+        let providers = try_join_all(self.providers.into_iter().map(|(name, provider)| {
+            let http_client = http_client.clone();
+            async move {
                 Ok::<_, Error>((
                     name.clone(),
                     ModelProvider {
                         name: name.clone(),
                         config: provider
                             .config
-                            .load(provider_types, provider_type_default_credentials)
+                            .load(
+                                provider_types,
+                                provider_type_default_credentials,
+                                http_client,
+                            )
                             .await
                             .map_err(|e| {
                                 Error::new(ErrorDetails::Config {
@@ -123,8 +129,8 @@ impl UninitializedModelConfig {
                         discard_unknown_chunks: provider.discard_unknown_chunks,
                     },
                 ))
-            },
-        ))
+            }
+        }))
         .await?
         .into_iter()
         .collect::<HashMap<_, _>>();
@@ -1096,6 +1102,7 @@ impl UninitializedProviderConfig {
         self,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
+        http_client: TensorzeroHttpClient,
     ) -> Result<ProviderConfig, Error> {
         Ok(match self {
             UninitializedProviderConfig::Anthropic {
@@ -1122,7 +1129,9 @@ impl UninitializedProviderConfig {
                     return Err(Error::new(ErrorDetails::Config { message: "AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
                 }
 
-                ProviderConfig::AWSBedrock(AWSBedrockProvider::new(model_id, region).await?)
+                ProviderConfig::AWSBedrock(
+                    AWSBedrockProvider::new(model_id, region, http_client).await?,
+                )
             }
             UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
