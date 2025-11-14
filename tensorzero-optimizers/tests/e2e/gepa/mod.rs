@@ -165,6 +165,23 @@ pub fn create_test_gepa_config() -> GEPAConfig {
     }
 }
 
+/// Create a test GEPAConfig using echo model for input validation tests
+pub fn create_test_gepa_config_echo() -> GEPAConfig {
+    GEPAConfig {
+        function_name: "test_function".to_string(),
+        evaluation_name: "test_eval".to_string(),
+        initial_variants: None,
+        variant_prefix: Some("test".to_string()),
+        batch_size: 5,
+        max_iterations: 1,
+        max_concurrency: 10,
+        analysis_model: "dummy::echo_request_messages".to_string(),
+        mutation_model: "dummy::echo_request_messages".to_string(),
+        seed: Some(42),
+        timeout: 300,
+    }
+}
+
 /// Create a test EvaluationInfo with simple text input/output
 pub fn create_test_evaluation_info(
     function_name: &str,
