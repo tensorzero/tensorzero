@@ -20,6 +20,7 @@ use crate::{
         GCPVertexGeminiContent, GCPVertexGeminiContentPart, GCPVertexGeminiRole, PROVIDER_TYPE,
     },
     stored_inference::LazyRenderedSample,
+    tool::Tool,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -62,7 +63,15 @@ impl<'a> GCPVertexGeminiSupervisedRow<'a> {
             .tool_params
             .additional_tools
             .as_ref()
-            .map(|tools| tools.iter().map(Into::into).collect())
+            .map(|tools| {
+                tools
+                    .iter()
+                    .filter_map(|dt| match &dt.0 {
+                        Tool::ClientSideFunction(func) => Some(func.into()),
+                        Tool::Custom(_) => None, // Skip custom tools for SFT
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
         let mut contents = prepare_gcp_vertex_gemini_messages(&inference.messages).await?;
         let system_instruction =

@@ -120,7 +120,17 @@ impl<'a> OpenAISupervisedRow<'a> {
             .tool_params
             .additional_tools
             .as_ref()
-            .map(|tools| tools.iter().map(Into::into).collect())
+            .map(|tools| {
+                tools
+                    .iter()
+                    .filter_map(|dt| match &dt.0 {
+                        tensorzero_core::tool::Tool::ClientSideFunction(func) => {
+                            Some(func.into())
+                        }
+                        tensorzero_core::tool::Tool::Custom(_) => None, // Skip custom tools for SFT
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
         let mut messages = prepare_openai_messages(
             inference
@@ -197,7 +207,17 @@ impl<'a> OpenAIReinforcementRow<'a> {
             .tool_params
             .additional_tools
             .as_ref()
-            .map(|tools| tools.iter().map(Into::into).collect())
+            .map(|tools| {
+                tools
+                    .iter()
+                    .filter_map(|dt| match &dt.0 {
+                        tensorzero_core::tool::Tool::ClientSideFunction(func) => {
+                            Some(func.into())
+                        }
+                        tensorzero_core::tool::Tool::Custom(_) => None, // Skip custom tools for SFT
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
         let messages = prepare_openai_messages(
             inference

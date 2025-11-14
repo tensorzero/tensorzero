@@ -13,7 +13,7 @@ use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{RequestMessage, ResolvedRequestMessage, Text};
 use crate::tool::{deserialize_tool_info, DynamicToolParams, StaticToolConfig};
 #[cfg(feature = "pyo3")]
-use crate::tool::{ClientSideFunctionTool, ProviderTool, ToolChoice};
+use crate::tool::{ClientSideFunctionTool, DynamicTool, ProviderTool, Tool, ToolChoice};
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
@@ -212,6 +212,12 @@ impl StoredInference {
                     .as_ref()
                     .map(|x| deserialize_from_pyobj(py, x))
                     .transpose()?;
+                let additional_tools = additional_tools.map(|tools| {
+                    tools
+                        .into_iter()
+                        .map(|t| DynamicTool(Tool::ClientSideFunction(t)))
+                        .collect()
+                });
                 let tool_choice: Option<ToolChoice> = tool_choice
                     .as_ref()
                     .map(|x| deserialize_from_pyobj(py, x))
@@ -403,7 +409,8 @@ impl StoredInference {
             StoredInference::Chat(example) => example
                 .tool_params
                 .additional_tools
-                .clone()
+                .as_ref()
+                .map(|tools| tools.iter().map(|dt| dt.0.clone()).collect::<Vec<_>>())
                 .into_bound_py_any(py),
             StoredInference::Json(_) => Ok(py.None().into_bound(py)),
         }
@@ -844,7 +851,8 @@ impl RenderedSample {
     pub fn get_additional_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         self.tool_params
             .additional_tools
-            .clone()
+            .as_ref()
+            .map(|tools| tools.iter().map(|dt| dt.0.clone()).collect::<Vec<_>>())
             .into_bound_py_any(py)
     }
 

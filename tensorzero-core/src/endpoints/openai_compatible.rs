@@ -44,8 +44,8 @@ use crate::inference::types::{
 };
 
 use crate::tool::{
-    ClientSideFunctionTool, DynamicToolParams, InferenceResponseToolCall, ProviderTool,
-    ToolCallWrapper, ToolChoice, ToolResult,
+    ClientSideFunctionTool, DynamicTool, DynamicToolParams, InferenceResponseToolCall,
+    ProviderTool, Tool, ToolCallWrapper, ToolChoice, ToolResult,
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::JsonMode;
@@ -775,7 +775,12 @@ impl Params {
             allowed_tools,
             additional_tools: openai_compatible_params
                 .tools
-                .map(|tools| tools.into_iter().map(OpenAICompatibleTool::into).collect()),
+                .map(|tools| {
+                    tools
+                        .into_iter()
+                        .map(|t| DynamicTool(t.into()))
+                        .collect()
+                }),
             tool_choice,
             parallel_tool_calls: openai_compatible_params.parallel_tool_calls,
             provider_tools: openai_compatible_params.tensorzero_provider_tools,
@@ -1189,6 +1194,12 @@ impl From<OpenAICompatibleTool> for ClientSideFunctionTool {
                 strict,
             },
         }
+    }
+}
+
+impl From<OpenAICompatibleTool> for Tool {
+    fn from(tool: OpenAICompatibleTool) -> Self {
+        Tool::ClientSideFunction(ClientSideFunctionTool::from(tool))
     }
 }
 

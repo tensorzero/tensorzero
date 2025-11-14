@@ -145,12 +145,14 @@ mod tests {
                 tool_choice: Some(ToolChoice::Specific("tool_1".to_string())),
                 parallel_tool_calls: None,
                 allowed_tools: Some(Vec::new()),
-                additional_tools: Some(vec![ClientSideFunctionTool {
-                    name: "tool_1".to_string(),
-                    description: "Tool 1".to_string(),
-                    parameters: json!({}),
-                    strict: true,
-                }]),
+                additional_tools: Some(vec![tensorzero_core::tool::DynamicTool(
+                    tensorzero_core::tool::Tool::ClientSideFunction(ClientSideFunctionTool {
+                        name: "tool_1".to_string(),
+                        description: "Tool 1".to_string(),
+                        parameters: json!({}),
+                        strict: true,
+                    }),
+                )]),
                 provider_tools: vec![],
             }
         );
