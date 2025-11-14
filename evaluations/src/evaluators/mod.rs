@@ -34,14 +34,21 @@ pub struct EvaluateInferenceParams {
 }
 
 /// Evaluates the inference response for the given datapoint using the evaluators specified in the evaluation config.
-/// If `active_evaluators` is provided, only runs evaluators in that set (used for adaptive stopping).
-/// If `active_evaluators` is None, runs all evaluators in the config.
+///
+/// ## Adaptive Stopping (Optional)
+///
+/// If `cancellation_tokens` is provided, evaluators whose tokens are cancelled will be skipped.
+/// This is used for adaptive stopping where evaluators stop independently based on precision convergence.
+/// - If `cancellation_tokens` is None: runs all evaluators in the config
+/// - If `cancellation_tokens` is Some(map): only runs evaluators whose tokens are not cancelled
+///
+/// ## Return Value
 ///
 /// Returns a map from evaluator name to Result<Option<Value>>.
 /// The semantics of the Result<Option<Value>> are as follows:
 /// - Ok(Some(value)): The evaluator was run successfully and the result was a valid value.
-/// - Ok(None): The evaluator was run successfully but the result was None (if for example the evaluator requires a reference output but none is present).
-/// - Err(e): The evaluator failed to run due to some error (like the LLM Judge failed to infer).
+/// - Ok(None): The evaluator was run successfully but the result was None (e.g., if the evaluator requires a reference output but none is present).
+/// - Err(e): The evaluator failed to run due to some error (e.g., the LLM Judge failed to infer).
 #[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), evaluation_name = %params.evaluation_name))]
 pub(crate) async fn evaluate_inference(
     params: EvaluateInferenceParams,
