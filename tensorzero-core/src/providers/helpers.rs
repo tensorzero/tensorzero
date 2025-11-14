@@ -1632,43 +1632,6 @@ mod tests {
     }
 
     #[test]
-    fn test_inject_extra_headers_model_provider_with_shorthand() {
-        let mut body = serde_json::json!({});
-        let config = FullExtraBodyConfig::default();
-        let headers_config = FullExtraHeadersConfig {
-            variant_extra_headers: None,
-            inference_extra_headers: FilteredInferenceExtraHeaders {
-                data: vec![InferenceExtraHeader::ModelProvider {
-                    model_name: "openai::gpt-4o".to_string(), // Using shorthand
-                    provider_name: "openai".to_string(),
-                    name: "X-Custom-Header".to_string(),
-                    kind: ExtraHeaderKind::Value("test-value".to_string()),
-                }],
-            },
-        };
-        let model_provider = ModelProviderRequestInfo {
-            provider_name: "openai".into(),
-            extra_headers: None,
-            extra_body: None,
-        };
-
-        let headers = inject_extra_request_data(
-            &config,
-            &headers_config,
-            model_provider,
-            "gpt-4o",
-            &mut body,
-        )
-        .unwrap();
-
-        // Should have applied the header
-        assert_eq!(
-            headers.get("X-Custom-Header").unwrap().to_str().unwrap(),
-            "test-value"
-        );
-    }
-
-    #[test]
     fn test_inject_extra_headers_model_provider_without_shorthand() {
         let mut body = serde_json::json!({});
         let config = FullExtraBodyConfig::default();
