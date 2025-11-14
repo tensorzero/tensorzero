@@ -20,7 +20,10 @@ use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, System, Text,
 };
-use tensorzero_core::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
+use tensorzero_core::tool::{
+    AllowedTools, AllowedToolsChoice, ProviderTool, ProviderToolScope, Tool,
+    ToolCallConfigDatabaseInsert, ToolChoice,
+};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -37,7 +40,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
     let datapoint_id = Uuid::now_v7();
 
     // Define custom dynamic tool (same as inference tests for consistency)
-    let custom_tool = tensorzero_core::tool::Tool {
+    let custom_tool = tensorzero_core::tool::ClientSideFunctionTool {
         name: "custom_weather_tool".to_string(),
         description: "A custom tool added dynamically".to_string(),
         parameters: serde_json::from_value(json!({
@@ -53,7 +56,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
     };
 
     // Get the static tool from function config to create proper ToolCallConfigDatabaseInsert
-    let get_temp_tool = tensorzero_core::tool::Tool {
+    let get_temp_tool = tensorzero_core::tool::ClientSideFunctionTool {
         name: "get_temperature".to_string(),
         description: "Get the current temperature in a given location".to_string(),
         parameters: serde_json::from_value(json!({
@@ -69,12 +72,20 @@ async fn test_datapoint_full_tool_params_round_trip() {
     };
 
     // Create tool_params in storage format (ToolCallConfigDatabaseInsert)
-    // This has ALL tools in tools_available (merged static + dynamic)
-    let tool_params = Some(ToolCallConfigDatabaseInsert {
-        tools_available: vec![get_temp_tool, custom_tool],
-        tool_choice: ToolChoice::Specific("get_temperature".to_string()),
-        parallel_tool_calls: Some(false),
-    });
+    // This has ALL tools in dynamic_tools (merged static + dynamic)
+    let tool_params = Some(ToolCallConfigDatabaseInsert::new_for_test(
+        vec![Tool::ClientSideFunction(custom_tool.clone())],
+        vec![ProviderTool {
+            scope: ProviderToolScope::Unscoped,
+            tool: json!({"foo": "bar"}),
+        }],
+        AllowedTools {
+            tools: vec![get_temp_tool.name.clone(), custom_tool.name.clone()],
+            choice: AllowedToolsChoice::DynamicAllowedTools,
+        },
+        ToolChoice::Specific("get_temperature".to_string()),
+        Some(false),
+    ));
 
     // Create datapoint via ClickHouse
     let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
@@ -147,8 +158,9 @@ async fn test_datapoint_full_tool_params_round_trip() {
 
     // Static tool (from function config) should be in allowed_tools
     let allowed_tools = dp["allowed_tools"].as_array().unwrap();
-    assert_eq!(allowed_tools.len(), 1);
+    assert_eq!(allowed_tools.len(), 2);
     assert_eq!(allowed_tools[0], "get_temperature");
+    assert_eq!(allowed_tools[1], "custom_weather_tool");
 
     // Dynamic tool should be in additional_tools
     let additional_tools = dp["additional_tools"].as_array().unwrap();
@@ -164,11 +176,11 @@ async fn test_datapoint_full_tool_params_round_trip() {
     assert_eq!(dp["tool_choice"], json!({"specific": "get_temperature"}));
     assert_eq!(dp["parallel_tool_calls"], false);
 
-    // provider_tools should be None (lossy conversion)
-    assert!(
-        dp["provider_tools"].is_null(),
-        "provider_tools should be null after round-trip (lossy conversion)"
-    );
+    // provider_tools should now be preserved with scope and nested tool field
+    let provider_tools = dp["provider_tools"].as_array().unwrap();
+    assert_eq!(provider_tools.len(), 1);
+    assert!(provider_tools[0]["scope"].is_null());
+    assert_eq!(provider_tools[0]["tool"], json!({"foo": "bar"}));
 }
 
 /// Test 5.2: Update datapoint tool params
@@ -183,7 +195,7 @@ async fn test_datapoint_update_tool_params() {
     let original_id = Uuid::now_v7();
 
     // Create original datapoint with initial tool_params
-    let get_temp_tool = tensorzero_core::tool::Tool {
+    let get_temp_tool = tensorzero_core::tool::ClientSideFunctionTool {
         name: "get_temperature".to_string(),
         description: "Get the current temperature in a given location".to_string(),
         parameters: serde_json::from_value(json!({
@@ -197,11 +209,16 @@ async fn test_datapoint_update_tool_params() {
         strict: false,
     };
 
-    let original_tool_params = Some(ToolCallConfigDatabaseInsert {
-        tools_available: vec![get_temp_tool],
-        tool_choice: ToolChoice::Auto,
-        parallel_tool_calls: Some(false),
-    });
+    let original_tool_params = Some(ToolCallConfigDatabaseInsert::new_for_test(
+        vec![Tool::ClientSideFunction(get_temp_tool.clone())],
+        vec![],
+        AllowedTools {
+            tools: vec![get_temp_tool.name.clone()],
+            choice: AllowedToolsChoice::DynamicAllowedTools,
+        },
+        ToolChoice::Auto,
+        Some(false),
+    ));
 
     let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),
@@ -314,7 +331,7 @@ async fn test_datapoint_update_tool_params() {
     // Verify updated tool_params (flattened at top level)
     assert_eq!(
         dp["allowed_tools"],
-        json!(["get_temperature"]),
+        json!(["get_temperature", "updated_tool"]),
         "allowed_tools should be updated"
     );
 
@@ -342,7 +359,7 @@ async fn test_list_datapoints_with_tool_params() {
     let dp2_id = Uuid::now_v7();
     let dp3_id = Uuid::now_v7();
 
-    let base_tool = tensorzero_core::tool::Tool {
+    let base_tool = tensorzero_core::tool::ClientSideFunctionTool {
         name: "get_temperature".to_string(),
         description: "Get temperature".to_string(),
         parameters: serde_json::from_value(json!({
@@ -354,7 +371,7 @@ async fn test_list_datapoints_with_tool_params() {
         strict: false,
     };
 
-    let custom_tool_1 = tensorzero_core::tool::Tool {
+    let custom_tool_1 = tensorzero_core::tool::ClientSideFunctionTool {
         name: "tool_1".to_string(),
         description: "First tool".to_string(),
         parameters: serde_json::from_value(json!({
@@ -365,7 +382,7 @@ async fn test_list_datapoints_with_tool_params() {
         strict: false,
     };
 
-    let custom_tool_2 = tensorzero_core::tool::Tool {
+    let custom_tool_2 = tensorzero_core::tool::ClientSideFunctionTool {
         name: "tool_2".to_string(),
         description: "Second tool".to_string(),
         parameters: serde_json::from_value(json!({
@@ -393,11 +410,16 @@ async fn test_list_datapoints_with_tool_params() {
             }],
         },
         output: None,
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![base_tool.clone()],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-        }),
+        tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![],
+            vec![],
+            AllowedTools {
+                tools: vec![base_tool.name.clone()],
+                choice: AllowedToolsChoice::DynamicAllowedTools,
+            },
+            ToolChoice::Auto,
+            None,
+        )),
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -422,11 +444,16 @@ async fn test_list_datapoints_with_tool_params() {
             }],
         },
         output: None,
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![base_tool.clone(), custom_tool_1],
-            tool_choice: ToolChoice::Required,
-            parallel_tool_calls: Some(false),
-        }),
+        tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![Tool::ClientSideFunction(custom_tool_1.clone())],
+            vec![],
+            AllowedTools {
+                tools: vec![base_tool.name.clone(), custom_tool_1.name.clone()],
+                choice: AllowedToolsChoice::DynamicAllowedTools,
+            },
+            ToolChoice::Required,
+            Some(false),
+        )),
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -451,11 +478,16 @@ async fn test_list_datapoints_with_tool_params() {
             }],
         },
         output: None,
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![base_tool, custom_tool_2],
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: Some(true),
-        }),
+        tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![Tool::ClientSideFunction(custom_tool_2.clone())],
+            vec![],
+            AllowedTools {
+                tools: vec![custom_tool_2.name.clone()],
+                choice: AllowedToolsChoice::DynamicAllowedTools,
+            },
+            ToolChoice::None,
+            Some(true),
+        )),
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -507,7 +539,10 @@ async fn test_list_datapoints_with_tool_params() {
 
     // Verify DP2: Static + one dynamic (flattened)
     let dp2_json = find_dp(&dp2_id);
-    assert_eq!(dp2_json["allowed_tools"], json!(["get_temperature"]));
+    assert_eq!(
+        dp2_json["allowed_tools"],
+        json!(["get_temperature", "tool_1"])
+    );
     let add_tools_2 = dp2_json["additional_tools"].as_array().unwrap();
     assert_eq!(add_tools_2.len(), 1);
     assert_eq!(add_tools_2[0]["name"], "tool_1");
@@ -516,7 +551,7 @@ async fn test_list_datapoints_with_tool_params() {
 
     // Verify DP3: Static + different dynamic with strict (flattened)
     let dp3_json = find_dp(&dp3_id);
-    assert_eq!(dp3_json["allowed_tools"], json!(["get_temperature"]));
+    assert_eq!(dp3_json["allowed_tools"], json!(["tool_2"]));
     let add_tools_3 = dp3_json["additional_tools"].as_array().unwrap();
     assert_eq!(add_tools_3.len(), 1);
     assert_eq!(add_tools_3[0]["name"], "tool_2");
@@ -535,7 +570,7 @@ async fn test_datapoint_only_static_tools() {
     let dataset_name = format!("test-dp-static-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
 
-    let static_tool = tensorzero_core::tool::Tool {
+    let static_tool = tensorzero_core::tool::ClientSideFunctionTool {
         name: "get_temperature".to_string(),
         description: "Get temperature".to_string(),
         parameters: serde_json::from_value(json!({
@@ -563,11 +598,16 @@ async fn test_datapoint_only_static_tools() {
             }],
         },
         output: None,
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![static_tool],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-        }),
+        tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![],
+            vec![],
+            AllowedTools {
+                tools: vec![static_tool.name.clone()],
+                choice: AllowedToolsChoice::FunctionDefault,
+            },
+            ToolChoice::Auto,
+            None,
+        )),
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -597,7 +637,7 @@ async fn test_datapoint_only_static_tools() {
     let dp = &resp_json["datapoints"][0];
 
     // Should have allowed_tools (flattened)
-    assert_eq!(dp["allowed_tools"], json!(["get_temperature"]));
+    assert!(dp["allowed_tools"].is_null());
 
     // Should NOT have additional_tools (or should be null/empty)
     assert!(
@@ -619,7 +659,7 @@ async fn test_datapoint_only_dynamic_tools() {
     let datapoint_id = Uuid::now_v7();
 
     // Include both static tool from config AND dynamic tool in storage
-    let static_tool = tensorzero_core::tool::Tool {
+    let static_tool = tensorzero_core::tool::ClientSideFunctionTool {
         name: "get_temperature".to_string(),
         description: "Get temperature".to_string(),
         parameters: serde_json::from_value(json!({
@@ -631,7 +671,7 @@ async fn test_datapoint_only_dynamic_tools() {
         strict: false,
     };
 
-    let dynamic_tool = tensorzero_core::tool::Tool {
+    let dynamic_tool = tensorzero_core::tool::ClientSideFunctionTool {
         name: "runtime_tool".to_string(),
         description: "A tool only available at runtime".to_string(),
         parameters: serde_json::from_value(json!({
@@ -659,12 +699,16 @@ async fn test_datapoint_only_dynamic_tools() {
             }],
         },
         output: None,
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            // In storage, both tools are in tools_available
-            tools_available: vec![static_tool, dynamic_tool],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-        }),
+        tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![Tool::ClientSideFunction(dynamic_tool.clone())],
+            vec![],
+            AllowedTools {
+                tools: vec![static_tool.name.clone(), dynamic_tool.name.clone()],
+                choice: AllowedToolsChoice::DynamicAllowedTools,
+            },
+            ToolChoice::Auto,
+            None,
+        )),
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -695,8 +739,9 @@ async fn test_datapoint_only_dynamic_tools() {
 
     // Static tool from function config should be in allowed_tools (flattened)
     let allowed_tools = dp["allowed_tools"].as_array().unwrap();
-    assert_eq!(allowed_tools.len(), 1);
+    assert_eq!(allowed_tools.len(), 2);
     assert_eq!(allowed_tools[0], "get_temperature");
+    assert_eq!(allowed_tools[1], "runtime_tool");
 
     // Dynamic tool should be in additional_tools (flattened)
     let additional_tools = dp["additional_tools"].as_array().unwrap();
@@ -719,7 +764,7 @@ async fn test_datapoint_tool_params_three_states() {
 
     // Create datapoint with tool_params
     let original_id = Uuid::now_v7();
-    let tool = tensorzero_core::tool::Tool {
+    let tool = tensorzero_core::tool::ClientSideFunctionTool {
         name: "get_temperature".to_string(),
         description: "Get temperature".to_string(),
         parameters: serde_json::from_value(json!({
@@ -746,11 +791,16 @@ async fn test_datapoint_tool_params_three_states() {
             }],
         },
         output: None,
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![tool],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-        }),
+        tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![Tool::ClientSideFunction(tool.clone())],
+            vec![],
+            AllowedTools {
+                tools: vec![tool.name.clone()],
+                choice: AllowedToolsChoice::DynamicAllowedTools,
+            },
+            ToolChoice::Auto,
+            None,
+        )),
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -903,8 +953,12 @@ async fn test_datapoint_tool_params_three_states() {
     );
     assert_eq!(dp3["tool_choice"], "required");
 
-    // When only additional_tools provided, function config tools go into allowed_tools
-    assert_eq!(dp3["allowed_tools"], json!(["get_temperature"]));
+    // When only additional_tools provided without explicit allowed_tools, the database stores
+    // AllowedToolsChoice::FunctionDefault which deserializes as None/null on read.
+    // This is the expected behavior - None means "use function defaults" without materializing them.
+    // Note: The actual allowed tools during inference would be the function's default tools,
+    // but we don't materialize them in the API response.
+    assert!(dp3["allowed_tools"].is_null());
 
     let add_tools = dp3["additional_tools"].as_array().unwrap();
     assert_eq!(add_tools.len(), 1);

@@ -522,7 +522,7 @@ tensorzero::make_gateway_test_functions!(test_delete_entire_dataset);
 // ============================================================================
 
 /// Test creating datapoints from inferences
-async fn test_create_from_inferences(client: Client) {
+async fn test_create_datapoints_from_inferences(client: Client) {
     let dataset_name = test_dataset_name("test_from_inferences");
 
     // Create datapoints from an inference query
@@ -534,7 +534,7 @@ async fn test_create_from_inferences(client: Client) {
     let output_source = None;
 
     let response = client
-        .create_from_inferences(dataset_name.clone(), params, output_source)
+        .create_datapoints_from_inferences(dataset_name.clone(), params, output_source)
         .await
         .unwrap();
 
@@ -554,4 +554,4 @@ async fn test_create_from_inferences(client: Client) {
     client.delete_dataset(dataset_name).await.unwrap();
 }
 
-tensorzero::make_gateway_test_functions!(test_create_from_inferences);
+tensorzero::make_gateway_test_functions!(test_create_datapoints_from_inferences);

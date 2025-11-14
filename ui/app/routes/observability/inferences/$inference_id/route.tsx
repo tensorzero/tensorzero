@@ -85,13 +85,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       inference_id,
       limit: 1, // Only need to know if *any* exist
     });
-  const feedbackBoundsPromise = dbClient.queryFeedbackBoundsByTargetId({
-    target_id: inference_id,
-  });
-
   // If there is a freshly inserted feedback, ClickHouse may take some time to
-  // update the feedback table as it is eventually consistent.
+  // update the feedback table and materialized views as it is eventually consistent.
   // In this case, we poll for the feedback item until it is found but eventually time out and log a warning.
+  // When polling for new feedback, we also need to query feedbackBounds and latestFeedbackByMetric
+  // AFTER the polling completes to ensure the materialized views have caught up.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(inference_id, newFeedbackId, limit)
     : dbClient.queryFeedbackByTargetId({
@@ -101,23 +99,49 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         limit,
       });
 
-  // --- Execute all promises concurrently ---
+  // --- Execute promises concurrently (with special handling for new feedback) ---
 
-  const [
-    inference,
+  let inference,
     model_inferences,
     demonstration_feedback,
     feedback_bounds,
     feedback,
-    latestFeedbackByMetric,
-  ] = await Promise.all([
-    inferencePromise,
-    modelInferencesPromise,
-    demonstrationFeedbackPromise,
-    feedbackBoundsPromise,
-    feedbackDataPromise,
-    queryLatestFeedbackIdByMetric({ target_id: inference_id }),
-  ]);
+    latestFeedbackByMetric;
+
+  if (newFeedbackId) {
+    // When there's new feedback, wait for polling to complete before querying
+    // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
+    [inference, model_inferences, demonstration_feedback, feedback] =
+      await Promise.all([
+        inferencePromise,
+        modelInferencesPromise,
+        demonstrationFeedbackPromise,
+        feedbackDataPromise,
+      ]);
+
+    // Query these after polling completes to avoid race condition with materialized views
+    [feedback_bounds, latestFeedbackByMetric] = await Promise.all([
+      dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+      queryLatestFeedbackIdByMetric({ target_id: inference_id }),
+    ]);
+  } else {
+    // Normal case: execute all queries in parallel
+    [
+      inference,
+      model_inferences,
+      demonstration_feedback,
+      feedback_bounds,
+      feedback,
+      latestFeedbackByMetric,
+    ] = await Promise.all([
+      inferencePromise,
+      modelInferencesPromise,
+      demonstrationFeedbackPromise,
+      dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+      feedbackDataPromise,
+      queryLatestFeedbackIdByMetric({ target_id: inference_id }),
+    ]);
+  }
 
   // --- Process results ---
 

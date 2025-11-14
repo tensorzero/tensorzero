@@ -16,7 +16,7 @@ use tensorzero::ClientExt;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse,
 };
-use tensorzero_core::tool::ToolChoice;
+use tensorzero_core::tool::{ProviderToolScope, ToolChoice};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -154,10 +154,11 @@ async fn test_inference_full_tool_params_round_trip() {
     // Step 4: Verify DynamicToolParams correctly reconstructed
     let retrieved_tool_params = &stored_inference.tool_params;
 
-    // Static tools should be in allowed_tools
+    // Static + dynamic tools should be in allowed_tools
     let allowed_tools = retrieved_tool_params.allowed_tools.as_ref().unwrap();
-    assert_eq!(allowed_tools.len(), 1);
+    assert_eq!(allowed_tools.len(), 2);
     assert_eq!(allowed_tools[0], "get_temperature");
+    assert_eq!(allowed_tools[1], "custom_weather_tool");
 
     // Dynamic tools should be in additional_tools
     let additional_tools = retrieved_tool_params.additional_tools.as_ref().unwrap();
@@ -176,11 +177,11 @@ async fn test_inference_full_tool_params_round_trip() {
     );
     assert_eq!(retrieved_tool_params.parallel_tool_calls, Some(false));
 
-    // IMPORTANT: provider_tools is LOSSY - should always be None after round-trip
+    // IMPORTANT: provider_tools is LOSSY - should always be empty after round-trip
     // Will fix this in a follow up with databae migrations.
     assert!(
-        retrieved_tool_params.provider_tools.is_none(),
-        "provider_tools should be None after database round-trip (lossy conversion)"
+        retrieved_tool_params.provider_tools.is_empty(),
+        "provider_tools should be empty after database round-trip (lossy conversion)"
     );
 }
 
@@ -220,6 +221,7 @@ async fn test_inference_only_static_tools() {
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    println!("Inference ID: {inference_id}");
 
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -238,6 +240,7 @@ async fn test_inference_only_static_tools() {
         panic!("Expected Chat inference");
     };
 
+    println!("stored inference: {stored_inference:?}");
     let retrieved_tool_params = &stored_inference.tool_params;
 
     // Should have allowed_tools
@@ -330,11 +333,8 @@ async fn test_inference_only_dynamic_tools() {
 
     let retrieved_tool_params = &stored_inference.tool_params;
 
-    // When no allowed_tools passed, function config tools become allowed_tools
-    // (see database_insert_to_dynamic_tool_params logic)
-    let allowed_tools = retrieved_tool_params.allowed_tools.as_ref().unwrap();
-    assert_eq!(allowed_tools.len(), 1);
-    assert_eq!(allowed_tools[0], "get_temperature"); // From function config
+    // If we don't specify allowed tools on the way in we don't get allowed tools on the way out.
+    assert!(retrieved_tool_params.allowed_tools.is_none());
 
     // Dynamic tool should be in additional_tools
     let additional_tools = retrieved_tool_params.additional_tools.as_ref().unwrap();
@@ -470,10 +470,20 @@ async fn test_provider_tools_not_persisted() {
         panic!("Expected Chat inference");
     };
 
-    // VERIFY: provider_tools should be None after round-trip
-    assert!(
-        stored_inference.tool_params.provider_tools.is_none(),
-        "LOSSY CONVERSION: provider_tools are not persisted to database"
+    // VERIFY: provider_tools should be present after round-trip
+    println!("{:?}", stored_inference.tool_params.provider_tools);
+    let stored_provider_tools = &stored_inference.tool_params.provider_tools;
+    assert_eq!(stored_provider_tools.len(), 1);
+    let first_tool = stored_provider_tools.first().unwrap();
+    assert_eq!(first_tool.scope, ProviderToolScope::Unscoped);
+    assert_eq!(
+        first_tool.tool,
+        json!({"type": "computer_20241022",
+            "name": "computer",
+            "display_width_px": 1024,
+            "display_height_px": 768,
+            "display_number": 1
+        })
     );
 }
 

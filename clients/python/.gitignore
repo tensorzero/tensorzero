@@ -67,3 +67,6 @@ docs/_build/
 
 # VSCode
 .vscode/
+
+# Mypy stubtest
+.mypy_cache/

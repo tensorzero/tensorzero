@@ -247,7 +247,7 @@ t0.experimental_list_inferences(
       metric_name="converted_sale",
       value=True,
   ),
-  order_by=[OrderBy(by="timestamp", direction="DESC")],
+  order_by=[OrderBy(by="timestamp", direction="descending")],
   limit=100_000,
   # ... and more ...
 )
