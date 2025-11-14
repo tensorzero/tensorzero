@@ -312,30 +312,30 @@ pub async fn run_evaluation(
 /// Core streaming evaluation function with optional adaptive stopping.
 ///
 /// This function runs an evaluation and streams results as they complete via an mpsc channel.
-/// When `stopping_config` is provided, evaluators can stop independently based on confidence
-/// interval convergence criteria.
+/// When `precision_limits` is provided, evaluators can stop independently once confidence
+/// interval half-widths are within the precision limits.
 ///
 /// ## How it works
 ///
 /// 1. Creates an mpsc channel for streaming `EvaluationUpdate` messages
 /// 2. Loads the evaluation and function configurations
 /// 3. Queries the dataset (limited by `max_inferences` if specified)
-/// 4. If adaptive stopping: creates cancellation tokens for each evaluator
+/// 4. If `precision_limits` is provided: creates cancellation tokens for each evaluator with a precision limit
 /// 5. Sends `RunInfo` as the first message (evaluation_run_id, num_datapoints)
-/// 6. Spawns a concurrent task for each datapoint that:
+/// 6. Spawns a concurrent task for each datapoint (up to `max_inferences`) that:
+///    - Acquires a semaphore permit (controls concurrency)
 ///    - Runs inference for the datapoint
 ///    - Evaluates the inference response (skipping cancelled evaluators)
 ///    - Returns (Datapoint, InferenceResponse, EvaluationResult)
 /// 7. Spawns a background collector task that:
 ///    - Collects results from the JoinSet as tasks complete
-///    - If adaptive stopping: updates per-evaluator statistics and checks stopping conditions
-///    - Cancels evaluator tokens when CI half-width ≤ precision_limit_k
+///    - If `precision_limits` is provided: updates per-evaluator statistics after `min_inferences`
+///    - Checks stopping conditions: cancels evaluator tokens when CI half-width ≤ precision_limit
+///    - When all evaluators with precision limits stop: aborts remaining tasks
 ///    - Converts results to `EvaluationUpdate::Success` or `EvaluationUpdate::Error`
 ///    - Sends each update through the channel
-///    - Closes the channel when all tasks complete
+///    - Closes the channel when all tasks complete or are aborted
 /// 8. Returns immediately with the receiver, run_info, and evaluation_config
-///
-/// ## Adaptive Stopping (Optional)
 ///
 /// **Min Inferences**: Minimum number of inferences to run before checking stopping conditions (default: 20)
 ///   - Ensures sufficient samples for statistical validity
@@ -344,7 +344,7 @@ pub async fn run_evaluation(
 ///
 /// **Precision Limits**: When `precision_limits` is `Some(map)`:
 /// - Per-evaluator CI half-width thresholds (HashMap<String, f32>)
-///   - Evaluator k stops when: `1.96 * stderr ≤ threshold_k`
+///   - Evaluator k stops when: `1.96 * stderr ≤ threshold_k` (1.96 gives a 95% Wald-style confidence interval)
 ///   - Only checked after `min_inferences` have completed
 ///   - Implemented via cancellation tokens that skip the evaluator on subsequent datapoints
 /// - **Evaluators not in precision_limits map**: Run on all datapoints (up to max_inferences)
