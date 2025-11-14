@@ -291,18 +291,18 @@ pub async fn run_gepa_optimization(
         );
 
         // Steps 3-6: Process iteration (evaluate, analyze, mutate, check improvement)
-        let mutation_result = process_gepa_iteration(
-            gateway_client.clone(),
-            clickhouse_connection_info.clone(),
-            Arc::clone(&tensorzero_config),
-            Arc::clone(&evaluation_config),
-            config,
+        let mutation_result = gepa_step(GEPAStepParams {
+            gateway_client: gateway_client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            tensorzero_config: Arc::clone(&tensorzero_config),
+            evaluation_config: Arc::clone(&evaluation_config),
+            gepa_config: config,
             function_config,
-            &parent_variant_name,
+            parent_variant_name: &parent_variant_name,
             parent_variant_config,
-            &batch_dataset_name,
+            batch_dataset_name: &batch_dataset_name,
             iteration,
-        )
+        })
         .await?;
 
         // If mutation improved over parent, evaluate on validation and update Pareto frontier
@@ -401,36 +401,40 @@ pub async fn run_gepa_optimization(
     Ok(frontier.variants)
 }
 
+/// Parameters for a single GEPA iteration step
+pub(crate) struct GEPAStepParams<'a> {
+    pub gateway_client: tensorzero_core::client::Client,
+    pub clickhouse_connection_info: ClickHouseConnectionInfo,
+    pub tensorzero_config: Arc<Config>,
+    pub evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
+    pub gepa_config: &'a GEPAConfig,
+    pub function_config: &'a FunctionConfig,
+    pub parent_variant_name: &'a str,
+    pub parent_variant_config: &'a UninitializedChatCompletionConfig,
+    pub batch_dataset_name: &'a str,
+    pub iteration: u32,
+}
+
 /// Process a single GEPA iteration: evaluate parent, analyze, mutate, check improvement
 ///
 /// Returns Some((variant_name, variant_config)) if mutation improved over parent,
 /// None otherwise (mutation failed, evaluation failed, or no improvement)
-#[expect(clippy::too_many_arguments)]
-async fn process_gepa_iteration(
-    gateway_client: tensorzero_core::client::Client,
-    clickhouse_connection_info: ClickHouseConnectionInfo,
-    tensorzero_config: Arc<Config>,
-    evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
-    gepa_config: &GEPAConfig,
-    function_config: &FunctionConfig,
-    parent_variant_name: &str,
-    parent_variant_config: &UninitializedChatCompletionConfig,
-    batch_dataset_name: &str,
-    iteration: u32,
+pub(crate) async fn gepa_step(
+    params: GEPAStepParams<'_>,
 ) -> Result<Option<(String, UninitializedChatCompletionConfig)>, Error> {
     // Step 3: Evaluate parent variant on mini-batch
     tracing::debug!("Evaluating parent variant on batch dataset");
 
     let parent_batch_results = evaluate_variant(EvaluateVariantParams {
-        gateway_client: gateway_client.clone(),
-        clickhouse_connection_info: clickhouse_connection_info.clone(),
-        tensorzero_config: Arc::clone(&tensorzero_config),
-        evaluation_config: Arc::clone(&evaluation_config),
-        evaluation_name: gepa_config.evaluation_name.clone(),
-        variant_name: parent_variant_name.to_string(),
-        variant_config: parent_variant_config.clone(),
-        dataset_name: batch_dataset_name.to_string(),
-        concurrency: gepa_config.max_concurrency as usize,
+        gateway_client: params.gateway_client.clone(),
+        clickhouse_connection_info: params.clickhouse_connection_info.clone(),
+        tensorzero_config: Arc::clone(&params.tensorzero_config),
+        evaluation_config: Arc::clone(&params.evaluation_config),
+        evaluation_name: params.gepa_config.evaluation_name.clone(),
+        variant_name: params.parent_variant_name.to_string(),
+        variant_config: params.parent_variant_config.clone(),
+        dataset_name: params.batch_dataset_name.to_string(),
+        concurrency: params.gepa_config.max_concurrency as usize,
     })
     .await?;
 
@@ -443,11 +447,11 @@ async fn process_gepa_iteration(
     tracing::debug!("Analyzing parent inferences");
 
     let analyses = analyze_inferences(
-        &gateway_client,
+        &params.gateway_client,
         &parent_batch_results.evaluation_infos,
-        function_config,
-        parent_variant_config,
-        gepa_config,
+        params.function_config,
+        params.parent_variant_config,
+        params.gepa_config,
     )
     .await?;
 
@@ -461,11 +465,11 @@ async fn process_gepa_iteration(
     tracing::debug!("Generating mutation from analyses");
 
     let mutate_result = mutate_templates(
-        &gateway_client,
+        &params.gateway_client,
         &analyses,
-        function_config,
-        parent_variant_config,
-        gepa_config,
+        params.function_config,
+        params.parent_variant_config,
+        params.gepa_config,
     )
     .await;
 
@@ -478,14 +482,18 @@ async fn process_gepa_iteration(
     };
 
     // Step 6: Create mutated variant config
-    let variant_prefix = gepa_config.variant_prefix.as_deref().unwrap_or("gepa");
+    let variant_prefix = params
+        .gepa_config
+        .variant_prefix
+        .as_deref()
+        .unwrap_or("gepa");
     let (child_variant_name, child_variant_config) = create_mutated_variant(
-        parent_variant_config,
+        params.parent_variant_config,
         mutation_output,
-        iteration as usize,
+        params.iteration as usize,
         variant_prefix,
-        parent_variant_name,
-        gepa_config.retries,
+        params.parent_variant_name,
+        params.gepa_config.retries,
     );
 
     tracing::info!("Created mutation variant: {}", child_variant_name);
@@ -494,15 +502,15 @@ async fn process_gepa_iteration(
     tracing::debug!("Evaluating mutation on batch dataset");
 
     let child_batch_results = evaluate_variant(EvaluateVariantParams {
-        gateway_client: gateway_client.clone(),
-        clickhouse_connection_info,
-        tensorzero_config,
-        evaluation_config: evaluation_config.clone(),
-        evaluation_name: gepa_config.evaluation_name.clone(),
+        gateway_client: params.gateway_client.clone(),
+        clickhouse_connection_info: params.clickhouse_connection_info,
+        tensorzero_config: params.tensorzero_config,
+        evaluation_config: params.evaluation_config.clone(),
+        evaluation_name: params.gepa_config.evaluation_name.clone(),
         variant_name: child_variant_name.clone(),
         variant_config: child_variant_config.clone(),
-        dataset_name: batch_dataset_name.to_string(),
-        concurrency: gepa_config.max_concurrency as usize,
+        dataset_name: params.batch_dataset_name.to_string(),
+        concurrency: params.gepa_config.max_concurrency as usize,
     })
     .await?;
 
@@ -514,7 +522,7 @@ async fn process_gepa_iteration(
     if is_improvement(
         &parent_batch_results.evaluation_stats,
         &child_batch_results.evaluation_stats,
-        &evaluation_config,
+        &params.evaluation_config,
     ) {
         tracing::info!("Mutation shows Pareto improvement over parent on batch");
         Ok(Some((child_variant_name, child_variant_config)))
