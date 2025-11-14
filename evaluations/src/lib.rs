@@ -604,28 +604,38 @@ pub async fn run_evaluation_core_streaming(
                         }
                     }
 
-                    EvaluationUpdate::Success(EvaluationInfo::new(
+                    Some(EvaluationUpdate::Success(EvaluationInfo::new(
                         datapoint,
                         inference_response,
                         evaluation_result,
-                    ))
+                    )))
                 }
                 Ok((task_id, Err(e))) => {
                     tracing::warn!("Task error: {}", e);
-                    EvaluationUpdate::Error(EvaluationError {
+                    Some(EvaluationUpdate::Error(EvaluationError {
                         datapoint_id: task_id_to_datapoint_id[&task_id],
                         message: e.to_string(),
-                    })
+                    }))
                 }
-                Err(e) => EvaluationUpdate::Error(EvaluationError {
-                    datapoint_id: task_id_to_datapoint_id[&e.id()],
-                    message: e.to_string(),
-                }),
+                // Check if error is due to cancellation: if so, assign None, otherwise wrap Error in Some()
+                Err(e) => {
+                    if e.is_cancelled() {
+                        None
+                    } else {
+                        Some(EvaluationUpdate::Error(EvaluationError {
+                            datapoint_id: task_id_to_datapoint_id[&e.id()],
+                            message: e.to_string(),
+                        }))
+                    }
+                }
             };
 
-            if sender_clone.send(update).await.is_err() {
-                // Receiver dropped, stop sending
-                break;
+            // Check if update is Some; if so, unwrap and send inner value
+            if let Some(update_value) = update {
+                if sender_clone.send(update_value).await.is_err() {
+                    // Receiver dropped, stop sending
+                    break;
+                }
             }
         }
     });
