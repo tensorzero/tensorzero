@@ -68,7 +68,7 @@ jobs:
 
       - name: Build `tensorzero-node`
         working-directory: internal/tensorzero-node
-        run: pnpm build
+        run: pnpm build:debug
 
       - name: Download `gateway` container
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
