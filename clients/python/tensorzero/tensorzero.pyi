@@ -1038,6 +1038,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param limit: Maximum number of datapoints to evaluate (None = no limit)
         :param offset: Number of datapoints to skip before starting evaluation (None = no offset)
         :return: An EvaluationJobHandler for iterating over evaluation results
+
+        Note: Datapoints are ordered by creation time in descending order (newest first).
         """
         ...
 
@@ -1576,6 +1578,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param limit: Maximum number of datapoints to evaluate (None = no limit)
         :param offset: Number of datapoints to skip before starting evaluation (None = no offset)
         :return: An AsyncEvaluationJobHandler for iterating over evaluation results
+
+        Note: Datapoints are ordered by creation time in descending order (newest first).
         """
         ...
 

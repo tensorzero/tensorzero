@@ -23,12 +23,13 @@ pub async fn query_dataset(
     debug!(table_name = %table_name, "Determined table name for function type");
 
     // Construct the query to fetch datapoints from the appropriate table
-    // ORDER BY id ensures consistent results when using LIMIT/OFFSET (UUIDs are v7, chronologically ordered)
+    // ORDER BY toUInt128(id) DESC ensures consistent results when using LIMIT/OFFSET
+    // UUIDs are v7, so toUInt128(id) DESC gives reverse chronological order (newest first)
     let mut query = r"SELECT * FROM {table_name: Identifier} FINAL
          WHERE dataset_name = {dataset_name: String}
          AND function_name = {function_name: String}
          AND staled_at IS NULL
-         ORDER BY id"
+         ORDER BY toUInt128(id) DESC"
         .to_string();
 
     // Add LIMIT and OFFSET if provided using parameterized queries
