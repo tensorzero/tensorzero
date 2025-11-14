@@ -59,13 +59,5 @@
   },
   "dependencies": {
     "buildkite-test-collector": "^1.9.1"
-  },
-  "optionalDependencies": {
-    "tensorzero-node-darwin-arm64": "0.0.0",
-    "tensorzero-node-linux-arm64-gnu": "0.0.0",
-    "tensorzero-node-linux-arm64-musl": "0.0.0",
-    "tensorzero-node-darwin-x64": "0.0.0",
-    "tensorzero-node-linux-x64-gnu": "0.0.0",
-    "tensorzero-node-linux-x64-musl": "0.0.0"
   }
 }
