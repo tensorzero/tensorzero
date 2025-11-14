@@ -214,9 +214,9 @@ struct ResponseData {
     streaming: bool,
     inference_id: Uuid,
     episode_id: Uuid,
-    input_tokens: i64,
-    output_tokens: i64,
-    total_tokens: i64,
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+    total_tokens: Option<i64>,
     estimated_tokens: i64,
     underestimate: bool,
 }
@@ -263,9 +263,9 @@ async fn make_non_streaming_inference(client: &Client) -> ResponseData {
         streaming: false,
         inference_id: response.inference_id,
         episode_id: response.episode_id,
-        input_tokens: response.usage.input_tokens.unwrap() as i64,
-        output_tokens: response.usage.output_tokens.unwrap() as i64,
-        total_tokens: response.usage.total_tokens().unwrap() as i64,
+        input_tokens: response.usage.input_tokens.map(|x| x as i64),
+        output_tokens: response.usage.output_tokens.map(|x| x as i64),
+        total_tokens: response.usage.total_tokens().map(|x| x as i64),
         underestimate: false,
         estimated_tokens: 1009,
     }
@@ -307,9 +307,9 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
 
     let mut inference_id = None;
     let mut episode_id = None;
-    let mut input_tokens = 0;
-    let mut output_tokens = 0;
-    let mut total_tokens = 0;
+    let mut input_tokens = None;
+    let mut output_tokens = None;
+    let mut total_tokens = None;
     while let Some(chunk) = stream.next().await {
         let InferenceResponseChunk::Chat(response) = chunk.clone().unwrap() else {
             panic!("Expected chat response, got: {chunk:#?}");
@@ -317,9 +317,9 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
         inference_id = Some(response.inference_id);
         episode_id = Some(response.episode_id);
         if let Some(usage) = response.usage {
-            input_tokens += usage.input_tokens.unwrap() as i64;
-            output_tokens += usage.output_tokens.unwrap() as i64;
-            total_tokens += (usage.total_tokens().unwrap()) as i64;
+            input_tokens = Some(input_tokens.unwrap_or(0) + usage.input_tokens.unwrap() as i64);
+            output_tokens = Some(output_tokens.unwrap_or(0) + usage.output_tokens.unwrap() as i64);
+            total_tokens = Some(total_tokens.unwrap_or(0) + usage.total_tokens().unwrap() as i64);
         }
     }
 
@@ -396,9 +396,9 @@ async fn test_stream_fatal_error_usage() {
 
     let mut inference_id = None;
     let mut episode_id = None;
-    let mut input_tokens = 0;
-    let mut output_tokens = 0;
-    let mut total_tokens = 0;
+    let mut input_tokens = None;
+    let mut output_tokens = None;
+    let mut total_tokens = None;
     let mut all_chunks = vec![];
     while let Some(chunk) = stream.next().await {
         all_chunks.push(chunk.clone());
@@ -407,9 +407,12 @@ async fn test_stream_fatal_error_usage() {
                 inference_id = Some(response.inference_id);
                 episode_id = Some(response.episode_id);
                 if let Some(usage) = response.usage {
-                    input_tokens += usage.input_tokens.unwrap() as i64;
-                    output_tokens += usage.output_tokens.unwrap() as i64;
-                    total_tokens += (usage.total_tokens().unwrap()) as i64;
+                    input_tokens =
+                        Some(input_tokens.unwrap_or(0) + usage.input_tokens.unwrap() as i64);
+                    output_tokens =
+                        Some(output_tokens.unwrap_or(0) + usage.output_tokens.unwrap() as i64);
+                    total_tokens =
+                        Some(total_tokens.unwrap_or(0) + usage.total_tokens().unwrap() as i64);
                 }
             }
             Ok(_) => panic!("Expected chat response, got: {chunk:#?}"),
@@ -561,18 +564,30 @@ fn check_spans(
             assert!(!model_provider_attr_map.contains_key("llm.system"));
             assert!(!model_provider_attr_map.contains_key("llm.model_name"));
 
-            assert_eq!(
-                model_provider_attr_map["gen_ai.usage.input_tokens"],
-                input_tokens.into()
-            );
-            assert_eq!(
-                model_provider_attr_map["gen_ai.usage.output_tokens"],
-                output_tokens.into()
-            );
-            assert_eq!(
-                model_provider_attr_map["gen_ai.usage.total_tokens"],
-                total_tokens.into()
-            );
+            if let Some(input_tokens) = input_tokens {
+                assert_eq!(
+                    model_provider_attr_map["gen_ai.usage.input_tokens"],
+                    input_tokens.into()
+                );
+            } else {
+                assert!(!model_provider_attr_map.contains_key("gen_ai.usage.input_tokens"));
+            }
+            if let Some(output_tokens) = output_tokens {
+                assert_eq!(
+                    model_provider_attr_map["gen_ai.usage.output_tokens"],
+                    output_tokens.into()
+                );
+            } else {
+                assert!(!model_provider_attr_map.contains_key("gen_ai.usage.output_tokens"));
+            }
+            if let Some(total_tokens) = total_tokens {
+                assert_eq!(
+                    model_provider_attr_map["gen_ai.usage.total_tokens"],
+                    total_tokens.into()
+                );
+            } else {
+                assert!(!model_provider_attr_map.contains_key("gen_ai.usage.total_tokens"));
+            }
             assert!(!model_provider_attr_map.contains_key("llm.token_count.prompt"));
             assert!(!model_provider_attr_map.contains_key("llm.token_count.completion"));
             assert!(!model_provider_attr_map.contains_key("llm.token_count.total"));
@@ -597,18 +612,30 @@ fn check_spans(
             assert!(!model_provider_attr_map.contains_key("gen_ai.system"));
             assert!(!model_provider_attr_map.contains_key("gen_ai.request.model"));
 
-            assert_eq!(
-                model_provider_attr_map["llm.token_count.prompt"],
-                input_tokens.into()
-            );
-            assert_eq!(
-                model_provider_attr_map["llm.token_count.completion"],
-                output_tokens.into()
-            );
-            assert_eq!(
-                model_provider_attr_map["llm.token_count.total"],
-                total_tokens.into()
-            );
+            if let Some(input_tokens) = input_tokens {
+                assert_eq!(
+                    model_provider_attr_map["llm.token_count.prompt"],
+                    input_tokens.into()
+                );
+            } else {
+                assert!(!model_provider_attr_map.contains_key("llm.token_count.prompt"));
+            }
+            if let Some(output_tokens) = output_tokens {
+                assert_eq!(
+                    model_provider_attr_map["llm.token_count.completion"],
+                    output_tokens.into()
+                );
+            } else {
+                assert!(!model_provider_attr_map.contains_key("llm.token_count.completion"));
+            }
+            if let Some(total_tokens) = total_tokens {
+                assert_eq!(
+                    model_provider_attr_map["llm.token_count.total"],
+                    total_tokens.into()
+                );
+            } else {
+                assert!(!model_provider_attr_map.contains_key("llm.token_count.total"));
+            }
             // We currently don't have input/output attributes implemented for streaming inferences
             if streaming {
                 // When we implement input/output attributes for streaming inferences, remove these checks
@@ -678,7 +705,10 @@ fn check_spans(
     assert_eq!(
         return_ticket_attr_map,
         HashMap::from([
-            ("actual_usage.tokens".to_string(), total_tokens.into()),
+            (
+                "actual_usage.tokens".to_string(),
+                total_tokens.unwrap_or_default().into()
+            ),
             ("actual_usage.model_inferences".to_string(), 1.into()),
             ("underestimate".to_string(), underestimate.into()),
             ("level".to_string(), "INFO".into()),

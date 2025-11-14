@@ -35,8 +35,8 @@ use crate::providers::openai::OpenAIMessagesConfig;
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
-    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
-    OpenAIToolChoiceString, OpenAIUsage, SpecificToolChoice, SystemOrDeveloper,
+    OpenAIEmbeddingUsage, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
+    OpenAIToolChoice, OpenAIToolChoiceString, SpecificToolChoice, SystemOrDeveloper,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -507,7 +507,7 @@ fn get_azure_embedding_url(endpoint: &Url, deployment_id: &str) -> Result<Url, E
 #[derive(Debug, Deserialize)]
 struct AzureEmbeddingResponse {
     data: Vec<AzureEmbeddingData>,
-    usage: OpenAIUsage,
+    usage: OpenAIEmbeddingUsage,
 }
 
 #[derive(Debug, Deserialize)]

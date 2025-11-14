@@ -831,7 +831,7 @@ impl EmbeddingProvider for DummyProvider {
         let raw_response = DUMMY_RAW_REQUEST.to_string();
         let usage = Usage {
             input_tokens: Some(10),
-            output_tokens: Some(1),
+            output_tokens: Some(0),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),

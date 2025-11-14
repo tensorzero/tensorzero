@@ -2271,6 +2271,20 @@ impl From<OpenAIUsage> for Usage {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(super) struct OpenAIEmbeddingUsage {
+    pub prompt_tokens: Option<u32>,
+}
+
+impl From<OpenAIEmbeddingUsage> for Usage {
+    fn from(usage: OpenAIEmbeddingUsage) -> Self {
+        Usage {
+            input_tokens: usage.prompt_tokens,
+            output_tokens: Some(0), // this is always zero for embeddings
+        }
+    }
+}
+
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
 struct OpenAIResponseFunctionCall {
     name: String,
@@ -2591,7 +2605,7 @@ impl<'a> OpenAIEmbeddingRequest<'a> {
 #[derive(Debug, Deserialize, Serialize)]
 struct OpenAIEmbeddingResponse {
     data: Vec<OpenAIEmbeddingData>,
-    usage: Option<OpenAIUsage>,
+    usage: Option<OpenAIEmbeddingUsage>,
 }
 
 struct OpenAIEmbeddingResponseWithMetadata<'a> {

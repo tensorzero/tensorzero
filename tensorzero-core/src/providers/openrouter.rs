@@ -53,7 +53,7 @@ use crate::providers::helpers::{
 
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::TensorZeroEventError;
-use crate::providers::openai::OpenAIUsage;
+use crate::providers::openai::OpenAIEmbeddingUsage;
 
 lazy_static! {
     static ref OPENROUTER_DEFAULT_BASE_URL: Url = {
@@ -585,7 +585,7 @@ impl<'a> OpenRouterEmbeddingRequest<'a> {
 #[derive(Debug, Deserialize, Serialize)]
 struct OpenRouterEmbeddingResponse {
     data: Vec<OpenRouterEmbeddingData>,
-    usage: Option<OpenAIUsage>,
+    usage: Option<OpenAIEmbeddingUsage>,
 }
 
 struct OpenRouterEmbeddingResponseWithMetadata<'a> {
