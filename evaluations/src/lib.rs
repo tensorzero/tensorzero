@@ -643,16 +643,11 @@ pub async fn run_evaluation_core_streaming(
                                     }
                                 }
 
-                                // Check if all evaluators with precision limits are now cancelled
+                                // Check if all evaluators (not just those with specified precision limits) are now cancelled
                                 let all_evaluators_stopped =
-                                    precision_map.keys().all(|evaluator_name| {
-                                        tokens
-                                            .get(evaluator_name)
-                                            .map(|token| token.is_cancelled())
-                                            .unwrap_or(false)
-                                    });
+                                    tokens.values().all(|token| token.is_cancelled());
 
-                                // Abort remaining inference tasks if all evaluators have hit their precision target
+                                // If they are, then abort remaining inference tasks
                                 if all_evaluators_stopped {
                                     join_set.abort_all();
                                 }
@@ -660,28 +655,38 @@ pub async fn run_evaluation_core_streaming(
                         }
                     }
 
-                    EvaluationUpdate::Success(EvaluationInfo::new(
+                    Some(EvaluationUpdate::Success(EvaluationInfo::new(
                         datapoint,
                         inference_response,
                         evaluation_result,
-                    ))
+                    )))
                 }
                 Ok((task_id, Err(e))) => {
                     tracing::warn!("Task error: {}", e);
-                    EvaluationUpdate::Error(EvaluationError {
+                    Some(EvaluationUpdate::Error(EvaluationError {
                         datapoint_id: task_id_to_datapoint_id[&task_id],
                         message: e.to_string(),
-                    })
+                    }))
                 }
-                Err(e) => EvaluationUpdate::Error(EvaluationError {
-                    datapoint_id: task_id_to_datapoint_id[&e.id()],
-                    message: e.to_string(),
-                }),
+                // Check if error is due to cancellation: if so, assign None, otherwise wrap Error in Some()
+                Err(e) => {
+                    if e.is_cancelled() {
+                        None
+                    } else {
+                        Some(EvaluationUpdate::Error(EvaluationError {
+                            datapoint_id: task_id_to_datapoint_id[&e.id()],
+                            message: e.to_string(),
+                        }))
+                    }
+                }
             };
 
-            if sender_clone.send(update).await.is_err() {
-                // Receiver dropped, stop sending
-                break;
+            // Check if update is Some; if so, unwrap and send inner value
+            if let Some(update_value) = update {
+                if sender_clone.send(update_value).await.is_err() {
+                    // Receiver dropped, stop sending
+                    break;
+                }
             }
         }
     });

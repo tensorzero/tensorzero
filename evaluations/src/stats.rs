@@ -100,11 +100,21 @@ impl EvaluationStats {
                             if let Some(num) = n.as_f64() {
                                 stats.push(num as f32);
                             }
+                        } else {
+                            tracing::error!(
+                                evaluator_name = %evaluation_name,
+                                "Received evaluation result for unknown evaluator"
+                            );
                         }
                     }
                     Some(Value::Bool(b)) => {
                         if let Some(stats) = per_evaluator_stats.get_mut(evaluation_name) {
                             stats.push(if *b { 1.0 } else { 0.0 });
+                        } else {
+                            tracing::error!(
+                                evaluator_name = %evaluation_name,
+                                "Received evaluation result for unknown evaluator"
+                            );
                         }
                     }
                     _ => {}
