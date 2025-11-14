@@ -97,12 +97,10 @@ use crate::rate_limiting::{
     get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
     RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
 };
-use crate::serde_util::{
-    deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
-};
+use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::tool::{
-    InferenceResponseToolCall, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
-    ToolCallWrapper, ToolResult,
+    deserialize_optional_tool_info, InferenceResponseToolCall, ToolCall, ToolCallConfig,
+    ToolCallConfigDatabaseInsert, ToolCallWrapper, ToolResult,
 };
 use crate::variant::{InferenceConfig, JsonMode};
 
@@ -1577,8 +1575,8 @@ pub struct ChatInferenceDatabaseInsert {
     pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    #[serde(deserialize_with = "deserialize_optional_tool_info")]
+    #[serde(flatten)]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: InferenceParams,
