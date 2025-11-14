@@ -5,8 +5,8 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  on-headers@<1.1.0: '>=1.1.0'
   js-yaml: '>=4.1.1'
+  on-headers: '>=1.1.0'
 
 importers:
 
