@@ -463,7 +463,7 @@ mod tests {
     use super::*;
     use serde::{Deserialize, Serialize};
 
-    #[derive(Debug, Deserialize, Serialize, PartialEq, Default)]
+    #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
     struct TestStruct {
         foo: u32,
         bar: String,

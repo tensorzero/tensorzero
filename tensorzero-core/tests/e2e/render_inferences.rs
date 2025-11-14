@@ -3,9 +3,9 @@ use object_store::path::Path;
 use serde_json::json;
 use std::collections::HashMap;
 use tensorzero::{
-    ClientExt, JsonInferenceDatapoint, Role, StorageKind, StoragePath, StoredChatInferenceDatabase,
-    StoredChatInferenceDatapoint, StoredDatapoint, StoredInferenceDatabase, StoredJsonInference,
-    Tool,
+    ClientExt, ClientSideFunctionTool, JsonInferenceDatapoint, Role, StorageKind, StoragePath,
+    StoredChatInferenceDatabase, StoredChatInferenceDatapoint, StoredDatapoint,
+    StoredInferenceDatabase, StoredJsonInference,
 };
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::stored_input::StoredFile;
@@ -15,9 +15,10 @@ use tensorzero_core::inference::types::stored_input::{
 use tensorzero_core::inference::types::{
     Arguments, ResolvedContentBlock, ResolvedRequestMessage, System,
 };
+use tensorzero_core::tool::InferenceResponseToolCall;
 use tensorzero_core::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Template, Text},
-    tool::{InferenceResponseToolCall, ToolCallConfigDatabaseInsert, ToolChoice},
+    tool::{AllowedTools, AllowedToolsChoice, Tool, ToolCallConfigDatabaseInsert, ToolChoice},
 };
 use uuid::Uuid;
 
@@ -237,16 +238,21 @@ pub async fn test_render_samples_normal() {
             })],
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            tool_params: ToolCallConfigDatabaseInsert {
-                tools_available: vec![Tool {
+            tool_params: ToolCallConfigDatabaseInsert::new_for_test(
+                vec![Tool::ClientSideFunction(ClientSideFunctionTool {
                     name: "get_temperature".to_string(),
                     description: "Get the temperature of a location".to_string(),
                     parameters: json!({}), // Don't need to validate the arguments so we can leave blank
                     strict: false,
-                }],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: None,
-            },
+                })],
+                vec![],
+                AllowedTools {
+                    tools: vec!["get_temperature".to_string()],
+                    choice: AllowedToolsChoice::DynamicAllowedTools,
+                },
+                ToolChoice::Auto,
+                None,
+            ),
             timestamp: Utc::now(),
             dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
                 text: "Hello, world!".to_string(),
@@ -281,6 +287,7 @@ pub async fn test_render_samples_normal() {
                                     },
                                     path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                                 },
+                                filename: None,
                             },
                         ))),
                     ],
@@ -786,16 +793,21 @@ pub async fn test_render_datapoints_normal() {
                 raw_name: "get_temperature".to_string(),
                 raw_arguments: "{\"location\":\"Tokyo\"}".to_string(),
             })]),
-            tool_params: Some(ToolCallConfigDatabaseInsert {
-                tools_available: vec![Tool {
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![Tool::ClientSideFunction(ClientSideFunctionTool {
                     name: "get_temperature".to_string(),
                     description: "Get the temperature of a location".to_string(),
                     parameters: json!({}), // Don't need to validate the arguments so we can leave blank
                     strict: false,
-                }],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: None,
-            }),
+                })],
+                vec![],
+                AllowedTools {
+                    tools: vec!["get_temperature".to_string()],
+                    choice: AllowedToolsChoice::DynamicAllowedTools,
+                },
+                ToolChoice::Auto,
+                None,
+            )),
             tags: None,
             auxiliary: "{}".to_string(),
             is_deleted: false,
@@ -835,6 +847,7 @@ pub async fn test_render_datapoints_normal() {
                                     },
                                     path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                                 },
+                                filename: None,
                             },
                         ))),
                     ],

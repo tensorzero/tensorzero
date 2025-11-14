@@ -4,6 +4,9 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * An InferenceResponseToolCall is a request by a model to call a Tool
  * in the form that we return to the client / ClickHouse
+ * This includes some synactic sugar (parsing / validation of the tool arguments)
+ * in the `arguments` field and the name in the `name` field.
+ * We support looping this back through the TensorZero inference API via the ToolCallWrapper
  */
 export type InferenceResponseToolCall = {
   /**
