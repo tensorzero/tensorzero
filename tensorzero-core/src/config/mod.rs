@@ -728,30 +728,6 @@ impl Config {
         .await
     }
 
-    /// Constructs a dummy (possibly invalid) config.
-    /// The only purpose of this method is to be called by `Client::build_dummy` in pyo3 code,
-    /// where we are unable to use `.await`. We should never actually call any methods
-    /// on a client constructed with this config.
-    #[cfg(feature = "pyo3")]
-    pub fn new_dummy_for_pyo3() -> Config {
-        Config {
-            gateway: Default::default(),
-            models: Default::default(),
-            embedding_models: Default::default(),
-            functions: Default::default(),
-            metrics: Default::default(),
-            tools: Default::default(),
-            evaluations: Default::default(),
-            templates: Default::default(),
-            object_store_info: Default::default(),
-            provider_types: Default::default(),
-            optimizers: Default::default(),
-            postgres: Default::default(),
-            rate_limiting: Default::default(),
-            http_client: Default::default(),
-        }
-    }
-
     pub async fn load_and_verify_from_path(config_glob: &ConfigFileGlob) -> Result<Config, Error> {
         Self::load_from_path_optional_verify_credentials(config_glob, true).await
     }
