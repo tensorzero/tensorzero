@@ -15,7 +15,21 @@ use tensorzero_core::{
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
-use super::evaluate::ValidationScoresMap;
+use super::evaluate::{ValidationScoresMap, VariantName};
+
+/// Result of Pareto frontier filtering with frequency-based sampling weights
+#[derive(Debug, Clone)]
+pub struct ParetoFrontier {
+    /// Pareto-optimal variants (non-dominated after GEPA's 3-step filtering)
+    pub variants: HashMap<VariantName, UninitializedChatCompletionConfig>,
+
+    /// Instance-wise membership frequencies for weighted sampling
+    ///
+    /// Maps each variant to the count of datapoints where it's Pareto-optimal.
+    /// Higher values indicate the variant performs well across more instances.
+    /// Used for proportional sampling in GEPA's mutation step.
+    pub frequencies: HashMap<VariantName, usize>,
+}
 
 /// Updates the Pareto frontier based on instance-wise Pareto dominance
 ///
@@ -42,20 +56,13 @@ use super::evaluate::ValidationScoresMap;
 /// maximum score per instance. We extend this to multiple evaluators by selecting Pareto
 /// non-dominated variants per instance, which naturally generalizes the single-objective case.
 ///
-/// Returns (filtered variants, frequency map) where frequencies are used for weighted sampling.
-#[expect(clippy::type_complexity)]
+/// Returns a ParetoFrontier containing filtered variants and their sampling frequencies.
 pub fn update_pareto_frontier(
     candidates: HashMap<String, UninitializedChatCompletionConfig>,
     val_scores_map: &ValidationScoresMap,
     config: &GEPAConfig,
     tensorzero_config: &Config,
-) -> Result<
-    (
-        HashMap<String, UninitializedChatCompletionConfig>,
-        HashMap<String, usize>,
-    ),
-    Error,
-> {
+) -> Result<ParetoFrontier, Error> {
     tracing::info!(
         "Filtering Pareto frontier using 3-step GEPA algorithm ({} candidates)",
         candidates.len()
@@ -170,7 +177,10 @@ pub fn update_pareto_frontier(
             "Early exit: {} candidate(s) after instance-wise filtering",
             filtered_candidates.len()
         );
-        return Ok((filtered_candidates, frequencies));
+        return Ok(ParetoFrontier {
+            variants: filtered_candidates,
+            frequencies,
+        });
     }
 
     // Step 3: Global filtering - check dominance over all (D×E) objectives
@@ -248,7 +258,10 @@ pub fn update_pareto_frontier(
         filtered_candidates.len()
     );
 
-    Ok((filtered_candidates, frequencies))
+    Ok(ParetoFrontier {
+        variants: filtered_candidates,
+        frequencies,
+    })
 }
 
 /// Impute missing score as worst-case value based on optimization direction
@@ -1019,15 +1032,15 @@ mod tests {
         let result = update_pareto_frontier(candidates, &val_scores_map, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, frequencies) = result.unwrap();
+        let frontier = result.unwrap();
 
         // Only variant_a should remain
-        assert_eq!(filtered.len(), 1);
-        assert!(filtered.contains_key("variant_a"));
-        assert!(!filtered.contains_key("variant_b"));
+        assert_eq!(frontier.variants.len(), 1);
+        assert!(frontier.variants.contains_key("variant_a"));
+        assert!(!frontier.variants.contains_key("variant_b"));
 
         // variant_a should be in Pareto set for both datapoints
-        assert_eq!(frequencies.get("variant_a"), Some(&2));
+        assert_eq!(frontier.frequencies.get("variant_a"), Some(&2));
     }
 
     #[test]
@@ -1070,16 +1083,16 @@ mod tests {
         let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, frequencies) = result.unwrap();
+        let frontier = result.unwrap();
 
         // Both should remain
-        assert_eq!(filtered.len(), 2);
-        assert!(filtered.contains_key("variant_a"));
-        assert!(filtered.contains_key("variant_b"));
+        assert_eq!(frontier.variants.len(), 2);
+        assert!(frontier.variants.contains_key("variant_a"));
+        assert!(frontier.variants.contains_key("variant_b"));
 
         // Each variant is Pareto-optimal on one datapoint
-        assert_eq!(frequencies.get("variant_a"), Some(&1));
-        assert_eq!(frequencies.get("variant_b"), Some(&1));
+        assert_eq!(frontier.frequencies.get("variant_a"), Some(&1));
+        assert_eq!(frontier.frequencies.get("variant_b"), Some(&1));
     }
 
     #[test]
@@ -1154,12 +1167,12 @@ mod tests {
         let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, _) = result.unwrap();
+        let frontier = result.unwrap();
 
         // C should be filtered out, A and B should remain
-        assert!(!filtered.contains_key("variant_c"));
-        assert!(filtered.contains_key("variant_a"));
-        assert!(filtered.contains_key("variant_b"));
+        assert!(!frontier.variants.contains_key("variant_c"));
+        assert!(frontier.variants.contains_key("variant_a"));
+        assert!(frontier.variants.contains_key("variant_b"));
     }
 
     #[test]
@@ -1196,11 +1209,11 @@ mod tests {
         let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, _) = result.unwrap();
+        let frontier = result.unwrap();
 
         // Only variant_a should remain
-        assert_eq!(filtered.len(), 1);
-        assert!(filtered.contains_key("variant_a"));
+        assert_eq!(frontier.variants.len(), 1);
+        assert!(frontier.variants.contains_key("variant_a"));
     }
 
     #[test]
@@ -1243,12 +1256,12 @@ mod tests {
         let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, _) = result.unwrap();
+        let frontier = result.unwrap();
 
         // Both should remain (incomparable due to None values)
-        assert_eq!(filtered.len(), 2);
-        assert!(filtered.contains_key("variant_a"));
-        assert!(filtered.contains_key("variant_b"));
+        assert_eq!(frontier.variants.len(), 2);
+        assert!(frontier.variants.contains_key("variant_a"));
+        assert!(frontier.variants.contains_key("variant_b"));
     }
 
     #[test]
@@ -1269,12 +1282,12 @@ mod tests {
         let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, frequencies) = result.unwrap();
+        let frontier = result.unwrap();
 
         // Single variant should be kept
-        assert_eq!(filtered.len(), 1);
-        assert!(filtered.contains_key("variant_a"));
-        assert_eq!(frequencies.get("variant_a"), Some(&1));
+        assert_eq!(frontier.variants.len(), 1);
+        assert!(frontier.variants.contains_key("variant_a"));
+        assert_eq!(frontier.frequencies.get("variant_a"), Some(&1));
     }
 
     #[test]
@@ -1311,11 +1324,11 @@ mod tests {
         let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, _) = result.unwrap();
+        let frontier = result.unwrap();
 
         // A dominates B on dp2 (only comparable point)
-        assert_eq!(filtered.len(), 1);
-        assert!(filtered.contains_key("variant_a"));
+        assert_eq!(frontier.variants.len(), 1);
+        assert!(frontier.variants.contains_key("variant_a"));
     }
 
     #[test]
@@ -1352,13 +1365,13 @@ mod tests {
         let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, _) = result.unwrap();
+        let frontier = result.unwrap();
 
         // All should remain (no one dominates)
-        assert_eq!(filtered.len(), 3);
-        assert!(filtered.contains_key("variant_a"));
-        assert!(filtered.contains_key("variant_b"));
-        assert!(filtered.contains_key("variant_c"));
+        assert_eq!(frontier.variants.len(), 3);
+        assert!(frontier.variants.contains_key("variant_a"));
+        assert!(frontier.variants.contains_key("variant_b"));
+        assert!(frontier.variants.contains_key("variant_c"));
     }
 
     #[test]
@@ -1403,16 +1416,16 @@ mod tests {
         let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, _) = result.unwrap();
+        let frontier = result.unwrap();
 
         // Both variants should remain because:
         // - On dp1: variant_a (0.9) dominates variant_b (None=-inf), so A is Pareto-optimal
         // - On dp2: variant_b (0.7) dominates variant_a (None=-inf), so B is Pareto-optimal
         // - Candidate set = {A, B}
         // - Global filtering: Neither globally dominates the other (A better on dp1, B better on dp2)
-        assert_eq!(filtered.len(), 2);
-        assert!(filtered.contains_key("variant_a"));
-        assert!(filtered.contains_key("variant_b"));
+        assert_eq!(frontier.variants.len(), 2);
+        assert!(frontier.variants.contains_key("variant_a"));
+        assert!(frontier.variants.contains_key("variant_b"));
     }
 
     #[test]
@@ -1443,11 +1456,11 @@ mod tests {
         let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, _) = result.unwrap();
+        let frontier = result.unwrap();
 
         // A should dominate B (1.0 > 0.0)
-        assert_eq!(filtered.len(), 1);
-        assert!(filtered.contains_key("variant_a"));
+        assert_eq!(frontier.variants.len(), 1);
+        assert!(frontier.variants.contains_key("variant_a"));
     }
 
     #[test]
@@ -1484,11 +1497,11 @@ mod tests {
         let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, _) = result.unwrap();
+        let frontier = result.unwrap();
 
         // Only A should remain
-        assert_eq!(filtered.len(), 1);
-        assert!(filtered.contains_key("variant_a"));
+        assert_eq!(frontier.variants.len(), 1);
+        assert!(frontier.variants.contains_key("variant_a"));
     }
 
     #[test]
@@ -1532,7 +1545,7 @@ mod tests {
         let elapsed = start.elapsed();
 
         assert!(result.is_ok());
-        let (filtered, _) = result.unwrap();
+        let frontier = result.unwrap();
 
         // Should complete in reasonable time (< 5 seconds)
         assert!(
@@ -1543,7 +1556,7 @@ mod tests {
 
         // Result should be non-empty
         assert!(
-            !filtered.is_empty(),
+            !frontier.variants.is_empty(),
             "Result should contain at least one non-dominated variant"
         );
     }
@@ -1648,13 +1661,13 @@ mod tests {
         let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, frequencies) = result.unwrap();
+        let frontier = result.unwrap();
 
         // With no datapoints, no instance-wise Pareto sets can be formed
         // so candidate_set is empty and all variants are filtered out
-        assert_eq!(filtered.len(), 0);
+        assert_eq!(frontier.variants.len(), 0);
         // No variants remain, so frequencies should be empty
-        assert!(frequencies.is_empty());
+        assert!(frontier.frequencies.is_empty());
     }
 
     #[test]
@@ -1722,19 +1735,19 @@ mod tests {
         let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, frequencies) = result.unwrap();
+        let frontier = result.unwrap();
 
         // C is dominated, A and B remain
-        assert_eq!(filtered.len(), 2);
-        assert!(filtered.contains_key("variant_a"));
-        assert!(filtered.contains_key("variant_b"));
+        assert_eq!(frontier.variants.len(), 2);
+        assert!(frontier.variants.contains_key("variant_a"));
+        assert!(frontier.variants.contains_key("variant_b"));
 
         // A should be in Pareto set for dp1 and dp2 (freq=2)
-        assert_eq!(frequencies.get("variant_a"), Some(&2));
+        assert_eq!(frontier.frequencies.get("variant_a"), Some(&2));
         // B should be in Pareto set for dp3 (freq=1)
-        assert_eq!(frequencies.get("variant_b"), Some(&1));
+        assert_eq!(frontier.frequencies.get("variant_b"), Some(&1));
         // C should not be in frequencies (filtered out)
-        assert!(!frequencies.contains_key("variant_c"));
+        assert!(!frontier.frequencies.contains_key("variant_c"));
     }
 
     #[test]
@@ -1775,8 +1788,8 @@ mod tests {
         let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
         assert!(result.is_ok());
 
-        let (filtered, _) = result.unwrap();
-        assert_eq!(filtered.len(), 1);
+        let frontier = result.unwrap();
+        assert_eq!(frontier.variants.len(), 1);
 
         // Note: We can't directly assert on log output, but this test documents
         // the behavior and ensures the code path executes without panicking

@@ -224,15 +224,15 @@ pub async fn run_gepa_optimization(
     tracing::info!("Initial evaluation complete");
 
     // Filter initial Pareto frontier using instance-wise dominance
-    let (mut pareto_frontier, mut frequencies) =
+    let mut frontier =
         update_pareto_frontier(pareto_frontier, &val_scores_map, config, &tensorzero_config)?;
 
     // Update scores map
-    val_scores_map.retain(|variant_name, _| pareto_frontier.contains_key(variant_name));
+    val_scores_map.retain(|variant_name, _| frontier.variants.contains_key(variant_name));
 
     tracing::info!(
         "Initial Pareto frontier filtered to {} variants",
-        pareto_frontier.len()
+        frontier.variants.len()
     );
 
     // Main GEPA loop
@@ -272,20 +272,21 @@ pub async fn run_gepa_optimization(
         );
 
         // Step 2: Sample variant to mutate (proportional to frequency)
-        let parent_variant_name = sample_by_frequency(&frequencies)?;
+        let parent_variant_name = sample_by_frequency(&frontier.frequencies)?;
 
-        let parent_variant_config = pareto_frontier.get(&parent_variant_name).ok_or_else(|| {
-            Error::new(ErrorDetails::InternalError {
-                message: format!(
-                    "Sampled variant '{parent_variant_name}' not found in Pareto frontier"
-                ),
-            })
-        })?;
+        let parent_variant_config =
+            frontier.variants.get(&parent_variant_name).ok_or_else(|| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!(
+                        "Sampled variant '{parent_variant_name}' not found in Pareto frontier"
+                    ),
+                })
+            })?;
 
         tracing::info!(
             "Sampled variant '{}' for mutation (frequency: {}/{})",
             parent_variant_name,
-            frequencies.get(&parent_variant_name).unwrap_or(&0),
+            frontier.frequencies.get(&parent_variant_name).unwrap_or(&0),
             val_examples.len()
         );
 
@@ -336,28 +337,26 @@ pub async fn run_gepa_optimization(
 
             // Step 7c: Update Pareto frontier with new child variant
             // First add child to frontier HashMap
-            pareto_frontier.insert(child_variant_name.clone(), child_variant_config);
+            frontier
+                .variants
+                .insert(child_variant_name.clone(), child_variant_config);
 
             // Re-filter Pareto frontier with updated val_scores_map
-            let (new_frontier, new_frequencies) = update_pareto_frontier(
-                pareto_frontier,
+            frontier = update_pareto_frontier(
+                frontier.variants,
                 &val_scores_map,
                 config,
                 &tensorzero_config,
             )?;
 
-            // Update frontier and frequencies
-            pareto_frontier = new_frontier;
-            frequencies = new_frequencies;
-
             // Keep val_scores_map in sync with filtered frontier
-            val_scores_map.retain(|variant_name, _| pareto_frontier.contains_key(variant_name));
+            val_scores_map.retain(|variant_name, _| frontier.variants.contains_key(variant_name));
 
             tracing::info!(
                 "Pareto frontier updated: {} variants (child {} retained: {})",
-                pareto_frontier.len(),
+                frontier.variants.len(),
                 child_variant_name,
-                pareto_frontier.contains_key(&child_variant_name)
+                frontier.variants.contains_key(&child_variant_name)
             );
         } else {
             tracing::debug!("Mutation did not improve over parent, skipping validation");
@@ -366,7 +365,7 @@ pub async fn run_gepa_optimization(
         tracing::info!(
             "GEPA iteration {} complete. Pareto frontier size: {}",
             iteration + 1,
-            pareto_frontier.len()
+            frontier.variants.len()
         );
     }
 
@@ -376,13 +375,15 @@ pub async fn run_gepa_optimization(
         original_variant_names.len()
     );
 
-    pareto_frontier.retain(|name, _| !original_variant_names.contains(name));
+    frontier
+        .variants
+        .retain(|name, _| !original_variant_names.contains(name));
 
     // Sync val_scores_map after filtering
-    val_scores_map.retain(|name, _| pareto_frontier.contains_key(name));
+    val_scores_map.retain(|name, _| frontier.variants.contains_key(name));
 
     // Return error if no GEPA-generated variants survived
-    if pareto_frontier.is_empty() {
+    if frontier.variants.is_empty() {
         return Err(Error::new(ErrorDetails::InternalError {
             message: format!(
                 "GEPA optimization failed to produce any variants that survived Pareto filtering. \
@@ -394,10 +395,10 @@ pub async fn run_gepa_optimization(
 
     tracing::info!(
         "Final Pareto frontier contains {} GEPA-evolved variants (originals filtered out)",
-        pareto_frontier.len()
+        frontier.variants.len()
     );
 
-    Ok(pareto_frontier)
+    Ok(frontier.variants)
 }
 
 /// Process a single GEPA iteration: evaluate parent, analyze, mutate, check improvement
