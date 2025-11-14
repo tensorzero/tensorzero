@@ -32,7 +32,7 @@ async fn create_test_inference(_client: &Client) -> Uuid {
     let response_json: serde_json::Value = response.json().await.unwrap();
     let inference_id_str = response_json["inference_id"]
         .as_str()
-        .unwrap_or_else(|| panic!("inference_id not found in response: {response_json:?}"));
+        .unwrap();
     Uuid::parse_str(inference_id_str).unwrap()
 }
 
