@@ -6,6 +6,8 @@
 //! This crate was extracted from `tensorzero-core` to avoid circular dependencies when
 //! optimizers need to depend on the `evaluations` crate.
 
+#![recursion_limit = "256"]
+
 use async_trait::async_trait;
 use std::sync::Arc;
 use tensorzero_core::{

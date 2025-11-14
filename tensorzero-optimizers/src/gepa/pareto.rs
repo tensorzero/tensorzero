@@ -15,8 +15,6 @@ use tensorzero_core::{
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
-use super::evaluate::EvaluationResults;
-
 /// Updates the Pareto frontier based on instance-wise Pareto dominance
 ///
 /// Filters candidates to only include Pareto-optimal variants based on validation scores.
@@ -441,80 +439,59 @@ pub fn find_non_dominated_variants(
     non_dominated
 }
 
-/// Check if mutation improves over original variant (global Pareto dominance)
-/// Returns false if either variant is missing from scores (evaluation failed)
+/// Check if child improves over parent variant (global Pareto dominance)
 ///
-/// Uses the evaluation config to determine objective directions (optimize: max/min)
-#[expect(dead_code)]
+/// Uses the evaluation config to determine objective directions (optimize: max/min).
+/// Returns true if child Pareto-dominates parent (better/equal on all, strictly better on ≥1).
 pub fn is_improvement(
-    scores: &HashMap<String, Option<EvaluationResults>>,
-    original_variant: &str,
-    mutation_variant: &str,
-    config: &Config,
-    evaluation_name: &str,
-) -> Result<bool, Error> {
-    // Get scores for both variants (return false if either is None)
-    let original_scores = match scores.get(original_variant) {
-        Some(Some(scores)) => scores,
-        _ => return Ok(false), // Original variant evaluation failed
-    };
-
-    let mutation_scores = match scores.get(mutation_variant) {
-        Some(Some(scores)) => scores,
-        _ => return Ok(false), // Mutation variant evaluation failed
-    };
-
-    // Get the evaluation config to determine metric optimization directions
-    let evaluation_config = config.evaluations.get(evaluation_name).ok_or_else(|| {
-        Error::new(ErrorDetails::Config {
-            message: format!("Evaluation '{evaluation_name}' not found in config"),
-        })
-    })?;
-
-    // Get evaluator names from the evaluation config
-    let evaluators = match &**evaluation_config {
+    parent_stats: &HashMap<String, evaluations::EvaluatorStats>,
+    child_stats: &HashMap<String, evaluations::EvaluatorStats>,
+    evaluation_config: &EvaluationConfig,
+) -> bool {
+    // Get evaluators from the evaluation config
+    let evaluators = match evaluation_config {
         EvaluationConfig::Inference(inference_config) => &inference_config.evaluators,
     };
 
-    // Track whether mutation is better, worse, or equal on each metric
+    // Track whether child is better, worse, or equal on each metric
     let mut strictly_better_on_at_least_one = false;
     let mut worse_on_any = false;
 
     // Compare on each metric
     for (evaluator_name, evaluator_config) in evaluators {
         // Get metric stats for both variants
-        let original_stats = original_scores.evaluation_stats.get(evaluator_name);
-        let mutation_stats = mutation_scores.evaluation_stats.get(evaluator_name);
+        let parent_stat = parent_stats.get(evaluator_name);
+        let child_stat = child_stats.get(evaluator_name);
 
         // Skip if either variant doesn't have stats for this evaluator
-        let (original_mean, mutation_mean) = match (original_stats, mutation_stats) {
-            (Some(orig), Some(mut_stat)) => (orig.mean, mut_stat.mean),
+        let (parent_mean, child_mean) = match (parent_stat, child_stat) {
+            (Some(parent), Some(child)) => (parent.mean, child.mean),
             _ => continue, // Skip this metric if either variant failed
         };
 
-        // Determine if mutation is better based on optimization direction
-        let mutation_is_better = match evaluator_config.optimize() {
-            MetricConfigOptimize::Max => mutation_mean > original_mean,
-            MetricConfigOptimize::Min => mutation_mean < original_mean,
+        // Determine if child is better based on optimization direction
+        let child_is_better = match evaluator_config.optimize() {
+            MetricConfigOptimize::Max => child_mean > parent_mean,
+            MetricConfigOptimize::Min => child_mean < parent_mean,
         };
 
-        let mutation_is_worse = match evaluator_config.optimize() {
-            MetricConfigOptimize::Max => mutation_mean < original_mean,
-            MetricConfigOptimize::Min => mutation_mean > original_mean,
+        let child_is_worse = match evaluator_config.optimize() {
+            MetricConfigOptimize::Max => child_mean < parent_mean,
+            MetricConfigOptimize::Min => child_mean > parent_mean,
         };
 
-        if mutation_is_better {
+        if child_is_better {
             strictly_better_on_at_least_one = true;
         }
 
-        if mutation_is_worse {
+        if child_is_worse {
             worse_on_any = true;
             break; // No need to check further if worse on any metric
         }
     }
 
     // Pareto dominance: better or equal on all metrics, strictly better on at least one
-    Ok(strictly_better_on_at_least_one && !worse_on_any)
+    strictly_better_on_at_least_one && !worse_on_any
 }
 
 #[cfg(test)]
@@ -617,6 +594,37 @@ mod tests {
                 )
             })
             .collect()
+    }
+
+    /// Create a HashMap of EvaluatorStats for testing is_improvement
+    ///
+    /// # Arguments
+    /// * `stats` - Slice of (evaluator_name, mean, stderr, count) tuples
+    fn create_evaluator_stats(
+        stats: &[(&str, f32, f32, usize)],
+    ) -> HashMap<String, evaluations::EvaluatorStats> {
+        stats
+            .iter()
+            .map(|(name, mean, stderr, count)| {
+                (
+                    name.to_string(),
+                    evaluations::EvaluatorStats {
+                        mean: *mean,
+                        stderr: *stderr,
+                        count: *count,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    /// Create an EvaluationConfig for testing is_improvement
+    fn create_evaluation_config(evaluators: &[(&str, &str)]) -> EvaluationConfig {
+        let evaluator_configs = create_test_evaluators(evaluators);
+        EvaluationConfig::Inference(InferenceEvaluationConfig {
+            evaluators: evaluator_configs,
+            function_name: "test_function".to_string(),
+        })
     }
 
     // ============================================================================
@@ -852,6 +860,116 @@ mod tests {
         assert!(result.contains(&"variant_a".to_string()));
         assert!(result.contains(&"variant_b".to_string()));
         assert!(!result.contains(&"variant_c".to_string()));
+    }
+
+    // ============================================================================
+    // Unit Tests for is_improvement
+    // ============================================================================
+
+    #[test]
+    fn test_is_improvement_basic() {
+        // Child better on single metric (max)
+        let parent_stats = create_evaluator_stats(&[("accuracy", 0.7, 0.1, 10)]);
+        let child_stats = create_evaluator_stats(&[("accuracy", 0.9, 0.1, 10)]);
+        let eval_config = create_evaluation_config(&[("accuracy", "max")]);
+
+        assert!(is_improvement(&parent_stats, &child_stats, &eval_config)); // Child is better
+    }
+
+    #[test]
+    fn test_is_improvement_worse() {
+        // Child worse on single metric (max)
+        let parent_stats = create_evaluator_stats(&[("accuracy", 0.9, 0.1, 10)]);
+        let child_stats = create_evaluator_stats(&[("accuracy", 0.7, 0.1, 10)]);
+        let eval_config = create_evaluation_config(&[("accuracy", "max")]);
+
+        assert!(!is_improvement(&parent_stats, &child_stats, &eval_config)); // Child is worse
+    }
+
+    #[test]
+    fn test_is_improvement_equal() {
+        // Child equal on all metrics - no strict improvement
+        let parent_stats = create_evaluator_stats(&[("accuracy", 0.8, 0.1, 10)]);
+        let child_stats = create_evaluator_stats(&[("accuracy", 0.8, 0.1, 10)]);
+        let eval_config = create_evaluation_config(&[("accuracy", "max")]);
+
+        assert!(!is_improvement(&parent_stats, &child_stats, &eval_config)); // Equal is not improvement
+    }
+
+    #[test]
+    fn test_is_improvement_pareto_dominant() {
+        // Child better on one metric, equal on another - should be Pareto improvement
+        let parent_stats =
+            create_evaluator_stats(&[("accuracy", 0.8, 0.1, 10), ("f1", 0.7, 0.1, 10)]);
+        let child_stats =
+            create_evaluator_stats(&[("accuracy", 0.9, 0.1, 10), ("f1", 0.7, 0.1, 10)]);
+        let eval_config = create_evaluation_config(&[("accuracy", "max"), ("f1", "max")]);
+
+        assert!(is_improvement(&parent_stats, &child_stats, &eval_config)); // Better on one, equal on other = improvement
+    }
+
+    #[test]
+    fn test_is_improvement_not_pareto_dominant() {
+        // Child better on one metric, worse on another - not Pareto dominant
+        let parent_stats =
+            create_evaluator_stats(&[("accuracy", 0.9, 0.1, 10), ("f1", 0.7, 0.1, 10)]);
+        let child_stats =
+            create_evaluator_stats(&[("accuracy", 0.8, 0.1, 10), ("f1", 0.9, 0.1, 10)]);
+        let eval_config = create_evaluation_config(&[("accuracy", "max"), ("f1", "max")]);
+
+        assert!(!is_improvement(&parent_stats, &child_stats, &eval_config)); // Tradeoff - not an improvement
+    }
+
+    #[test]
+    fn test_is_improvement_mixed_directions() {
+        // Test with both max and min optimization directions
+        // Child: higher accuracy (max, good), lower latency (min, good)
+        let parent_stats =
+            create_evaluator_stats(&[("accuracy", 0.7, 0.1, 10), ("latency", 0.5, 0.1, 10)]);
+        let child_stats =
+            create_evaluator_stats(&[("accuracy", 0.9, 0.1, 10), ("latency", 0.3, 0.1, 10)]);
+        let eval_config = create_evaluation_config(&[("accuracy", "max"), ("latency", "min")]);
+
+        assert!(is_improvement(&parent_stats, &child_stats, &eval_config)); // Better on both metrics
+    }
+
+    #[test]
+    fn test_is_improvement_missing_stats() {
+        // Child missing stats for one evaluator - should skip that metric
+        let parent_stats = create_evaluator_stats(&[("accuracy", 0.8, 0.1, 10)]);
+        let child_stats = create_evaluator_stats(&[("accuracy", 0.9, 0.1, 10)]);
+        let eval_config = create_evaluation_config(&[("accuracy", "max"), ("f1", "max")]);
+
+        assert!(is_improvement(&parent_stats, &child_stats, &eval_config)); // Better on accuracy, f1 skipped (missing)
+    }
+
+    #[test]
+    fn test_is_improvement_multiple_evaluators() {
+        // Child improves on 2/3 metrics, equal on 1
+        let parent_stats = create_evaluator_stats(&[
+            ("accuracy", 0.7, 0.1, 10),
+            ("f1", 0.6, 0.1, 10),
+            ("precision", 0.8, 0.1, 10),
+        ]);
+        let child_stats = create_evaluator_stats(&[
+            ("accuracy", 0.9, 0.1, 10),
+            ("f1", 0.8, 0.1, 10),
+            ("precision", 0.8, 0.1, 10),
+        ]);
+        let eval_config =
+            create_evaluation_config(&[("accuracy", "max"), ("f1", "max"), ("precision", "max")]);
+
+        assert!(is_improvement(&parent_stats, &child_stats, &eval_config)); // Better on 2, equal on 1 = improvement
+    }
+
+    #[test]
+    fn test_is_improvement_min_optimization() {
+        // Test with minimize optimization - child has lower value (better)
+        let parent_stats = create_evaluator_stats(&[("latency", 0.9, 0.1, 10)]);
+        let child_stats = create_evaluator_stats(&[("latency", 0.3, 0.1, 10)]);
+        let eval_config = create_evaluation_config(&[("latency", "min")]);
+
+        assert!(is_improvement(&parent_stats, &child_stats, &eval_config)); // Lower latency = better for min
     }
 
     // ============================================================================

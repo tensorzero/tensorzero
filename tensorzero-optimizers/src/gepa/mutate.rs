@@ -295,7 +295,6 @@ pub async fn mutate_templates(
 /// Create a new variant with mutated templates
 ///
 /// Generates a new variant name and clones the parent variant config with updated templates.
-#[cfg_attr(not(test), expect(dead_code))]
 pub fn create_mutated_variant(
     parent_config: &UninitializedChatCompletionConfig,
     mutated_templates: MutateOutput,

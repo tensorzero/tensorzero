@@ -10,7 +10,7 @@ use futures::future::join_all;
 use tokio::sync::Semaphore;
 
 use tensorzero_core::{
-    client::{Client, ClientBuilder, ClientBuilderMode},
+    client::{ClientBuilder, ClientBuilderMode},
     config::Config,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     endpoints::inference::InferenceCredentials,
@@ -31,7 +31,6 @@ pub use super::evaluate::{
 };
 #[expect(unused_imports)]
 pub use super::mutate::{create_mutated_variant, mutate_templates, MutateOutput};
-#[expect(unused_imports)]
 pub use super::pareto::{is_improvement, update_pareto_frontier};
 pub use super::sample::{random_sample, sample_by_frequency};
 
@@ -220,6 +219,18 @@ pub async fn run_gepa_optimization(
     let (pareto_frontier, mut frequencies) =
         update_pareto_frontier(pareto_frontier, &val_scores_map, config, &tensorzero_config)?;
 
+    // Update scores map
+    val_scores_map.retain(|variant_name, _| pareto_frontier.contains_key(variant_name));
+
+    // Assert that frequencies and val_scores_map are in sync
+    debug_assert_eq!(
+        frequencies.keys().collect::<std::collections::HashSet<_>>(),
+        val_scores_map
+            .keys()
+            .collect::<std::collections::HashSet<_>>(),
+        "frequencies and val_scores_map must have the same keys"
+    );
+
     tracing::info!(
         "Initial Pareto frontier filtered to {} variants",
         pareto_frontier.len()
@@ -238,20 +249,39 @@ pub async fn run_gepa_optimization(
             train_examples.len()
         );
 
-        // Step 2: Evaluate parent on mini-batch
-        // (This step is implicit - parent evaluation happens during mutation analysis in Step 4)
+        // Create batch dataset for this iteration
+        let batch_dataset_name = format!(
+            "{}_gepa_batch_{}_{}",
+            config.evaluation_name,
+            iteration,
+            uuid::Uuid::now_v7()
+        );
 
-        // Step 3: Sample variant to mutate (proportional to frequency)
+        let _batch_datapoint_ids = create_evaluation_dataset(
+            &tensorzero_config,
+            client,
+            clickhouse_connection_info,
+            &batch_examples,
+            &batch_dataset_name,
+        )
+        .await?;
+
+        tracing::debug!(
+            "Created batch dataset '{}' with {} examples",
+            batch_dataset_name,
+            batch_examples.len()
+        );
+
+        // Step 2: Sample variant to mutate (proportional to frequency)
         let parent_variant_name = sample_by_frequency(&frequencies)?;
 
-        let _parent_variant_config =
-            pareto_frontier.get(&parent_variant_name).ok_or_else(|| {
-                Error::new(ErrorDetails::InternalError {
-                    message: format!(
-                        "Sampled variant '{parent_variant_name}' not found in Pareto frontier"
-                    ),
-                })
-            })?;
+        let parent_variant_config = pareto_frontier.get(&parent_variant_name).ok_or_else(|| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!(
+                    "Sampled variant '{parent_variant_name}' not found in Pareto frontier"
+                ),
+            })
+        })?;
 
         tracing::info!(
             "Sampled variant '{}' for mutation (frequency: {}/{})",
@@ -260,10 +290,34 @@ pub async fn run_gepa_optimization(
             val_examples.len()
         );
 
-        // TODO: 4. Generate mutation using mutate() function (which does analysis internally)
-        // TODO: 5. Evaluate mutation on batch
-        // TODO: 6. If improvement, evaluate on validation set and add to val_scores
-        // TODO: 7. Update Pareto frontier using instance-wise dominance on val_scores
+        // Steps 3-6: Process iteration (evaluate, analyze, mutate, check improvement)
+        let mutation_result = process_gepa_iteration(
+            gateway_client.clone(),
+            clickhouse_connection_info.clone(),
+            Arc::clone(&tensorzero_config),
+            Arc::clone(&evaluation_config),
+            config,
+            function_config,
+            &parent_variant_name,
+            parent_variant_config,
+            &batch_dataset_name,
+            iteration,
+        )
+        .await?;
+
+        // If mutation improved over parent, evaluate on validation and update Pareto frontier
+        if let Some((_child_variant_name, _child_variant_config)) = mutation_result {
+            tracing::info!(
+                "Mutation '{}' improved over parent, evaluating on validation set",
+                _child_variant_name
+            );
+
+            // TODO: Step 7a: Evaluate child on validation set
+            // TODO: Step 7b: Add to val_scores_map
+            // TODO: Step 7c: Update Pareto frontier
+        } else {
+            tracing::debug!("Mutation did not improve over parent, skipping validation");
+        }
 
         tracing::info!(
             "GEPA iteration {} complete. Pareto frontier size: {}",
@@ -279,6 +333,128 @@ pub async fn run_gepa_optimization(
     );
 
     Ok(pareto_frontier)
+}
+
+/// Process a single GEPA iteration: evaluate parent, analyze, mutate, check improvement
+///
+/// Returns Some((variant_name, variant_config)) if mutation improved over parent,
+/// None otherwise (mutation failed, evaluation failed, or no improvement)
+#[expect(clippy::too_many_arguments)]
+async fn process_gepa_iteration(
+    gateway_client: tensorzero_core::client::Client,
+    clickhouse_connection_info: ClickHouseConnectionInfo,
+    tensorzero_config: Arc<Config>,
+    evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
+    gepa_config: &GEPAConfig,
+    function_config: &FunctionConfig,
+    parent_variant_name: &str,
+    parent_variant_config: &UninitializedChatCompletionConfig,
+    batch_dataset_name: &str,
+    iteration: u32,
+) -> Result<Option<(String, UninitializedChatCompletionConfig)>, Error> {
+    // Step 3: Evaluate parent variant on mini-batch
+    tracing::debug!("Evaluating parent variant on batch dataset");
+
+    let parent_batch_results = evaluate_variant(EvaluateVariantParams {
+        gateway_client: gateway_client.clone(),
+        clickhouse_connection_info: clickhouse_connection_info.clone(),
+        tensorzero_config: Arc::clone(&tensorzero_config),
+        evaluation_config: Arc::clone(&evaluation_config),
+        evaluation_name: gepa_config.evaluation_name.clone(),
+        variant_name: parent_variant_name.to_string(),
+        variant_config: parent_variant_config.clone(),
+        dataset_name: batch_dataset_name.to_string(),
+        concurrency: gepa_config.max_concurrency as usize,
+    })
+    .await?;
+
+    tracing::debug!(
+        "Parent evaluation complete: {} datapoints evaluated",
+        parent_batch_results.evaluation_infos.len()
+    );
+
+    // Step 4: Analyze parent inferences to generate improvement feedback
+    tracing::debug!("Analyzing parent inferences");
+
+    let analyses = analyze_inferences(
+        &gateway_client,
+        &parent_batch_results.evaluation_infos,
+        function_config,
+        parent_variant_config,
+        gepa_config,
+    )
+    .await?;
+
+    tracing::info!(
+        "Analysis complete: {}/{} inferences analyzed successfully",
+        analyses.len(),
+        parent_batch_results.evaluation_infos.len()
+    );
+
+    // Step 5: Generate mutation from analyses using mutate_templates
+    tracing::debug!("Generating mutation from analyses");
+
+    let mutate_result = mutate_templates(
+        &gateway_client,
+        &analyses,
+        function_config,
+        parent_variant_config,
+        gepa_config,
+    )
+    .await;
+
+    let mutation_output = match mutate_result {
+        Ok(output) => output,
+        Err(e) => {
+            tracing::warn!("Mutation generation failed: {}", e);
+            return Ok(None);
+        }
+    };
+
+    // Step 6: Create mutated variant config
+    let variant_prefix = gepa_config.variant_prefix.as_deref().unwrap_or("gepa");
+    let (child_variant_name, child_variant_config) = create_mutated_variant(
+        parent_variant_config,
+        mutation_output,
+        iteration as usize,
+        variant_prefix,
+        parent_variant_name,
+    );
+
+    tracing::info!("Created mutation variant: {}", child_variant_name);
+
+    // Step 7: Evaluate mutation on batch
+    tracing::debug!("Evaluating mutation on batch dataset");
+
+    let child_batch_results = evaluate_variant(EvaluateVariantParams {
+        gateway_client: gateway_client.clone(),
+        clickhouse_connection_info,
+        tensorzero_config,
+        evaluation_config: evaluation_config.clone(),
+        evaluation_name: gepa_config.evaluation_name.clone(),
+        variant_name: child_variant_name.clone(),
+        variant_config: child_variant_config.clone(),
+        dataset_name: batch_dataset_name.to_string(),
+        concurrency: gepa_config.max_concurrency as usize,
+    })
+    .await?;
+
+    tracing::debug!(
+        "Child evaluation complete: {} datapoints evaluated",
+        child_batch_results.evaluation_infos.len()
+    );
+
+    if is_improvement(
+        &parent_batch_results.evaluation_stats,
+        &child_batch_results.evaluation_stats,
+        &evaluation_config,
+    ) {
+        tracing::info!("Mutation shows Pareto improvement over parent on batch");
+        Ok(Some((child_variant_name, child_variant_config)))
+    } else {
+        tracing::debug!("Mutation did not improve over parent on batch");
+        Ok(None)
+    }
 }
 
 /// Initializes the Pareto frontier with baseline variants or provided initial variants
@@ -335,40 +511,6 @@ fn initialize_pareto_frontier(
     }
 
     Ok(frontier)
-}
-
-/// Generate mutation of a variant using GEPA analysis and mutation
-/// Returns None if mutation generation fails
-///
-/// Process:
-/// 1. Run inference on batch_examples using candidate variant (with internal_dynamic_variant_config)
-/// 2. Analyze each inference using tensorzero::optimization::gepa::analyze built-in function
-///    (with internal_dynamic_variant_config for the analysis model)
-/// 3. Generate mutation using tensorzero::optimization::gepa::mutate built-in function
-///    (with internal_dynamic_variant_config for the mutation model)
-/// 4. Return new variant config with updated templates
-#[expect(dead_code)]
-#[expect(clippy::too_many_arguments)]
-async fn mutate(
-    _gateway_client: &Client,
-    _credentials: &InferenceCredentials,
-    _function_name: &str,
-    _variant_config: &UninitializedChatCompletionConfig,
-    _batch_examples: &[RenderedSample],
-    _analysis_model: &str,
-    _mutation_model: &str,
-    _job_id: &uuid::Uuid,
-    _max_concurrency: u32,
-) -> Option<UninitializedChatCompletionConfig> {
-    // TODO: Implement mutation generation
-    // 1. Run inference on batch_examples using variant_config
-    // 2. For each inference result, call tensorzero::optimization::gepa::analyze
-    // 3. Aggregate analysis results
-    // 4. Call tensorzero::optimization::gepa::mutate with analysis and variant config
-    // 5. Parse mutation response and create new UninitializedChatCompletionConfig
-    // 6. Return new config (or None if mutation failed)
-
-    None
 }
 
 /// Convert candidate variants to output format for the job handle
