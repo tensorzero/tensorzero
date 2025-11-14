@@ -67,7 +67,7 @@ use tensorzero_rust::{
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
     Datapoint, DynamicToolParams, FeedbackParams, FunctionTool, InferenceOutput, InferenceParams,
     InferenceResponse, InferenceStream, LaunchOptimizationParams, ListDatapointsRequest,
-    ListInferencesParams, OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
+    ListInferencesParams, OptimizationJobHandle, StoredInference, TensorZeroError,
     WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
@@ -99,7 +99,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
     m.add_class::<LocalHttpGateway>()?;
-    m.add_class::<RenderedSample>()?;
     m.add_class::<EvaluationJobHandler>()?;
     m.add_class::<AsyncEvaluationJobHandler>()?;
     m.add_class::<UninitializedOpenAIRFTConfig>()?;
@@ -1601,7 +1600,7 @@ impl TensorZeroGateway {
         this: PyRef<'_, Self>,
         stored_samples: Vec<Bound<'_, PyAny>>,
         variants: HashMap<String, String>,
-    ) -> PyResult<Vec<RenderedSample>> {
+    ) -> PyResult<Py<PyList>> {
         let client = this.as_super().client.clone();
         let config = client.config().ok_or_else(|| {
             PyValueError::new_err(
@@ -1618,7 +1617,23 @@ impl TensorZeroGateway {
             .map(|x| deserialize_from_stored_sample(this.py(), x, config))
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_samples, variants);
-        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+        let wires =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+
+        // Convert to Python dataclasses
+        let py_objects: Vec<_> = wires
+            .iter()
+            .map(|sample| {
+                convert_response_to_python_dataclass(
+                    this.py(),
+                    sample,
+                    "tensorzero.generated_types",
+                    "RenderedSample",
+                )
+            })
+            .collect::<PyResult<_>>()?;
+
+        Ok(PyList::new(this.py(), py_objects)?.unbind())
     }
 
     /// Launch an optimization job.
@@ -2851,7 +2866,22 @@ impl AsyncTensorZeroGateway {
                 .experimental_render_samples(stored_samples, variants)
                 .await;
             Python::attach(|py| match res {
-                Ok(samples) => Ok(PyList::new(py, samples)?.unbind()),
+                Ok(samples) => {
+                    // Convert to Python dataclasses
+                    let py_objects: Vec<_> = samples
+                        .iter()
+                        .map(|sample| {
+                            convert_response_to_python_dataclass(
+                                py,
+                                sample,
+                                "tensorzero.generated_types",
+                                "RenderedSample",
+                            )
+                        })
+                        .collect::<PyResult<_>>()?;
+
+                    Ok(PyList::new(py, py_objects)?.unbind())
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })

@@ -409,11 +409,7 @@ pub fn deserialize_from_rendered_sample<'a>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,
 ) -> PyResult<RenderedSample> {
-    if obj.is_instance_of::<RenderedSample>() {
-        Ok(obj.extract()?)
-    } else {
-        deserialize_from_pyobj(py, obj)
-    }
+    deserialize_from_pyobj(py, obj)
 }
 
 pub fn deserialize_optimization_config(

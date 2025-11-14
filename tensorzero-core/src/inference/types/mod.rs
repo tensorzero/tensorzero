@@ -1010,15 +1010,21 @@ pub enum StoredContentBlock {
 
 /// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
 /// As a result, it can implement both `Serialize` and `Deserialize`
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[export_schema]
 pub enum ResolvedContentBlock {
+    #[schemars(title = "ResolvedContentBlockText")]
     Text(Text),
+    #[schemars(title = "ResolvedContentBlockToolCall")]
     ToolCall(ToolCall),
+    #[schemars(title = "ResolvedContentBlockToolResult")]
     ToolResult(ToolResult),
+    #[schemars(title = "ResolvedContentBlockFile")]
     File(Box<ObjectStorageFile>),
+    #[schemars(title = "ResolvedContentBlockThought")]
     Thought(Thought),
+    #[schemars(title = "ResolvedContentBlockUnknown")]
     Unknown {
         data: Value,
         model_provider_name: Option<String>,
@@ -1312,10 +1318,10 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
 }
 
 /// For use in rendering for optimization purposes
-#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
 #[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[export_schema]
 pub struct ModelInput {
     pub system: Option<String>,
     pub messages: Vec<ResolvedRequestMessage>,
@@ -1325,14 +1331,6 @@ impl std::fmt::Display for ModelInput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl ModelInput {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
     }
 }
 

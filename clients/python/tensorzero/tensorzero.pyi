@@ -20,7 +20,6 @@ from typing_extensions import deprecated
 # PyO3
 from tensorzero import (
     ChatDatapointInsert,
-    ChatInferenceOutput,
     ContentBlock,
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
     DynamicEvaluationRunResponse,  # DEPRECATED
@@ -32,7 +31,6 @@ from tensorzero import (
     WorkflowEvaluationRunEpisodeResponse,
     WorkflowEvaluationRunResponse,
 )
-from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 
 # TODO: clean these up.
 from tensorzero.types import (
@@ -56,6 +54,7 @@ from .generated_types import (
     JsonInferenceOutput,
     ListDatapointsRequest,
     ListInferencesRequest,
+    RenderedSample,
     StoredInference,
     UpdateDatapointMetadataRequest,
     UpdateDatapointRequest,
@@ -159,28 +158,6 @@ class AsyncEvaluationJobHandler:
         ...
 
     def __repr__(self) -> str: ...
-
-@final
-class RenderedSample:
-    function_name: str
-    input: ModelInput
-    stored_input: ResolvedInput
-    output: Optional[ChatInferenceOutput]
-    stored_output: Optional[Union[ChatInferenceOutput, JsonInferenceOutput]]
-    episode_id: Optional[UUID]
-    inference_id: Optional[UUID]
-    tool_params: Optional[ToolCallConfigDatabaseInsert]
-    output_schema: Optional[Dict[str, Any]]
-    dispreferred_outputs: List[ChatInferenceOutput] = []
-    tags: Dict[str, str]
-    @property
-    def allowed_tools(self) -> Optional[List[str]]: ...
-    @property
-    def additional_tools(self) -> Optional[List[Any]]: ...
-    @property
-    def parallel_tool_calls(self) -> Optional[bool]: ...
-    @property
-    def provider_tools(self) -> Optional[List[Any]]: ...
 
 @final
 class OptimizationJobHandle:
