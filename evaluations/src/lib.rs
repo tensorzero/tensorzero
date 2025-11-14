@@ -86,6 +86,46 @@ pub struct Args {
 
     #[arg(long, default_value = "on")]
     pub inference_cache: CacheEnabledMode,
+
+    /// Minimum number of inferences to run before checking stopping conditions (default: 20).
+    /// Only applies when precision_limits is set.
+    #[arg(long)]
+    pub min_inferences: Option<usize>,
+
+    /// Maximum number of datapoints to evaluate from the dataset.
+    #[arg(long)]
+    pub max_inferences: Option<usize>,
+
+    /// Per-evaluator precision limits for adaptive stopping.
+    /// Format: evaluator_name=threshold, comma-separated for multiple evaluators.
+    /// Example: --precision-limits "exact_match=0.13,llm_judge=0.16"
+    /// Evaluator stops when CI half-width <= threshold.
+    #[arg(long = "precision-limits", value_parser = parse_precision_limits)]
+    pub precision_limits: Option<Vec<(String, f32)>>,
+}
+
+/// Parse precision limits argument in format "evaluator1=threshold1,evaluator2=threshold2,..."
+fn parse_precision_limits(s: &str) -> Result<Vec<(String, f32)>, String> {
+    s.split(',')
+        .map(|pair| {
+            let parts: Vec<&str> = pair.trim().splitn(2, '=').collect();
+            if parts.len() != 2 {
+                return Err(format!(
+                    "Invalid precision limit format: '{pair}'. Expected format: evaluator_name=threshold"
+                ));
+            }
+            let evaluator_name = parts[0].to_string();
+            let threshold = parts[1]
+                .parse::<f32>()
+                .map_err(|e| format!("Invalid threshold value '{}': {e}", parts[1]))?;
+            if threshold < 0.0 {
+                return Err(format!(
+                    "Precision limit threshold must be non-negative, got {threshold}"
+                ));
+            }
+            Ok((evaluator_name, threshold))
+        })
+        .collect()
 }
 
 pub struct Clients {
@@ -236,8 +276,19 @@ pub async fn run_evaluation(
         concurrency: args.concurrency,
     };
 
+    // Convert Option<Vec<(String, f32)>> to Option<HashMap<String, f32>> for precision_limits
+    let precision_limits = args
+        .precision_limits
+        .map(|limits| limits.into_iter().collect());
+
     let output_format = args.format.clone();
-    let result = run_evaluation_core_streaming(core_args, None, None, None).await?; // No adaptive stopping
+    let result = run_evaluation_core_streaming(
+        core_args,
+        args.min_inferences,
+        args.max_inferences,
+        precision_limits,
+    )
+    .await?;
 
     let mut receiver = result.receiver;
     let dataset_len = result.run_info.num_datapoints;

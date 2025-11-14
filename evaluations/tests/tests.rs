@@ -88,6 +88,9 @@ async fn run_evaluations_json() {
         format: OutputFormat::Jsonl,
         // This test relies on the cache (see below), so we need to enable it
         inference_cache: CacheEnabledMode::On,
+        min_inferences: None,
+        max_inferences: None,
+        precision_limits: None,
     };
 
     let mut output = Vec::new();
@@ -362,6 +365,9 @@ async fn run_exact_match_evaluation_chat() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
+        min_inferences: None,
+        max_inferences: None,
+        precision_limits: None,
     };
 
     let mut output = Vec::new();
@@ -486,6 +492,9 @@ async fn run_llm_judge_evaluation_chat() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::On,
+        min_inferences: None,
+        max_inferences: None,
+        precision_limits: None,
     };
 
     let mut output = Vec::new();
@@ -707,6 +716,9 @@ async fn run_image_evaluation() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::WriteOnly,
+        min_inferences: None,
+        max_inferences: None,
+        precision_limits: None,
     };
 
     let mut output = Vec::new();
@@ -922,6 +934,9 @@ async fn check_invalid_image_evaluation() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
+        min_inferences: None,
+        max_inferences: None,
+        precision_limits: None,
     };
 
     let mut output = Vec::new();
@@ -1023,6 +1038,9 @@ async fn run_llm_judge_evaluation_chat_pretty() {
         concurrency: 10,
         format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::Off,
+        min_inferences: None,
+        max_inferences: None,
+        precision_limits: None,
     };
 
     let mut output = Vec::new();
@@ -1066,6 +1084,9 @@ async fn run_llm_judge_evaluation_json_pretty() {
         concurrency: 10,
         format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::Off,
+        min_inferences: None,
+        max_inferences: None,
+        precision_limits: None,
     };
 
     let mut output = Vec::new();
@@ -1225,6 +1246,9 @@ async fn run_evaluations_errors() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
+        min_inferences: None,
+        max_inferences: None,
+        precision_limits: None,
     };
 
     let mut output = Vec::new();
@@ -1642,6 +1666,9 @@ async fn run_evaluations_best_of_3() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
+        min_inferences: None,
+        max_inferences: None,
+        precision_limits: None,
     };
 
     let mut output = Vec::new();
@@ -1830,6 +1857,9 @@ async fn run_evaluations_mixture_of_3() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
+        min_inferences: None,
+        max_inferences: None,
+        precision_limits: None,
     };
 
     let mut output = Vec::new();
@@ -2021,6 +2051,9 @@ async fn run_evaluations_dicl() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
+        min_inferences: None,
+        max_inferences: None,
+        precision_limits: None,
     };
 
     let mut output = Vec::new();
@@ -2493,4 +2526,64 @@ async fn test_precision_limits_parameter() {
         topic_ci.unwrap(),
         precision_limits["topic_starts_with_f"]
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_cli_args_with_adaptive_stopping() {
+    init_tracing_for_tests();
+    let dataset_name = format!("good-haiku-data-cli-{}", Uuid::now_v7());
+    write_chat_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
+    )
+    .await;
+
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let evaluation_run_id = Uuid::now_v7();
+
+    // Test CLI Args with values for the adaptive stopping parameters: min_inferences, max_inference, and precision_limits
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        evaluation_name: "haiku_with_outputs".to_string(),
+        dataset_name: dataset_name.clone(),
+        variant_name: "gpt_4o_mini".to_string(),
+        concurrency: 5,
+        format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::Off,
+        min_inferences: Some(5),
+        max_inferences: Some(20),
+        precision_limits: Some(vec![("exact_match".to_string(), 0.2)]),
+    };
+
+    let mut output = Vec::new();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
+
+    // Parse output and verify constraints were respected
+    let output_str = String::from_utf8(output).unwrap();
+    let lines: Vec<&str> = output_str.lines().collect();
+
+    // First line should be RunInfo
+    let run_info: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    let num_datapoints = run_info["num_datapoints"].as_u64().unwrap() as usize;
+
+    // Should process at least min_inferences (5) but not more than max_inferences (20)
+    assert!(
+        num_datapoints >= 5,
+        "Should process at least min_inferences (5), got {num_datapoints}"
+    );
+    assert!(
+        num_datapoints <= 20,
+        "Should not exceed max_inferences (20), got {num_datapoints}"
+    );
+
+    println!("CLI adaptive stopping test: processed {num_datapoints} datapoints (min=5, max=20)");
 }
