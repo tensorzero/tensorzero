@@ -123,9 +123,9 @@ impl UninitializedEmbeddingModelConfig {
         let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
             (Some(timeout_ms), None) => Some(timeout_ms),
             (None, Some(old_timeout)) => {
-                tracing::warn!(
-                    "Deprecation Warning: `timeouts` is deprecated for embedding models. \
-                    Please use `timeout_ms` instead."
+                crate::utils::deprecation_warning(
+                    "`timeouts` is deprecated for embedding models. \
+                    Please use `timeout_ms` instead.",
                 );
                 Some(old_timeout)
             }
@@ -658,9 +658,9 @@ impl UninitializedEmbeddingProviderConfig {
         let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
             (Some(timeout_ms), None) => Some(timeout_ms),
             (None, Some(old_timeout)) => {
-                tracing::warn!(
-                    "Deprecation Warning: `timeouts` is deprecated for embedding providers. \
-                    Please use `timeout_ms` instead."
+                crate::utils::deprecation_warning(
+                    "`timeouts` is deprecated for embedding providers. \
+                    Please use `timeout_ms` instead.",
                 );
                 Some(old_timeout)
             }

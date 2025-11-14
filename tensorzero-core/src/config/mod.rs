@@ -927,7 +927,7 @@ impl Config {
                     })
                 })?.to_owned())
             } else if let Some(single_file) = span_map.get_single_file() {
-                tracing::warn!("Deprecation warning: `[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
+                crate::utils::deprecation_warning("`[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
                 Some(
                     single_file
                         .parent()
