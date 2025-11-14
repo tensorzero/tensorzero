@@ -816,6 +816,7 @@ mod tests {
             clickhouse_connection_info,
             postgres_connection_info,
             http_client,
+            None,
         )
         .await
         .expect("Gateway setup should succeed when rate limiting has no rules");
