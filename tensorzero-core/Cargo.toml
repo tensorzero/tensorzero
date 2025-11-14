@@ -71,7 +71,6 @@ http = { workspace = true }
 serde_path_to_error = { workspace = true }
 sha2 = "0.10.9"
 strum = { version = "0.27.1", features = ["derive"] }
-strum_macros = "0.27.1"
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 toml = { workspace = true }
@@ -107,7 +106,6 @@ tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
     "http",
 ] }
 tower-http = { workspace = true }
-tower-layer = "0.3.3"
 pyo3 = { workspace = true, optional = true }
 google-cloud-auth = { workspace = true }
 mime = { workspace = true }
