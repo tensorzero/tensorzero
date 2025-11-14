@@ -15,6 +15,8 @@ use tensorzero_core::{
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
+use super::evaluate::ValidationScoresMap;
+
 /// Updates the Pareto frontier based on instance-wise Pareto dominance
 ///
 /// Filters candidates to only include Pareto-optimal variants based on validation scores.
@@ -44,7 +46,7 @@ use tensorzero_core::{
 #[expect(clippy::type_complexity)]
 pub fn update_pareto_frontier(
     candidates: HashMap<String, UninitializedChatCompletionConfig>,
-    val_scores_map: &HashMap<String, HashMap<String, HashMap<String, Option<f32>>>>,
+    val_scores_map: &ValidationScoresMap,
     config: &GEPAConfig,
     tensorzero_config: &Config,
 ) -> Result<
@@ -312,7 +314,7 @@ fn calculate_frequencies(
 pub fn global_dominates(
     variant_a_name: &str,
     variant_b_name: &str,
-    val_scores_map: &HashMap<String, HashMap<String, HashMap<String, Option<f32>>>>,
+    val_scores_map: &ValidationScoresMap,
     evaluators: &HashMap<String, EvaluatorConfig>,
 ) -> bool {
     let mut better_or_equal_on_all = true;

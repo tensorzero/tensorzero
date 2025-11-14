@@ -28,6 +28,7 @@ pub use super::analyze::{analyze_inferences, InferenceWithAnalysis};
 #[expect(unused_imports)]
 pub use super::evaluate::{
     create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, EvaluationResults,
+    ValidationScoresMap,
 };
 #[expect(unused_imports)]
 pub use super::mutate::{create_mutated_variant, mutate_templates, MutateOutput};
@@ -206,7 +207,7 @@ pub async fn run_gepa_optimization(
     let results = join_all(evaluation_futures).await;
 
     // Collect into val_scores_map directly (only thing needed for Pareto filtering)
-    let mut val_scores_map = HashMap::new();
+    let mut val_scores_map: ValidationScoresMap = HashMap::new();
     for result in results {
         match result {
             Ok((variant_name, scores)) => {

@@ -36,6 +36,29 @@ use evaluations::{
     EvaluationVariant, EvaluatorStats, OutputFormat,
 };
 
+// Type aliases for cleaner score map signatures
+
+/// An evaluator/metric name
+pub type EvaluatorName = String;
+
+/// A datapoint/example identifier
+pub type DatapointId = String;
+
+/// A variant name identifier
+pub type VariantName = String;
+
+/// Scores for all evaluators on a single datapoint
+/// Key: evaluator_name, Value: score (None if evaluation failed)
+pub type DatapointScores = HashMap<EvaluatorName, Option<f32>>;
+
+/// Scores for all datapoints for a single variant
+/// Key: datapoint_id, Value: scores for all evaluators on that datapoint
+pub type VariantScores = HashMap<DatapointId, DatapointScores>;
+
+/// Scores for all variants on the validation set
+/// Key: variant_name, Value: scores for all datapoints for that variant
+pub type ValidationScoresMap = HashMap<VariantName, VariantScores>;
+
 /// Holds the results of evaluating variants on a dataset
 #[derive(Clone, Debug)]
 pub struct EvaluationResults {
@@ -54,7 +77,7 @@ impl EvaluationResults {
     ///
     /// Returns a HashMap mapping datapoint_id to a HashMap of evaluator scores.
     /// Scores are extracted from evaluation_infos on-demand.
-    pub fn per_datapoint_scores(&self) -> HashMap<String, HashMap<String, Option<f32>>> {
+    pub fn per_datapoint_scores(&self) -> VariantScores {
         let mut score_map = HashMap::new();
 
         for info in &self.evaluation_infos {
