@@ -180,6 +180,7 @@ pub fn create_test_gepa_config_echo() -> GEPAConfig {
         mutation_model: "dummy::echo_request_messages".to_string(),
         seed: Some(42),
         timeout: 300,
+        include_datapoint_input_for_mutation: false,
     }
 }
 
