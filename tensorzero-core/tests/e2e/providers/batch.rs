@@ -11,6 +11,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use tensorzero_core::inference::types::{StoredContentBlock, StoredRequestMessage};
+use tensorzero_core::tool::Tool;
 use tensorzero_core::{
     db::clickhouse::{
         test_helpers::select_batch_model_inferences_clickhouse, ClickHouseConnectionInfo, TableName,
@@ -1752,6 +1753,56 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         let tool_params: Value =
             serde_json::from_str(result.get("tool_params").unwrap().as_str().unwrap()).unwrap();
         assert_eq!(tool_params, expected_tool_params[i]);
+
+        // Verify new Migration 0041 columns (decomposed tool call storage format)
+        // Verify dynamic_tools column (should be empty for static tools)
+        let dynamic_tools = result.get("dynamic_tools").unwrap().as_array().unwrap();
+        if i < 4 {
+            assert!(dynamic_tools.is_empty());
+        } else {
+            assert_eq!(dynamic_tools.len(), 1);
+            let tool: Tool =
+                serde_json::from_str(dynamic_tools.first().unwrap().as_str().unwrap()).unwrap();
+            let Tool::ClientSideFunction(tool) = tool;
+            assert_eq!(tool.name, "self_destruct");
+        }
+
+        // Verify dynamic_provider_tools column (should be empty)
+        let dynamic_provider_tools = result
+            .get("dynamic_provider_tools")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert!(
+            dynamic_provider_tools.is_empty(),
+            "dynamic_provider_tools should be empty"
+        );
+
+        // Verify allowed_tools column
+        let allowed_tools_str = result.get("allowed_tools").unwrap().as_str().unwrap();
+        let _allowed_tools: Value = serde_json::from_str(allowed_tools_str).unwrap();
+
+        // Verify tool_choice column matches expected
+        let tool_choice_col = result.get("tool_choice").unwrap().as_str().unwrap();
+        let expected_tool_choice = match i {
+            0 | 1 => "auto",
+            2 => "required",
+            3 => "none",
+            4 => "{\"specific\":\"self_destruct\"}",
+            _ => panic!("Unexpected index: {i}"),
+        };
+        assert_eq!(
+            tool_choice_col, expected_tool_choice,
+            "tool_choice column mismatch for inference #{i}"
+        );
+
+        // Verify parallel_tool_calls column (should be null for this test)
+        let parallel_tool_calls = result.get("parallel_tool_calls");
+        assert!(
+            parallel_tool_calls.is_none() || parallel_tool_calls.unwrap().is_null(),
+            "parallel_tool_calls should be null"
+        );
+
         let inference_params = result.get("inference_params").unwrap().as_str().unwrap();
         let inference_params: Value = serde_json::from_str(inference_params).unwrap();
         assert_eq!(inference_params, expected_inference_params[i]);

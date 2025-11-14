@@ -63,7 +63,7 @@ use crate::model::{
     fully_qualified_name, Credential, CredentialLocationWithFallback, ModelProvider,
 };
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
-use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::helpers::{convert_stream_error, parse_jsonl_batch_file, JsonlBatchFileInfo};
 
@@ -1754,8 +1754,8 @@ pub struct GCPVertexGeminiSFTTool<'a> {
     pub tool: GCPVertexGeminiTool<'a>,
 }
 
-impl<'a> From<&'a Tool> for GCPVertexGeminiSFTTool<'a> {
-    fn from(tool: &'a Tool) -> Self {
+impl<'a> From<&'a ClientSideFunctionTool> for GCPVertexGeminiSFTTool<'a> {
+    fn from(tool: &'a ClientSideFunctionTool) -> Self {
         let mut parameters = tool.parameters.clone();
         capitalize_types(&mut parameters);
         let function_declaration = GCPVertexGeminiFunctionDeclaration {

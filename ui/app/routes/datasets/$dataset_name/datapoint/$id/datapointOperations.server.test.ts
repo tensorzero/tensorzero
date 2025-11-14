@@ -14,6 +14,7 @@ import type {
   GetDatasetMetadataParams,
   DatasetMetadata,
   StaleDatapointParams,
+  UpdateDatapointsMetadataRequest,
 } from "~/types/tensorzero";
 
 // TODO(shuyangli): Once we remove all custom logic from the Node client, make mocking more ergonomic by providing a mock client at the tensorzero-node level.
@@ -24,9 +25,15 @@ const mockUpdateDatapoint = vi.fn(
     id: datapoint.id,
   }),
 );
+const mockUpdateDatapointsMetadata = vi.fn(
+  async (_datasetName: string, _request: UpdateDatapointsMetadataRequest) => ({
+    ids: [],
+  }),
+);
 vi.mock("~/utils/tensorzero.server", () => ({
   getTensorZeroClient: vi.fn(() => ({
     updateDatapoint: mockUpdateDatapoint,
+    updateDatapointsMetadata: mockUpdateDatapointsMetadata,
   })),
 }));
 
@@ -353,60 +360,26 @@ describe("datapointOperations", () => {
     test("should update datapoint with new name", async () => {
       const datasetName = "test_dataset";
       const datapointId = uuid();
-      const sourceInferenceId = uuid();
-      const episodeId = uuid();
-
-      const datapoint: ParsedChatInferenceDatapointRow = {
-        dataset_name: datasetName,
-        function_name: "write_haiku",
-        name: "old_name",
-        id: datapointId,
-        episode_id: episodeId,
-        input: {
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: "Write a haiku about coding",
-                },
-              ],
-            },
-          ],
-        },
-        output: [{ type: "text", text: "Code flows like water" }],
-        tags: { environment: "test" },
-        auxiliary: "",
-        is_deleted: false,
-        updated_at: new Date().toISOString(),
-        staled_at: null,
-        source_inference_id: sourceInferenceId,
-        is_custom: false,
-      };
-
       const newName = "new_name";
 
       await renameDatapoint({
-        functionType: "chat",
         datasetName,
-        datapoint,
-        newName,
+        datapointId,
+        name: newName,
       });
 
-      // Verify updateDatapoint was called with the new name
-      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
+      // Verify updateDatapointsMetadata was called with the new name
+      expect(mockUpdateDatapointsMetadata).toHaveBeenCalledWith(
         datasetName,
         expect.objectContaining({
-          id: datapointId,
-          function_name: "write_haiku",
-          episode_id: episodeId,
-          tags: { environment: "test" },
-          is_custom: false,
-          source_inference_id: sourceInferenceId,
-          auxiliary: "",
-          name: newName,
-          staled_at: undefined,
+          datapoints: [
+            {
+              id: datapointId,
+              metadata: {
+                name: newName,
+              },
+            },
+          ],
         }),
       );
 
@@ -416,123 +389,34 @@ describe("datapointOperations", () => {
   });
 
   describe("renameDatapoint - json", () => {
-    test("should update datapoint with new name and preserve output_schema", async () => {
+    test("should update datapoint with new name", async () => {
       const datasetName = "test_dataset";
       const datapointId = uuid();
-      const sourceInferenceId = uuid();
-      const episodeId = uuid();
-
-      const datapoint: ParsedJsonInferenceDatapointRow = {
-        dataset_name: datasetName,
-        function_name: "extract_entities",
-        name: "old_json_name",
-        id: datapointId,
-        episode_id: episodeId,
-        input: {
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: "John works at Google in Mountain View",
-                },
-              ],
-            },
-          ],
-        },
-        output: {
-          raw: '{"person":["John"],"organization":["Google"],"location":["Mountain View"],"miscellaneous":[]}',
-          parsed: {
-            person: ["John"],
-            organization: ["Google"],
-            location: ["Mountain View"],
-            miscellaneous: [],
-          },
-        },
-        output_schema: {
-          type: "object",
-          properties: {
-            person: { type: "array", items: { type: "string" } },
-            organization: { type: "array", items: { type: "string" } },
-            location: { type: "array", items: { type: "string" } },
-            miscellaneous: { type: "array", items: { type: "string" } },
-          },
-          required: ["person", "organization", "location", "miscellaneous"],
-        },
-        tags: { source: "test" },
-        auxiliary: "",
-        is_deleted: false,
-        updated_at: new Date().toISOString(),
-        staled_at: null,
-        source_inference_id: sourceInferenceId,
-        is_custom: false,
-      };
-
       const newName = "new_json_name";
 
       await renameDatapoint({
-        functionType: "json",
         datasetName,
-        datapoint,
-        newName,
+        datapointId,
+        name: newName,
       });
 
-      // Verify updateDatapoint was called with the new name and output_schema
-      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
+      // Verify updateDatapointsMetadata was called with the new name
+      expect(mockUpdateDatapointsMetadata).toHaveBeenCalledWith(
         datasetName,
         expect.objectContaining({
-          id: datapointId,
-          episode_id: episodeId,
-          function_name: "extract_entities",
-          tags: { source: "test" },
-          is_custom: false,
-          source_inference_id: sourceInferenceId,
-          output_schema: datapoint.output_schema,
-          auxiliary: "",
-          name: newName,
-          staled_at: undefined,
+          datapoints: [
+            {
+              id: datapointId,
+              metadata: {
+                name: newName,
+              },
+            },
+          ],
         }),
       );
 
       // Verify staleDatapoint was NOT called
       expect(mockStaleDatapoint).not.toHaveBeenCalled();
-    });
-
-    test("should throw error when json datapoint is missing output_schema", async () => {
-      // This is explicitly typed as unknown because we are missing the output_schema field.
-      const datapoint = {
-        dataset_name: "test_dataset",
-        function_name: "extract_entities",
-        name: "old_name",
-        id: uuid(),
-        episode_id: null,
-        input: {
-          messages: [
-            {
-              role: "user",
-              content: [{ type: "text", text: "Test" }],
-            },
-          ],
-        },
-        output: undefined,
-        tags: {},
-        auxiliary: "",
-        is_deleted: false,
-        updated_at: new Date().toISOString(),
-        staled_at: null,
-        source_inference_id: null,
-        is_custom: false,
-      } as unknown as ParsedJsonInferenceDatapointRow;
-
-      await expect(
-        renameDatapoint({
-          functionType: "json",
-          datasetName: "test_dataset",
-          datapoint,
-          newName: "new_name",
-        }),
-      ).rejects.toThrow("Json datapoint is missing output_schema");
     });
   });
 });

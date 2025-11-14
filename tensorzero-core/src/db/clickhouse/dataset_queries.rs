@@ -73,9 +73,17 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         query_params_owned.insert("dataset_name".to_string(), dataset_name.clone());
 
         // Build the INSERT query with conditional logic based on inference type
-        let type_specific_field = match params.inference_type {
-            DatapointKind::Chat => "subquery.tool_params",
-            DatapointKind::Json => "subquery.output_schema",
+        let type_specific_fields = match params.inference_type {
+            DatapointKind::Chat => {
+                r"subquery.tool_params,
+    subquery.dynamic_tools,
+    subquery.dynamic_provider_tools,
+    subquery.parallel_tool_calls,
+    subquery.tool_choice,
+    subquery.allowed_tools,
+            "
+            }
+            DatapointKind::Json => "subquery.output_schema,",
         };
 
         let wrapped_query = format!(
@@ -88,7 +96,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 subquery.episode_id as episode_id,
                 subquery.input as input,
                 subquery.output as output,
-                {type_specific_field},
+                {type_specific_fields}
                 subquery.tags as tags,
                 subquery.auxiliary as auxiliary,
                 false as is_deleted,
@@ -317,9 +325,17 @@ impl DatasetQueries for ClickHouseConnectionInfo {
 
         let table = function_type.table_name();
 
-        let type_specific_field = match function_type {
-            DatapointKind::Chat => "tool_params",
-            DatapointKind::Json => "output_schema",
+        let type_specific_fields = match params.function_type {
+            DatapointKind::Chat => {
+                r"tool_params,
+    dynamic_tools,
+    dynamic_provider_tools,
+    parallel_tool_calls,
+    tool_choice,
+    allowed_tools,
+            "
+            }
+            DatapointKind::Json => "output_schema,",
         };
 
         let query = format!(
@@ -329,35 +345,35 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 dataset_name,
                 function_name,
                 id,
-                name,
                 episode_id,
                 input,
                 output,
-                {type_specific_field},
+                {type_specific_fields}
                 tags,
                 auxiliary,
                 is_deleted,
+                updated_at,
+                staled_at,
                 source_inference_id,
                 is_custom,
-                staled_at,
-                updated_at
+                name
             )
             SELECT
                 dataset_name,
                 function_name,
                 id,
-                name,
                 episode_id,
                 input,
                 output,
-                {type_specific_field},
+                {type_specific_fields}
                 tags,
                 auxiliary,
                 is_deleted,
+                now64() as updated_at,
+                now64() as staled_at,
                 source_inference_id,
                 is_custom,
-                now64() as staled_at,
-                now64() as updated_at
+                name
             FROM {{table:Identifier}} FINAL
             WHERE dataset_name = {{dataset_name:String}} AND id = {{datapoint_id:String}}
             "
@@ -576,6 +592,11 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 input,
                 output,
                 tool_params,
+                dynamic_tools,
+                dynamic_provider_tools,
+                parallel_tool_calls,
+                tool_choice,
+                allowed_tools,
                 '' as output_schema, -- for column alignment in UNION ALL
                 tags,
                 auxiliary,
@@ -604,6 +625,11 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 input,
                 output,
                 '' as tool_params, -- for column alignment in UNION ALL
+                [] as dynamic_tools,
+                [] as dynamic_provider_tools,
+                NULL as parallel_tool_calls,
+                NULL as tool_choice,
+                NULL as allowed_tools,
                 output_schema,
                 tags,
                 auxiliary,
@@ -779,6 +805,11 @@ impl ClickHouseConnectionInfo {
             input,
             output,
             tool_params,
+            dynamic_provider_tools,
+            dynamic_tools,
+            allowed_tools,
+            parallel_tool_calls,
+            tool_choice,
             tags,
             auxiliary,
             is_deleted,
@@ -796,6 +827,11 @@ impl ClickHouseConnectionInfo {
             new_data.input,
             new_data.output,
             new_data.tool_params,
+            new_data.dynamic_provider_tools,
+            new_data.dynamic_tools,
+            new_data.allowed_tools,
+            new_data.parallel_tool_calls,
+            new_data.tool_choice,
             new_data.tags,
             new_data.auxiliary,
             new_data.is_deleted,
@@ -808,7 +844,7 @@ impl ClickHouseConnectionInfo {
 
         let external_data = ExternalDataInfo {
             external_data_name: "new_data".to_string(),
-            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)".to_string(),
+            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, dynamic_tools Array(String), dynamic_provider_tools Array(String), allowed_tools Nullable(String), tool_choice Nullable(String), parallel_tool_calls Nullable(bool), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)".to_string(),
             format: "JSONEachRow".to_string(),
             data: serialized_datapoints.join("\n"),
         };
@@ -839,7 +875,6 @@ impl ClickHouseConnectionInfo {
         (
             dataset_name,
             function_name,
-            name,
             id,
             episode_id,
             input,
@@ -848,15 +883,15 @@ impl ClickHouseConnectionInfo {
             tags,
             auxiliary,
             is_deleted,
-            is_custom,
-            source_inference_id,
             updated_at,
-            staled_at
+            staled_at,
+            source_inference_id,
+            is_custom,
+            name
         )
         SELECT
             new_data.dataset_name,
             new_data.function_name,
-            new_data.name,
             new_data.id,
             new_data.episode_id,
             new_data.input,
@@ -865,16 +900,17 @@ impl ClickHouseConnectionInfo {
             new_data.tags,
             new_data.auxiliary,
             new_data.is_deleted,
-            new_data.is_custom,
-            new_data.source_inference_id,
             now64() as updated_at,
-            new_data.staled_at
+            new_data.staled_at,
+            new_data.source_inference_id,
+            new_data.is_custom,
+            new_data.name
         FROM new_data
         ";
 
         let external_data = ExternalDataInfo {
             external_data_name: "new_data".to_string(),
-            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)".to_string(),
+            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), name Nullable(String)".to_string(),
             format: "JSONEachRow".to_string(),
             data: serialized_datapoints.join("\n"),
         };
@@ -912,9 +948,17 @@ fn build_select_inferences_matching_dataset_subquery(
     };
 
     // Start building the base query.
-    let type_specific_field = match params.inference_type {
-        DatapointKind::Chat => "tool_params",
-        DatapointKind::Json => "output_schema",
+    let type_specific_fields = match params.inference_type {
+        DatapointKind::Chat => {
+            r"tool_params,
+dynamic_tools,
+dynamic_provider_tools,
+parallel_tool_calls,
+tool_choice,
+allowed_tools,
+        "
+        }
+        DatapointKind::Json => "output_schema,",
     };
     let mut query = format!(
         "SELECT
@@ -925,7 +969,7 @@ fn build_select_inferences_matching_dataset_subquery(
             episode_id,
             input,
             {output_field},
-            {type_specific_field},
+            {type_specific_fields}
             tags,
             NULL as staled_at,
             id as source_inference_id,
@@ -1087,6 +1131,11 @@ mod tests {
                 input,
                 output,
                 tool_params,
+                dynamic_tools,
+                dynamic_provider_tools,
+                parallel_tool_calls,
+                tool_choice,
+                allowed_tools,
                 tags,
                 NULL as staled_at,
                 id as source_inference_id,
@@ -1624,6 +1673,11 @@ mod tests {
                     subquery.input as input,
                     subquery.output as output,
                     subquery.tool_params,
+                    subquery.dynamic_tools,
+                    subquery.dynamic_provider_tools,
+                    subquery.parallel_tool_calls,
+                    subquery.tool_choice,
+                    subquery.allowed_tools,
                     subquery.tags as tags,
                     subquery.auxiliary as auxiliary,
                     false as is_deleted,
@@ -2103,6 +2157,8 @@ mod tests {
                 // Parse and verify the data
                 let actual_row_as_json: serde_json::Value =
                     serde_json::from_str(&external_data.data).unwrap();
+                // When tool_params is None, the new Migration 0041 fields are not serialized
+                // (due to #[serde(flatten)]), so they won't be in the JSON
                 let expected_row_as_json = json!({
                     "dataset_name": "test_dataset",
                     "function_name": "test_function",
@@ -2113,7 +2169,6 @@ mod tests {
                         "messages": [],
                     },
                     "output": [{"type": "text", "text": "response"}],
-                    "tool_params": "",
                     "tags": {"test_tag": "test_value"},
                     "auxiliary": "",
                     "source_inference_id": null,
@@ -2166,6 +2221,95 @@ mod tests {
                 .await
                 .is_ok(),
             "Should insert chat datapoint successfully"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_insert_chat_datapoint_with_tool_params_executes_successfully() {
+        use crate::tool::{
+            AllowedTools, AllowedToolsChoice, ClientSideFunctionTool, Tool,
+            ToolCallConfigDatabaseInsert, ToolChoice,
+        };
+
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_with_external_data()
+            .withf(|external_data, query| {
+                // Verify the query is correct
+                assert!(query.contains("INSERT INTO ChatInferenceDatapoint"));
+
+                // Parse and verify the data includes all Migration 0041 columns
+                let actual_row_as_json: serde_json::Value =
+                    serde_json::from_str(&external_data.data).unwrap();
+
+                // Verify the new Migration 0041 columns are present with correct values
+                assert_eq!(
+                    actual_row_as_json["dynamic_tools"],
+                    json!([{"type": "client_side_function", "description": "Get temperature", "parameters": {"type": "object"}, "name": "get_temperature", "strict": true}])
+                );
+                assert_eq!(actual_row_as_json["dynamic_provider_tools"], json!([]));
+                assert_eq!(
+                    actual_row_as_json["allowed_tools"],
+                    json!({"tools": ["weather_tool"], "choice": "dynamic_allowed_tools"})
+                );
+                assert_eq!(actual_row_as_json["tool_choice"], json!("required"));
+                assert_eq!(actual_row_as_json["parallel_tool_calls"], json!(true));
+
+                // Verify legacy tool_params field is also present
+                assert!(actual_row_as_json.get("tool_params").is_some());
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        written_rows: 1,
+                        read_rows: 0,
+                    },
+                })
+            });
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let datapoint = ChatInferenceDatapointInsert {
+            dataset_name: "test_dataset".to_string(),
+            function_name: "test_function".to_string(),
+            id: Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap(),
+            name: Some("test_with_tools".to_string()),
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "response".to_string(),
+            })]),
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![Tool::ClientSideFunction(ClientSideFunctionTool {
+                    name: "get_temperature".to_string(),
+                    description: "Get temperature".to_string(),
+                    parameters: json!({"type": "object"}),
+                    strict: true,
+                })],
+                vec![],
+                AllowedTools {
+                    tools: vec!["weather_tool".to_string()],
+                    choice: AllowedToolsChoice::DynamicAllowedTools,
+                },
+                ToolChoice::Required,
+                Some(true),
+            )),
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+        };
+        assert!(
+            conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
+                .await
+                .is_ok(),
+            "Should insert chat datapoint with tool_params successfully"
         );
     }
 
@@ -2276,6 +2420,11 @@ mod tests {
                     input,
                     output,
                     tool_params,
+                    dynamic_provider_tools,
+                    dynamic_tools,
+                    allowed_tools,
+                    parallel_tool_calls,
+                    tool_choice,
                     tags,
                     auxiliary,
                     is_deleted,
@@ -2295,6 +2444,11 @@ mod tests {
                     new_data.input,
                     new_data.output,
                     new_data.tool_params,
+                    new_data.dynamic_provider_tools,
+                    new_data.dynamic_tools,
+                    new_data.allowed_tools,
+                    new_data.parallel_tool_calls,
+                    new_data.tool_choice,
                     new_data.tags,
                     new_data.auxiliary,
                     new_data.is_deleted,
@@ -2310,7 +2464,7 @@ mod tests {
                 assert_eq!(external_data.format, "JSONEachRow");
                 assert!(external_data
                     .structure
-                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)"));
+                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, dynamic_tools Array(String), dynamic_provider_tools Array(String), allowed_tools Nullable(String), tool_choice Nullable(String), parallel_tool_calls Nullable(bool), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)"));
                 assert!(!external_data.structure.contains("updated_at"));
 
                 // Parse the data - should contain 3 datapoints separated by newlines
@@ -2442,7 +2596,6 @@ mod tests {
                     (
                         dataset_name,
                         function_name,
-                        name,
                         id,
                         episode_id,
                         input,
@@ -2451,10 +2604,11 @@ mod tests {
                         tags,
                         auxiliary,
                         is_deleted,
-                        is_custom,
-                        source_inference_id,
                         updated_at,
-                        staled_at
+                        staled_at,
+                        source_inference_id,
+                        is_custom,
+                        name
                     )",
                 );
                 assert_query_contains(
@@ -2462,7 +2616,6 @@ mod tests {
                     "SELECT
                         new_data.dataset_name,
                         new_data.function_name,
-                        new_data.name,
                         new_data.id,
                         new_data.episode_id,
                         new_data.input,
@@ -2471,10 +2624,11 @@ mod tests {
                         new_data.tags,
                         new_data.auxiliary,
                         new_data.is_deleted,
-                        new_data.is_custom,
-                        new_data.source_inference_id,
                         now64() as updated_at,
-                        new_data.staled_at
+                        new_data.staled_at,
+                        new_data.source_inference_id,
+                        new_data.is_custom,
+                        new_data.name
                     FROM new_data",
                 );
 
@@ -2483,7 +2637,7 @@ mod tests {
                 assert_eq!(external_data.format, "JSONEachRow");
                 assert!(external_data
                     .structure
-                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)"));
+                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), name Nullable(String)"));
 
                 // Parse the data - should contain 2 datapoints separated by newlines
                 let lines: Vec<&str> = external_data.data.lines().collect();
@@ -3089,6 +3243,11 @@ mod tests {
                     input,
                     output,
                     tool_params,
+                    dynamic_tools,
+                    dynamic_provider_tools,
+                    parallel_tool_calls,
+                    tool_choice,
+                    allowed_tools,
                     '' as output_schema,");
                 assert_query_contains(query,
                     "tags,
@@ -3118,7 +3277,12 @@ mod tests {
                     output,
                     '' as tool_params,");
                 assert_query_contains(query,
-                "output_schema,
+                "[] as dynamic_tools,
+                    [] as dynamic_provider_tools,
+                    NULL as parallel_tool_calls,
+                    NULL as tool_choice,
+                    NULL as allowed_tools,
+                    output_schema,
                     tags,
                     auxiliary,
                     source_inference_id,

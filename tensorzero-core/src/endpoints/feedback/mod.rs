@@ -22,8 +22,10 @@ use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text,
 };
 use crate::jsonschema_util::StaticJSONSchema;
-use crate::serde_util::deserialize_optional_json_string;
-use crate::tool::{StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
+use crate::tool::{
+    deserialize_optional_tool_info, StaticToolConfig, ToolCall, ToolCallConfig,
+    ToolCallConfigDatabaseInsert,
+};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -737,7 +739,7 @@ pub enum DynamicDemonstrationInfo {
 
 #[derive(Debug, Deserialize)]
 struct ToolParamsResult {
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     tool_params: Option<ToolCallConfigDatabaseInsert>,
 }
 
@@ -757,7 +759,7 @@ async fn get_dynamic_demonstration_info(
 ) -> Result<DynamicDemonstrationInfo, Error> {
     match function_config {
         FunctionConfig::Chat(..) => {
-            let parameterized_query = "SELECT tool_params FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
+            let parameterized_query = "SELECT tool_params, dynamic_tools, dynamic_provider_tools, allowed_tools, tool_choice FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
             let result = clickhouse_client
                 .run_query_synchronous(
                     parameterized_query,

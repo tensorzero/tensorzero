@@ -418,7 +418,7 @@ mod tests {
         ContentBlockChatOutput, JsonInferenceOutput, StoredInput, System,
     };
     use crate::stored_inference::StoredInferenceDatabase;
-    use crate::tool::ToolCallConfigDatabaseInsert;
+    use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert};
     use crate::{config::ConfigFileGlob, inference::types::Text, tool::ToolChoice};
 
     use super::*;
@@ -453,6 +453,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -487,6 +492,11 @@ SELECT
     '' as output_schema,
     i.tags as tags,
     i.tool_params as tool_params,
+    i.dynamic_tools as dynamic_tools,
+    i.dynamic_provider_tools as dynamic_provider_tools,
+    i.allowed_tools as allowed_tools,
+    i.tool_choice as tool_choice,
+    i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -527,6 +537,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -616,6 +631,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     demo_f.value AS output,
     [i.output] as dispreferred_outputs
@@ -657,6 +677,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -714,6 +739,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -787,6 +817,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -879,6 +914,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -980,6 +1020,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1061,6 +1106,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1149,6 +1199,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1189,6 +1244,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1231,6 +1291,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1294,6 +1359,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1354,6 +1424,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1404,6 +1479,11 @@ SELECT
     '' as output_schema,
     i.tags as tags,
     i.tool_params as tool_params,
+    i.dynamic_tools as dynamic_tools,
+    i.dynamic_provider_tools as dynamic_provider_tools,
+    i.allowed_tools as allowed_tools,
+    i.tool_choice as tool_choice,
+    i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1463,6 +1543,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1530,6 +1615,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1608,6 +1698,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     demo_f.value AS output,
     [i.output] as dispreferred_outputs
@@ -1700,6 +1795,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1756,6 +1856,11 @@ SELECT
     '' as output_schema,
     i.tags as tags,
     i.tool_params as tool_params,
+    i.dynamic_tools as dynamic_tools,
+    i.dynamic_provider_tools as dynamic_provider_tools,
+    i.allowed_tools as allowed_tools,
+    i.tool_choice as tool_choice,
+    i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1818,6 +1923,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1906,11 +2016,16 @@ FORMAT JSONEachRow";
         assert!(chat_inference.dispreferred_outputs.is_empty());
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert {
-                tools_available: vec![],
-                tool_choice: ToolChoice::None,
-                parallel_tool_calls: Some(false),
-            }
+            ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![],
+                AllowedTools {
+                    tools: vec![],
+                    choice: AllowedToolsChoice::FunctionDefault,
+                },
+                ToolChoice::None,
+                Some(false),
+            )
         );
 
         // Test the Python version (singly serialized)
@@ -1947,11 +2062,16 @@ FORMAT JSONEachRow";
         );
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert {
-                tools_available: vec![],
-                tool_choice: ToolChoice::None,
-                parallel_tool_calls: Some(false),
-            }
+            ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![],
+                AllowedTools {
+                    tools: vec![],
+                    choice: AllowedToolsChoice::FunctionDefault,
+                },
+                ToolChoice::None,
+                Some(false),
+            )
         );
         assert!(chat_inference.dispreferred_outputs.is_empty());
     }
@@ -2209,6 +2329,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -2253,6 +2378,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -2317,6 +2447,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
