@@ -29,7 +29,7 @@ pub async fn get_inferences_handler(
     Ok(Json(response))
 }
 
-async fn get_inferences(
+pub async fn get_inferences(
     config: &Config,
     clickhouse: &impl InferenceQueries,
     request: GetInferencesRequest,
@@ -41,6 +41,7 @@ async fn get_inferences(
 
     let params = ListInferencesParams {
         ids: Some(&request.ids),
+        function_name: request.function_name.as_deref(),
         output_source: request.output_source,
         // Return all inferences matching the IDs.
         limit: Some(u64::MAX),
@@ -75,7 +76,7 @@ pub async fn list_inferences_handler(
     Ok(Json(response))
 }
 
-async fn list_inferences(
+pub async fn list_inferences(
     config: &Config,
     clickhouse: &impl InferenceQueries,
     request: ListInferencesRequest,
@@ -197,6 +198,7 @@ mod tests {
 
         let request = GetInferencesRequest {
             ids: vec![id1, id2],
+            function_name: None,
             output_source: InferenceOutputSource::Inference,
         };
 
@@ -217,6 +219,7 @@ mod tests {
 
         let request = GetInferencesRequest {
             ids: vec![],
+            function_name: None,
             output_source: InferenceOutputSource::Inference,
         };
 
@@ -244,6 +247,7 @@ mod tests {
 
         let request = GetInferencesRequest {
             ids: vec![id],
+            function_name: None,
             output_source: InferenceOutputSource::Inference,
         };
 
@@ -289,6 +293,7 @@ mod tests {
 
         let request = GetInferencesRequest {
             ids: vec![id],
+            function_name: None,
             output_source: InferenceOutputSource::Demonstration,
         };
 

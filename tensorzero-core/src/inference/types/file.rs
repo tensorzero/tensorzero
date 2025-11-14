@@ -128,9 +128,9 @@ impl<'de> Deserialize<'de> for Base64File {
 
         // Check if the deprecated "url" field is present
         if value.get("url").is_some() && value.get("source_url").is_none() {
-            tracing::warn!(
-                "Deprecation Warning: `url` is deprecated for `Base64File`. \
-                Please use `source_url` instead."
+            crate::utils::deprecation_warning(
+                "`url` is deprecated for `Base64File`. \
+                Please use `source_url` instead.",
             );
         }
 
@@ -188,9 +188,9 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
 
         // Check if the deprecated "url" field is present
         if value.get("url").is_some() && value.get("source_url").is_none() {
-            tracing::warn!(
-                "Deprecation Warning: `url` is deprecated for `Base64FileMetadata`. \
-                Please use `source_url` instead."
+            crate::utils::deprecation_warning(
+                "`url` is deprecated for `Base64FileMetadata`. \
+                Please use `source_url` instead.",
             );
         }
 
@@ -366,9 +366,9 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 
         // Check if the deprecated "url" field is present
         if value.get("url").is_some() && value.get("source_url").is_none() {
-            tracing::warn!(
-                "Deprecation Warning: `url` is deprecated for `ObjectStorageFile`. \
-                Please use `source_url` instead."
+            crate::utils::deprecation_warning(
+                "`url` is deprecated for `ObjectStorageFile`. \
+                Please use `source_url` instead.",
             );
         }
 

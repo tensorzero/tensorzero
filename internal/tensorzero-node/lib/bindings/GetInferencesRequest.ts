@@ -11,6 +11,12 @@ export type GetInferencesRequest = {
    */
   ids: Array<string>;
   /**
+   * Optional function name to filter by.
+   * Including this improves query performance since `function_name` is the first column
+   * in the ClickHouse primary key.
+   */
+  function_name?: string;
+  /**
    * Source of the inference output.
    * Determines whether to return the original inference output or demonstration feedback
    * (manually-curated output) if available.
