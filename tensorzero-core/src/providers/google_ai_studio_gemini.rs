@@ -2722,7 +2722,7 @@ mod tests {
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
         assert_eq!(usage.input_tokens, Some(8));
-        assert_eq!(usage.output_tokens, Some(0));
+        assert_eq!(usage.output_tokens, None);
 
         // Verify finish reason for safety blocks
         assert_eq!(chunk.finish_reason, Some(FinishReason::ContentFilter));

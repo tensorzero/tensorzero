@@ -16,6 +16,7 @@ use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
 use crate::model_table::{OpenAIKind, ShorthandModelConfig};
 use crate::providers::azure::AzureProvider;
+use crate::providers::openrouter::OpenRouterProvider;
 use crate::rate_limiting::{
     get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
     RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse,
@@ -552,6 +553,7 @@ pub trait EmbeddingProvider {
 pub enum EmbeddingProviderConfig {
     OpenAI(OpenAIProvider),
     Azure(AzureProvider),
+    OpenRouter(OpenRouterProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -702,6 +704,12 @@ impl UninitializedEmbeddingProviderConfig {
                 provider_name,
                 extra_body,
             },
+            ProviderConfig::OpenRouter(provider) => EmbeddingProviderInfo {
+                inner: EmbeddingProviderConfig::OpenRouter(provider),
+                timeout_ms,
+                provider_name,
+                extra_body,
+            },
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => EmbeddingProviderInfo {
                 inner: EmbeddingProviderConfig::Dummy(provider),
@@ -735,6 +743,11 @@ impl EmbeddingProvider for EmbeddingProviderConfig {
                     .await
             }
             EmbeddingProviderConfig::Azure(provider) => {
+                provider
+                    .embed(request, client, dynamic_api_keys, model_provider_data)
+                    .await
+            }
+            EmbeddingProviderConfig::OpenRouter(provider) => {
                 provider
                     .embed(request, client, dynamic_api_keys, model_provider_data)
                     .await

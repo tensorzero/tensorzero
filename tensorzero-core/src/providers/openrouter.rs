@@ -17,6 +17,11 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::cache::ModelProviderRequest;
+use crate::embeddings::EmbeddingEncodingFormat;
+use crate::embeddings::{
+    Embedding, EmbeddingInput, EmbeddingProvider, EmbeddingProviderRequestInfo,
+    EmbeddingProviderResponse, EmbeddingRequest,
+};
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{
     warn_discarded_thought_block, DelayedError, DisplayOrDebugGateway, Error, ErrorDetails,
@@ -46,7 +51,9 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send_eventsource,
 };
 
+use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::TensorZeroEventError;
+use crate::providers::openai::OpenAIUsage;
 
 lazy_static! {
     static ref OPENROUTER_DEFAULT_BASE_URL: Url = {
@@ -328,6 +335,109 @@ impl InferenceProvider for OpenRouterProvider {
     }
 }
 
+impl EmbeddingProvider for OpenRouterProvider {
+    async fn embed(
+        &self,
+        request: &EmbeddingRequest,
+        client: &TensorzeroHttpClient,
+        dynamic_api_keys: &InferenceCredentials,
+        model_provider_data: &EmbeddingProviderRequestInfo,
+    ) -> Result<EmbeddingProviderResponse, Error> {
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
+        let request_body = OpenRouterEmbeddingRequest::new(
+            &self.model_name,
+            &request.input,
+            request.encoding_format,
+        );
+        let request_url = get_embedding_url(&OPENROUTER_DEFAULT_BASE_URL)?;
+        let start_time = Instant::now();
+        let mut request_builder = client
+            .post(request_url)
+            .header("X-Title", "TensorZero")
+            .header("HTTP-Referer", "https://www.tensorzero.com/");
+        if let Some(api_key) = api_key {
+            request_builder = request_builder.bearer_auth(api_key.expose_secret());
+        }
+
+        let request_body_value = serde_json::to_value(&request_body).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing OpenRouter embedding request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
+
+        let (res, raw_request) = inject_extra_request_data_and_send(
+            PROVIDER_TYPE,
+            &FullExtraBodyConfig::default(), // No overrides supported
+            &Default::default(),             // No extra headers for embeddings yet
+            model_provider_data,
+            &self.model_name,
+            request_body_value,
+            request_builder,
+        )
+        .await?;
+        if res.status().is_success() {
+            let raw_response = res.text().await.map_err(|e| {
+                Error::new(ErrorDetails::InferenceServer {
+                    message: format!(
+                        "Error parsing text response: {}",
+                        DisplayOrDebugGateway::new(e)
+                    ),
+                    raw_request: Some(raw_request.clone()),
+                    raw_response: None,
+                    provider_type: PROVIDER_TYPE.to_string(),
+                })
+            })?;
+
+            let response: OpenRouterEmbeddingResponse = serde_json::from_str(&raw_response)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing JSON response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: Some(raw_response.clone()),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?;
+            let latency = Latency::NonStreaming {
+                response_time: start_time.elapsed(),
+            };
+
+            Ok(OpenRouterEmbeddingResponseWithMetadata {
+                response,
+                latency,
+                request: request_body,
+                raw_response,
+            }
+            .try_into()?)
+        } else {
+            Err(handle_openrouter_error(
+                &raw_request,
+                res.status(),
+                &res.text().await.map_err(|e| {
+                    Error::new(ErrorDetails::InferenceServer {
+                        message: format!(
+                            "Error parsing error response: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                        raw_request: Some(raw_request.clone()),
+                        raw_response: None,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    })
+                })?,
+                PROVIDER_TYPE,
+            ))
+        }
+    }
+}
+
 pub fn stream_openrouter(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
@@ -390,6 +500,18 @@ pub(super) fn get_chat_url(base_url: &Url) -> Result<Url, Error> {
     })
 }
 
+fn get_embedding_url(base_url: &Url) -> Result<Url, Error> {
+    let mut url = base_url.clone();
+    if !url.path().ends_with('/') {
+        url.set_path(&format!("{}/", url.path()));
+    }
+    url.join("embeddings").map_err(|e| {
+        Error::new(ErrorDetails::InvalidBaseUrl {
+            message: e.to_string(),
+        })
+    })
+}
+
 // Functions only needed for tests
 #[cfg(test)]
 fn get_file_url(base_url: &Url, file_id: Option<&str>) -> Result<Url, Error> {
@@ -434,6 +556,87 @@ pub(super) fn handle_openrouter_error(
             provider_type: provider_type.to_string(),
         }
         .into(),
+    }
+}
+
+// Embedding-related structures
+#[derive(Debug, Serialize)]
+struct OpenRouterEmbeddingRequest<'a> {
+    model: &'a str,
+    input: &'a EmbeddingInput,
+    // Note: OpenRouter doesn't support the dimensions parameter
+    encoding_format: EmbeddingEncodingFormat,
+}
+
+impl<'a> OpenRouterEmbeddingRequest<'a> {
+    fn new(
+        model: &'a str,
+        input: &'a EmbeddingInput,
+        encoding_format: EmbeddingEncodingFormat,
+    ) -> Self {
+        Self {
+            model,
+            input,
+            encoding_format,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct OpenRouterEmbeddingResponse {
+    data: Vec<OpenRouterEmbeddingData>,
+    usage: Option<OpenAIUsage>,
+}
+
+struct OpenRouterEmbeddingResponseWithMetadata<'a> {
+    response: OpenRouterEmbeddingResponse,
+    latency: Latency,
+    request: OpenRouterEmbeddingRequest<'a>,
+    raw_response: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct OpenRouterEmbeddingData {
+    embedding: Embedding,
+}
+
+impl<'a> TryFrom<OpenRouterEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderResponse {
+    type Error = Error;
+    fn try_from(
+        response: OpenRouterEmbeddingResponseWithMetadata<'a>,
+    ) -> Result<Self, Self::Error> {
+        let OpenRouterEmbeddingResponseWithMetadata {
+            response,
+            latency,
+            request,
+            raw_response,
+        } = response;
+        let raw_request = serde_json::to_string(&request).map_err(|e| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: format!(
+                    "Error serializing request body as JSON: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+                raw_request: Some(serde_json::to_string(&request).unwrap_or_default()),
+                raw_response: None,
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+
+        let embeddings = response
+            .data
+            .into_iter()
+            .map(|embedding| embedding.embedding)
+            .collect();
+
+        Ok(EmbeddingProviderResponse::new(
+            embeddings,
+            request.input.clone(),
+            raw_request,
+            raw_response,
+            response.usage.map(|usage| usage.into()).unwrap_or_default(),
+            latency,
+        ))
     }
 }
 

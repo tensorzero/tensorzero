@@ -232,16 +232,10 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let embedding_providers = vec![
-        EmbeddingTestProvider {
-            model_name: "text-embedding-3-small".into(),
-            dimensions: 1536,
-        },
-        EmbeddingTestProvider {
-            model_name: "gemini_embedding_001_openrouter".to_string(),
-            dimensions: 3072,
-        },
-    ];
+    let embedding_providers = vec![EmbeddingTestProvider {
+        model_name: "text-embedding-3-small".into(),
+        dimensions: 1536,
+    }];
 
     let provider_type_default_credentials_providers = vec![E2ETestProvider {
         supports_batch_inference: true,

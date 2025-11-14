@@ -33,7 +33,7 @@ pub async fn test_basic_embedding_with_provider(provider: EmbeddingTestProvider)
         "embedding"
     );
 
-    // OpenRouter (via OpenAI provider) doesn't report usage for Gemini embeddings
+    // OpenRouter doesn't report usage for Gemini embeddings
     if provider.model_name != "gemini_embedding_001_openrouter" {
         assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
         assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
@@ -75,7 +75,7 @@ pub async fn test_bulk_embedding_with_provider(provider: EmbeddingTestProvider) 
         assert!(!embedding_data["embedding"].as_array().unwrap().is_empty());
     }
 
-    // OpenRouter (via OpenAI provider) doesn't report usage for Gemini embeddings
+    // OpenRouter doesn't report usage for Gemini embeddings
     if provider.model_name != "gemini_embedding_001_openrouter" {
         assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
         assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
@@ -83,7 +83,7 @@ pub async fn test_bulk_embedding_with_provider(provider: EmbeddingTestProvider) 
 }
 
 pub async fn test_embedding_with_dimensions_with_provider(provider: EmbeddingTestProvider) {
-    // OpenRouter (via OpenAI provider) doesn't support this field
+    // OpenRouter doesn't support this field
     if provider.model_name == "gemini_embedding_001_openrouter" {
         return;
     }
@@ -216,7 +216,7 @@ pub async fn test_embedding_large_bulk_with_provider(provider: EmbeddingTestProv
         assert!(!embedding_data["embedding"].as_array().unwrap().is_empty());
     }
 
-    // OpenRouter (via OpenAI provider) doesn't report usage for Gemini embeddings
+    // OpenRouter doesn't report usage for Gemini embeddings
     if provider.model_name != "gemini_embedding_001_openrouter" {
         assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
         assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
@@ -348,7 +348,7 @@ pub async fn test_embedding_cache_with_provider(provider: EmbeddingTestProvider)
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
 
-    // OpenRouter (via OpenAI provider) doesn't report usage for Gemini embeddings
+    // OpenRouter doesn't report usage for Gemini embeddings
     if provider.model_name != "gemini_embedding_001_openrouter" {
         assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
         assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
@@ -422,7 +422,7 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
     assert_eq!(response_initial.status(), StatusCode::OK);
     let response_initial_json = response_initial.json::<Value>().await.unwrap();
 
-    // OpenRouter (via OpenAI provider) doesn't report usage for Gemini embeddings
+    // OpenRouter doesn't report usage for Gemini embeddings
     if provider.model_name != "gemini_embedding_001_openrouter" {
         assert!(
             response_initial_json["usage"]["prompt_tokens"]
@@ -458,7 +458,7 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
     assert_eq!(response_disabled.status(), StatusCode::OK);
     let response_disabled_json = response_disabled.json::<Value>().await.unwrap();
 
-    // OpenRouter (via OpenAI provider) doesn't report usage for Gemini embeddings
+    // OpenRouter doesn't report usage for Gemini embeddings
     if provider.model_name != "gemini_embedding_001_openrouter" {
         assert!(
             response_disabled_json["usage"]["prompt_tokens"]
@@ -522,7 +522,7 @@ pub async fn test_embedding_cache_options_with_provider(provider: EmbeddingTestP
     assert_eq!(response_expired.status(), StatusCode::OK);
     let response_expired_json = response_expired.json::<Value>().await.unwrap();
 
-    // OpenRouter (via OpenAI provider) doesn't report usage for Gemini embeddings
+    // OpenRouter doesn't report usage for Gemini embeddings
     if provider.model_name != "gemini_embedding_001_openrouter" {
         assert!(
             response_expired_json["usage"]["prompt_tokens"]
@@ -565,7 +565,7 @@ pub async fn test_embedding_dryrun_with_provider(provider: EmbeddingTestProvider
         .unwrap()
         .is_empty());
 
-    // OpenRouter (via OpenAI provider) doesn't report usage for Gemini embeddings
+    // OpenRouter doesn't report usage for Gemini embeddings
     if provider.model_name != "gemini_embedding_001_openrouter" {
         assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
         assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
@@ -606,6 +606,11 @@ pub async fn test_embedding_dryrun_with_provider(provider: EmbeddingTestProvider
 }
 
 pub async fn test_single_token_array_with_provider(provider: EmbeddingTestProvider) {
+    // OpenRouter doesn't support token array inputs
+    if provider.model_name == "gemini_embedding_001_openrouter" {
+        return;
+    }
+
     // Token array for "The dog barked." (using cl100k_base encoding)
     let tokens = vec![791, 5679, 293, 43161, 13];
     let payload = json!({
@@ -618,9 +623,13 @@ pub async fn test_single_token_array_with_provider(provider: EmbeddingTestProvid
         .send()
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
+    let status = response.status();
+    let response_text = response.text().await.unwrap();
+    let response_json: Value = serde_json::from_str(&response_text)
+        .unwrap_or_else(|_| panic!("Failed to parse JSON: {response_text}"));
     println!("Single token array API response: {response_json:?}");
+    assert_eq!(status, StatusCode::OK);
+
     assert_eq!(response_json["object"].as_str().unwrap(), "list");
     assert_eq!(
         response_json["data"][0]["embedding"]
@@ -636,7 +645,7 @@ pub async fn test_single_token_array_with_provider(provider: EmbeddingTestProvid
         "embedding"
     );
 
-    // OpenRouter (via OpenAI provider) doesn't report usage for Gemini embeddings
+    // OpenRouter doesn't report usage for Gemini embeddings
     if provider.model_name != "gemini_embedding_001_openrouter" {
         assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
         assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
@@ -646,6 +655,11 @@ pub async fn test_single_token_array_with_provider(provider: EmbeddingTestProvid
 pub async fn test_batch_token_arrays_semantic_similarity_with_provider(
     provider: EmbeddingTestProvider,
 ) {
+    // OpenRouter doesn't support token array inputs
+    if provider.model_name == "gemini_embedding_001_openrouter" {
+        return;
+    }
+
     // Token arrays (using cl100k_base encoding):
     // "The dog barked." -> [791, 5679, 293, 43161, 13]
     // "The cat meowed." -> [791, 8415, 757, 13111, 13]
@@ -720,7 +734,7 @@ pub async fn test_batch_token_arrays_semantic_similarity_with_provider(
         "Dog-cat similarity ({sim_dog_cat}) should be greater than cat-megumin similarity ({sim_cat_megumin})"
     );
 
-    // OpenRouter (via OpenAI provider) doesn't report usage for Gemini embeddings
+    // OpenRouter doesn't report usage for Gemini embeddings
     if provider.model_name != "gemini_embedding_001_openrouter" {
         assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
         assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
