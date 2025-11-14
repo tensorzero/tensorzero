@@ -1,6 +1,7 @@
 //! Validation functions for GEPA configuration and examples
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use tensorzero_core::{
     config::Config,
@@ -8,18 +9,28 @@ use tensorzero_core::{
     function::FunctionConfig,
     inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
     stored_inference::{RenderedSample, StoredOutput},
+    tool::StaticToolConfig,
     variant::VariantConfig,
 };
 
 /// Minimum number of valid examples required for GEPA optimization
 pub const MIN_EXAMPLES: usize = 10;
 
+/// Function configuration with associated static tools for GEPA optimization
+#[derive(Clone, Debug)]
+pub struct FunctionConfigAndTools {
+    pub function_config: Arc<FunctionConfig>,
+    /// Static tools from Config.tools that are referenced by the function
+    /// Key: tool name, Value: StaticToolConfig
+    pub static_tools: HashMap<String, Arc<StaticToolConfig>>,
+}
+
 /// Validates the GEPA configuration and checks that required resources exist
-/// Returns the FunctionConfig for the function being optimized
-pub fn validate_gepa_config<'a>(
+/// Returns the FunctionConfig and associated static tools for the function being optimized
+pub fn validate_gepa_config(
     config: &tensorzero_core::optimization::gepa::GEPAConfig,
-    tensorzero_config: &'a Config,
-) -> Result<&'a FunctionConfig, Error> {
+    tensorzero_config: &Config,
+) -> Result<FunctionConfigAndTools, Error> {
     // Check that the function exists in the config
     let function_config = tensorzero_config
         .functions
@@ -102,7 +113,7 @@ pub fn validate_gepa_config<'a>(
         }
     }
 
-    // Validate tools referenced by function exist in config
+    // Validate tools referenced by function exist in config and extract them
     let function_tool_names: Vec<String> = match &**function_config {
         FunctionConfig::Chat(chat_config) => chat_config.tools.clone(),
         FunctionConfig::Json(_) => {
@@ -111,8 +122,11 @@ pub fn validate_gepa_config<'a>(
         }
     };
 
+    let mut static_tools = HashMap::new();
     for tool_name in &function_tool_names {
-        if !tensorzero_config.tools.contains_key(tool_name) {
+        if let Some(tool_config) = tensorzero_config.tools.get(tool_name) {
+            static_tools.insert(tool_name.clone(), tool_config.clone());
+        } else {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
                     "tool '{}' referenced by function '{}' not found in configuration",
@@ -122,7 +136,10 @@ pub fn validate_gepa_config<'a>(
         }
     }
 
-    Ok(function_config)
+    Ok(FunctionConfigAndTools {
+        function_config: function_config.clone(),
+        static_tools,
+    })
 }
 
 /// Validates and filters examples for GEPA optimization

@@ -15,12 +15,13 @@ use tensorzero_core::{
     config::Config,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     error::{Error, ErrorDetails},
-    function::FunctionConfig,
     http::TensorzeroHttpClient,
     optimization::gepa::GEPAConfig,
     stored_inference::RenderedSample,
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
+
+use super::validate::FunctionConfigAndTools;
 
 // Re-export public types and functions from sibling modules
 #[expect(unused_imports)]
@@ -59,8 +60,8 @@ pub async fn run_gepa_optimization(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     tensorzero_config: std::sync::Arc<Config>,
 ) -> Result<HashMap<String, UninitializedChatCompletionConfig>, Error> {
-    // Validate configuration and examples, get the function config
-    let function_config = validate_gepa_config(config, &tensorzero_config)?;
+    // Validate configuration and examples, get the function config and tools
+    let config_and_tools = validate_gepa_config(config, &tensorzero_config)?;
 
     // Require validation examples for GEPA
     let val_examples = val_examples.ok_or_else(|| {
@@ -99,7 +100,7 @@ pub async fn run_gepa_optimization(
     tracing::info!("Gateway client built successfully for GEPA optimization");
 
     // Initialize the Pareto frontier with baseline or provided variants
-    let pareto_frontier = initialize_pareto_frontier(config, function_config)?;
+    let pareto_frontier = initialize_pareto_frontier(config, &config_and_tools)?;
 
     // Track original variant names to filter them out at the end
     let original_variant_names: std::collections::HashSet<String> =
@@ -297,7 +298,7 @@ pub async fn run_gepa_optimization(
             tensorzero_config: Arc::clone(&tensorzero_config),
             evaluation_config: Arc::clone(&evaluation_config),
             gepa_config: config,
-            function_config,
+            config_and_tools: &config_and_tools,
             parent_variant_name: &parent_variant_name,
             parent_variant_config,
             batch_dataset_name: &batch_dataset_name,
@@ -408,7 +409,7 @@ pub(crate) struct GEPAStepParams<'a> {
     pub tensorzero_config: Arc<Config>,
     pub evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
     pub gepa_config: &'a GEPAConfig,
-    pub function_config: &'a FunctionConfig,
+    pub config_and_tools: &'a FunctionConfigAndTools,
     pub parent_variant_name: &'a str,
     pub parent_variant_config: &'a UninitializedChatCompletionConfig,
     pub batch_dataset_name: &'a str,
@@ -449,7 +450,7 @@ pub(crate) async fn gepa_step(
     let analyses = analyze_inferences(
         &params.gateway_client,
         &parent_batch_results.evaluation_infos,
-        params.function_config,
+        params.config_and_tools,
         params.parent_variant_config,
         params.gepa_config,
     )
@@ -467,7 +468,7 @@ pub(crate) async fn gepa_step(
     let mutate_result = mutate_templates(
         &params.gateway_client,
         &analyses,
-        params.function_config,
+        params.config_and_tools,
         params.parent_variant_config,
         params.gepa_config,
     )
@@ -535,9 +536,9 @@ pub(crate) async fn gepa_step(
 /// Initializes the Pareto frontier with baseline variants or provided initial variants
 fn initialize_pareto_frontier(
     config: &GEPAConfig,
-    function_config: &FunctionConfig,
+    config_and_tools: &FunctionConfigAndTools,
 ) -> Result<HashMap<String, UninitializedChatCompletionConfig>, Error> {
-    let variants = function_config.variants();
+    let variants = config_and_tools.function_config.variants();
     let mut frontier = HashMap::new();
 
     if let Some(initial_variant_names) = &config.initial_variants {

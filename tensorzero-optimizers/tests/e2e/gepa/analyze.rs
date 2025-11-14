@@ -65,7 +65,7 @@ async fn test_analyze_inferences_success() {
         ),
     ];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
 
@@ -73,7 +73,7 @@ async fn test_analyze_inferences_success() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -108,7 +108,7 @@ async fn test_analyze_inferences_empty_input() {
     let client = make_embedded_gateway().await;
 
     let eval_infos: Vec<EvaluationInfo> = vec![];
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
 
@@ -116,7 +116,7 @@ async fn test_analyze_inferences_empty_input() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -140,7 +140,7 @@ async fn test_analyze_inferences_single_inference() {
         "Test output",
     )];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
 
@@ -148,7 +148,7 @@ async fn test_analyze_inferences_single_inference() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -187,7 +187,7 @@ async fn test_analyze_inferences_concurrency_limit() {
         })
         .collect();
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
 
     // Set low concurrency limit
@@ -198,7 +198,7 @@ async fn test_analyze_inferences_concurrency_limit() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -228,7 +228,7 @@ async fn test_analyze_inferences_parallel_execution() {
         })
         .collect();
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let mut gepa_config = create_test_gepa_config();
     gepa_config.max_concurrency = 5;
@@ -238,7 +238,7 @@ async fn test_analyze_inferences_parallel_execution() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -275,7 +275,7 @@ async fn test_analyze_inferences_graceful_degradation() {
         ),
     ];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
 
@@ -283,7 +283,7 @@ async fn test_analyze_inferences_graceful_degradation() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -312,7 +312,7 @@ async fn test_analyze_inferences_invalid_model() {
         "Test output",
     )];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let mut gepa_config = create_test_gepa_config();
     gepa_config.analysis_model = "nonexistent::invalid_model".to_string();
@@ -321,7 +321,7 @@ async fn test_analyze_inferences_invalid_model() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -347,7 +347,7 @@ async fn test_analyze_inferences_all_failures_error() {
         "Test output",
     )];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let mut gepa_config = create_test_gepa_config();
     gepa_config.analysis_model = "invalid_provider::nonexistent_model".to_string();
@@ -356,7 +356,7 @@ async fn test_analyze_inferences_all_failures_error() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -387,7 +387,7 @@ async fn test_analyze_inferences_with_schemas() {
         "Test output",
     )];
 
-    let function_config = create_test_function_config_with_schemas();
+    let config_and_tools = create_test_config_and_tools_with_schemas();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
 
@@ -395,7 +395,7 @@ async fn test_analyze_inferences_with_schemas() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -423,19 +423,24 @@ async fn test_analyze_inferences_with_tools() {
 
     // Create function config with tools
     use std::collections::HashMap;
+    use std::sync::Arc;
     use tensorzero_core::config::SchemaData;
     use tensorzero_core::function::FunctionConfigChat;
+    use tensorzero_optimizers::gepa::FunctionConfigAndTools;
 
-    let function_config = FunctionConfig::Chat(FunctionConfigChat {
-        variants: HashMap::new(),
-        schemas: SchemaData::default(),
-        tools: vec![], // Tools would be added here in a real scenario
-        tool_choice: tensorzero_core::tool::ToolChoice::None,
-        parallel_tool_calls: None,
-        description: Some("Test function with tools".to_string()),
-        all_explicit_templates_names: std::collections::HashSet::new(),
-        experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
-    });
+    let config_and_tools = FunctionConfigAndTools {
+        function_config: Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec![], // Tools would be added here in a real scenario
+            tool_choice: tensorzero_core::tool::ToolChoice::None,
+            parallel_tool_calls: None,
+            description: Some("Test function with tools".to_string()),
+            all_explicit_templates_names: std::collections::HashSet::new(),
+            experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+        })),
+        static_tools: HashMap::new(),
+    };
 
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
@@ -444,7 +449,7 @@ async fn test_analyze_inferences_with_tools() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -470,7 +475,7 @@ async fn test_analyze_inferences_json_function() {
         "Test output",
     )];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
 
@@ -478,7 +483,7 @@ async fn test_analyze_inferences_json_function() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -505,7 +510,7 @@ async fn test_analyze_inferences_xml_extraction() {
         "Test output",
     )];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
 
@@ -513,7 +518,7 @@ async fn test_analyze_inferences_xml_extraction() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -546,7 +551,7 @@ async fn test_analyze_inferences_response_structure() {
         "42",
     )];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
 
@@ -554,7 +559,7 @@ async fn test_analyze_inferences_response_structure() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -615,7 +620,7 @@ async fn test_analyze_input_includes_evaluations() {
         .evaluations
         .insert("fluency".to_string(), Some(serde_json::json!(0.92)));
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config_echo();
 
@@ -623,7 +628,7 @@ async fn test_analyze_input_includes_evaluations() {
     let result = analyze_inferences(
         &client,
         &[eval_info],
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -665,7 +670,7 @@ async fn test_analyze_input_includes_function_context() {
         "Test output",
     )];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config_echo();
 
@@ -673,7 +678,7 @@ async fn test_analyze_input_includes_function_context() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -722,7 +727,7 @@ async fn test_analyze_input_includes_schemas() {
         "Test output",
     )];
 
-    let function_config = create_test_function_config_with_schemas();
+    let config_and_tools = create_test_config_and_tools_with_schemas();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config_echo();
 
@@ -730,7 +735,7 @@ async fn test_analyze_input_includes_schemas() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -764,19 +769,24 @@ async fn test_analyze_input_includes_tools() {
     )];
 
     use std::collections::HashMap;
+    use std::sync::Arc;
     use tensorzero_core::config::SchemaData;
     use tensorzero_core::function::FunctionConfigChat;
+    use tensorzero_optimizers::gepa::FunctionConfigAndTools;
 
-    let function_config = FunctionConfig::Chat(FunctionConfigChat {
-        variants: HashMap::new(),
-        schemas: SchemaData::default(),
-        tools: vec![], // Tools would be added here in a real scenario
-        tool_choice: tensorzero_core::tool::ToolChoice::None,
-        parallel_tool_calls: None,
-        description: Some("Test function with tools".to_string()),
-        all_explicit_templates_names: std::collections::HashSet::new(),
-        experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
-    });
+    let config_and_tools = FunctionConfigAndTools {
+        function_config: Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec![], // Tools would be added here in a real scenario
+            tool_choice: tensorzero_core::tool::ToolChoice::None,
+            parallel_tool_calls: None,
+            description: Some("Test function with tools".to_string()),
+            all_explicit_templates_names: std::collections::HashSet::new(),
+            experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+        })),
+        static_tools: HashMap::new(),
+    };
 
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config_echo();
@@ -785,7 +795,7 @@ async fn test_analyze_input_includes_tools() {
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -804,7 +814,7 @@ async fn test_analyze_input_includes_tools() {
     // When tools is empty, the template should not include the tools section
     // (due to {% if tools %} condition in the template)
     assert!(
-        !user_message.contains("<available_tools>") || user_message.contains("<available_tools>"),
-        "User message should handle tools section appropriately"
+        !user_message.contains("<available_tools>"),
+        "User message should not contain <available_tools> when tools is empty"
     );
 }

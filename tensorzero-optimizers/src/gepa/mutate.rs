@@ -22,7 +22,8 @@ use tensorzero_core::{
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
-use super::analyze::InferenceWithAnalysis;
+use super::analyze::{extract_tool_schemas, InferenceWithAnalysis};
+use super::validate::FunctionConfigAndTools;
 
 /// Output from the GEPA mutate function
 ///
@@ -49,7 +50,7 @@ struct MutateOutputRaw {
 /// Build the input Arguments for the mutate function
 pub fn build_mutate_input(
     analyses: &[InferenceWithAnalysis],
-    function_config: &FunctionConfig,
+    config_and_tools: &FunctionConfigAndTools,
     parent_variant_config: &UninitializedChatCompletionConfig,
 ) -> Result<Arguments, Error> {
     use serde_json::json;
@@ -70,7 +71,8 @@ pub fn build_mutate_input(
     }
 
     // Extract schemas from function_config.schemas.inner (matching analyze.rs pattern)
-    let schemas_map: HashMap<String, serde_json::Value> = function_config
+    let schemas_map: HashMap<String, serde_json::Value> = config_and_tools
+        .function_config
         .schemas()
         .inner
         .iter()
@@ -80,21 +82,17 @@ pub fn build_mutate_input(
         .collect();
 
     // Extract output schema for JSON functions
-    let output_schema = match function_config {
+    let output_schema = match &*config_and_tools.function_config {
         FunctionConfig::Json(params) => Some(params.output_schema.value.clone()),
         FunctionConfig::Chat(_) => None,
     };
 
-    // Extract tools for Chat functions
-    let tools = match function_config {
-        FunctionConfig::Chat(params) => {
-            if params.tools.is_empty() {
-                None
-            } else {
-                Some(json!(params.tools))
-            }
-        }
-        FunctionConfig::Json(_) => None,
+    // Extract tool schemas (no dynamic tools for mutate - use None)
+    let tool_schemas = extract_tool_schemas(config_and_tools, None);
+    let tools = if tool_schemas.is_empty() {
+        None
+    } else {
+        Some(json!(tool_schemas))
     };
 
     // Serialize analyses array
@@ -188,7 +186,7 @@ pub fn parse_mutate_response(response: &InferenceResponse) -> Result<MutateOutpu
 pub async fn mutate_templates(
     gateway_client: &Client,
     analyses: &[InferenceWithAnalysis],
-    function_config: &FunctionConfig,
+    config_and_tools: &FunctionConfigAndTools,
     parent_variant_config: &UninitializedChatCompletionConfig,
     gepa_config: &tensorzero_core::optimization::gepa::GEPAConfig,
 ) -> Result<MutateOutput, Error> {
@@ -201,7 +199,7 @@ pub async fn mutate_templates(
     );
 
     // Build input Arguments for the mutate function
-    let arguments = build_mutate_input(analyses, function_config, parent_variant_config)?;
+    let arguments = build_mutate_input(analyses, config_and_tools, parent_variant_config)?;
 
     // Create dynamic variant config for the mutate function using new template format
     let mut mutate_config = UninitializedChatCompletionConfig {
@@ -547,6 +545,8 @@ mod tests {
 
     #[test]
     fn test_build_mutate_input_with_schemas() {
+        use crate::gepa::validate::FunctionConfigAndTools;
+        use std::sync::Arc;
         use tensorzero_core::{
             config::SchemaData,
             function::{FunctionConfig, FunctionConfigChat},
@@ -605,8 +605,14 @@ mod tests {
         // Create empty analyses
         let analyses: Vec<InferenceWithAnalysis> = vec![];
 
+        // Wrap function_config in FunctionConfigAndTools
+        let config_and_tools = FunctionConfigAndTools {
+            function_config: Arc::new(function_config),
+            static_tools: HashMap::new(),
+        };
+
         // Call build_mutate_input
-        let result = build_mutate_input(&analyses, &function_config, &variant_config);
+        let result = build_mutate_input(&analyses, &config_and_tools, &variant_config);
 
         // Assert: Should succeed
         assert!(result.is_ok(), "build_mutate_input should succeed");
@@ -633,6 +639,8 @@ mod tests {
 
     #[test]
     fn test_build_mutate_input_empty_templates_error() {
+        use crate::gepa::validate::FunctionConfigAndTools;
+        use std::sync::Arc;
         use tensorzero_core::function::{FunctionConfig, FunctionConfigChat};
 
         // Create function config
@@ -662,8 +670,14 @@ mod tests {
         // Create empty analyses
         let analyses: Vec<InferenceWithAnalysis> = vec![];
 
+        // Wrap function_config in FunctionConfigAndTools
+        let config_and_tools = FunctionConfigAndTools {
+            function_config: Arc::new(function_config),
+            static_tools: HashMap::new(),
+        };
+
         // Call build_mutate_input
-        let result = build_mutate_input(&analyses, &function_config, &variant_config);
+        let result = build_mutate_input(&analyses, &config_and_tools, &variant_config);
 
         // Assert: Should return Config error
         assert!(

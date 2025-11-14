@@ -41,7 +41,7 @@ async fn test_mutate_templates_success() {
     ];
 
     // Create function and variant configs
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let mut template_map = HashMap::new();
     template_map.insert(
         "system".to_string(),
@@ -55,7 +55,7 @@ async fn test_mutate_templates_success() {
     let result = mutate_templates(
         &client,
         &analyses,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -91,7 +91,7 @@ async fn test_mutate_templates_single_analysis() {
         "<report_error>Output is too generic</report_error>",
     )];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let mut template_map = HashMap::new();
     template_map.insert(
         "system".to_string(),
@@ -104,7 +104,7 @@ async fn test_mutate_templates_single_analysis() {
     let result = mutate_templates(
         &client,
         &analyses,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -127,7 +127,7 @@ async fn test_mutate_templates_empty_analyses() {
 
     let analyses: Vec<InferenceWithAnalysis> = vec![];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let mut template_map = HashMap::new();
     template_map.insert(
         "system".to_string(),
@@ -140,7 +140,7 @@ async fn test_mutate_templates_empty_analyses() {
     let result = mutate_templates(
         &client,
         &analyses,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -171,7 +171,7 @@ async fn test_mutate_templates_invalid_model() {
         "<report_optimal>Good</report_optimal>",
     )];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let mut template_map = HashMap::new();
     template_map.insert(
         "system".to_string(),
@@ -187,7 +187,7 @@ async fn test_mutate_templates_invalid_model() {
     let result = mutate_templates(
         &client,
         &analyses,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -225,7 +225,7 @@ async fn test_mutate_templates_with_schemas() {
         ),
     ];
 
-    let function_config = create_test_function_config_with_schemas();
+    let config_and_tools = create_test_config_and_tools_with_schemas();
     let mut template_map = HashMap::new();
     template_map.insert(
         "system".to_string(),
@@ -239,7 +239,7 @@ async fn test_mutate_templates_with_schemas() {
     let result = mutate_templates(
         &client,
         &analyses,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -274,7 +274,7 @@ async fn test_mutate_templates_end_to_end() {
         ),
     ];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
 
@@ -282,7 +282,7 @@ async fn test_mutate_templates_end_to_end() {
     let analyses_result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -303,7 +303,7 @@ async fn test_mutate_templates_end_to_end() {
     let result = mutate_templates(
         &client,
         &analyses,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -330,7 +330,7 @@ async fn test_mutate_templates_preserves_template_names() {
         "<report_optimal>Good</report_optimal>",
     )];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
 
     // Create variant with specific template names
     let mut template_map = HashMap::new();
@@ -348,7 +348,7 @@ async fn test_mutate_templates_preserves_template_names() {
     let result = mutate_templates(
         &client,
         &analyses,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )
@@ -389,7 +389,7 @@ async fn test_mutate_templates_with_new_template_format() {
         "<report_optimal>Excellent quality</report_optimal>",
     )];
 
-    let function_config = create_test_function_config();
+    let config_and_tools = create_test_config_and_tools();
 
     // Use custom template names (not just system/user/assistant)
     let mut template_map = HashMap::new();
@@ -431,7 +431,7 @@ async fn test_mutate_templates_with_new_template_format() {
     let result = mutate_templates(
         &client,
         &analyses,
-        &function_config,
+        &config_and_tools,
         &variant_config,
         &gepa_config,
     )

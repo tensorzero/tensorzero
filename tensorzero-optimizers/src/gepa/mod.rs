@@ -16,6 +16,7 @@ mod validate;
 pub use analyze::{analyze_inferences, InferenceWithAnalysis};
 pub use evaluate::{DatapointScores, ValidationScoresMap, VariantScores};
 pub use mutate::mutate_templates;
+pub use validate::FunctionConfigAndTools;
 
 use async_trait::async_trait;
 

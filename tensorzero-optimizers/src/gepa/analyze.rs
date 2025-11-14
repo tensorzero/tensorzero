@@ -24,10 +24,13 @@ use tensorzero_core::{
     function::FunctionConfig,
     inference::types::{Arguments, ContentBlockChatOutput, Role, Template},
     optimization::gepa::GEPAConfig,
+    tool::{AllowedToolsChoice, DynamicToolParams},
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
 use evaluations::stats::EvaluationInfo;
+
+use crate::gepa::validate::FunctionConfigAndTools;
 
 /// Serialize values to JSON with contextual error messages
 fn serialize_to_value<T: serde::Serialize>(
@@ -39,6 +42,114 @@ fn serialize_to_value<T: serde::Serialize>(
             message: format!("Failed to serialize {context}: {e}"),
         })
     })
+}
+
+/// Extract tool schemas combining static and dynamic tools
+///
+/// # Arguments
+/// * `config_and_tools` - Function configuration with static tools
+/// * `tool_params` - Optional dynamic tool parameters from datapoint
+///
+/// # Returns
+/// * HashMap of tool_name -> tool_schema (JSON with name, description, parameters, strict)
+pub(super) fn extract_tool_schemas(
+    config_and_tools: &FunctionConfigAndTools,
+    tool_params: Option<&DynamicToolParams>,
+) -> HashMap<String, serde_json::Value> {
+    let mut tool_schemas = HashMap::new();
+
+    // 1. Get static tool names from function config
+    let static_tool_names: Vec<String> = match &*config_and_tools.function_config {
+        FunctionConfig::Chat(chat_config) => chat_config.tools.clone(),
+        FunctionConfig::Json(_) => Vec::new(),
+    };
+
+    // 2. Filter by allowed_tools if specified in tool_params
+    let allowed_names: Vec<String> = if let Some(params) = tool_params {
+        if let Some(allowed) = &params.allowed_tools {
+            static_tool_names
+                .into_iter()
+                .filter(|name| allowed.contains(name))
+                .collect()
+        } else {
+            static_tool_names
+        }
+    } else {
+        static_tool_names
+    };
+
+    // 3. Extract static tool schemas
+    for tool_name in &allowed_names {
+        if let Some(static_tool) = config_and_tools.static_tools.get(tool_name) {
+            let schema = json!({
+                "name": static_tool.name,
+                "description": static_tool.description,
+                "parameters": static_tool.parameters.value,
+                "strict": static_tool.strict,
+            });
+            tool_schemas.insert(tool_name.clone(), schema);
+        }
+    }
+
+    // 4. Add dynamic additional_tools from tool_params
+    if let Some(params) = tool_params {
+        if let Some(additional_tools) = &params.additional_tools {
+            for tool in additional_tools {
+                let schema = json!({
+                    "name": tool.name,
+                    "description": tool.description,
+                    "parameters": tool.parameters,
+                    "strict": tool.strict,
+                });
+                tool_schemas.insert(tool.name.clone(), schema);
+            }
+        }
+    }
+
+    // 5. TODO: Add provider tools
+
+    tool_schemas
+}
+
+/// Extracts tool parameters from an EvaluationInfo
+/// Converts from database format (ToolCallConfigDatabaseInsert) to DynamicToolParams
+fn extract_tool_params_from_eval_info(eval_info: &EvaluationInfo) -> Option<DynamicToolParams> {
+    match &eval_info.datapoint {
+        StoredDatapoint::Chat(dp) => dp.tool_params.as_ref().map(|db_params| {
+            use tensorzero_core::tool::{ClientSideFunctionTool, Tool};
+
+            // Extract additional_tools from dynamic_tools
+            let additional_tools: Vec<ClientSideFunctionTool> = db_params
+                .dynamic_tools
+                .iter()
+                .map(|tool| match tool {
+                    Tool::ClientSideFunction(client_tool) => client_tool.clone(),
+                })
+                .collect();
+
+            // Convert AllowedTools to Option<Vec<String>>
+            // Replicates the private into_dynamic_allowed_tools method
+            let allowed_tools = match db_params.allowed_tools.choice {
+                AllowedToolsChoice::FunctionDefault => None,
+                AllowedToolsChoice::DynamicAllowedTools => {
+                    Some(db_params.allowed_tools.tools.clone())
+                }
+            };
+
+            DynamicToolParams {
+                allowed_tools,
+                additional_tools: if additional_tools.is_empty() {
+                    None
+                } else {
+                    Some(additional_tools)
+                },
+                tool_choice: Some(db_params.tool_choice.clone()),
+                parallel_tool_calls: db_params.parallel_tool_calls,
+                provider_tools: db_params.dynamic_provider_tools.clone(),
+            }
+        }),
+        StoredDatapoint::Json(_) => None,
+    }
 }
 
 /// Represents an inference output paired with its analysis feedback
@@ -57,14 +168,14 @@ pub struct InferenceWithAnalysis {
 ///
 /// # Arguments
 /// * `eval_info` - Evaluation information containing the datapoint and inference response
-/// * `function_config` - Function configuration (schemas, tools, output_schema)
+/// * `config_and_tools` - Function configuration with static tools
 /// * `variant_config` - Variant configuration (templates, model name)
 ///
 /// # Returns
 /// * Template arguments containing function metadata, templates, schemas, and the input/output pair
 pub fn build_analyze_input(
     eval_info: &EvaluationInfo,
-    function_config: &FunctionConfig,
+    config_and_tools: &FunctionConfigAndTools,
     variant_config: &UninitializedChatCompletionConfig,
 ) -> Result<Arguments, Error> {
     // Extract all templates from templates.inner HashMap using idiomatic iterators
@@ -76,7 +187,8 @@ pub fn build_analyze_input(
         .collect::<Result<_, _>>()?;
 
     // Extract all schemas from function config using the new schemas.inner pattern
-    let schemas_map: HashMap<String, serde_json::Value> = function_config
+    let schemas_map: HashMap<String, serde_json::Value> = config_and_tools
+        .function_config
         .schemas()
         .inner
         .iter()
@@ -86,21 +198,20 @@ pub fn build_analyze_input(
         .collect();
 
     // Extract output schema for JSON functions
-    let output_schema = match function_config {
+    let output_schema = match &*config_and_tools.function_config {
         FunctionConfig::Json(params) => Some(params.output_schema.value.clone()),
         FunctionConfig::Chat(_) => None,
     };
 
-    // Extract tools for Chat functions
-    let tools = match function_config {
-        FunctionConfig::Chat(params) => {
-            if params.tools.is_empty() {
-                None
-            } else {
-                Some(serde_json::json!(params.tools))
-            }
-        }
-        FunctionConfig::Json(_) => None,
+    // Extract tool_params from datapoint
+    let tool_params = extract_tool_params_from_eval_info(eval_info);
+
+    // Extract tool schemas combining static and dynamic tools
+    let tool_schemas = extract_tool_schemas(config_and_tools, tool_params.as_ref());
+    let tools = if tool_schemas.is_empty() {
+        None
+    } else {
+        Some(json!(tool_schemas))
     };
 
     // Serialize the inference output
@@ -162,7 +273,7 @@ pub fn build_analyze_input(
 pub async fn analyze_inferences(
     gateway_client: &Client,
     evaluation_infos: &[EvaluationInfo],
-    function_config: &FunctionConfig,
+    config_and_tools: &FunctionConfigAndTools,
     variant_config: &UninitializedChatCompletionConfig,
     gepa_config: &GEPAConfig,
 ) -> Result<Vec<InferenceWithAnalysis>, Error> {
@@ -238,7 +349,7 @@ pub async fn analyze_inferences(
                 })?;
 
                 // Build input for the analyze function (returns Arguments directly)
-                let arguments = build_analyze_input(eval_info, function_config, variant_config)?;
+                let arguments = build_analyze_input(eval_info, config_and_tools, variant_config)?;
 
                 // Create ClientInferenceParams for the analyze function
                 let params = ClientInferenceParams {
@@ -469,6 +580,22 @@ mod tests {
         })
     }
 
+    /// Create a minimal FunctionConfigAndTools for testing (no tools)
+    fn create_test_config_and_tools() -> FunctionConfigAndTools {
+        FunctionConfigAndTools {
+            function_config: Arc::new(create_test_function_config()),
+            static_tools: HashMap::new(),
+        }
+    }
+
+    /// Create a FunctionConfigAndTools with schemas for testing (no tools)
+    fn create_test_config_and_tools_with_schemas() -> FunctionConfigAndTools {
+        FunctionConfigAndTools {
+            function_config: Arc::new(create_test_function_config_with_schemas()),
+            static_tools: HashMap::new(),
+        }
+    }
+
     /// Create a test Chat InferenceResponse
     fn create_test_chat_inference_response(text: &str) -> InferenceResponse {
         InferenceResponse::Chat(ChatInferenceResponse {
@@ -576,10 +703,10 @@ mod tests {
     #[test]
     fn test_build_analyze_input_basic() {
         let eval_info = create_test_evaluation_info();
-        let function_config = create_test_function_config();
+        let config_and_tools = create_test_config_and_tools();
         let variant_config = create_test_variant_config();
 
-        let result = build_analyze_input(&eval_info, &function_config, &variant_config);
+        let result = build_analyze_input(&eval_info, &config_and_tools, &variant_config);
 
         assert!(result.is_ok());
         let input = result.unwrap();
@@ -596,10 +723,10 @@ mod tests {
     #[test]
     fn test_build_analyze_input_with_schemas() {
         let eval_info = create_test_evaluation_info();
-        let function_config = create_test_function_config_with_schemas();
+        let config_and_tools = create_test_config_and_tools_with_schemas();
         let variant_config = create_test_variant_config();
 
-        let result = build_analyze_input(&eval_info, &function_config, &variant_config);
+        let result = build_analyze_input(&eval_info, &config_and_tools, &variant_config);
 
         assert!(result.is_ok());
         let input = result.unwrap();
@@ -615,10 +742,10 @@ mod tests {
     #[test]
     fn test_build_analyze_input_empty_schemas() {
         let eval_info = create_test_evaluation_info();
-        let function_config = create_test_function_config(); // No schemas
+        let config_and_tools = create_test_config_and_tools(); // No schemas
         let variant_config = create_test_variant_config();
 
-        let result = build_analyze_input(&eval_info, &function_config, &variant_config);
+        let result = build_analyze_input(&eval_info, &config_and_tools, &variant_config);
 
         assert!(result.is_ok());
         let input = result.unwrap();
@@ -632,10 +759,10 @@ mod tests {
     #[test]
     fn test_build_analyze_input_templates_extracted() {
         let eval_info = create_test_evaluation_info();
-        let function_config = create_test_function_config();
+        let config_and_tools = create_test_config_and_tools();
         let variant_config = create_test_variant_config();
 
-        let result = build_analyze_input(&eval_info, &function_config, &variant_config);
+        let result = build_analyze_input(&eval_info, &config_and_tools, &variant_config);
 
         assert!(result.is_ok());
         let input = result.unwrap();
@@ -652,10 +779,10 @@ mod tests {
     #[test]
     fn test_build_analyze_input_model_name() {
         let eval_info = create_test_evaluation_info();
-        let function_config = create_test_function_config();
+        let config_and_tools = create_test_config_and_tools();
         let variant_config = create_test_variant_config();
 
-        let result = build_analyze_input(&eval_info, &function_config, &variant_config);
+        let result = build_analyze_input(&eval_info, &config_and_tools, &variant_config);
 
         assert!(result.is_ok());
         let input = result.unwrap();
@@ -667,10 +794,10 @@ mod tests {
     #[test]
     fn test_build_analyze_input_function_name() {
         let eval_info = create_test_evaluation_info();
-        let function_config = create_test_function_config();
+        let config_and_tools = create_test_config_and_tools();
         let variant_config = create_test_variant_config();
 
-        let result = build_analyze_input(&eval_info, &function_config, &variant_config);
+        let result = build_analyze_input(&eval_info, &config_and_tools, &variant_config);
 
         assert!(result.is_ok());
         let input = result.unwrap();

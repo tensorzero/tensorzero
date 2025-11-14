@@ -3,6 +3,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::missing_panics_doc)]
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use evaluations::EvaluationInfo;
 use tensorzero_core::{
@@ -17,7 +18,7 @@ use tensorzero_core::{
     optimization::gepa::GEPAConfig,
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
-use tensorzero_optimizers::gepa::InferenceWithAnalysis;
+use tensorzero_optimizers::gepa::{FunctionConfigAndTools, InferenceWithAnalysis};
 use uuid::Uuid;
 
 pub mod analyze;
@@ -89,6 +90,22 @@ pub fn create_test_function_config_with_schemas() -> FunctionConfig {
         all_explicit_templates_names: std::collections::HashSet::new(),
         experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
     })
+}
+
+/// Create a minimal FunctionConfigAndTools for testing (no tools)
+pub fn create_test_config_and_tools() -> FunctionConfigAndTools {
+    FunctionConfigAndTools {
+        function_config: Arc::new(create_test_function_config()),
+        static_tools: HashMap::new(),
+    }
+}
+
+/// Create a FunctionConfigAndTools with schemas for testing (no tools)
+pub fn create_test_config_and_tools_with_schemas() -> FunctionConfigAndTools {
+    FunctionConfigAndTools {
+        function_config: Arc::new(create_test_function_config_with_schemas()),
+        static_tools: HashMap::new(),
+    }
 }
 
 /// Create a test UninitializedChatCompletionConfig with simple templates (new format)
