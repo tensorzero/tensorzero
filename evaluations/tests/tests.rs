@@ -25,8 +25,9 @@ use url::Url;
 use crate::common::write_json_fixture_to_dataset;
 use common::{get_tensorzero_client, write_chat_fixture_to_dataset};
 use evaluations::{
-    run_evaluation, run_evaluation_core_streaming, stats::EvaluationUpdate, Args,
-    EvaluationCoreArgs, EvaluationVariant, OutputFormat,
+    run_evaluation, run_evaluation_core_streaming,
+    stats::{EvaluationUpdate, PerEvaluatorStats},
+    Args, EvaluationCoreArgs, EvaluationVariant, OutputFormat,
 };
 use std::collections::HashMap;
 use std::time::Duration;
@@ -2294,7 +2295,7 @@ async fn test_evaluation_with_dynamic_variant() {
         concurrency: 2,
     };
 
-    let result = run_evaluation_core_streaming(core_args, None, None).await;
+    let result = run_evaluation_core_streaming(core_args, None, None, None).await;
     assert!(
         result.is_ok(),
         "Evaluation with dynamic variant should succeed"
@@ -2302,4 +2303,194 @@ async fn test_evaluation_with_dynamic_variant() {
 
     let result = result.unwrap();
     assert!(result.run_info.num_datapoints > 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_max_inferences_parameter() {
+    init_tracing_for_tests();
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("extract_entities_max_inferences-{}", Uuid::now_v7());
+    let tensorzero_client = get_tensorzero_client().await;
+
+    // Write 10 datapoints to the dataset
+    write_json_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-core/fixtures/datasets/json_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("extract_entities_0.8".to_string(), dataset_name.clone())]),
+    )
+    .await;
+
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(
+            &tensorzero_core::config::ConfigFileGlob::new_from_path(&PathBuf::from(&format!(
+                "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+                std::env::var("CARGO_MANIFEST_DIR").unwrap()
+            )))
+            .unwrap(),
+            false,
+        )
+        .await
+        .unwrap(),
+    );
+
+    let evaluation_run_id = Uuid::now_v7();
+
+    // Test with max_inferences = 3 (should only process 3 datapoints)
+    let core_args = EvaluationCoreArgs {
+        tensorzero_client: tensorzero_client.clone(),
+        clickhouse_client: clickhouse.clone(),
+        config: config.clone(),
+        dataset_name: dataset_name.clone(),
+        variant: EvaluationVariant::Name("extract_entities_0.8".to_string()),
+        evaluation_name: "entity_extraction".to_string(),
+        evaluation_run_id,
+        inference_cache: CacheEnabledMode::Off,
+        concurrency: 2,
+    };
+
+    let max_inferences = Some(3);
+    let result = run_evaluation_core_streaming(core_args, None, max_inferences, None)
+        .await
+        .unwrap();
+
+    // Verify that only 3 datapoints were processed
+    assert_eq!(
+        result.run_info.num_datapoints, 3,
+        "max_inferences should limit dataset to 3 datapoints"
+    );
+
+    // Consume the results to ensure all evaluations complete
+    let mut receiver = result.receiver;
+    let mut success_count = 0;
+    while let Some(update) = receiver.recv().await {
+        if matches!(update, EvaluationUpdate::Success(_)) {
+            success_count += 1;
+        }
+    }
+
+    assert_eq!(
+        success_count, 3,
+        "Should have exactly 3 successful evaluations"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_precision_limits_parameter() {
+    init_tracing_for_tests();
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("good-haiku-data-precision-{}", Uuid::now_v7());
+    let tensorzero_client = get_tensorzero_client().await;
+
+    // Use existing chat fixture that has both outputs (for exact_match) and inputs (for LLM judge)
+    write_chat_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
+    )
+    .await;
+
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(
+            &tensorzero_core::config::ConfigFileGlob::new_from_path(&PathBuf::from(&format!(
+                "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+                std::env::var("CARGO_MANIFEST_DIR").unwrap()
+            )))
+            .unwrap(),
+            false,
+        )
+        .await
+        .unwrap(),
+    );
+
+    let evaluation_run_id = Uuid::now_v7();
+
+    // Set precision limits for both evaluators
+    // exact_match: CI half-width <= 0.13
+    // topic_starts_with_f: CI half-width <= 0.16
+    let mut precision_limits = HashMap::new();
+    precision_limits.insert("exact_match".to_string(), 0.10);
+    precision_limits.insert("topic_starts_with_f".to_string(), 0.13);
+
+    let core_args = EvaluationCoreArgs {
+        tensorzero_client: tensorzero_client.clone(),
+        clickhouse_client: clickhouse.clone(),
+        config: config.clone(),
+        dataset_name: dataset_name.clone(),
+        variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
+        evaluation_name: "haiku_without_outputs".to_string(), // Has both exact_match and topic_starts_with_f
+        evaluation_run_id,
+        inference_cache: CacheEnabledMode::Off,
+        concurrency: 5,
+    };
+
+    // Run with min_inferences=10 and precision limits
+    let result = run_evaluation_core_streaming(
+        core_args,
+        Some(10), // min_inferences
+        None,     // No max_inferences limit
+        Some(precision_limits.clone()),
+    )
+    .await
+    .unwrap();
+
+    // Consume results and track evaluations, computing statistics as we go
+    let mut receiver = result.receiver;
+    let mut exact_match_stats = PerEvaluatorStats::new();
+    let mut topic_stats = PerEvaluatorStats::new();
+    let mut total_datapoints = 0;
+
+    while let Some(update) = receiver.recv().await {
+        if let EvaluationUpdate::Success(info) = update {
+            total_datapoints += 1;
+
+            // Track exact_match values
+            if let Some(Some(serde_json::Value::Bool(b))) = info.evaluations.get("exact_match") {
+                exact_match_stats.push(if *b { 1.0 } else { 0.0 });
+            }
+
+            // Track topic_starts_with_f values
+            if let Some(Some(serde_json::Value::Bool(b))) =
+                info.evaluations.get("topic_starts_with_f")
+            {
+                topic_stats.push(if *b { 1.0 } else { 0.0 });
+            }
+        }
+    }
+
+    // Verify min_inferences constraint
+    assert!(
+        total_datapoints >= 10,
+        "Should process at least min_inferences (10) datapoints, got {total_datapoints}"
+    );
+
+    // Verify that both evaluators achieved their precision limits
+    let exact_match_ci = exact_match_stats.ci_half_width();
+    let topic_ci = topic_stats.ci_half_width();
+
+    // Assert that achieved precision is within limits
+    assert!(
+        exact_match_ci.is_some(),
+        "exact_match should have computed CI half-width"
+    );
+    assert!(
+        exact_match_ci.unwrap() <= precision_limits["exact_match"],
+        "exact_match CI half-width {:.3} should be <= limit {:.3}",
+        exact_match_ci.unwrap(),
+        precision_limits["exact_match"]
+    );
+
+    assert!(
+        topic_ci.is_some(),
+        "topic_starts_with_f should have computed CI half-width"
+    );
+    assert!(
+        topic_ci.unwrap() <= precision_limits["topic_starts_with_f"],
+        "topic_starts_with_f CI half-width {:.3} should be <= limit {:.3}",
+        topic_ci.unwrap(),
+        precision_limits["topic_starts_with_f"]
+    );
 }

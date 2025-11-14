@@ -237,7 +237,7 @@ pub async fn run_evaluation(
     };
 
     let output_format = args.format.clone();
-    let result = run_evaluation_core_streaming(core_args, None, None).await?; // No budget, no adaptive stopping
+    let result = run_evaluation_core_streaming(core_args, None, None, None).await?; // No adaptive stopping
 
     let mut receiver = result.receiver;
     let dataset_len = result.run_info.num_datapoints;
@@ -319,7 +319,7 @@ pub async fn run_evaluation(
 ///
 /// 1. Creates an mpsc channel for streaming `EvaluationUpdate` messages
 /// 2. Loads the evaluation and function configurations
-/// 3. Queries the dataset (limited by budget if adaptive stopping enabled)
+/// 3. Queries the dataset (limited by `max_inferences` if specified)
 /// 4. If adaptive stopping: creates cancellation tokens for each evaluator
 /// 5. Sends `RunInfo` as the first message (evaluation_run_id, num_datapoints)
 /// 6. Spawns a concurrent task for each datapoint that:
@@ -329,25 +329,30 @@ pub async fn run_evaluation(
 /// 7. Spawns a background collector task that:
 ///    - Collects results from the JoinSet as tasks complete
 ///    - If adaptive stopping: updates per-evaluator statistics and checks stopping conditions
-///    - Cancels evaluator tokens when CI half-width ≤ epsilon_k
+///    - Cancels evaluator tokens when CI half-width ≤ precision_limit_k
 ///    - Converts results to `EvaluationUpdate::Success` or `EvaluationUpdate::Error`
 ///    - Sends each update through the channel
 ///    - Closes the channel when all tasks complete
 /// 8. Returns immediately with the receiver, run_info, and evaluation_config
 ///
-/// ## Budget and Adaptive Stopping (Optional)
+/// ## Adaptive Stopping (Optional)
 ///
-/// **Budget (B)**: When `budget` is `Some(B)`, limits dataset to at most B datapoints.
+/// **Min Inferences**: Minimum number of inferences to run before checking stopping conditions (default: 20)
+///   - Ensures sufficient samples for statistical validity
 ///
-/// **Adaptive Stopping**: When `epsilon` is `Some(map)`:
-/// - **Epsilon (ε_k)**: Per-evaluator CI half-width thresholds (HashMap<String, f32>)
-///   - Evaluator k stops when: `1.96 * stderr ≤ ε_k`
+/// **Max Inferences**: When `max_inferences` is `Some(max)`, limits dataset to at most `max` datapoints.
+///
+/// **Precision Limits**: When `precision_limits` is `Some(map)`:
+/// - Per-evaluator CI half-width thresholds (HashMap<String, f32>)
+///   - Evaluator k stops when: `1.96 * stderr ≤ threshold_k`
+///   - Only checked after `min_inferences` have completed
 ///   - Implemented via cancellation tokens that skip the evaluator on subsequent datapoints
-/// - **Evaluators not in epsilon map**: Run on all datapoints (up to budget)
+/// - **Evaluators not in precision_limits map**: Run on all datapoints (up to max_inferences)
 /// - All datapoint tasks are spawned upfront for maximum concurrency
+/// - When all evaluators with precision limits have stopped, remaining tasks are aborted
 ///
-/// When both `budget` and `epsilon` are `None`:
-/// - All evaluators run on all datapoints
+/// When `precision_limits` is `None`:
+/// - All evaluators run on all datapoints (up to max_inferences)
 /// - Standard evaluation behavior
 ///
 /// ## Return value
@@ -368,9 +373,12 @@ pub async fn run_evaluation(
 #[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant = ?args.variant, concurrency = %args.concurrency))]
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
-    budget: Option<usize>,
-    epsilon: Option<HashMap<String, f32>>,
+    min_inferences: Option<usize>,
+    max_inferences: Option<usize>,
+    precision_limits: Option<HashMap<String, f32>>,
 ) -> Result<EvaluationStreamResult> {
+    // Default to 20 for min_inferences
+    let min_inferences = min_inferences.unwrap_or(20);
     let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
 
     // Build the semaphore and clients
@@ -410,7 +418,7 @@ pub async fn run_evaluation_core_streaming(
         &args.dataset_name,
         &inference_evaluation_config.function_name,
         &function_config,
-        budget, // Apply budget limit if provided
+        max_inferences, // Apply max_inferences limit if provided
     )
     .await?;
     info!(dataset_size = dataset.len(), "Dataset loaded successfully");
@@ -422,7 +430,7 @@ pub async fn run_evaluation_core_streaming(
 
     // Setup for adaptive stopping (if enabled)
     let cancellation_tokens: Option<Arc<HashMap<String, CancellationToken>>> =
-        epsilon.as_ref().map(|_| {
+        precision_limits.as_ref().map(|_| {
             Arc::new(
                 inference_evaluation_config
                     .evaluators
@@ -433,8 +441,8 @@ pub async fn run_evaluation_core_streaming(
         });
 
     let mut evaluator_stats: Option<HashMap<String, PerEvaluatorStats>> =
-        epsilon.as_ref().map(|eps_map| {
-            eps_map
+        precision_limits.as_ref().map(|precision_map| {
+            precision_map
                 .keys()
                 .map(|name| (name.clone(), PerEvaluatorStats::new()))
                 .collect()
@@ -525,16 +533,19 @@ pub async fn run_evaluation_core_streaming(
 
     // Spawn a task to collect results and stream them
     let sender_clone = sender.clone();
-    let epsilon_clone = epsilon.clone();
+    let precision_limits_clone = precision_limits.clone();
+    let mut completed_inferences = 0;
     // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
     #[expect(clippy::disallowed_methods)]
     tokio::spawn(async move {
         while let Some(result) = join_set.join_next_with_id().await {
             let update = match result {
                 Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
+                    completed_inferences += 1;
+
                     // Update statistics for adaptive stopping (if enabled)
-                    if let (Some(stats), Some(eps_map)) =
-                        (evaluator_stats.as_mut(), epsilon_clone.as_ref())
+                    if let (Some(stats), Some(precision_map)) =
+                        (evaluator_stats.as_mut(), precision_limits_clone.as_ref())
                     {
                         for (evaluator_name, eval_result) in &evaluation_result {
                             // Only track stats for evaluators with stopping conditions
@@ -554,40 +565,46 @@ pub async fn run_evaluation_core_streaming(
                         }
 
                         // Check stopping conditions and cancel tokens if needed
-                        if let Some(tokens) = cancellation_tokens.as_ref() {
-                            for (evaluator_name, evaluator_stats) in stats.iter() {
-                                if let Some(epsilon_k) = eps_map.get(evaluator_name) {
-                                    if let Some(ci_half_width) = evaluator_stats.ci_half_width() {
-                                        if ci_half_width <= *epsilon_k {
-                                            if let Some(token) = tokens.get(evaluator_name) {
-                                                if !token.is_cancelled() {
-                                                    info!(
-                                                        evaluator_name = %evaluator_name,
-                                                        ci_half_width = ci_half_width,
-                                                        epsilon_k = epsilon_k,
-                                                        count = evaluator_stats.count(),
-                                                        mean = ?evaluator_stats.mean(),
-                                                        "Stopping evaluator: CI half-width <= epsilon_k"
-                                                    );
-                                                    token.cancel();
+                        // Only check after min_inferences have been completed
+                        if completed_inferences >= min_inferences {
+                            if let Some(tokens) = cancellation_tokens.as_ref() {
+                                for (evaluator_name, evaluator_stats) in stats.iter() {
+                                    if let Some(precision_limit) = precision_map.get(evaluator_name)
+                                    {
+                                        if let Some(ci_half_width) = evaluator_stats.ci_half_width()
+                                        {
+                                            if ci_half_width <= *precision_limit {
+                                                if let Some(token) = tokens.get(evaluator_name) {
+                                                    if !token.is_cancelled() {
+                                                        info!(
+                                                            evaluator_name = %evaluator_name,
+                                                            ci_half_width = ci_half_width,
+                                                            precision_limit = precision_limit,
+                                                            count = evaluator_stats.count(),
+                                                            mean = ?evaluator_stats.mean(),
+                                                            "Stopping evaluator: CI half-width <= precision_limit"
+                                                        );
+                                                        token.cancel();
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
-                            }
 
-                            // Check if all evaluators with epsilon thresholds are now cancelled
-                            let all_evaluators_stopped = eps_map.keys().all(|evaluator_name| {
-                                tokens
-                                    .get(evaluator_name)
-                                    .map(|token| token.is_cancelled())
-                                    .unwrap_or(false)
-                            });
+                                // Check if all evaluators with precision limits are now cancelled
+                                let all_evaluators_stopped =
+                                    precision_map.keys().all(|evaluator_name| {
+                                        tokens
+                                            .get(evaluator_name)
+                                            .map(|token| token.is_cancelled())
+                                            .unwrap_or(false)
+                                    });
 
-                            // Abort remaining inference tasks if all evaluators have hit their precision target
-                            if all_evaluators_stopped {
-                                join_set.abort_all();
+                                // Abort remaining inference tasks if all evaluators have hit their precision target
+                                if all_evaluators_stopped {
+                                    join_set.abort_all();
+                                }
                             }
                         }
                     }
