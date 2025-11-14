@@ -2409,8 +2409,8 @@ async fn test_precision_limits_parameter() {
     let evaluation_run_id = Uuid::now_v7();
 
     // Set precision limits for both evaluators
-    // exact_match: CI half-width <= 0.13
-    // topic_starts_with_f: CI half-width <= 0.16
+    // exact_match: CI half-width <= 0.10
+    // topic_starts_with_f: CI half-width <= 0.13
     let mut precision_limits = HashMap::new();
     precision_limits.insert("exact_match".to_string(), 0.10);
     precision_limits.insert("topic_starts_with_f".to_string(), 0.13);
