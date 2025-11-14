@@ -5,7 +5,6 @@ use crate::inference::types::chat_completion_inference_params::{
     warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
 };
 use crate::providers::openai::OpenAIMessagesConfig;
-use crate::tool::ToolChoice;
 use crate::{
     http::TensorZeroEventSource, providers::helpers_thinking_block::THINK_CHUNK_ID,
     tool::ClientSideFunctionTool,
@@ -22,9 +21,6 @@ use url::Url;
 
 use super::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-};
-use super::openai::{
-    AllowedToolsMode, OpenAIToolChoiceString, SpecificToolFunction, ToolReference,
 };
 use crate::{
     cache::ModelProviderRequest,
@@ -44,7 +40,7 @@ use crate::{
         InferenceProvider,
     },
     model::{Credential, ModelProvider},
-    tool::{ToolCall, ToolCallChunk},
+    tool::{ToolCall, ToolCallChunk, ToolTypeFilter},
 };
 
 use super::{
@@ -403,7 +399,7 @@ pub(super) fn prepare_fireworks_tools<'a>(
             }
             let tools = Some(
                 tool_config
-                    .strict_tools_available()
+                    .strict_tools_available(ToolTypeFilter::FunctionOnly)
                     .map(Into::into)
                     .collect(),
             );

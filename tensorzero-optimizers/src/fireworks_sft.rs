@@ -347,10 +347,8 @@ impl<'a> FireworksSupervisedRow<'a> {
                 tools
                     .iter()
                     .filter_map(|dt| match &dt.0 {
-                        tensorzero_core::tool::Tool::ClientSideFunction(func) => {
-                            Some(func.into())
-                        }
-                        tensorzero_core::tool::Tool::Custom(_) => None, // Skip custom tools for SFT
+                        tensorzero_core::tool::Tool::ClientSideFunction(func) => Some(func.into()),
+                        tensorzero_core::tool::Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
                     })
                     .collect()
             })

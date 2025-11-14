@@ -16,6 +16,7 @@ use tensorzero_core::{
     },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
     inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
+    tool::Tool,
 };
 
 use uuid::Uuid;
@@ -338,31 +339,36 @@ async fn test_create_delete_datapoint_chat() {
         if let Some(additional_tools) = &list_datapoint.tool_params.additional_tools {
             assert!(!additional_tools.is_empty());
             let first_tool = &additional_tools[0];
-            assert_eq!(first_tool.name, "get_temperature");
-            assert_eq!(
-                first_tool.description,
-                "Get the current temperature in a given location"
-            );
-            assert_eq!(
-                first_tool.parameters,
-                json!({
-                    "$schema": "http://json-schema.org/draft-07/schema#",
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "The location to get the temperature for (e.g. \"New York\")"
-                        },
-                        "units": {
-                            "type": "string",
-                            "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
-                            "enum": ["fahrenheit", "celsius"]
-                        }
-                    },
-                    "required": ["location"],
-                    "additionalProperties": false
-                })
-            );
+            match &first_tool.0 {
+                Tool::ClientSideFunction(tool) => {
+                    assert_eq!(tool.name, "get_temperature");
+                    assert_eq!(
+                        tool.description,
+                        "Get the current temperature in a given location"
+                    );
+                    assert_eq!(
+                        tool.parameters,
+                        json!({
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                                "location": {
+                                    "type": "string",
+                                    "description": "The location to get the temperature for (e.g. \"New York\")"
+                                },
+                                "units": {
+                                    "type": "string",
+                                    "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+                                    "enum": ["fahrenheit", "celsius"]
+                                }
+                            },
+                            "required": ["location"],
+                            "additionalProperties": false
+                        })
+                    );
+                }
+                _ => panic!("Expected ClientSideFunction tool"),
+            }
         }
 
         let datapoint_id = datapoint.id;

@@ -31,7 +31,7 @@ use crate::inference::types::{
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 use crate::model::{Credential, ModelProvider};
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig, ToolTypeFilter};
 
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
@@ -583,7 +583,12 @@ pub(super) fn prepare_groq_tools<'a>(
             if !tool_config.any_tools_available() {
                 return (None, None, None);
             }
-            let tools = Some(tool_config.tools_available().map(Into::into).collect());
+            let tools = Some(
+                tool_config
+                    .tools_available(ToolTypeFilter::FunctionOnly)
+                    .map(Into::into)
+                    .collect(),
+            );
             let parallel_tool_calls = tool_config.parallel_tool_calls;
 
             // Check if we need to construct an AllowedToolsChoice variant

@@ -40,7 +40,9 @@ use crate::inference::InferenceProvider;
 use crate::model::{fully_qualified_name, Credential, ModelProvider};
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
-use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
+use crate::tool::{
+    ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig, ToolTypeFilter,
+};
 
 use super::gcp_vertex_gemini::process_jsonschema_for_gcp_vertex_gemini;
 use super::helpers::{convert_stream_error, inject_extra_request_data_and_send};
@@ -927,7 +929,7 @@ fn prepare_tools<'a>(
             }
             let tools = Some(vec![GeminiTool {
                 function_declarations: tool_config
-                    .tools_available()
+                    .tools_available(ToolTypeFilter::FunctionOnly)
                     .map(GeminiFunctionDeclaration::from_tool_config)
                     .collect(),
             }]);
@@ -1614,7 +1616,9 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
+        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG
+            .tools_available(ToolTypeFilter::FunctionOnly)
+            .collect();
         let tool = GeminiTool {
             function_declarations: tools_vec
                 .iter()

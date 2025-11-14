@@ -27,6 +27,7 @@ use tensorzero_core::{
     },
     rate_limiting::ScopeInfo,
     stored_inference::RenderedSample,
+    tool::ToolTypeFilter,
     variant::dicl::UninitializedDiclConfig,
 };
 
@@ -220,7 +221,7 @@ fn validate_function_config(
             // JSON functions should have exactly one implicit tool for schema validation
             if json_config
                 .implicit_tool_call_config
-                .tools_available()
+                .tools_available(ToolTypeFilter::FunctionOnly)
                 .count()
                 != 1
             {
@@ -228,7 +229,7 @@ fn validate_function_config(
                     message: format!(
                         "DICL optimization expected JSON function '{}' to have exactly 1 implicit tool, but found {}. This indicates a configuration issue.",
                         function_name,
-                        json_config.implicit_tool_call_config.tools_available().count()
+                        json_config.implicit_tool_call_config.tools_available(ToolTypeFilter::FunctionOnly).count()
                     ),
                 }));
             }
@@ -637,8 +638,8 @@ mod tests {
         providers::dummy::DummyProvider,
         stored_inference::{RenderedSample, StoredOutput},
         tool::{
-            create_implicit_tool_call_config, ClientSideFunctionTool, DynamicToolParams, ToolCall,
-            ToolCallConfig, ToolChoice, ToolResult,
+            create_implicit_tool_call_config, ClientSideFunctionTool, DynamicTool,
+            DynamicToolParams, Tool, ToolCall, ToolCallConfig, ToolChoice, ToolResult,
         },
     };
 
@@ -870,7 +871,12 @@ mod tests {
         let mut sample = create_test_rendered_sample();
         sample.tool_params = DynamicToolParams {
             allowed_tools: None,
-            additional_tools: Some(tools),
+            additional_tools: Some(
+                tools
+                    .into_iter()
+                    .map(|t| DynamicTool(Tool::ClientSideFunction(t)))
+                    .collect(),
+            ),
             tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: Some(true),
             provider_tools: vec![],
@@ -1141,6 +1147,9 @@ mod tests {
     fn test_validate_function_config_json_valid() {
         let function_config = create_test_json_function_config();
         let result = validate_function_config("test_json_function", &function_config);
+        if let Err(e) = &result {
+            eprintln!("Validation error: {:?}", e);
+        }
         assert!(result.is_ok());
     }
 

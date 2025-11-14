@@ -44,7 +44,7 @@ use crate::inference::types::{
 use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
 use crate::inference::InferenceProvider;
 use crate::model::ModelProvider;
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig, ToolTypeFilter};
 
 const PROVIDER_NAME: &str = "AWS Bedrock";
 pub const PROVIDER_TYPE: &str = "aws_bedrock";
@@ -252,7 +252,7 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(tool_config) = &request.tool_config {
             if !matches!(tool_config.tool_choice, ToolChoice::None) {
                 let tools: Vec<Tool> = tool_config
-                    .strict_tools_available()
+                    .strict_tools_available(ToolTypeFilter::FunctionOnly)
                     .map(Tool::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
 
@@ -397,7 +397,7 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(tool_config) = &request.tool_config {
             if !matches!(tool_config.tool_choice, ToolChoice::None) {
                 let tools: Vec<Tool> = tool_config
-                    .strict_tools_available()
+                    .strict_tools_available(ToolTypeFilter::FunctionOnly)
                     .map(Tool::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
 

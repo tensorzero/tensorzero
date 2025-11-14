@@ -33,7 +33,7 @@ use crate::{
         OpenAIFile, OpenAIMessagesConfig, OpenAITool, OpenAIToolType, SystemOrDeveloper,
         PROVIDER_TYPE,
     },
-    tool::{ToolCall, ToolCallChunk, ToolChoice},
+    tool::{ToolCall, ToolCallChunk, ToolChoice, ToolTypeFilter},
 };
 
 #[derive(Serialize, Debug)]
@@ -345,7 +345,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
             .as_ref()
             .map(|tool_config| {
                 tool_config
-                    .tools_available()
+                    .tools_available(ToolTypeFilter::All)
                     .map(|tool| OpenAITool::from(tool).into_openai_responses_tool())
                     .collect()
             })

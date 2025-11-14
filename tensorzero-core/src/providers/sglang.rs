@@ -32,12 +32,12 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::providers::openai::{check_api_base_suffix, OpenAIMessagesConfig};
-use crate::tool::ToolCallChunk;
+use crate::tool::{ToolCallChunk, ToolTypeFilter};
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, OpenAIRequestMessage,
-    OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice, OpenAIUsage,
-    StreamOptions, SystemOrDeveloper,
+    OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice, OpenAIUsage, StreamOptions,
+    SystemOrDeveloper,
 };
 
 const PROVIDER_NAME: &str = "SGLang";
@@ -591,7 +591,7 @@ pub(super) fn prepare_sglang_tools<'a>(
             }
             let tools = Some(
                 tool_config
-                    .strict_tools_available()
+                    .strict_tools_available(ToolTypeFilter::FunctionOnly)
                     .map(Into::into)
                     .collect(),
             );

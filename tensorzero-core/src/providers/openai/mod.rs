@@ -58,7 +58,9 @@ use crate::providers::openai::responses::{
     OpenAIResponsesInputMessage, OpenAIResponsesInputMessageContent, OpenAIResponsesRequest,
     OpenAIResponsesResponse,
 };
-use crate::tool::{ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{
+    ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig, ToolTypeFilter,
+};
 
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
@@ -1524,7 +1526,12 @@ pub(super) fn prepare_openai_tools<'a>(
             if !tool_config.any_tools_available() {
                 return (None, None, None);
             }
-            let tools = Some(tool_config.tools_available().map(Into::into).collect());
+            let tools = Some(
+                tool_config
+                    .tools_available(ToolTypeFilter::All)
+                    .map(Into::into)
+                    .collect(),
+            );
             let parallel_tool_calls = tool_config.parallel_tool_calls;
 
             // Check if we need to construct an AllowedToolsChoice variant
@@ -3643,7 +3650,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request_without_tools);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_openai_tools(&request_without_tools);
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());

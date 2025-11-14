@@ -12,6 +12,7 @@ rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"]  # for NAPI
 
 [alias]
 test-unit = "nextest run --lib --bins"
+test-unit-fast = "nextest run --lib --bins --retries 0 --no-fail-fast"
 test-all = "nextest run --features e2e_tests"
 # Note - 'test-batch', 'test-e2e', and 'test-e2e-no-creds' must be kept in sync
 # Running all of them should cover all of our tests, and not miss any

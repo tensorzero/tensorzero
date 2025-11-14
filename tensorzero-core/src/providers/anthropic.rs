@@ -41,7 +41,9 @@ use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
+use crate::tool::{
+    ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig, ToolTypeFilter,
+};
 
 use super::helpers::convert_stream_error;
 use super::helpers::{peek_first_chunk, warn_cannot_forward_url_if_missing_mime_type};
@@ -792,7 +794,7 @@ impl<'a> AnthropicRequestBody<'a> {
                 None
             } else {
                 Some(
-                    c.strict_tools_available()
+                    c.strict_tools_available(ToolTypeFilter::FunctionOnly)
                         .map(Into::into)
                         .collect::<Vec<_>>(),
                 )
@@ -3403,7 +3405,7 @@ mod tests {
 
         // Convert to Anthropic tools
         let tools: Vec<AnthropicTool> = tool_config
-            .strict_tools_available()
+            .strict_tools_available(ToolTypeFilter::FunctionOnly)
             .map(AnthropicTool::from)
             .collect();
 

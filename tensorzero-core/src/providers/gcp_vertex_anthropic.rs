@@ -38,7 +38,7 @@ use crate::providers::anthropic::{
     anthropic_to_tensorzero_stream_message, handle_anthropic_error, AnthropicStreamMessage,
 };
 use crate::providers::gcp_vertex_gemini::location_subdomain_prefix;
-use crate::tool::{ToolCall, ToolChoice};
+use crate::tool::{ToolCall, ToolChoice, ToolTypeFilter};
 
 use super::anthropic::{
     prefill_json_chunk_response, prefill_json_response, AnthropicMessage, AnthropicMessageContent,
@@ -568,7 +568,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
                 None
             } else {
                 Some(
-                    c.strict_tools_available()
+                    c.strict_tools_available(ToolTypeFilter::FunctionOnly)
                         .map(Into::into)
                         .collect::<Vec<_>>(),
                 )

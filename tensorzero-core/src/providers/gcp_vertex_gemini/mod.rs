@@ -67,6 +67,7 @@ use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultC
 use crate::tool::{AllowedTools, AllowedToolsChoice};
 use crate::tool::{
     ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig,
+    ToolTypeFilter,
 };
 
 use super::helpers::{convert_stream_error, parse_jsonl_batch_file, JsonlBatchFileInfo};
@@ -2058,7 +2059,7 @@ fn prepare_tools<'a>(
             }
             let tools = Some(vec![GCPVertexGeminiTool::FunctionDeclarations(
                 tool_config
-                    .tools_available()
+                    .tools_available(ToolTypeFilter::FunctionOnly)
                     .map(GCPVertexGeminiFunctionDeclaration::from)
                     .collect(),
             )]);
@@ -2847,7 +2848,9 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
+        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG
+            .tools_available(ToolTypeFilter::FunctionOnly)
+            .collect();
         let tools_vec_owned: Vec<ToolConfig> = tools_vec.iter().map(|&t| t.clone()).collect();
         let tool = GCPVertexGeminiTool::from(&tools_vec_owned);
         assert_eq!(

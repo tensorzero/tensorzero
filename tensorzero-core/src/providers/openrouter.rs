@@ -39,7 +39,7 @@ use crate::inference::types::{
 };
 use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig, ToolTypeFilter};
 
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
@@ -49,8 +49,8 @@ use crate::providers::helpers::{
 // Import unified OpenAI types for allowed_tools support
 use super::openai::{
     AllowedToolsChoice as OpenAIAllowedToolsChoice,
-    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode,
-    OpenAIToolType, SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
+    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode, OpenAIToolType,
+    SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
 };
 
 use crate::inference::TensorZeroEventError;
@@ -694,7 +694,12 @@ pub(super) fn prepare_openrouter_tools<'a>(
             if !tool_config.any_tools_available() {
                 return (None, None, None);
             }
-            let tools = Some(tool_config.tools_available().map(Into::into).collect());
+            let tools = Some(
+                tool_config
+                    .tools_available(ToolTypeFilter::FunctionOnly)
+                    .map(Into::into)
+                    .collect(),
+            );
             let parallel_tool_calls = tool_config.parallel_tool_calls;
 
             // Check if we need to construct an AllowedToolsChoice variant
@@ -2267,7 +2272,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openrouter_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_openrouter_tools(&request_with_tools);
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -2309,7 +2315,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openrouter_tools(&request_without_tools);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_openrouter_tools(&request_without_tools);
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());

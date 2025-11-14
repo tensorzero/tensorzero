@@ -88,7 +88,9 @@ pub use tensorzero_core::stored_inference::{
     RenderedSample, StoredChatInference, StoredChatInferenceDatabase, StoredInference,
     StoredInferenceDatabase, StoredJsonInference,
 };
-pub use tensorzero_core::tool::{ClientSideFunctionTool, DynamicToolParams, ToolCallWrapper};
+pub use tensorzero_core::tool::{
+    ClientSideFunctionTool, DynamicTool, DynamicToolParams, Tool, ToolCallWrapper,
+};
 pub use tensorzero_core::utils::gateway::setup_clickhouse_without_config;
 
 // Export quantile array from migration_0037

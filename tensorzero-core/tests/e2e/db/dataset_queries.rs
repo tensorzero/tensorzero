@@ -2615,7 +2615,9 @@ mod tool_call_storage_tests {
             // Verify dynamic tool is present
             assert_eq!(tool_params.dynamic_tools.len(), 1);
 
-            let Tool::ClientSideFunction(tool) = &tool_params.dynamic_tools[0];
+            let Tool::ClientSideFunction(tool) = &tool_params.dynamic_tools[0] else {
+                panic!("Expected ClientSideFunction tool");
+            };
             assert_eq!(tool.name, "runtime_tool");
             assert_eq!(tool.description, "A tool provided at runtime");
             assert!(!tool.strict);

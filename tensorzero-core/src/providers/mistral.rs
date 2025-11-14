@@ -37,7 +37,7 @@ use crate::{
         check_new_tool_call_name, convert_stream_error, inject_extra_request_data_and_send,
         inject_extra_request_data_and_send_eventsource,
     },
-    tool::{ToolCall, ToolCallChunk, ToolChoice},
+    tool::{ToolCall, ToolCallChunk, ToolChoice, ToolTypeFilter},
 };
 
 use super::openai::{
@@ -428,21 +428,21 @@ enum MistralResponseFormat {
 
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(untagged)]
-enum MistralToolChoice<'a> {
+pub(super) enum MistralToolChoice<'a> {
     String(MistralToolChoiceString),
     Specific(MistralSpecificToolChoice<'a>),
 }
 
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-enum MistralToolChoiceString {
+pub(super) enum MistralToolChoiceString {
     Auto,
     None,
     Any,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
-struct MistralSpecificToolChoice<'a> {
+pub(super) struct MistralSpecificToolChoice<'a> {
     r#type: &'static str,
     function: MistralSpecificToolFunction<'a>,
 }
@@ -469,7 +469,7 @@ impl<'a> From<&'a ToolChoice> for MistralToolChoice<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-struct MistralTool<'a> {
+pub(super) struct MistralTool<'a> {
     r#type: OpenAIToolType,
     function: OpenAIFunction<'a>,
 }
@@ -496,7 +496,7 @@ pub(super) fn prepare_mistral_tools<'a>(
             }
             let tools = Some(
                 tool_config
-                    .strict_tools_available()
+                    .strict_tools_available(ToolTypeFilter::FunctionOnly)
                     .map(|t| MistralTool::from(OpenAITool::from(t)))
                     .collect(),
             );

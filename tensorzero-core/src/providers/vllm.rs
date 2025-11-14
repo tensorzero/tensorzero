@@ -33,6 +33,7 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::providers::openai::{check_api_base_suffix, OpenAIMessagesConfig};
+use crate::tool::ToolTypeFilter;
 
 const PROVIDER_NAME: &str = "vLLM";
 pub const PROVIDER_TYPE: &str = "vllm";
@@ -359,7 +360,7 @@ pub(super) fn prepare_vllm_tools<'a>(
             }
             let tools = Some(
                 tool_config
-                    .strict_tools_available()
+                    .strict_tools_available(ToolTypeFilter::FunctionOnly)
                     .map(Into::into)
                     .collect(),
             );

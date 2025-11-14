@@ -35,7 +35,7 @@ use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{
-    AllowedToolsChoice, DynamicTool, DynamicToolParams, StaticToolConfig, Tool, ToolCallConfig,
+    AllowedToolsChoice, DynamicTool, DynamicToolParams, StaticToolConfig, ToolCallConfig,
     ToolCallConfigConstructorArgs, ToolCallConfigDatabaseInsert, ToolChoice,
 };
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
@@ -431,12 +431,7 @@ impl FunctionConfig {
         let additional_tools = if dynamic_tools.is_empty() {
             None
         } else {
-            Some(
-                dynamic_tools
-                    .into_iter()
-                    .map(DynamicTool)
-                    .collect(),
-            )
+            Some(dynamic_tools.into_iter().map(DynamicTool).collect())
         };
 
         DynamicToolParams {
@@ -2497,14 +2492,14 @@ mod tests {
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
             assert_eq!(result.allowed_tools, None);
             assert_eq!(result.additional_tools.as_ref().unwrap().len(), 2);
-            assert_eq!(
-                result.additional_tools.as_ref().unwrap()[0].name,
-                "dynamic1"
-            );
-            assert_eq!(
-                result.additional_tools.as_ref().unwrap()[1].name,
-                "dynamic2"
-            );
+            match &result.additional_tools.as_ref().unwrap()[0].0 {
+                Tool::ClientSideFunction(tool) => assert_eq!(tool.name, "dynamic1"),
+                _ => panic!("Expected ClientSideFunction"),
+            }
+            match &result.additional_tools.as_ref().unwrap()[1].0 {
+                Tool::ClientSideFunction(tool) => assert_eq!(tool.name, "dynamic2"),
+                _ => panic!("Expected ClientSideFunction"),
+            }
 
             // Test 3: Mixed static and dynamic tools
             // Static tools (a, b) go in allowed_tools, dynamic tools (x, y) go in dynamic_tools
@@ -2530,10 +2525,20 @@ mod tests {
             assert!(allowed.contains(&"b".to_string()));
             let additional = result.additional_tools.unwrap();
             assert_eq!(additional.len(), 2);
-            assert_eq!(additional[0].name, "x");
-            assert_eq!(additional[1].name, "y");
-            assert!(additional[0].strict);
-            assert!(additional[1].strict);
+            match &additional[0].0 {
+                Tool::ClientSideFunction(tool) => {
+                    assert_eq!(tool.name, "x");
+                    assert!(tool.strict);
+                }
+                _ => panic!("Expected ClientSideFunction"),
+            }
+            match &additional[1].0 {
+                Tool::ClientSideFunction(tool) => {
+                    assert_eq!(tool.name, "y");
+                    assert!(tool.strict);
+                }
+                _ => panic!("Expected ClientSideFunction"),
+            }
 
             // Test 4: Empty tools list
             let function_config = create_chat_function(vec!["tool1"]);
@@ -2656,10 +2661,15 @@ mod tests {
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
 
             let result_tool = &result.additional_tools.unwrap()[0];
-            assert_eq!(result_tool.name, tool.name);
-            assert_eq!(result_tool.description, tool.description);
-            assert_eq!(result_tool.parameters, tool.parameters);
-            assert_eq!(result_tool.strict, tool.strict);
+            match &result_tool.0 {
+                Tool::ClientSideFunction(result_tool_inner) => {
+                    assert_eq!(result_tool_inner.name, tool.name);
+                    assert_eq!(result_tool_inner.description, tool.description);
+                    assert_eq!(result_tool_inner.parameters, tool.parameters);
+                    assert_eq!(result_tool_inner.strict, tool.strict);
+                }
+                _ => panic!("Expected ClientSideFunction"),
+            }
         }
     }
 
