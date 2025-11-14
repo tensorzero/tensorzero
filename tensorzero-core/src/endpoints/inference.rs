@@ -1526,67 +1526,26 @@ fn validate_variant_filter(variant_name: &str, function: &FunctionConfig) -> Res
 }
 
 /// Validate that provider filter references a valid provider
-fn validate_provider_filter(provider_name: &str, models: &ModelTable) -> Result<(), Error> {
-    // The provider_name in filters must be in fully qualified format:
-    // "tensorzero::model_name::X::provider_name::Y"
-    // Shorthand format is NOT accepted for provider filters.
+/// The provider_name in filters must be in fully qualified format:
+/// "tensorzero::model_name::X::provider_name::Y"
+///
+/// Deprecated: Use separate `model_name` and `provider_name` fields instead.
+fn validate_provider_filter(model_provider_name: &str) -> Result<(), Error> {
+    tracing::warn!(
+        "Deprecation Warning: Please provide `model_name` and `provider_name` fields instead of `model_provider_name` when specifying `extra_body` or `extra_headers` in the request. Alternatively, you can skip the filter altogether to match any model inference in your request."
+    );
 
     // Check if it's a fully qualified name
-    if provider_name.starts_with("tensorzero::model_name::") {
-        tracing::warn!(
-            "Using fully qualified format '{}' for model_provider_name is deprecated. \
-             Please use separate 'model_name' and 'provider_name' fields instead.",
-            provider_name
-        );
-
-        // Parse the fully qualified name: tensorzero::model_name::{model}::provider_name::{provider}
-        let parts: Vec<&str> = provider_name.split("::").collect();
-        if parts.len() == 5
-            && parts[0] == "tensorzero"
-            && parts[1] == "model_name"
-            && parts[3] == "provider_name"
-        {
-            let model_name = parts[2];
-            let provider = parts[4];
-
-            // Check if the model exists in the table
-            if let Some(model_config) = models.table.get(model_name) {
-                // Check if the provider exists in that model
-                if !model_config.providers.contains_key(provider) {
-                    return Err(ErrorDetails::InvalidInferenceTarget {
-                        message: format!(
-                            "Invalid model_provider_name filter '{provider_name}': provider '{provider}' not found in model '{model_name}'",
-                        ),
-                    }
-                    .into());
-                }
-                return Ok(());
-            } else {
-                return Err(ErrorDetails::InvalidInferenceTarget {
-                    message: format!(
-                        "Invalid model_provider_name filter '{provider_name}': model '{model_name}' does not exist",
-                    ),
-                }
-                .into());
-            }
-        }
-
-        // Invalid fully qualified format
+    if !model_provider_name.starts_with("tensorzero::model_name::") {
         return Err(ErrorDetails::InvalidInferenceTarget {
             message: format!(
-                "Invalid model_provider_name filter '{provider_name}': invalid fully qualified format",
+                "Invalid model_provider_name filter `{model_provider_name}`: must use fully qualified format 'tensorzero::model_name::{{model}}::provider_name::{{provider}}'"
             ),
         }
         .into());
     }
 
-    // Reject shorthand format
-    Err(ErrorDetails::InvalidInferenceTarget {
-        message: format!(
-            "Invalid model_provider_name filter '{provider_name}': must use fully qualified format 'tensorzero::model_name::{{model}}::provider_name::{{provider}}'"
-        ),
-    }
-    .into())
+    Ok(())
 }
 
 /// Validate that model_provider filter references a valid model and provider
@@ -1638,7 +1597,7 @@ async fn validate_inference_filters(
                 model_provider_name,
                 ..
             } => {
-                validate_provider_filter(model_provider_name, models)?;
+                validate_provider_filter(model_provider_name)?;
             }
             InferenceExtraBody::ModelProvider {
                 model_name,
@@ -1665,7 +1624,7 @@ async fn validate_inference_filters(
                 model_provider_name,
                 ..
             } => {
-                validate_provider_filter(model_provider_name, models)?;
+                validate_provider_filter(model_provider_name)?;
             }
             InferenceExtraHeader::ModelProvider {
                 model_name,
@@ -2221,59 +2180,10 @@ mod tests {
 
         #[test]
         fn test_validate_provider_filter_fully_qualified_valid() {
-            let models = create_test_model_table();
-            // Valid model and valid provider
             let result = validate_provider_filter(
                 "tensorzero::model_name::test-model::provider_name::test-provider",
-                &models,
             );
             assert!(result.is_ok());
-        }
-
-        #[test]
-        fn test_validate_provider_filter_fully_qualified_valid_model_invalid_provider() {
-            let models = create_test_model_table();
-            // Valid model but invalid provider - should fail
-            let result = validate_provider_filter(
-                "tensorzero::model_name::test-model::provider_name::nonexistent",
-                &models,
-            );
-            assert!(result.is_err());
-        }
-
-        #[test]
-        fn test_validate_provider_filter_fully_qualified_invalid_model_valid_provider() {
-            let models = create_test_model_table();
-            // Invalid model with valid provider name - should fail
-            let result = validate_provider_filter(
-                "tensorzero::model_name::nonexistent::provider_name::test-provider",
-                &models,
-            );
-            assert!(result.is_err());
-        }
-
-        #[test]
-        fn test_validate_provider_filter_fully_qualified_invalid_both() {
-            let models = create_test_model_table();
-            // Both model and provider invalid - should fail
-            let result = validate_provider_filter(
-                "tensorzero::model_name::nonexistent::provider_name::nonexistent",
-                &models,
-            );
-            assert!(result.is_err());
-        }
-
-        #[test]
-        fn test_validate_provider_filter_shorthand_rejected() {
-            let models = create_test_model_table();
-            // Shorthand format should be rejected
-            let result = validate_provider_filter("openai::gpt-4o", &models);
-            assert!(result.is_err());
-            let err_msg = result.unwrap_err().to_string();
-            assert!(
-                err_msg.contains("must use fully qualified format"),
-                "Expected error about fully qualified format, got: {err_msg}"
-            );
         }
 
         #[tokio::test]
