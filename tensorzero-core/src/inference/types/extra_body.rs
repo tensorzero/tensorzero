@@ -78,6 +78,7 @@ pub struct FullExtraBodyConfig {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum InferenceExtraBody {
+    // Deprecated: Migrate to `ModelProvider` and remove in 2026.2+
     Provider {
         model_provider_name: String,
         pointer: String,

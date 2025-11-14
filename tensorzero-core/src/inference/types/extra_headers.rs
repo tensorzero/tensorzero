@@ -76,6 +76,7 @@ pub struct FullExtraHeadersConfig {
 #[ts(export)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum InferenceExtraHeader {
+    // Deprecated: Migrate to `ModelProvider` and remove in 2026.2+
     Provider {
         model_provider_name: String,
         name: String,
