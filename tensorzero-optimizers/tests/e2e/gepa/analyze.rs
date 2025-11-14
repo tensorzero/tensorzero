@@ -439,7 +439,7 @@ async fn test_analyze_inferences_with_tools() {
             all_explicit_templates_names: std::collections::HashSet::new(),
             experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
         })),
-        static_tools: HashMap::new(),
+        static_tools: None,
     };
 
     let variant_config = create_test_variant_config();
@@ -785,7 +785,7 @@ async fn test_analyze_input_includes_tools() {
             all_explicit_templates_names: std::collections::HashSet::new(),
             experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
         })),
-        static_tools: HashMap::new(),
+        static_tools: None,
     };
 
     let variant_config = create_test_variant_config();

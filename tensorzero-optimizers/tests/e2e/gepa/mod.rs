@@ -96,7 +96,7 @@ pub fn create_test_function_config_with_schemas() -> FunctionConfig {
 pub fn create_test_config_and_tools() -> FunctionConfigAndTools {
     FunctionConfigAndTools {
         function_config: Arc::new(create_test_function_config()),
-        static_tools: HashMap::new(),
+        static_tools: None,
     }
 }
 
@@ -104,7 +104,7 @@ pub fn create_test_config_and_tools() -> FunctionConfigAndTools {
 pub fn create_test_config_and_tools_with_schemas() -> FunctionConfigAndTools {
     FunctionConfigAndTools {
         function_config: Arc::new(create_test_function_config_with_schemas()),
-        static_tools: HashMap::new(),
+        static_tools: None,
     }
 }
 

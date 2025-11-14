@@ -22,7 +22,8 @@ pub struct FunctionConfigAndTools {
     pub function_config: Arc<FunctionConfig>,
     /// Static tools from Config.tools that are referenced by the function
     /// Key: tool name, Value: StaticToolConfig
-    pub static_tools: HashMap<String, Arc<StaticToolConfig>>,
+    /// None if the function has no tools configured
+    pub static_tools: Option<HashMap<String, Arc<StaticToolConfig>>>,
 }
 
 /// Validates the GEPA configuration and checks that required resources exist
@@ -122,19 +123,24 @@ pub fn validate_gepa_config(
         }
     };
 
-    let mut static_tools = HashMap::new();
-    for tool_name in &function_tool_names {
-        if let Some(tool_config) = tensorzero_config.tools.get(tool_name) {
-            static_tools.insert(tool_name.clone(), tool_config.clone());
-        } else {
-            return Err(Error::new(ErrorDetails::Config {
-                message: format!(
-                    "tool '{}' referenced by function '{}' not found in configuration",
-                    tool_name, config.function_name
-                ),
-            }));
+    let static_tools = if function_tool_names.is_empty() {
+        None
+    } else {
+        let mut tools = HashMap::new();
+        for tool_name in &function_tool_names {
+            if let Some(tool_config) = tensorzero_config.tools.get(tool_name) {
+                tools.insert(tool_name.clone(), tool_config.clone());
+            } else {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "tool '{}' referenced by function '{}' not found in configuration",
+                        tool_name, config.function_name
+                    ),
+                }));
+            }
         }
-    }
+        Some(tools)
+    };
 
     Ok(FunctionConfigAndTools {
         function_config: function_config.clone(),

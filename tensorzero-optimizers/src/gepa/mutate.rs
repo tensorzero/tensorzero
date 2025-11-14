@@ -22,7 +22,7 @@ use tensorzero_core::{
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
-use super::analyze::{extract_tool_schemas, InferenceWithAnalysis};
+use super::analyze::InferenceWithAnalysis;
 use super::validate::FunctionConfigAndTools;
 
 /// Output from the GEPA mutate function
@@ -87,13 +87,11 @@ pub fn build_mutate_input(
         FunctionConfig::Chat(_) => None,
     };
 
-    // Extract tool schemas (no dynamic tools for mutate - use None)
-    let tool_schemas = extract_tool_schemas(config_and_tools, None);
-    let tools = if tool_schemas.is_empty() {
-        None
-    } else {
-        Some(json!(tool_schemas))
-    };
+    // Serialize static_tools (already filtered to this function's tools during validation)
+    let tools = config_and_tools
+        .static_tools
+        .as_ref()
+        .map(|tools| json!(tools));
 
     // Serialize analyses array
     let analyses_json = serde_json::to_value(analyses).map_err(|e| {
@@ -608,7 +606,7 @@ mod tests {
         // Wrap function_config in FunctionConfigAndTools
         let config_and_tools = FunctionConfigAndTools {
             function_config: Arc::new(function_config),
-            static_tools: HashMap::new(),
+            static_tools: None,
         };
 
         // Call build_mutate_input
@@ -673,7 +671,7 @@ mod tests {
         // Wrap function_config in FunctionConfigAndTools
         let config_and_tools = FunctionConfigAndTools {
             function_config: Arc::new(function_config),
-            static_tools: HashMap::new(),
+            static_tools: None,
         };
 
         // Call build_mutate_input

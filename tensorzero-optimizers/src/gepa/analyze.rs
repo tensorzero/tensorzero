@@ -24,7 +24,6 @@ use tensorzero_core::{
     function::FunctionConfig,
     inference::types::{Arguments, ContentBlockChatOutput, Role, Template},
     optimization::gepa::GEPAConfig,
-    tool::{AllowedToolsChoice, DynamicToolParams},
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
@@ -42,114 +41,6 @@ fn serialize_to_value<T: serde::Serialize>(
             message: format!("Failed to serialize {context}: {e}"),
         })
     })
-}
-
-/// Extract tool schemas combining static and dynamic tools
-///
-/// # Arguments
-/// * `config_and_tools` - Function configuration with static tools
-/// * `tool_params` - Optional dynamic tool parameters from datapoint
-///
-/// # Returns
-/// * HashMap of tool_name -> tool_schema (JSON with name, description, parameters, strict)
-pub(super) fn extract_tool_schemas(
-    config_and_tools: &FunctionConfigAndTools,
-    tool_params: Option<&DynamicToolParams>,
-) -> HashMap<String, serde_json::Value> {
-    let mut tool_schemas = HashMap::new();
-
-    // 1. Get static tool names from function config
-    let static_tool_names: Vec<String> = match &*config_and_tools.function_config {
-        FunctionConfig::Chat(chat_config) => chat_config.tools.clone(),
-        FunctionConfig::Json(_) => Vec::new(),
-    };
-
-    // 2. Filter by allowed_tools if specified in tool_params
-    let allowed_names: Vec<String> = if let Some(params) = tool_params {
-        if let Some(allowed) = &params.allowed_tools {
-            static_tool_names
-                .into_iter()
-                .filter(|name| allowed.contains(name))
-                .collect()
-        } else {
-            static_tool_names
-        }
-    } else {
-        static_tool_names
-    };
-
-    // 3. Extract static tool schemas
-    for tool_name in &allowed_names {
-        if let Some(static_tool) = config_and_tools.static_tools.get(tool_name) {
-            let schema = json!({
-                "name": static_tool.name,
-                "description": static_tool.description,
-                "parameters": static_tool.parameters.value,
-                "strict": static_tool.strict,
-            });
-            tool_schemas.insert(tool_name.clone(), schema);
-        }
-    }
-
-    // 4. Add dynamic additional_tools from tool_params
-    if let Some(params) = tool_params {
-        if let Some(additional_tools) = &params.additional_tools {
-            for tool in additional_tools {
-                let schema = json!({
-                    "name": tool.name,
-                    "description": tool.description,
-                    "parameters": tool.parameters,
-                    "strict": tool.strict,
-                });
-                tool_schemas.insert(tool.name.clone(), schema);
-            }
-        }
-    }
-
-    // 5. TODO: Add provider tools
-
-    tool_schemas
-}
-
-/// Extracts tool parameters from an EvaluationInfo
-/// Converts from database format (ToolCallConfigDatabaseInsert) to DynamicToolParams
-fn extract_tool_params_from_eval_info(eval_info: &EvaluationInfo) -> Option<DynamicToolParams> {
-    match &eval_info.datapoint {
-        StoredDatapoint::Chat(dp) => dp.tool_params.as_ref().map(|db_params| {
-            use tensorzero_core::tool::{ClientSideFunctionTool, Tool};
-
-            // Extract additional_tools from dynamic_tools
-            let additional_tools: Vec<ClientSideFunctionTool> = db_params
-                .dynamic_tools
-                .iter()
-                .map(|tool| match tool {
-                    Tool::ClientSideFunction(client_tool) => client_tool.clone(),
-                })
-                .collect();
-
-            // Convert AllowedTools to Option<Vec<String>>
-            // Replicates the private into_dynamic_allowed_tools method
-            let allowed_tools = match db_params.allowed_tools.choice {
-                AllowedToolsChoice::FunctionDefault => None,
-                AllowedToolsChoice::DynamicAllowedTools => {
-                    Some(db_params.allowed_tools.tools.clone())
-                }
-            };
-
-            DynamicToolParams {
-                allowed_tools,
-                additional_tools: if additional_tools.is_empty() {
-                    None
-                } else {
-                    Some(additional_tools)
-                },
-                tool_choice: Some(db_params.tool_choice.clone()),
-                parallel_tool_calls: db_params.parallel_tool_calls,
-                provider_tools: db_params.dynamic_provider_tools.clone(),
-            }
-        }),
-        StoredDatapoint::Json(_) => None,
-    }
 }
 
 /// Represents an inference output paired with its analysis feedback
@@ -203,15 +94,30 @@ pub fn build_analyze_input(
         FunctionConfig::Chat(_) => None,
     };
 
-    // Extract tool_params from datapoint
-    let tool_params = extract_tool_params_from_eval_info(eval_info);
-
-    // Extract tool schemas combining static and dynamic tools
-    let tool_schemas = extract_tool_schemas(config_and_tools, tool_params.as_ref());
-    let tools = if tool_schemas.is_empty() {
-        None
-    } else {
-        Some(json!(tool_schemas))
+    // Extract and serialize tool configuration using into_tool_call_config
+    let tools = match &eval_info.datapoint {
+        StoredDatapoint::Chat(dp) => {
+            match &dp.tool_params {
+                Some(tool_params) => {
+                    // Clone because into_tool_call_config consumes self
+                    let empty_tools = HashMap::new();
+                    let tool_config = tool_params.clone().into_tool_call_config(
+                        &config_and_tools.function_config,
+                        config_and_tools
+                            .static_tools
+                            .as_ref()
+                            .unwrap_or(&empty_tools),
+                    )?;
+                    // tool_config is Option<ToolCallConfig>
+                    // Convert Option<ToolCallConfig> to Option<serde_json::Value>
+                    tool_config
+                        .map(|config| serialize_to_value(&config, "tool config"))
+                        .transpose()?
+                }
+                None => None,
+            }
+        }
+        StoredDatapoint::Json(_) => None,
     };
 
     // Serialize the inference output
@@ -584,7 +490,7 @@ mod tests {
     fn create_test_config_and_tools() -> FunctionConfigAndTools {
         FunctionConfigAndTools {
             function_config: Arc::new(create_test_function_config()),
-            static_tools: HashMap::new(),
+            static_tools: None,
         }
     }
 
@@ -592,7 +498,7 @@ mod tests {
     fn create_test_config_and_tools_with_schemas() -> FunctionConfigAndTools {
         FunctionConfigAndTools {
             function_config: Arc::new(create_test_function_config_with_schemas()),
-            static_tools: HashMap::new(),
+            static_tools: None,
         }
     }
 
