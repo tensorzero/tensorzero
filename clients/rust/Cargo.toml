@@ -34,7 +34,6 @@ workspace = true
 [dev-dependencies]
 clap = { workspace = true }
 lazy_static = { workspace = true }
-object_store = { workspace = true }
 tokio = { workspace = true }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.20"
