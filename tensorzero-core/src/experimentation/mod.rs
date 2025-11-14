@@ -1,5 +1,8 @@
 use std::collections::BTreeMap;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -15,6 +18,79 @@ pub mod asymptotic_confidence_sequences;
 mod static_weights;
 pub mod track_and_stop;
 mod uniform;
+
+/// Check for duplicate variants within a list
+fn check_duplicates_within(variants: &[String], list_name: &str) -> Result<(), Error> {
+    let mut seen = HashSet::new();
+    let mut duplicates = Vec::new();
+
+    for variant in variants {
+        if !seen.insert(variant) && !duplicates.contains(&variant.as_str()) {
+            duplicates.push(variant.as_str());
+        }
+    }
+
+    if !duplicates.is_empty() {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!(
+                "`{}` contains duplicate entries: {}",
+                list_name,
+                duplicates.join(", ")
+            ),
+        }));
+    }
+
+    Ok(())
+}
+
+/// Check for duplicate variants across candidate_variants and fallback_variants
+fn check_duplicates_across(candidates: &[String], fallbacks: &[String]) -> Result<(), Error> {
+    let candidate_set: HashSet<_> = candidates.iter().collect();
+    let mut duplicates = Vec::new();
+
+    for fallback in fallbacks {
+        if candidate_set.contains(fallback) && !duplicates.contains(&fallback.as_str()) {
+            duplicates.push(fallback.as_str());
+        }
+    }
+
+    if !duplicates.is_empty() {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!(
+                "variants cannot appear in both `candidate_variants` and `fallback_variants`: {}",
+                duplicates.join(", ")
+            ),
+        }));
+    }
+
+    Ok(())
+}
+
+/// Check for duplicate variants across candidate_variants (from a map) and fallback_variants
+fn check_duplicates_across_map(
+    candidate_keys: impl Iterator<Item = impl AsRef<str>>,
+    fallbacks: &[String],
+) -> Result<(), Error> {
+    let candidate_set: HashSet<_> = candidate_keys.map(|s| s.as_ref().to_string()).collect();
+    let mut duplicates = Vec::new();
+
+    for fallback in fallbacks {
+        if candidate_set.contains(fallback) && !duplicates.contains(&fallback.as_str()) {
+            duplicates.push(fallback.as_str());
+        }
+    }
+
+    if !duplicates.is_empty() {
+        return Err(Error::new(ErrorDetails::Config {
+            message: format!(
+                "variants cannot appear in both `candidate_variants` and `fallback_variants`: {}",
+                duplicates.join(", ")
+            ),
+        }));
+    }
+
+    Ok(())
+}
 
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]

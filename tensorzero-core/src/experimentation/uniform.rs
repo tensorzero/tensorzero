@@ -13,7 +13,7 @@ use crate::{
     variant::VariantInfo,
 };
 
-use super::VariantSampler;
+use super::{check_duplicates_across, check_duplicates_within, VariantSampler};
 
 /// Pure function for uniform sampling logic.
 /// Given a uniform sample in [0, 1), selects a variant from active_variants
@@ -86,6 +86,9 @@ impl UniformConfig {
                     message: "uniform experimentation: candidate_variants cannot be empty when fallback_variants is not specified".to_string(),
                 }));
             }
+            // Check for duplicates within candidate_variants
+            check_duplicates_within(candidates, "candidate_variants")?;
+
             for variant_name in candidates {
                 if !function_variants.contains_key(variant_name) {
                     return Err(Error::new(ErrorDetails::Config {
@@ -110,6 +113,9 @@ impl UniformConfig {
                     message: "uniform experimentation: fallback_variants cannot be empty when candidate_variants is empty".to_string(),
                 }));
             }
+            // Check for duplicates within fallback_variants
+            check_duplicates_within(fallbacks, "fallback_variants")?;
+
             for variant_name in fallbacks {
                 if !function_variants.contains_key(variant_name) {
                     return Err(Error::new(ErrorDetails::Config {
@@ -119,6 +125,13 @@ impl UniformConfig {
                     }));
                 }
             }
+        }
+
+        // Check for duplicates across both lists
+        if let (Some(candidates), Some(fallbacks)) =
+            (&self.candidate_variants, &self.fallback_variants)
+        {
+            check_duplicates_across(candidates, fallbacks)?;
         }
 
         Ok(Self {
@@ -176,6 +189,7 @@ impl VariantSampler for UniformConfig {
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
         _postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
+        // Sampling is stable per episode ID
         let uniform_sample = get_uniform_value(function_name, &episode_id);
 
         let fallback_variants = self.fallback_variants.as_deref().unwrap_or(&[]);
@@ -285,13 +299,6 @@ impl VariantSampler for UniformConfig {
             let mut probabilities: HashMap<&'a str, f64> = HashMap::new();
             for variant_name in active_candidates {
                 probabilities.insert(variant_name, uniform_prob);
-            }
-
-            // Set 0.0 for other active variants that are not in candidates
-            for key in active_variants.keys() {
-                if !probabilities.contains_key(key.as_str()) {
-                    probabilities.insert(key.as_str(), 0.0);
-                }
             }
 
             Ok(probabilities)
@@ -598,11 +605,11 @@ mod tests {
             .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
-        // A and B should have equal probability, C should have 0
-        assert_eq!(probs.len(), 3);
+        // Only A and B should be returned (candidates), not C
+        assert_eq!(probs.len(), 2);
         assert!((probs["A"] - 0.5).abs() < 1e-9);
         assert!((probs["B"] - 0.5).abs() < 1e-9);
-        assert!((probs["C"] - 0.0).abs() < 1e-9);
+        assert!(!probs.contains_key("C"));
 
         let sum: f64 = probs.values().sum();
         assert!((sum - 1.0).abs() < 1e-9);
@@ -630,6 +637,115 @@ mod tests {
 
         let sum: f64 = probs.values().sum();
         assert!((sum - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_consistent_behavior_no_zero_probabilities_in_candidate_mode() {
+        // Test that candidate mode doesn't include variants with 0 probability
+        let config = UniformConfig {
+            candidate_variants: Some(vec!["A".to_string()]),
+            fallback_variants: None,
+        };
+
+        let active_variants: HashMap<_, _> = create_test_variants(&["A", "B", "C", "D"])
+            .into_iter()
+            .collect();
+        let postgres = PostgresConnectionInfo::new_disabled();
+
+        let probs = config
+            .get_current_display_probabilities("test", &active_variants, &postgres)
+            .unwrap();
+
+        // Only the candidate variant should be included
+        assert_eq!(probs.len(), 1);
+        assert!((probs["A"] - 1.0).abs() < 1e-9);
+
+        // Verify non-candidate variants are not included (not even with 0.0)
+        assert!(!probs.contains_key("B"));
+        assert!(!probs.contains_key("C"));
+        assert!(!probs.contains_key("D"));
+    }
+
+    #[test]
+    fn test_consistent_behavior_no_zero_probabilities_in_fallback_mode() {
+        // Test that fallback mode doesn't include variants with 0 probability
+        // when there are other active variants not in the fallback list
+        let config = UniformConfig {
+            candidate_variants: Some(vec![]),
+            fallback_variants: Some(vec!["B".to_string(), "C".to_string()]),
+        };
+
+        let active_variants: HashMap<_, _> = create_test_variants(&["A", "B", "C", "D"])
+            .into_iter()
+            .collect();
+        let postgres = PostgresConnectionInfo::new_disabled();
+
+        let probs = config
+            .get_current_display_probabilities("test", &active_variants, &postgres)
+            .unwrap();
+
+        // Only fallback variants should be included
+        assert_eq!(probs.len(), 2);
+        assert!((probs["B"] - 1.0).abs() < 1e-9);
+        assert!((probs["C"] - 0.0).abs() < 1e-9);
+
+        // Verify non-fallback variants are not included (not even with 0.0)
+        assert!(!probs.contains_key("A"));
+        assert!(!probs.contains_key("D"));
+    }
+
+    #[test]
+    fn test_consistent_behavior_both_modes_exclude_irrelevant_variants() {
+        // Test that both modes consistently exclude irrelevant variants
+        let postgres = PostgresConnectionInfo::new_disabled();
+
+        // Candidate mode: 2 candidates out of 5 active variants
+        let candidate_config = UniformConfig {
+            candidate_variants: Some(vec!["X".to_string(), "Y".to_string()]),
+            fallback_variants: None,
+        };
+        let active_variants_1: HashMap<_, _> = create_test_variants(&["X", "Y", "Z", "W", "V"])
+            .into_iter()
+            .collect();
+
+        let candidate_probs = candidate_config
+            .get_current_display_probabilities("test", &active_variants_1, &postgres)
+            .unwrap();
+
+        assert_eq!(
+            candidate_probs.len(),
+            2,
+            "Candidate mode should only return candidate variants"
+        );
+        assert!(candidate_probs.contains_key("X"));
+        assert!(candidate_probs.contains_key("Y"));
+        assert!(!candidate_probs.contains_key("Z"));
+        assert!(!candidate_probs.contains_key("W"));
+        assert!(!candidate_probs.contains_key("V"));
+
+        // Fallback mode: 2 fallback variants out of 5 active variants
+        let fallback_config = UniformConfig {
+            candidate_variants: Some(vec![]),
+            fallback_variants: Some(vec!["X".to_string(), "Y".to_string()]),
+        };
+        let active_variants_2: HashMap<_, _> = create_test_variants(&["X", "Y", "Z", "W", "V"])
+            .into_iter()
+            .collect();
+
+        let fallback_probs = fallback_config
+            .get_current_display_probabilities("test", &active_variants_2, &postgres)
+            .unwrap();
+
+        assert_eq!(
+            fallback_probs.len(),
+            2,
+            "Fallback mode should only return fallback variants"
+        );
+        assert!(fallback_probs.contains_key("X"));
+        assert!(fallback_probs.contains_key("Y"));
+        assert!(!fallback_probs.contains_key("Z"));
+        assert!(!fallback_probs.contains_key("W"));
+        assert!(!fallback_probs.contains_key("V"));
     }
 
     #[tokio::test]
@@ -712,5 +828,76 @@ mod tests {
             .setup(db, "test_function", &postgres, cancel_token)
             .await;
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_load_validation_duplicate_candidates() {
+        let config = UniformConfig {
+            candidate_variants: Some(vec!["A".to_string(), "B".to_string(), "A".to_string()]),
+            fallback_variants: None,
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C"]).into_iter().collect();
+
+        let result = config.load(&variants);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("`candidate_variants` contains duplicate entries"));
+        assert!(err_msg.contains("A"));
+    }
+
+    #[test]
+    fn test_load_validation_duplicate_fallbacks() {
+        let config = UniformConfig {
+            candidate_variants: Some(vec!["A".to_string()]),
+            fallback_variants: Some(vec!["B".to_string(), "C".to_string(), "B".to_string()]),
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C"]).into_iter().collect();
+
+        let result = config.load(&variants);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("`fallback_variants` contains duplicate entries"));
+        assert!(err_msg.contains("B"));
+    }
+
+    #[test]
+    fn test_load_validation_duplicate_across_lists() {
+        let config = UniformConfig {
+            candidate_variants: Some(vec!["A".to_string(), "B".to_string()]),
+            fallback_variants: Some(vec!["B".to_string(), "C".to_string()]),
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C"]).into_iter().collect();
+
+        let result = config.load(&variants);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("cannot appear in both `candidate_variants` and `fallback_variants`")
+        );
+        assert!(err_msg.contains("B"));
+    }
+
+    #[test]
+    fn test_load_validation_multiple_duplicates_across_lists() {
+        let config = UniformConfig {
+            candidate_variants: Some(vec!["A".to_string(), "B".to_string(), "C".to_string()]),
+            fallback_variants: Some(vec!["B".to_string(), "C".to_string(), "D".to_string()]),
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C", "D"])
+            .into_iter()
+            .collect();
+
+        let result = config.load(&variants);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("cannot appear in both `candidate_variants` and `fallback_variants`")
+        );
+        assert!(err_msg.contains("B"));
+        assert!(err_msg.contains("C"));
     }
 }
