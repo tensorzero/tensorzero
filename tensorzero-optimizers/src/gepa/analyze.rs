@@ -126,6 +126,18 @@ pub fn build_analyze_input(
     map.insert("input".to_string(), json!(eval_info.datapoint.input()));
     map.insert("output".to_string(), json!(output));
 
+    // Extract evaluator scores from evaluations
+    let mut evaluations = serde_json::Map::new();
+    for (evaluator_name, result_opt) in &eval_info.evaluations {
+        let score = result_opt.as_ref().and_then(|value| match value {
+            serde_json::Value::Number(n) => n.as_f64().map(|f| f as f32),
+            serde_json::Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
+            _ => None,
+        });
+        evaluations.insert(evaluator_name.clone(), json!(score));
+    }
+    map.insert("evaluations".to_string(), json!(evaluations));
+
     Ok(Arguments(map))
 }
 

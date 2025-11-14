@@ -51,6 +51,12 @@
 {{output | tojson(indent=2)}}
 </inference_output>
 
+<evaluations>
+{% for evaluator_name in evaluations %}
+<evaluator name="{{evaluator_name}}">{{evaluations[evaluator_name]}}</evaluator>
+{% endfor %}
+</evaluations>
+
 <task>
 Analyze the inference_output given the function_context and inference_context.
 

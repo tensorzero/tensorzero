@@ -18,6 +18,12 @@ The **inference_context** contains:
 
 The **inference_output** is the LLM response given the **inference_input.**
 
+The **evaluations** section contains:
+- **evaluator scores:** numeric values (typically 0-1) measuring different quality dimensions, or null if an evaluator failed
+- Low scores typically indicate errors or quality issues
+- High scores typically indicate good performance
+- Use these scores to inform your analysis - they provide quantitative evidence of output quality
+
 ## Your Task
 
 Analyze the inference output to determine:
