@@ -27,12 +27,8 @@ tokio-util = "0.7.12"
 axum = { workspace = true }
 http = { workspace = true }
 
-# Error handling
-thiserror = "2.0.16"
-
 # Utilities
 futures = { workspace = true }
-itertools = "0.14.0"
 rand = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
@@ -45,7 +41,6 @@ reqwest = { workspace = true }
 # Object storage (for file uploads)
 object_store = { workspace = true }
 mime = { workspace = true }
-mime_guess = "2.0.5"
 
 # Tracing and logging
 tracing = { workspace = true }
@@ -82,3 +77,7 @@ required-features = ["e2e_tests"]
 name = "e2e_gepa"
 path = "tests/e2e/gepa/mod.rs"
 required-features = ["e2e_tests"]
+
+# False positive (used in macro)
+[package.metadata.cargo-shear]
+ignored = ["paste"]

@@ -4,10 +4,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tensorzero_core::{rate_limiting::ScopeInfo, tool::InferenceResponseToolCall};
 use tokio::time::{sleep, Duration};
+use tracing_subscriber::{self, EnvFilter};
 use url::Url;
 use uuid::Uuid;
-
-use tracing_subscriber::{self, EnvFilter};
 
 use tensorzero::{
     ClientExt, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
