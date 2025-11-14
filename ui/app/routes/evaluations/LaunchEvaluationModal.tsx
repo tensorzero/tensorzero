@@ -59,16 +59,20 @@ function EvaluationForm({
   const [maxInferences, setMaxInferences] = useState<string>(
     initialFormState?.max_inferences ?? "",
   );
-  const [precisionLimits, setPrecisionLimits] = useState<string>(
-    initialFormState?.precision_limits ?? "",
-  );
+  const [precisionLimits, setPrecisionLimits] = useState<
+    Record<string, string>
+  >(initialFormState?.precision_limits ?? {});
 
   let count = null;
   let isLoading = false;
   let function_name = null;
+  let evaluatorNames: string[] = [];
   if (selectedEvaluationName) {
     function_name =
       config.evaluations[selectedEvaluationName]?.function_name ?? null;
+    evaluatorNames = Object.keys(
+      config.evaluations[selectedEvaluationName]?.evaluators ?? {},
+    );
   }
   const functionConfig = useFunctionConfig(function_name);
 
@@ -90,6 +94,7 @@ function EvaluationForm({
     ) {
       setSelectedEvaluationName(null);
       setSelectedVariantName(null);
+      setPrecisionLimits({});
     }
 
     // Validate dataset name - if datasets have loaded and the dataset doesn't exist, clear it
@@ -119,7 +124,53 @@ function EvaluationForm({
     functionConfig,
   ]);
 
-  // Check if all fields are filled
+  // Initialize precision limits with 0.0 for all evaluators when evaluation changes
+  useEffect(() => {
+    if (selectedEvaluationName) {
+      const currentEvaluatorNames = Object.keys(
+        config.evaluations[selectedEvaluationName]?.evaluators ?? {},
+      );
+      const newLimits: Record<string, string> = {};
+
+      // Initialize all evaluators with 0.0 or keep existing values
+      for (const evaluatorName of currentEvaluatorNames) {
+        newLimits[evaluatorName] = precisionLimits[evaluatorName] ?? "0.0";
+      }
+
+      // Only update if the structure changed
+      const currentKeys = Object.keys(precisionLimits).sort().join(",");
+      const newKeys = Object.keys(newLimits).sort().join(",");
+      if (currentKeys !== newKeys) {
+        setPrecisionLimits(newLimits);
+      }
+    }
+  }, [selectedEvaluationName, config.evaluations, precisionLimits]);
+
+  // Validate min_inferences: must be empty or a positive integer
+  const isMinInferencesValid =
+    minInferences === "" ||
+    (Number.isInteger(Number(minInferences)) &&
+      Number(minInferences) > 0 &&
+      !minInferences.includes("."));
+
+  // Validate max_inferences: must be empty or a positive integer
+  const isMaxInferencesValid =
+    maxInferences === "" ||
+    (Number.isInteger(Number(maxInferences)) &&
+      Number(maxInferences) > 0 &&
+      !maxInferences.includes("."));
+
+  // Validate precision_limits: all values must be non-negative numbers
+  const arePrecisionLimitsValid = Object.values(precisionLimits).every(
+    (value) => {
+      if (value === "") return true;
+      // Check if the entire string is a valid number
+      const num = Number(value);
+      return !isNaN(num) && num >= 0 && value.trim() !== "";
+    },
+  );
+
+  // Check if all fields are filled and valid
   const isFormValid =
     selectedEvaluationName !== null &&
     selectedVariantName !== null &&
@@ -127,7 +178,10 @@ function EvaluationForm({
     datasetCount !== null &&
     datasetCount > 0 &&
     inferenceCache !== null &&
-    concurrencyLimit !== "";
+    concurrencyLimit !== "" &&
+    isMinInferencesValid &&
+    isMaxInferencesValid &&
+    arePrecisionLimitsValid;
 
   return (
     <fetcher.Form
@@ -263,13 +317,35 @@ function EvaluationForm({
           setInferenceCache={setInferenceCache}
           minInferences={minInferences}
           setMinInferences={setMinInferences}
+          isMinInferencesValid={isMinInferencesValid}
           maxInferences={maxInferences}
           setMaxInferences={setMaxInferences}
+          isMaxInferencesValid={isMaxInferencesValid}
           precisionLimits={precisionLimits}
           setPrecisionLimits={setPrecisionLimits}
+          arePrecisionLimitsValid={arePrecisionLimitsValid}
+          evaluatorNames={evaluatorNames}
           defaultOpen={inferenceCache !== "on"}
         />
         <input type="hidden" name="inference_cache" value={inferenceCache} />
+        <input
+          type="hidden"
+          name="precision_limits"
+          value={
+            Object.keys(precisionLimits).length > 0
+              ? JSON.stringify(
+                  Object.fromEntries(
+                    Object.entries(precisionLimits)
+                      .filter(([_, value]) => {
+                        const num = parseFloat(value);
+                        return value !== "" && !isNaN(num) && num > 0;
+                      })
+                      .map(([key, value]) => [key, parseFloat(value)]),
+                  ),
+                )
+              : ""
+          }
+        />
       </div>
       <DialogFooter>
         <Button className="mt-2" type="submit" disabled={!isFormValid}>
@@ -324,7 +400,7 @@ interface EvaluationsFormValues {
   inference_cache: InferenceCacheSetting;
   min_inferences: string;
   max_inferences: string;
-  precision_limits: string;
+  precision_limits: Record<string, string>;
 }
 
 interface EvaluationsFormState extends Partial<EvaluationsFormValues> {
@@ -361,6 +437,27 @@ function getFromLocalStorage() {
     return null;
   }
 
+  const data = parsed as Record<string, unknown>;
+
+  // Handle precision_limits: convert old JSON string format to Record<string, string>
+  if (typeof data.precision_limits === "string" && data.precision_limits) {
+    try {
+      const parsedLimits = JSON.parse(data.precision_limits);
+      if (typeof parsedLimits === "object" && parsedLimits !== null) {
+        // Convert numbers to strings for the form
+        data.precision_limits = Object.fromEntries(
+          Object.entries(parsedLimits).map(([k, v]) => [k, String(v)]),
+        );
+      } else {
+        data.precision_limits = {};
+      }
+    } catch {
+      data.precision_limits = {};
+    }
+  } else if (typeof data.precision_limits !== "object") {
+    data.precision_limits = {};
+  }
+
   // TODO: add validation
-  return parsed as Partial<EvaluationsFormValues>;
+  return data as Partial<EvaluationsFormValues>;
 }
