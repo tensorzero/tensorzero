@@ -51,6 +51,7 @@ pub async fn test_gepa_optimization_chat() {
             mutation_model: "openai::gpt-4o-mini-2024-07-18".to_string(),
             seed: Some(42),
             timeout: 300,
+            include_datapoint_input_for_mutation: false,
         }),
     };
 
@@ -259,6 +260,7 @@ async fn run_gepa_workflow_with_client(client: &tensorzero::Client) {
                 mutation_model: "test".to_string(),
                 seed: Some(42),
                 timeout: 300,
+                include_datapoint_input_for_mutation: false,
             }),
         },
     };

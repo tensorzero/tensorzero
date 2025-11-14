@@ -33,6 +33,10 @@ fn default_mutation_model() -> String {
     "openai::gpt-5".to_string()
 }
 
+fn default_include_datapoint_input_for_mutation() -> bool {
+    false
+}
+
 /// GEPA (Genetic Evolution with Pareto Analysis) optimization configuration
 ///
 /// GEPA is a multi-objective optimization algorithm that maintains a Pareto frontier
@@ -74,6 +78,10 @@ pub struct GEPAConfig {
 
     /// Client timeout in seconds for TensorZero gateway operations
     pub timeout: u64,
+
+    /// Whether to include datapoint input in InferenceWithAnalysis for mutation
+    /// If true, the mutate function will see the original datapoint inputs
+    pub include_datapoint_input_for_mutation: bool,
 }
 
 /// Uninitialized GEPA configuration (deserializable from TOML)
@@ -105,6 +113,9 @@ pub struct UninitializedGEPAConfig {
 
     #[serde(default = "default_timeout")]
     pub timeout: u64,
+
+    #[serde(default = "default_include_datapoint_input_for_mutation")]
+    pub include_datapoint_input_for_mutation: bool,
 }
 
 impl Default for UninitializedGEPAConfig {
@@ -121,6 +132,7 @@ impl Default for UninitializedGEPAConfig {
             mutation_model: default_mutation_model(),
             seed: None,
             timeout: default_timeout(),
+            include_datapoint_input_for_mutation: default_include_datapoint_input_for_mutation(),
         }
     }
 }
@@ -148,6 +160,7 @@ impl UninitializedGEPAConfig {
         mutation_model=None,
         seed=None,
         timeout=None,
+        include_datapoint_input_for_mutation=None,
     ))]
     #[expect(clippy::too_many_arguments)]
     fn py_new(
@@ -162,6 +175,7 @@ impl UninitializedGEPAConfig {
         mutation_model: Option<String>,
         seed: Option<u32>,
         timeout: Option<u64>,
+        include_datapoint_input_for_mutation: Option<bool>,
     ) -> Self {
         Self {
             function_name,
@@ -175,6 +189,8 @@ impl UninitializedGEPAConfig {
             mutation_model: mutation_model.unwrap_or_else(default_mutation_model),
             seed,
             timeout: timeout.unwrap_or_else(default_timeout),
+            include_datapoint_input_for_mutation: include_datapoint_input_for_mutation
+                .unwrap_or_else(default_include_datapoint_input_for_mutation),
         }
     }
 
@@ -201,6 +217,7 @@ impl UninitializedGEPAConfig {
             mutation_model: self.mutation_model,
             seed: self.seed,
             timeout: self.timeout,
+            include_datapoint_input_for_mutation: self.include_datapoint_input_for_mutation,
         })
     }
 }

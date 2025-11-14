@@ -517,6 +517,7 @@ mod tests {
             mutation_model: "openai::gpt-5".to_string(),
             seed: None,
             timeout: 300,
+            include_datapoint_input_for_mutation: false,
         };
 
         let tensorzero_config = create_minimal_config();
@@ -549,6 +550,7 @@ mod tests {
             mutation_model: "openai::gpt-5".to_string(),
             seed: None,
             timeout: 300,
+            include_datapoint_input_for_mutation: false,
         };
 
         // This would fail during validation if we had a proper test config

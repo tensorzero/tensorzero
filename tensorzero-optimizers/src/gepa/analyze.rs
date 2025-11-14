@@ -47,6 +47,10 @@ pub struct InferenceWithAnalysis {
     pub inference_output: InferenceResponse,
     /// Content blocks from the analyze function response
     pub analysis: Vec<ContentBlockChatOutput>,
+    /// Optional datapoint input (only included if include_datapoint_input_for_mutation is true)
+    /// Skipped during serialization if None to avoid bloating the mutate function input
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datapoint_input: Option<serde_json::Value>,
 }
 
 /// Build the input JSON for the analyze function
@@ -305,9 +309,20 @@ pub async fn analyze_inferences(
                     );
                 }
 
+                // Conditionally include datapoint input based on config flag
+                let datapoint_input = if gepa_config.include_datapoint_input_for_mutation {
+                    Some(serialize_to_value(
+                        eval_info.datapoint.input(),
+                        "datapoint input",
+                    )?)
+                } else {
+                    None
+                };
+
                 Ok(InferenceWithAnalysis {
                     inference_output: eval_info.response.clone(),
                     analysis,
+                    datapoint_input,
                 })
             }
         })
