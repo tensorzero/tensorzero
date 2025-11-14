@@ -575,7 +575,7 @@ async fn test_get_dataset_rows_pages_correctly() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_count_datasets() {
+async fn test_clickhouse_count_datasets() {
     let (clickhouse, _guard) = get_clean_clickhouse(false).await;
     let is_manual = clickhouse.is_cluster_configured();
     migration_manager::run(RunMigrationManagerArgs {
