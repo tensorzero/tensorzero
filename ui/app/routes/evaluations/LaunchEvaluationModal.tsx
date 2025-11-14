@@ -312,18 +312,44 @@ function EvaluationForm({
         />
       </div>
       <div className="mt-4">
+        <label
+          htmlFor="max_inferences"
+          className="mb-1 block text-sm font-medium"
+        >
+          Max Inferences
+        </label>
+        <p className="text-muted-foreground mb-2 text-xs">
+          Maximum number of datapoints to evaluate (optional)
+        </p>
+        <input
+          type="text"
+          id="max_inferences"
+          name="max_inferences"
+          value={maxInferences}
+          onChange={(e) => setMaxInferences(e.target.value)}
+          placeholder="No limit"
+          className={`border-input bg-background w-full rounded-md border px-3 py-2 text-sm ${
+            !isMaxInferencesValid && maxInferences !== ""
+              ? "border-red-500 focus:ring-red-500"
+              : ""
+          }`}
+        />
+        {!isMaxInferencesValid && maxInferences !== "" && (
+          <p className="mt-1 text-xs text-red-500">
+            Must be a positive integer
+          </p>
+        )}
+      </div>
+      <div className="mt-4">
         <AdvancedParametersAccordion
           inferenceCache={inferenceCache}
           setInferenceCache={setInferenceCache}
-          minInferences={minInferences}
-          setMinInferences={setMinInferences}
-          isMinInferencesValid={isMinInferencesValid}
-          maxInferences={maxInferences}
-          setMaxInferences={setMaxInferences}
-          isMaxInferencesValid={isMaxInferencesValid}
           precisionLimits={precisionLimits}
           setPrecisionLimits={setPrecisionLimits}
           arePrecisionLimitsValid={arePrecisionLimitsValid}
+          minInferences={minInferences}
+          setMinInferences={setMinInferences}
+          isMinInferencesValid={isMinInferencesValid}
           evaluatorNames={evaluatorNames}
           defaultOpen={inferenceCache !== "on"}
         />

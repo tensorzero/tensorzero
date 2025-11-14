@@ -12,15 +12,12 @@ import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 export interface AdvancedParametersAccordionProps {
   inferenceCache: InferenceCacheSetting;
   setInferenceCache: (inference_cache: InferenceCacheSetting) => void;
-  minInferences: string;
-  setMinInferences: (value: string) => void;
-  isMinInferencesValid: boolean;
-  maxInferences: string;
-  setMaxInferences: (value: string) => void;
-  isMaxInferencesValid: boolean;
   precisionLimits: Record<string, string>;
   setPrecisionLimits: (value: Record<string, string>) => void;
   arePrecisionLimitsValid: boolean;
+  minInferences: string;
+  setMinInferences: (value: string) => void;
+  isMinInferencesValid: boolean;
   evaluatorNames: string[];
   defaultOpen?: boolean;
 }
@@ -28,15 +25,12 @@ export interface AdvancedParametersAccordionProps {
 export function AdvancedParametersAccordion({
   inferenceCache,
   setInferenceCache,
-  minInferences,
-  setMinInferences,
-  isMinInferencesValid,
-  maxInferences,
-  setMaxInferences,
-  isMaxInferencesValid,
   precisionLimits,
   setPrecisionLimits,
   arePrecisionLimitsValid: _arePrecisionLimitsValid,
+  minInferences,
+  setMinInferences,
+  isMinInferencesValid,
   evaluatorNames,
   defaultOpen,
 }: AdvancedParametersAccordionProps) {
@@ -96,62 +90,13 @@ export function AdvancedParametersAccordion({
                 </div>
               </RadioGroup>
             </div>
-            <div>
-              <Label htmlFor="min_inferences">Min Inferences</Label>
-              <p className="text-muted-foreground mb-2 text-xs">
-                Minimum samples before checking stopping conditions (default:
-                20)
-              </p>
-              <input
-                type="text"
-                id="min_inferences"
-                name="min_inferences"
-                value={minInferences}
-                onChange={(e) => setMinInferences(e.target.value)}
-                placeholder="20"
-                className={`border-input bg-background w-full rounded-md border px-3 py-2 text-sm ${
-                  !isMinInferencesValid && minInferences !== ""
-                    ? "border-red-500 focus:ring-red-500"
-                    : ""
-                }`}
-              />
-              {!isMinInferencesValid && minInferences !== "" && (
-                <p className="mt-1 text-xs text-red-500">
-                  Must be a positive integer
-                </p>
-              )}
-            </div>
-            <div>
-              <Label htmlFor="max_inferences">Max Inferences</Label>
-              <p className="text-muted-foreground mb-2 text-xs">
-                Maximum number of datapoints to evaluate (optional)
-              </p>
-              <input
-                type="text"
-                id="max_inferences"
-                name="max_inferences"
-                value={maxInferences}
-                onChange={(e) => setMaxInferences(e.target.value)}
-                placeholder="No limit"
-                className={`border-input bg-background w-full rounded-md border px-3 py-2 text-sm ${
-                  !isMaxInferencesValid && maxInferences !== ""
-                    ? "border-red-500 focus:ring-red-500"
-                    : ""
-                }`}
-              />
-              {!isMaxInferencesValid && maxInferences !== "" && (
-                <p className="mt-1 text-xs text-red-500">
-                  Must be a positive integer
-                </p>
-              )}
-            </div>
             {evaluatorNames.length > 0 && (
               <div>
                 <Label>Precision Limits</Label>
                 <p className="text-muted-foreground mb-3 text-xs">
                   Stop running an evaluator when both sides of its 95%
                   confidence interval are within the specified threshold of the
-                  mean value (optional)
+                  mean value. (Set to 0 to disable early stopping)
                 </p>
                 <div className="space-y-3">
                   {evaluatorNames.map((evaluatorName) => {
@@ -196,6 +141,31 @@ export function AdvancedParametersAccordion({
                 </div>
               </div>
             )}
+            <div>
+              <Label htmlFor="min_inferences">Min Inferences</Label>
+              <p className="text-muted-foreground mb-2 text-xs">
+                Minimum samples before checking precision limits for early
+                stopping (default: 20)
+              </p>
+              <input
+                type="text"
+                id="min_inferences"
+                name="min_inferences"
+                value={minInferences}
+                onChange={(e) => setMinInferences(e.target.value)}
+                placeholder="20"
+                className={`border-input bg-background w-full rounded-md border px-3 py-2 text-sm ${
+                  !isMinInferencesValid && minInferences !== ""
+                    ? "border-red-500 focus:ring-red-500"
+                    : ""
+                }`}
+              />
+              {!isMinInferencesValid && minInferences !== "" && (
+                <p className="mt-1 text-xs text-red-500">
+                  Must be a positive integer
+                </p>
+              )}
+            </div>
           </div>
         </AccordionContent>
       </AccordionItem>
