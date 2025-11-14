@@ -50,7 +50,7 @@ fn parse_injected_body(response: InferenceOutput) -> serde_json::Value {
     serde_json::from_str(output_text).unwrap()
 }
 
-// Standard config used by most tests
+// Standard config used by all tests
 pub const STANDARD_CONFIG: &str = r#"
 [models.my_echo_injected_data]
 routing = ["dummy"]
@@ -59,17 +59,21 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "echo_injected_data"
 
-[functions.test_extra]
+[functions.function_echo_injected_data_explicit]
 type = "chat"
 
-[functions.test_extra.variants.default]
+[functions.function_echo_injected_data_explicit.variants.default]
 type = "chat_completion"
 model = "my_echo_injected_data"
 
-[functions.function_echo_injected_data]
+[functions.function_echo_injected_data_explicit.variants.variant_with_extra]
+type = "chat_completion"
+model = "my_echo_injected_data"
+
+[functions.function_echo_injected_data_shorthand]
 type = "chat"
 
-[functions.function_echo_injected_data.variants.default]
+[functions.function_echo_injected_data_shorthand.variants.default]
 type = "chat_completion"
 model = "dummy::echo_injected_data"
 "#;
@@ -82,7 +86,7 @@ async fn test_extra_body_always_function() {
 
     let result = client
         .inference(ClientInferenceParams {
-            function_name: Some("test_extra".to_string()),
+            function_name: Some("function_echo_injected_data_explicit".to_string()),
             input: create_test_input(),
             extra_body: serde_json::from_value(json!([{
                 "pointer": "/test_field",
@@ -100,27 +104,11 @@ async fn test_extra_body_always_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_extra_body_variant_function() {
-    let config = r#"
-[models.my_echo_injected_data]
-routing = ["dummy"]
-
-[models.my_echo_injected_data.providers.dummy]
-type = "dummy"
-model_name = "echo_injected_data"
-
-[functions.test_extra]
-type = "chat"
-
-[functions.test_extra.variants.variant_with_extra]
-type = "chat_completion"
-model = "my_echo_injected_data"
-"#;
-
-    let client = create_test_gateway(config).await;
+    let client = create_test_gateway(STANDARD_CONFIG).await;
 
     let result = client
         .inference(ClientInferenceParams {
-            function_name: Some("test_extra".to_string()),
+            function_name: Some("function_echo_injected_data_explicit".to_string()),
             variant_name: Some("variant_with_extra".to_string()),
             input: create_test_input(),
             extra_body: serde_json::from_value(json!([{
@@ -143,7 +131,7 @@ async fn test_extra_body_provider_fully_qualified_config_function() {
 
     let result = client
         .inference(ClientInferenceParams {
-            function_name: Some("test_extra".to_string()),
+            function_name: Some("function_echo_injected_data_explicit".to_string()),
             input: create_test_input(),
             extra_body: serde_json::from_value(json!([{
                 "model_provider_name": "tensorzero::model_name::my_echo_injected_data::provider_name::dummy",
@@ -166,7 +154,7 @@ async fn test_extra_body_provider_fully_qualified_shorthand_function() {
 
     let result = client
         .inference(ClientInferenceParams {
-            function_name: Some("function_echo_injected_data".to_string()),
+            function_name: Some("function_echo_injected_data_shorthand".to_string()),
             input: create_test_input(),
             extra_body: serde_json::from_value(json!([{
                 "model_provider_name": "tensorzero::model_name::dummy::echo_injected_data::provider_name::dummy",
@@ -192,7 +180,7 @@ async fn test_extra_body_model_provider_no_shorthand_function() {
 
     let result = client
         .inference(ClientInferenceParams {
-            function_name: Some("test_extra".to_string()),
+            function_name: Some("function_echo_injected_data_explicit".to_string()),
             input: create_test_input(),
             extra_body: serde_json::from_value(json!([{
                 "model_name": "my_echo_injected_data",
@@ -216,7 +204,7 @@ async fn test_extra_body_model_provider_shorthand_function() {
 
     let result = client
         .inference(ClientInferenceParams {
-            function_name: Some("function_echo_injected_data".to_string()),
+            function_name: Some("function_echo_injected_data_shorthand".to_string()),
             input: create_test_input(),
             extra_body: serde_json::from_value(json!([{
                 "model_name": "dummy::echo_injected_data",
