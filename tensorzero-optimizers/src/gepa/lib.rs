@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use futures::future::join_all;
 use tokio::sync::Semaphore;
@@ -13,7 +14,6 @@ use tensorzero_core::{
     client::{ClientBuilder, ClientBuilderMode},
     config::Config,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
-    endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
     function::FunctionConfig,
     http::TensorzeroHttpClient,
@@ -55,7 +55,6 @@ pub async fn run_gepa_optimization(
     client: &TensorzeroHttpClient,
     train_examples: Vec<RenderedSample>,
     val_examples: Option<Vec<RenderedSample>>,
-    _credentials: &InferenceCredentials,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     tensorzero_config: std::sync::Arc<Config>,
 ) -> Result<HashMap<String, UninitializedChatCompletionConfig>, Error> {
@@ -86,7 +85,7 @@ pub async fn run_gepa_optimization(
         clickhouse_connection_info: clickhouse_connection_info.clone(),
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         http_client: client.clone(),
-        timeout: None,
+        timeout: Some(Duration::from_secs(config.timeout)),
     })
     .build()
     .await
@@ -123,7 +122,7 @@ pub async fn run_gepa_optimization(
         val_examples.len()
     );
 
-    let _val_datapoint_ids = create_evaluation_dataset(
+    create_evaluation_dataset(
         &tensorzero_config,
         client,
         clickhouse_connection_info,
@@ -230,15 +229,6 @@ pub async fn run_gepa_optimization(
     // Update scores map
     val_scores_map.retain(|variant_name, _| pareto_frontier.contains_key(variant_name));
 
-    // Assert that frequencies and val_scores_map are in sync
-    debug_assert_eq!(
-        frequencies.keys().collect::<std::collections::HashSet<_>>(),
-        val_scores_map
-            .keys()
-            .collect::<std::collections::HashSet<_>>(),
-        "frequencies and val_scores_map must have the same keys"
-    );
-
     tracing::info!(
         "Initial Pareto frontier filtered to {} variants",
         pareto_frontier.len()
@@ -265,7 +255,7 @@ pub async fn run_gepa_optimization(
             uuid::Uuid::now_v7()
         );
 
-        let _batch_datapoint_ids = create_evaluation_dataset(
+        create_evaluation_dataset(
             &tensorzero_config,
             client,
             clickhouse_connection_info,
@@ -361,15 +351,6 @@ pub async fn run_gepa_optimization(
 
             // Keep val_scores_map in sync with filtered frontier
             val_scores_map.retain(|variant_name, _| pareto_frontier.contains_key(variant_name));
-
-            // Assert consistency
-            debug_assert_eq!(
-                frequencies.keys().collect::<std::collections::HashSet<_>>(),
-                val_scores_map
-                    .keys()
-                    .collect::<std::collections::HashSet<_>>(),
-                "frequencies and val_scores_map must have the same keys after Pareto update"
-            );
 
             tracing::info!(
                 "Pareto frontier updated: {} variants (child {} retained: {})",

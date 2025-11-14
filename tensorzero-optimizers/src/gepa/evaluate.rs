@@ -192,14 +192,14 @@ pub async fn consume_evaluation_stream(
 /// * `dataset_name` - The name of the dataset to create
 ///
 /// # Returns
-/// * `Vec<Uuid>` - The IDs of the created datapoints
+/// * `()` - Returns success or error
 pub async fn create_evaluation_dataset(
     tensorzero_config: &Config,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     samples: &[RenderedSample],
     dataset_name: &str,
-) -> Result<Vec<Uuid>, Error> {
+) -> Result<(), Error> {
     // Convert RenderedSamples to CreateDatapointRequest
     let datapoints: Result<Vec<CreateDatapointRequest>, Error> = samples
         .iter()
@@ -257,7 +257,7 @@ pub async fn create_evaluation_dataset(
     };
 
     // Call the datasets v1 create_datapoints function
-    let response = create_datapoints(
+    create_datapoints(
         tensorzero_config,
         http_client,
         clickhouse_connection_info,
@@ -266,5 +266,5 @@ pub async fn create_evaluation_dataset(
     )
     .await?;
 
-    Ok(response.ids)
+    Ok(())
 }

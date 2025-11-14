@@ -43,7 +43,7 @@ impl Optimizer for GEPAConfig {
         client: &TensorzeroHttpClient,
         train_examples: Vec<RenderedSample>,
         val_examples: Option<Vec<RenderedSample>>,
-        credentials: &InferenceCredentials,
+        _credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: std::sync::Arc<Config>,
     ) -> Result<Self::Handle, Error> {
@@ -53,7 +53,6 @@ impl Optimizer for GEPAConfig {
             client,
             train_examples,
             val_examples,
-            credentials,
             clickhouse_connection_info,
             config,
         )
