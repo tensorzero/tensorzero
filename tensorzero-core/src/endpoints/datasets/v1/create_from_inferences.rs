@@ -72,6 +72,7 @@ pub async fn create_from_inferences(
             ListInferencesParams {
                 ids: Some(inference_ids),
                 output_source: inference_output_source,
+                limit: inference_ids.len() as u32,
                 ..Default::default()
             }
         }
@@ -84,6 +85,7 @@ pub async fn create_from_inferences(
             variant_name: variant_name.as_deref(),
             filters: filters.as_ref(),
             output_source: inference_output_source,
+            limit: u32::MAX,
             ..Default::default()
         },
     };
