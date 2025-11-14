@@ -63,7 +63,7 @@ pub(crate) async fn evaluate_inference(
     let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
 
     // Filter evaluators based on cancellation tokens (if provided)
-    let evaluators_to_run: Vec<_> = inference_evaluation_config
+    let evaluators_to_run = inference_evaluation_config
         .evaluators
         .keys()
         .filter(|name| {
@@ -71,8 +71,7 @@ pub(crate) async fn evaluate_inference(
             // Otherwise, only run evaluators whose tokens are not cancelled
             cancellation_tokens
                 .is_none_or(|tokens| tokens.get(*name).is_none_or(|token| !token.is_cancelled()))
-        })
-        .collect();
+        });
 
     info!(
         evaluators = ?evaluators_to_run,
