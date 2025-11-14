@@ -16,16 +16,13 @@ pub use stats::{
     EvaluatorStats, PerEvaluatorStats,
 };
 use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::client::ClientInput;
 use tensorzero_core::client::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
-    ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
-    InferenceResponse,
+    ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
 };
-use tensorzero_core::client::{ClientInput, StoragePath};
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo};
-use tensorzero_core::error::Error;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
-use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 use tensorzero_core::{
     config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::StoredDatapoint,
     function::FunctionConfig,
@@ -92,7 +89,7 @@ pub struct Args {
 }
 
 pub struct Clients {
-    pub tensorzero_client: ThrottledTensorZeroClient,
+    pub tensorzero_client: Client,
     pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
@@ -377,9 +374,9 @@ pub async fn run_evaluation_core_streaming(
     let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
 
     // Build the semaphore and clients
-    let semaphore = Semaphore::new(args.concurrency);
+    let semaphore = Arc::new(Semaphore::new(args.concurrency));
     let clients = Arc::new(Clients {
-        tensorzero_client: ThrottledTensorZeroClient::new(args.tensorzero_client, semaphore),
+        tensorzero_client: args.tensorzero_client,
         clickhouse_client: args.clickhouse_client,
     });
 
@@ -471,10 +468,14 @@ pub async fn run_evaluation_core_streaming(
         let datapoint_id = datapoint.id();
         let inference_cache = args.inference_cache;
         let tokens_clone = cancellation_tokens.clone();
+        let semaphore_clone = semaphore.clone();
         // Skip feedback for dynamic variants (they're not production-ready)
         // Named variants: send_feedback=true, Dynamic variants: send_feedback=false
         let send_feedback = !matches!(variant.as_ref(), EvaluationVariant::Info(_));
         let abort_handle = join_set.spawn(async move {
+            // Acquire semaphore permit for the entire task (inference + evaluation)
+            let _permit = semaphore_clone.acquire().await?;
+
             let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?)?);
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
@@ -803,34 +804,6 @@ pub struct EvaluationStreamResult {
     pub receiver: mpsc::Receiver<EvaluationUpdate>,
     pub run_info: RunInfo,
     pub evaluation_config: Arc<EvaluationConfig>,
-}
-
-pub struct ThrottledTensorZeroClient {
-    pub client: Client,
-    semaphore: Semaphore,
-}
-
-impl ThrottledTensorZeroClient {
-    pub fn new(client: Client, semaphore: Semaphore) -> Self {
-        Self { client, semaphore }
-    }
-
-    async fn inference(&self, params: ClientInferenceParams) -> Result<InferenceOutput> {
-        let _permit = self.semaphore.acquire().await?;
-        let inference_output = self.client.inference(params).await?;
-        Ok(inference_output)
-    }
-
-    async fn feedback(&self, params: FeedbackParams) -> Result<()> {
-        self.client.feedback(params).await?;
-        Ok(())
-    }
-}
-
-impl StoragePathResolver for ThrottledTensorZeroClient {
-    async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
-        self.client.resolve(storage_path).await
-    }
 }
 
 #[cfg(test)]

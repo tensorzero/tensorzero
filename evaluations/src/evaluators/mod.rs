@@ -159,13 +159,12 @@ pub(crate) async fn evaluate_inference(
                                     })
                                     .await
                                 {
-                                    #[expect(clippy::ignored_unit_patterns)]
                                     Ok(_) => {
                                         debug!(evaluator_name = %evaluator_name, "Feedback sent successfully");
                                     },
                                     Err(e) => {
                                         error!(evaluator_name = %evaluator_name, error = %e, "Failed to send feedback");
-                                        return (evaluator_name, Err(e));
+                                        return (evaluator_name, Err(e.into()));
                                     }
                                 }
                             }

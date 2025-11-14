@@ -6,7 +6,7 @@ mod common;
 use clap::Parser;
 use evaluations::dataset::query_dataset;
 use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEvaluatorParams};
-use evaluations::{Clients, ThrottledTensorZeroClient};
+use evaluations::Clients;
 use serde_json::json;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::input_handling::resolved_input_to_client_input;
@@ -52,7 +52,6 @@ use tensorzero_core::{
     },
     evaluations::{LLMJudgeIncludeConfig, LLMJudgeOptimize},
 };
-use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 pub fn init_tracing_for_tests() {
@@ -1269,7 +1268,6 @@ async fn test_run_llm_judge_evaluator_chat() {
     .build()
     .await
     .unwrap();
-    let tensorzero_client = ThrottledTensorZeroClient::new(tensorzero_client, Semaphore::new(1));
     let clients = Arc::new(Clients {
         tensorzero_client,
         clickhouse_client: get_clickhouse().await,
@@ -1444,7 +1442,6 @@ async fn test_run_llm_judge_evaluator_chat() {
 async fn test_run_llm_judge_evaluator_json() {
     init_tracing_for_tests();
     let tensorzero_client = get_tensorzero_client().await;
-    let tensorzero_client = ThrottledTensorZeroClient::new(tensorzero_client, Semaphore::new(1));
     let clients = Arc::new(Clients {
         tensorzero_client,
         clickhouse_client: get_clickhouse().await,
