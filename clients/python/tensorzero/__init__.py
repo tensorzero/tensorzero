@@ -98,7 +98,7 @@ from .types import (
     Message,
     ModelProviderExtraBody,
     ModelProviderExtraHeader,
-    NotFilter,
+    NotFilter,  # pyright: ignore[reportDeprecated]
     OrderBy,
     OrFilter,  # pyright: ignore[reportDeprecated]
     ProviderExtraBody,  # DEPRECATED

@@ -51,6 +51,10 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 
 use crate::common::get_gateway_endpoint;
 
+mod extra_body;
+mod extra_headers;
+mod tool_params;
+
 #[tokio::test]
 async fn e2e_test_inference_dryrun() {
     let payload = json!({
@@ -4098,5 +4102,3 @@ async fn test_internal_tag_auto_injection() {
         inference_id.to_string()
     );
 }
-
-pub mod tool_params;

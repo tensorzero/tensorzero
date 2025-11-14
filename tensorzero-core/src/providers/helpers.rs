@@ -1,28 +1,24 @@
-use std::{collections::HashMap, pin::Pin};
-
-use crate::{
-    error::IMPOSSIBLE_ERROR_MESSAGE,
-    http::{TensorZeroEventSource, TensorzeroRequestBuilder},
-    inference::types::resolved_input::{FileUrl, LazyFile},
-};
 use axum::http;
 use bytes::Bytes;
 use futures::{stream::Peekable, Stream};
 use serde::de::DeserializeOwned;
 use serde_json::{map::Entry, Map, Value};
+use std::{collections::HashMap, pin::Pin};
 use uuid::Uuid;
 
 use crate::{
-    error::{DisplayOrDebugGateway, Error, ErrorDetails},
+    error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    http::{TensorZeroEventSource, TensorzeroRequestBuilder},
     inference::types::{
         batch::{ProviderBatchInferenceOutput, ProviderBatchInferenceResponse},
         extra_body::{ExtraBodyReplacementKind, FullExtraBodyConfig, InferenceExtraBody},
         extra_headers::{
             ExtraHeader, ExtraHeaderKind, FullExtraHeadersConfig, InferenceExtraHeader,
         },
+        resolved_input::{FileUrl, LazyFile},
         ProviderInferenceResponseChunk,
     },
-    model::{fully_qualified_name, ModelProviderRequestInfo, SHORTHAND_MODEL_PREFIXES},
+    model::{fully_qualified_name, ModelProviderRequestInfo},
 };
 
 pub struct JsonlBatchFileInfo {
@@ -30,23 +26,6 @@ pub struct JsonlBatchFileInfo {
     pub raw_request: String,
     pub raw_response: String,
     pub file_id: String,
-}
-
-/// Strip shorthand prefix from model name if it's a known shorthand prefix matching the provider.
-/// For example, "openai::gpt-4o" with provider "openai" returns "gpt-4o".
-/// Only strips if the prefix is in the known SHORTHAND_MODEL_PREFIXES list.
-/// If no matching shorthand prefix exists, returns the original name unchanged.
-fn strip_shorthand_prefix<'a>(model_name: &'a str, provider_name: &str) -> &'a str {
-    let expected_prefix = format!("{provider_name}::");
-
-    // Only strip if this is a known shorthand prefix
-    if SHORTHAND_MODEL_PREFIXES.contains(&expected_prefix.as_str()) {
-        model_name
-            .strip_prefix(&expected_prefix)
-            .unwrap_or(model_name)
-    } else {
-        model_name
-    }
 }
 
 pub async fn convert_stream_error(
@@ -306,7 +285,18 @@ pub fn inject_extra_request_data(
 
     let expected_model_name = model_name;
     let expected_provider_name_plain = &model_provider.provider_name;
-    let expected_provider_name = fully_qualified_name(model_name, &model_provider.provider_name);
+    let expected_provider_name_fully_qualified =
+        fully_qualified_name(model_name, &model_provider.provider_name);
+
+    tracing::info!("Expected model name: {}", expected_model_name);
+    tracing::info!(
+        "Expected provider name (plain): {}",
+        expected_provider_name_plain
+    );
+    tracing::info!(
+        "Expected provider name (fully qualified): {}",
+        expected_provider_name_fully_qualified
+    );
 
     // Finally, write the inference-level extra_body information. This can overwrite values set from the config-level extra_body.
     for extra_body in &config.inference_extra_body.data {
@@ -330,7 +320,7 @@ pub fn inject_extra_request_data(
                 pointer,
                 kind,
             } => {
-                if *model_provider_name == expected_provider_name {
+                if *model_provider_name == expected_provider_name_fully_qualified {
                     match kind {
                         ExtraBodyReplacementKind::Value(value) => {
                             write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
@@ -347,9 +337,7 @@ pub fn inject_extra_request_data(
                 pointer,
                 kind,
             } => {
-                let canonical_filter_model_name =
-                    strip_shorthand_prefix(filter_model_name, filter_provider_name);
-                if canonical_filter_model_name == expected_model_name
+                if filter_model_name == expected_model_name
                     && filter_provider_name.as_str() == expected_provider_name_plain.as_ref()
                 {
                     match kind {
@@ -457,7 +445,7 @@ pub fn inject_extra_request_data(
                 name,
                 kind,
             } => {
-                if *model_provider_name == expected_provider_name {
+                if *model_provider_name == expected_provider_name_fully_qualified {
                     let name =
                         http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                             Error::new(ErrorDetails::Serialization {
@@ -495,9 +483,7 @@ pub fn inject_extra_request_data(
                 name,
                 kind,
             } => {
-                let canonical_filter_model_name =
-                    strip_shorthand_prefix(filter_model_name, filter_provider_name);
-                if canonical_filter_model_name == expected_model_name
+                if filter_model_name == expected_model_name
                     && filter_provider_name.as_str() == expected_provider_name_plain.as_ref()
                 {
                     let name =
@@ -915,51 +901,6 @@ mod tests {
                 .await
                 .expect("Peeking stream should succeed");
         assert_eq!(&chunk, peeked_chunk);
-    }
-
-    #[test]
-    fn test_strip_shorthand_prefix() {
-        // Known shorthand prefix - should strip
-        assert_eq!(strip_shorthand_prefix("openai::gpt-4o", "openai"), "gpt-4o");
-        assert_eq!(
-            strip_shorthand_prefix("anthropic::claude-3-5-sonnet-20241022", "anthropic"),
-            "claude-3-5-sonnet-20241022"
-        );
-        assert_eq!(
-            strip_shorthand_prefix("dummy::test-model", "dummy"),
-            "test-model"
-        );
-
-        // Already just suffix - should return as-is
-        assert_eq!(strip_shorthand_prefix("gpt-4o", "openai"), "gpt-4o");
-        assert_eq!(
-            strip_shorthand_prefix("claude-3-5-sonnet-20241022", "anthropic"),
-            "claude-3-5-sonnet-20241022"
-        );
-
-        // Wrong provider for the prefix - should NOT strip
-        assert_eq!(
-            strip_shorthand_prefix("openai::gpt-4o", "anthropic"),
-            "openai::gpt-4o"
-        );
-        assert_eq!(
-            strip_shorthand_prefix("anthropic::claude-3", "openai"),
-            "anthropic::claude-3"
-        );
-
-        // External model with :: but not a known prefix - should NOT strip
-        assert_eq!(
-            strip_shorthand_prefix("custom::model::name", "custom"),
-            "custom::model::name"
-        );
-        assert_eq!(
-            strip_shorthand_prefix("azure::deployment::model", "azure"),
-            "azure::deployment::model"
-        );
-        assert_eq!(
-            strip_shorthand_prefix("my_provider::my::nested::model", "my_provider"),
-            "my_provider::my::nested::model"
-        );
     }
 
     #[test]
