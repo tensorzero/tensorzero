@@ -2343,7 +2343,7 @@ async fn test_max_inferences_parameter() {
         clickhouse_client: clickhouse.clone(),
         config: config.clone(),
         dataset_name: dataset_name.clone(),
-        variant: EvaluationVariant::Name("extract_entities_0.8".to_string()),
+        variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
         evaluation_name: "entity_extraction".to_string(),
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
