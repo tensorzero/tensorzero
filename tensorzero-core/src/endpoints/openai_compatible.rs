@@ -256,7 +256,7 @@ impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
             model: format!("{TENSORZERO_EMBEDDING_MODEL_NAME_PREFIX}{}", response.model),
             usage: Some(OpenAIEmbeddingUsage {
                 prompt_tokens: response.usage.input_tokens,
-                total_tokens: response.usage.input_tokens,
+                total_tokens: response.usage.input_tokens, // there are no output tokens for embeddings
             }),
         }
     }

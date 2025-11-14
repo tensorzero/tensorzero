@@ -3235,8 +3235,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: Some(0),
-                output_tokens: Some(0),
+                input_tokens: None,
+                output_tokens: None,
             }
         );
         assert_eq!(model_inference_response.latency, latency);

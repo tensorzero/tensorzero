@@ -1885,19 +1885,13 @@ impl InferenceResult {
     }
 
     /// Aggregates the usage of all model inference results, considering cached results.
-    /// If any of the values are None, the total usage is considered as None (via `map`).
+    /// If any of the values are None, the total usage is considered as None (via `sum_usage_strict`).
     pub fn usage_considering_cached(&self) -> Usage {
-        self.model_inference_results()
-            .iter()
-            .map(ModelInferenceResponseWithMetadata::usage_considering_cached)
-            .fold(Usage::default(), |acc, u| Usage {
-                input_tokens: u
-                    .input_tokens
-                    .map(|tokens| tokens + acc.input_tokens.unwrap_or(0)),
-                output_tokens: u
-                    .output_tokens
-                    .map(|tokens| tokens + acc.output_tokens.unwrap_or(0)),
-            })
+        Usage::sum_usage_strict(
+            self.model_inference_results()
+                .iter()
+                .map(ModelInferenceResponseWithMetadata::usage_considering_cached),
+        )
     }
 
     pub fn set_original_response(&mut self, original_response: Option<String>) {
