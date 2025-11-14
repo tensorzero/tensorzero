@@ -333,11 +333,7 @@ async fn test_datapoint_update_tool_params() {
     let dp = &datapoints[0];
 
     // Verify updated tool_params (flattened at top level)
-    assert_eq!(
-        dp["allowed_tools"],
-        json!(["get_temperature"]),
-        // Note: we no longer update updated tools because additional_tools are no longer added by default
-    );
+    assert_eq!(dp["allowed_tools"], json!(["get_temperature"]),);
 
     let additional_tools = dp["additional_tools"].as_array().unwrap();
     assert_eq!(additional_tools.len(), 1);

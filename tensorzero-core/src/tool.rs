@@ -328,16 +328,16 @@ impl AllowedTools {
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum AllowedToolsChoice {
-    // If `allowed_tools` is not explicitly passed, we set the function tools
-    // by default and add any dynamic tools
+    /// If `allowed_tools` is not explicitly passed, we set the function tools
+    /// by default and add any dynamic tools
     #[default]
     FunctionDefault,
-    // If `allowed_tools` was explicitly passed we use that list only and then automatically add dynamically set tools
-    // This is deprecated but we keep it around as it may still be in the database.
-    // We have never allowed users to specify AllowedToolsChoice so this is more about the semantics of the data than anything else.
+    /// If `allowed_tools` was explicitly passed we use that list only and then automatically add dynamically set tools
+    /// This is deprecated but we keep it around as it may still be in the database.
+    /// We have never allowed users to specify AllowedToolsChoice so this is more about the semantics of the data than anything else.
     #[deprecated]
     DynamicAllowedTools,
-    // Currently, we match OpenAI in that if allowed tools is set we only allow the tools that are in it.
+    /// Currently, we match OpenAI in that if allowed tools is set we only allow the tools that are in it.
     Explicit,
 }
 
@@ -439,13 +439,13 @@ impl ToolCallConfig {
             dynamic_parallel_tool_calls,
             dynamic_provider_tools,
         } = args;
-        // If `allowed_tools` is not provided, use the function's configured tools plus any dynamic tools.
-        // This means we allow all tools for the function.
         let allowed_tools = match dynamic_allowed_tools {
             Some(allowed_tools) => AllowedTools {
                 tools: allowed_tools,
                 choice: AllowedToolsChoice::Explicit,
             },
+            // If `allowed_tools` is not provided, use the function's configured tools plus any dynamic tools.
+            // This means we allow all tools for the function.
             None => {
                 // Collect function tools
                 let mut tools: Vec<String> = function_tools.to_vec();

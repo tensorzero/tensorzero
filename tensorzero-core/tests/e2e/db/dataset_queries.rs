@@ -2537,13 +2537,11 @@ mod tool_call_storage_tests {
             assert!(tool_params
                 .allowed_tools
                 .tools
-                .iter()
-                .any(|t| t == "static_tool_1"));
+                .contains(&"static_tool_1".to_string()));
             assert!(tool_params
                 .allowed_tools
                 .tools
-                .iter()
-                .any(|t| t == "static_tool_2"));
+                .contains(&"static_tool_2".to_string()));
             assert_eq!(
                 tool_params.allowed_tools.choice,
                 AllowedToolsChoice::Explicit
@@ -2714,13 +2712,11 @@ mod tool_call_storage_tests {
             assert!(tool_params
                 .allowed_tools
                 .tools
-                .iter()
-                .any(|t| t == "static_a"));
+                .contains(&"static_a".to_string()));
             assert!(tool_params
                 .allowed_tools
                 .tools
-                .iter()
-                .any(|t| t == "static_b"));
+                .contains(&"static_b".to_string()));
         } else {
             panic!("Expected chat datapoint");
         }
@@ -2951,13 +2947,11 @@ mod tool_call_storage_tests {
             assert!(tool_params
                 .allowed_tools
                 .tools
-                .iter()
-                .any(|t| t == "explicit_tool_1"));
+                .contains(&"explicit_tool_1".to_string()));
             assert!(tool_params
                 .allowed_tools
                 .tools
-                .iter()
-                .any(|t| t == "explicit_tool_2"));
+                .contains(&"explicit_tool_2".to_string()));
 
             if let ToolChoice::Specific(tool_name) = tool_params.tool_choice {
                 assert_eq!(tool_name, "explicit_tool_1");
@@ -3112,13 +3106,11 @@ mod tool_call_storage_tests {
             assert!(tool_params
                 .allowed_tools
                 .tools
-                .iter()
-                .any(|t| t == "static_1"));
+                .contains(&"static_1".to_string()));
             assert!(tool_params
                 .allowed_tools
                 .tools
-                .iter()
-                .any(|t| t == "static_2"));
+                .contains(&"static_2".to_string()));
 
             assert_eq!(tool_params.tool_choice, ToolChoice::Required);
             assert_eq!(tool_params.parallel_tool_calls, Some(true));
