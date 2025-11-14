@@ -53,6 +53,15 @@ function EvaluationForm({
   const [inferenceCache, setInferenceCache] = useState<InferenceCacheSetting>(
     initialFormState?.inference_cache ?? "on",
   );
+  const [minInferences, setMinInferences] = useState<string>(
+    initialFormState?.min_inferences ?? "",
+  );
+  const [maxInferences, setMaxInferences] = useState<string>(
+    initialFormState?.max_inferences ?? "",
+  );
+  const [precisionLimits, setPrecisionLimits] = useState<string>(
+    initialFormState?.precision_limits ?? "",
+  );
 
   let count = null;
   let isLoading = false;
@@ -252,6 +261,12 @@ function EvaluationForm({
         <AdvancedParametersAccordion
           inferenceCache={inferenceCache}
           setInferenceCache={setInferenceCache}
+          minInferences={minInferences}
+          setMinInferences={setMinInferences}
+          maxInferences={maxInferences}
+          setMaxInferences={setMaxInferences}
+          precisionLimits={precisionLimits}
+          setPrecisionLimits={setPrecisionLimits}
           defaultOpen={inferenceCache !== "on"}
         />
         <input type="hidden" name="inference_cache" value={inferenceCache} />
@@ -307,6 +322,9 @@ interface EvaluationsFormValues {
   variant_name: string | null;
   concurrency_limit: string;
   inference_cache: InferenceCacheSetting;
+  min_inferences: string;
+  max_inferences: string;
+  precision_limits: string;
 }
 
 interface EvaluationsFormState extends Partial<EvaluationsFormValues> {

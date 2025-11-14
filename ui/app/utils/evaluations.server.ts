@@ -58,6 +58,41 @@ const evaluationFormDataSchema = z.object({
       message: "Concurrency limit must be a positive integer",
     }),
   inference_cache: z.enum(INFERENCE_CACHE_SETTINGS),
+  min_inferences: z
+    .string()
+    .optional()
+    .transform((val) => (val ? Number.parseInt(val, 10) : undefined))
+    .refine((val) => val === undefined || (!Number.isNaN(val) && val > 0), {
+      message: "Min inferences must be a positive integer",
+    }),
+  max_inferences: z
+    .string()
+    .optional()
+    .transform((val) => (val ? Number.parseInt(val, 10) : undefined))
+    .refine((val) => val === undefined || (!Number.isNaN(val) && val > 0), {
+      message: "Max inferences must be a positive integer",
+    }),
+  precision_limits: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (!val) return undefined;
+      try {
+        return JSON.parse(val) as Record<string, number>;
+      } catch {
+        return undefined;
+      }
+    })
+    .refine(
+      (val) =>
+        val === undefined ||
+        (typeof val === "object" &&
+          Object.values(val).every((v) => typeof v === "number" && v >= 0)),
+      {
+        message:
+          "Precision limits must be a JSON object mapping evaluator names to non-negative numbers",
+      },
+    ),
 });
 export type EvaluationFormData = z.infer<typeof evaluationFormDataSchema>;
 
@@ -74,6 +109,9 @@ export function runEvaluation(
   variantName: string,
   concurrency: number,
   inferenceCache: InferenceCacheSetting,
+  minInferences?: number,
+  maxInferences?: number,
+  precisionLimits?: Record<string, number>,
 ): Promise<EvaluationStartInfo> {
   const env = getEnv();
   const startTime = new Date();
@@ -166,6 +204,11 @@ export function runEvaluation(
     variantName,
     concurrency,
     inferenceCache,
+    minInferences,
+    maxInferences,
+    precisionLimits: precisionLimits
+      ? JSON.stringify(precisionLimits)
+      : undefined,
     onEvent: handleEvent,
   });
 
