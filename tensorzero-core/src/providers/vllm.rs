@@ -331,9 +331,6 @@ struct VLLMRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
-    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -446,7 +443,6 @@ impl<'a> VLLMRequest<'a> {
             seed: request.seed,
             stop: request.borrow_stop_sequences(),
             tools,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             tool_choice,
             parallel_tool_calls,
         };

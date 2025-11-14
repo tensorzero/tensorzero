@@ -2528,7 +2528,6 @@ mod tests {
                 None,
             );
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-            // Check allowed_tools contains both "a" and "b" (order doesn't matter due to HashSet)
             let allowed = result.allowed_tools.unwrap();
             assert_eq!(allowed.len(), 2);
             assert!(allowed.contains(&"a".to_string()));

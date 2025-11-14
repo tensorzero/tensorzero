@@ -615,9 +615,6 @@ struct AzureRequest<'a> {
     response_format: Option<AzureResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenAITool<'a>>>,
-    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<AzureToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -702,7 +699,6 @@ impl<'a> AzureRequest<'a> {
             response_format,
             seed: request.seed,
             tools,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             tool_choice: tool_choice.map(AzureToolChoice::from),
             reasoning_effort: None,
             service_tier: None, // handled below
@@ -1194,7 +1190,6 @@ mod tests {
             stream: false,
             response_format: None,
             tools: None,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             tool_choice: None,
             reasoning_effort: None,
             service_tier: None,

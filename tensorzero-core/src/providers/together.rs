@@ -369,9 +369,6 @@ struct TogetherRequest<'a> {
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
-    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -465,7 +462,6 @@ impl<'a> TogetherRequest<'a> {
             response_format,
             tools,
             tool_choice,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None,

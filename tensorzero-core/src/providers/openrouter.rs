@@ -66,14 +66,6 @@ lazy_static! {
 const PROVIDER_NAME: &str = "OpenRouter";
 pub const PROVIDER_TYPE: &str = "openrouter";
 
-// OLD: returned separate allowed_tools field
-// type PreparedOpenRouterToolsResult<'a> = (
-//     Option<Vec<OpenRouterTool<'a>>>,
-//     Option<OpenRouterToolChoice<'a>>,
-//     Option<bool>,
-//     Option<Vec<&'a str>>,
-// );
-
 type PreparedOpenRouterToolsResult<'a> = (
     Option<Vec<OpenRouterTool<'a>>>,
     Option<OpenRouterToolChoice<'a>>,
@@ -1120,9 +1112,6 @@ struct OpenRouterRequest<'a> {
     response_format: Option<OpenRouterResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenRouterTool<'a>>>,
-    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenRouterToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1214,7 +1203,6 @@ impl<'a> OpenRouterRequest<'a> {
             stream_options,
             response_format,
             tools,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
@@ -1994,7 +1982,6 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
@@ -2094,7 +2081,6 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
@@ -2164,7 +2150,6 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
@@ -2224,7 +2209,6 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
@@ -2941,7 +2925,6 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
