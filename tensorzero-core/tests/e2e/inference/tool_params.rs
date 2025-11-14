@@ -9,6 +9,8 @@
 //! 3. Lossy conversions: provider_tools and AllowedToolsChoice metadata are NOT persisted
 //! 4. Edge cases: empty lists, None values, mixed static/dynamic tools
 
+use std::collections::HashSet;
+
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::test_helpers::make_embedded_gateway;
@@ -643,7 +645,7 @@ async fn test_allowed_tools_restriction() {
     assert_eq!(tools_available.len(), 2);
 
     // Verify both tools are present in some order
-    let tool_names: Vec<&str> = tools_available
+    let tool_names: HashSet<&str> = tools_available
         .iter()
         .map(|t| t.get("name").unwrap().as_str().unwrap())
         .collect();

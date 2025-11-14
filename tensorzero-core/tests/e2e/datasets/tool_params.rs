@@ -80,9 +80,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
             tool: json!({"foo": "bar"}),
         }],
         AllowedTools {
-            tools: [get_temp_tool.name.clone(), custom_tool.name.clone()]
-                .into_iter()
-                .collect(),
+            tools: vec![get_temp_tool.name.clone(), custom_tool.name.clone()],
             choice: AllowedToolsChoice::Explicit,
         },
         ToolChoice::Specific("get_temperature".to_string()),
@@ -217,7 +215,7 @@ async fn test_datapoint_update_tool_params() {
         vec![Tool::ClientSideFunction(get_temp_tool.clone())],
         vec![],
         AllowedTools {
-            tools: [get_temp_tool.name.clone()].into_iter().collect(),
+            tools: vec![get_temp_tool.name.clone()],
             choice: AllowedToolsChoice::Explicit,
         },
         ToolChoice::Auto,
@@ -414,7 +412,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![],
             vec![],
             AllowedTools {
-                tools: [base_tool.name.clone()].into_iter().collect(),
+                tools: vec![base_tool.name.clone()],
                 choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,
@@ -448,9 +446,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![Tool::ClientSideFunction(custom_tool_1.clone())],
             vec![],
             AllowedTools {
-                tools: [base_tool.name.clone(), custom_tool_1.name.clone()]
-                    .into_iter()
-                    .collect(),
+                tools: vec![base_tool.name.clone(), custom_tool_1.name.clone()],
                 choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Required,
@@ -484,7 +480,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![Tool::ClientSideFunction(custom_tool_2.clone())],
             vec![],
             AllowedTools {
-                tools: [custom_tool_2.name.clone()].into_iter().collect(),
+                tools: vec![custom_tool_2.name.clone()],
                 choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::None,
@@ -710,9 +706,7 @@ async fn test_datapoint_only_dynamic_tools() {
             vec![Tool::ClientSideFunction(dynamic_tool.clone())],
             vec![],
             AllowedTools {
-                tools: [static_tool.name.clone(), dynamic_tool.name.clone()]
-                    .into_iter()
-                    .collect(),
+                tools: vec![static_tool.name.clone(), dynamic_tool.name.clone()],
                 choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,
@@ -806,7 +800,7 @@ async fn test_datapoint_tool_params_three_states() {
             vec![Tool::ClientSideFunction(tool.clone())],
             vec![],
             AllowedTools {
-                tools: [tool.name.clone()].into_iter().collect(),
+                tools: vec![tool.name.clone()],
                 choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,

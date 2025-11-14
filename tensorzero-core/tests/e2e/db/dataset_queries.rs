@@ -2671,9 +2671,7 @@ mod tool_call_storage_tests {
                 vec![dynamic_tool],
                 vec![],
                 AllowedTools {
-                    tools: ["static_a".to_string(), "static_b".to_string()]
-                        .into_iter()
-                        .collect(),
+                    tools: vec!["static_a".to_string(), "static_b".to_string()],
                     choice: AllowedToolsChoice::Explicit,
                 },
                 ToolChoice::Auto,
@@ -2903,9 +2901,7 @@ mod tool_call_storage_tests {
                 vec![],
                 vec![],
                 AllowedTools {
-                    tools: ["explicit_tool_1".to_string(), "explicit_tool_2".to_string()]
-                        .into_iter()
-                        .collect(),
+                    tools: vec!["explicit_tool_1".to_string(), "explicit_tool_2".to_string()],
                     choice: AllowedToolsChoice::Explicit, // Explicit list
                 },
                 ToolChoice::Specific("explicit_tool_1".to_string()),
@@ -3063,9 +3059,7 @@ mod tool_call_storage_tests {
                 vec![dynamic_tool1, dynamic_tool2],
                 vec![provider_tool],
                 AllowedTools {
-                    tools: ["static_1".to_string(), "static_2".to_string()]
-                        .into_iter()
-                        .collect(),
+                    tools: vec!["static_1".to_string(), "static_2".to_string()],
                     choice: AllowedToolsChoice::Explicit,
                 },
                 ToolChoice::Required,
