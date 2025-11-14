@@ -160,6 +160,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                     "test-fine-tuned-model",
                     &ProviderTypesConfig::default(),
                     &ProviderTypeDefaultCredentials::default(),
+                    TensorzeroHttpClient::new_testing().unwrap(),
                 )
                 .await
                 .unwrap();
