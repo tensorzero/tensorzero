@@ -286,7 +286,13 @@ pub fn impute_missing_score(score: Option<f32>, optimize: MetricConfigOptimize) 
 
 /// Compare two values according to optimization direction
 ///
-/// Returns (is_worse, is_better) where:
+/// # Arguments
+/// * `a_val` - The first value to compare
+/// * `b_val` - The second value to compare
+/// * `optimize` - The optimization direction (Max or Min)
+///
+/// # Returns
+/// A tuple `(is_worse, is_better)` where:
 /// - `is_worse`: true if value `a` is worse than value `b` given the optimization direction
 /// - `is_better`: true if value `a` is strictly better than value `b` given the optimization direction
 fn compare_values(a_val: f32, b_val: f32, optimize: MetricConfigOptimize) -> (bool, bool) {
@@ -300,6 +306,13 @@ fn compare_values(a_val: f32, b_val: f32, optimize: MetricConfigOptimize) -> (bo
 ///
 /// For each variant, counts how many datapoint-level Pareto sets it appears in.
 /// Higher frequency indicates the variant performs well on more instances.
+///
+/// # Arguments
+/// * `variants` - Set of variant names to calculate frequencies for
+/// * `instance_pareto_sets` - Map from datapoint ID to set of Pareto-optimal variant names for that instance
+///
+/// # Returns
+/// HashMap mapping each variant name to its frequency (count of instance-wise Pareto set memberships)
 fn calculate_frequencies(
     variants: &HashSet<String>,
     instance_pareto_sets: &HashMap<String, HashSet<String>>,
@@ -424,6 +437,13 @@ pub fn instance_dominates(
 }
 
 /// Find non-dominated variants for a single instance (datapoint) using instance-wise dominance
+///
+/// # Arguments
+/// * `instance_scores` - Vector of (variant_name, scores) tuples where scores map evaluator names to optional values
+/// * `evaluators` - Map of evaluator configurations containing optimization directions
+///
+/// # Returns
+/// Vector of variant names that are not dominated by any other variant on this instance
 pub fn find_non_dominated_variants(
     instance_scores: &[(String, HashMap<String, Option<f32>>)],
     evaluators: &HashMap<String, EvaluatorConfig>,
@@ -514,10 +534,13 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    use tensorzero_core::evaluations::{
-        EvaluationConfig, EvaluatorConfig, ExactMatchConfig, InferenceEvaluationConfig,
-        LLMJudgeConfig, LLMJudgeIncludeConfig, LLMJudgeInputFormat, LLMJudgeOptimize,
-        LLMJudgeOutputType,
+    use tensorzero_core::{
+        evaluations::{
+            EvaluationConfig, EvaluatorConfig, ExactMatchConfig, InferenceEvaluationConfig,
+            LLMJudgeConfig, LLMJudgeIncludeConfig, LLMJudgeInputFormat, LLMJudgeOptimize,
+            LLMJudgeOutputType,
+        },
+        utils::retries::RetryConfig,
     };
 
     // ============================================================================
@@ -592,7 +615,7 @@ mod tests {
             seed: Some(42),
             timeout: 300,
             include_datapoint_input_for_mutation: false,
-            retries: tensorzero_core::utils::retries::RetryConfig::default(),
+            retries: RetryConfig::default(),
         }
     }
 
