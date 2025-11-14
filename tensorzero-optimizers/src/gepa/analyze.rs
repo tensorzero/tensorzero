@@ -24,7 +24,7 @@ use tensorzero_core::{
     function::FunctionConfig,
     inference::types::{Arguments, ContentBlockChatOutput, Role, Template},
     optimization::gepa::GEPAConfig,
-    variant::chat_completion::UninitializedChatCompletionConfig,
+    variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
 use evaluations::stats::EvaluationInfo;
@@ -166,24 +166,37 @@ pub async fn analyze_inferences(
         max_concurrency
     );
 
-    // Create dynamic variant config for the analyze function (wrapped in Arc for efficient sharing)
-    let analyze_variant_config = Arc::new(UninitializedVariantInfo {
-        inner: UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
-            model: analysis_model.clone().into(),
-            weight: None,
-            system_template: Some(ResolvedTomlPath::new_fake_path(
+    // Create dynamic variant config for the analyze function using new template format
+    let mut analyze_config = UninitializedChatCompletionConfig {
+        model: analysis_model.clone().into(),
+        weight: None,
+        ..Default::default()
+    };
+
+    // Populate templates.inner with the analyze function's templates
+    analyze_config.templates.inner.insert(
+        "system".to_string(),
+        UninitializedChatTemplate {
+            path: ResolvedTomlPath::new_fake_path(
                 "gepa/analyze/system.minijinja".to_string(),
                 include_str!("config/functions/analyze/baseline/system_template.minijinja")
                     .to_string(),
-            )),
-            user_template: Some(ResolvedTomlPath::new_fake_path(
+            ),
+        },
+    );
+    analyze_config.templates.inner.insert(
+        "user".to_string(),
+        UninitializedChatTemplate {
+            path: ResolvedTomlPath::new_fake_path(
                 "gepa/analyze/user.minijinja".to_string(),
                 include_str!("config/functions/analyze/baseline/user_template.minijinja")
                     .to_string(),
-            )),
-            assistant_template: None,
-            ..Default::default()
-        }),
+            ),
+        },
+    );
+
+    let analyze_variant_config = Arc::new(UninitializedVariantInfo {
+        inner: UninitializedVariantConfig::ChatCompletion(analyze_config),
         timeouts: None,
     });
 
