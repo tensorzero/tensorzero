@@ -542,15 +542,16 @@ def test_sync_run_evaluation_with_offset(
     assert len(results2) == 3
 
     # Verify that results are different (offset should skip different datapoints)
-    # Note: Results come back in async order, so we need to sort by datapoint ID
-    # We sort results1, take the 3rd, 4th, 5th datapoints (indices 2:5), and compare with results2
+    # Note: Results come back in async order, so we need to sort by datapoint ID in descending order
+    # to match the database ordering (newest first). We then take the 3rd, 4th, 5th datapoints
+    # (indices 2:5) from results1 and compare with results2
     if all(r["type"] == "success" for r in results1) and all(r["type"] == "success" for r in results2):
-        # Sort results1 by datapoint ID, then extract IDs for positions 2-4 (0-indexed)
-        sorted_results1 = sorted(results1, key=lambda r: r["datapoint"]["id"])
+        # Sort results1 by datapoint ID in descending order (newest first), then extract IDs for positions 2-4 (0-indexed)
+        sorted_results1 = sorted(results1, key=lambda r: r["datapoint"]["id"], reverse=True)
         ids1 = [r["datapoint"]["id"] for r in sorted_results1[2:5]]
 
-        # Sort results2 by datapoint ID and extract IDs
-        sorted_results2 = sorted(results2, key=lambda r: r["datapoint"]["id"])
+        # Sort results2 by datapoint ID in descending order (newest first) and extract IDs
+        sorted_results2 = sorted(results2, key=lambda r: r["datapoint"]["id"], reverse=True)
         ids2 = [r["datapoint"]["id"] for r in sorted_results2]
 
         assert ids1 == ids2, "Offset should skip the first 2 datapoints"

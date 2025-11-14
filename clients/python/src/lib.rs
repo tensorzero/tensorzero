@@ -1327,8 +1327,10 @@ impl TensorZeroGateway {
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
-    /// * `limit` - Maximum number of datapoints to evaluate (None = no limit). Datapoints are ordered by creation time in descending order (newest first).
-    /// * `offset` - Number of datapoints to skip before starting evaluation (None = no offset). Datapoints are ordered by creation time in descending order (newest first).
+    /// * `limit` - Maximum number of datapoints to evaluate, starting from the newest (None = no limit)
+    /// * `offset` - Number of newest datapoints to skip before starting evaluation (None = no offset)
+    ///
+    /// Note: Datapoints are ordered by creation time in descending order (newest first).
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
@@ -2443,8 +2445,10 @@ impl AsyncTensorZeroGateway {
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
-    /// * `limit` - Maximum number of datapoints to evaluate (None = no limit). Datapoints are ordered by creation time in descending order (newest first).
-    /// * `offset` - Number of datapoints to skip before starting evaluation (None = no offset). Datapoints are ordered by creation time in descending order (newest first).
+    /// * `limit` - Maximum number of datapoints to evaluate, starting from the newest (None = no limit)
+    /// * `offset` - Number of newest datapoints to skip before starting evaluation (None = no offset)
+    ///
+    /// Note: Datapoints are ordered by creation time in descending order (newest first).
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
