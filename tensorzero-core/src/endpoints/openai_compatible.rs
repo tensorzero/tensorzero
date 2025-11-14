@@ -44,8 +44,8 @@ use crate::inference::types::{
 };
 
 use crate::tool::{
-    DynamicToolParams, InferenceResponseToolCall, ProviderTool, Tool, ToolCallWrapper, ToolChoice,
-    ToolResult,
+    ClientSideFunctionTool, DynamicToolParams, InferenceResponseToolCall, ProviderTool,
+    ToolCallWrapper, ToolChoice, ToolResult,
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::JsonMode;
@@ -595,7 +595,7 @@ pub struct OpenAICompatibleParams {
     #[serde(rename = "tensorzero::internal_dynamic_variant_config")]
     tensorzero_internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
     #[serde(default, rename = "tensorzero::provider_tools")]
-    tensorzero_provider_tools: Option<Vec<ProviderTool>>,
+    tensorzero_provider_tools: Vec<ProviderTool>,
     #[serde(default, rename = "tensorzero::params")]
     tensorzero_params: Option<InferenceParams>,
     #[serde(flatten)]
@@ -1174,7 +1174,7 @@ fn convert_openai_message_content(
     }
 }
 
-impl From<OpenAICompatibleTool> for Tool {
+impl From<OpenAICompatibleTool> for ClientSideFunctionTool {
     fn from(tool: OpenAICompatibleTool) -> Self {
         match tool {
             OpenAICompatibleTool::Function {
@@ -1182,7 +1182,7 @@ impl From<OpenAICompatibleTool> for Tool {
                 name,
                 parameters,
                 strict,
-            } => Tool {
+            } => ClientSideFunctionTool {
                 description: description.unwrap_or_default(),
                 parameters,
                 name,
@@ -1598,7 +1598,7 @@ mod tests {
             stream_options: None,
             stop: None,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2514,7 +2514,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2554,7 +2554,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2600,7 +2600,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2646,7 +2646,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();

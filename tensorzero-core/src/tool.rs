@@ -1,3 +1,4 @@
+use std::fmt;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -6,17 +7,21 @@ use std::{
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::de::{self, MapAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use tensorzero_derive::export_schema;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::{
+    config::Config,
     error::{Error, ErrorDetails},
+    function::FunctionConfig,
     jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
     rate_limiting::{get_estimated_tokens, RateLimitedInputContent},
 };
+use strum::AsRefStr;
 
 /*  Key tool types in TensorZero
  * - DynamicToolParams: the wire format for tool configuration info (flattened into struct body)
@@ -42,18 +47,24 @@ use crate::{
  * If we are doing an implicit tool call for JSON schema enforcement, we can use the compiled schema from the output signature.
  */
 
-/// A Tool object describes how a tool can be dynamically configured by the user.
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
-#[ts(export)]
-#[serde(deny_unknown_fields)]
-#[export_schema]
+/// `Tool` is the generic form for all tools that TensorZero itself manages.
+/// Today, this is only ClientSideFunctionTools (the original kind), but soon we'll
+/// implement OpenAI's custom tools standard, MCP, and potentially more.
+/// We store this type (serialized) in the Array(String) in the `dynamic_tools` column
+/// in the ChatInference, ChatInferenceDatapoint, and BatchModelInference tables.
+/// Most likely, this will eventually become the wire type too with a custom deserializer
+/// so that folks can specify ClientSideFunctionTools without tags but then can
+/// add tags and specify other kinds of tool.
+///
+/// Notably, provider tools (like OpenAI websearch) are not part of this enum
+/// as there's not really anything we can do besides experiment with them.
+/// They are a separate type `ProviderTool`.
+#[derive(ts_rs::TS, AsRefStr, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-pub struct Tool {
-    pub description: String,
-    pub parameters: Value,
-    pub name: String,
-    #[serde(default)]
-    pub strict: bool,
+pub enum Tool {
+    ClientSideFunction(ClientSideFunctionTool),
 }
 
 impl std::fmt::Display for Tool {
@@ -63,9 +74,107 @@ impl std::fmt::Display for Tool {
     }
 }
 
+impl Tool {
+    fn name(&self) -> &str {
+        match self {
+            Tool::ClientSideFunction(tool) => &tool.name,
+        }
+    }
+
+    fn into_dynamic_tool_config(self) -> DynamicToolConfig {
+        match self {
+            Tool::ClientSideFunction(tool) => DynamicToolConfig {
+                description: tool.description,
+                parameters: DynamicJSONSchema::new(tool.parameters),
+                name: tool.name,
+                strict: tool.strict,
+            },
+        }
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Tool {
+    /*
+     * Note: as we add more tool types, we can throw AttributeError on fields that they don't have
+     * and ask the caller to check the type field.
+     * This avoids a breaking change to the Python interface as we go from a single tool type to potentially more in the future.
+     * most notably, MCP
+     */
+    #[getter]
+    pub fn get_type(&self) -> &str {
+        self.as_ref()
+    }
+
+    #[getter]
+    pub fn get_parameters<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            Tool::ClientSideFunction(tool) => {
+                serialize_to_dict(py, tool.parameters.clone()).map(|x| x.into_bound(py))
+            }
+        }
+    }
+
+    #[getter]
+    pub fn get_description(&self) -> &str {
+        match self {
+            Tool::ClientSideFunction(tool) => &tool.description,
+        }
+    }
+
+    #[getter]
+    pub fn get_name(&self) -> &str {
+        match self {
+            Tool::ClientSideFunction(tool) => &tool.name,
+        }
+    }
+
+    #[getter]
+    pub fn get_strict(&self) -> bool {
+        match self {
+            Tool::ClientSideFunction(tool) => tool.strict,
+        }
+    }
+
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+/// `ClientSideFunctionTool` is a particular kind of tool that relies
+/// on the client to execute a function on their side (a ToolCall content block)
+/// and return the result on the next turn (a ToolCallResult).
+/// Notably, we assume there is a JSON schema `parameters` that specifies the
+/// set of arguments that the tool will accept.
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
+#[serde(deny_unknown_fields)]
+#[export_schema]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct ClientSideFunctionTool {
+    pub description: String,
+    pub parameters: Value,
+    pub name: String,
+    /// `strict` here specifies that TensorZero should attempt to use any facilities
+    /// available from the model provider to force the model to generate an accurate tool call,
+    /// notably OpenAI's strict tool call mode (https://platform.openai.com/docs/guides/function-calling#strict-mode).
+    /// This imposes additional restrictions on the JSON schema that may vary across providers
+    /// so we allow it to be configurable.
+    #[serde(default)]
+    pub strict: bool,
+}
+
+impl std::fmt::Display for ClientSideFunctionTool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl ClientSideFunctionTool {
     #[getter]
     pub fn get_parameters<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         serialize_to_dict(py, self.parameters.clone()).map(|x| x.into_bound(py))
@@ -118,6 +227,7 @@ impl ProviderToolScope {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ProviderTool {
     #[serde(default)]
@@ -185,10 +295,20 @@ pub struct DynamicImplicitToolConfig {
 /// Records / lists the tools that were allowed in the request
 /// Also lists how they were set (default, dynamically set)
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct AllowedTools {
     pub tools: Vec<String>,
     pub choice: AllowedToolsChoice,
+}
+
+impl AllowedTools {
+    fn into_dynamic_allowed_tools(self) -> Option<Vec<String>> {
+        match self.choice {
+            AllowedToolsChoice::FunctionDefault => None,
+            AllowedToolsChoice::DynamicAllowedTools => Some(self.tools),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, ts_rs::TS)]
@@ -218,17 +338,81 @@ pub struct ToolCallConfig {
     pub allowed_tools: AllowedTools,
 }
 
-impl ToolCallConfig {
-    pub fn new(
-        function_tools: &[String],
-        function_tool_choice: &ToolChoice,
+pub struct ToolCallConfigConstructorArgs<'a> {
+    pub function_tools: &'a [String],
+    pub function_tool_choice: &'a ToolChoice,
+    pub function_parallel_tool_calls: Option<bool>,
+    pub static_tools: &'a HashMap<String, Arc<StaticToolConfig>>,
+    pub dynamic_allowed_tools: Option<Vec<String>>,
+    pub dynamic_additional_tools: Option<Vec<Tool>>,
+    pub dynamic_tool_choice: Option<ToolChoice>,
+    pub dynamic_parallel_tool_calls: Option<bool>,
+    pub dynamic_provider_tools: Vec<ProviderTool>,
+}
+
+impl<'a> ToolCallConfigConstructorArgs<'a> {
+    /// Returns a ToolCallConfigConstructorArgs with dynamic tool param fields set to defaults.
+    /// Use this with struct update syntax to avoid specifying all dynamic fields at callsites.
+    pub fn with_dynamic_tool_params(
+        function_tools: &'a [String],
+        function_tool_choice: &'a ToolChoice,
         function_parallel_tool_calls: Option<bool>,
-        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+        static_tools: &'a HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Self {
+        Self {
+            function_tools,
+            function_tool_choice,
+            function_parallel_tool_calls,
+            static_tools,
+            dynamic_allowed_tools: None,
+            dynamic_additional_tools: None,
+            dynamic_tool_choice: None,
+            dynamic_parallel_tool_calls: None,
+            dynamic_provider_tools: Vec::new(),
+        }
+    }
+
+    // Helper to construct ToolCallConfigConstructorArgs with defaults
+    #[cfg(test)]
+    pub fn new_for_test(
+        function_tools: &'a [String],
+        function_tool_choice: &'a ToolChoice,
+        function_parallel_tool_calls: Option<bool>,
+        static_tools: &'a HashMap<String, Arc<StaticToolConfig>>,
         dynamic_tool_params: DynamicToolParams,
-    ) -> Result<Option<Self>, Error> {
+    ) -> ToolCallConfigConstructorArgs<'a> {
+        ToolCallConfigConstructorArgs {
+            function_tools,
+            function_tool_choice,
+            function_parallel_tool_calls,
+            static_tools,
+            dynamic_allowed_tools: dynamic_tool_params.allowed_tools,
+            dynamic_additional_tools: dynamic_tool_params
+                .additional_tools
+                .map(|tools| tools.into_iter().map(Tool::ClientSideFunction).collect()),
+            dynamic_tool_choice: dynamic_tool_params.tool_choice,
+            dynamic_parallel_tool_calls: dynamic_tool_params.parallel_tool_calls,
+            dynamic_provider_tools: dynamic_tool_params.provider_tools,
+        }
+    }
+}
+
+impl ToolCallConfig {
+    pub fn new(args: ToolCallConfigConstructorArgs<'_>) -> Result<Option<Self>, Error> {
+        let ToolCallConfigConstructorArgs {
+            function_tools,
+            function_tool_choice,
+            function_parallel_tool_calls,
+            static_tools,
+            dynamic_allowed_tools,
+            dynamic_additional_tools,
+            dynamic_tool_choice,
+            dynamic_parallel_tool_calls,
+            dynamic_provider_tools,
+        } = args;
         // If `allowed_tools` is not provided, use the function's configured tools.
         // This means we allow all tools for the function.
-        let mut allowed_tools = match dynamic_tool_params.allowed_tools {
+        let mut allowed_tools = match dynamic_allowed_tools {
             Some(allowed_tools) => AllowedTools {
                 tools: allowed_tools,
                 choice: AllowedToolsChoice::DynamicAllowedTools,
@@ -240,10 +424,9 @@ impl ToolCallConfig {
         };
 
         // Make a set for all names in additional tools
-        let additional_tool_names: HashSet<&str> = dynamic_tool_params
-            .additional_tools
+        let additional_tool_names: HashSet<&str> = dynamic_additional_tools
             .as_ref()
-            .map(|tools| tools.iter().map(|t| t.name.as_str()).collect())
+            .map(|tools| tools.iter().map(Tool::name).collect())
             .unwrap_or_default();
 
         // Get each tool from the static tool config.
@@ -269,27 +452,23 @@ impl ToolCallConfig {
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut dynamic_tools_available = vec![];
-        if let Some(additional_tools) = dynamic_tool_params.additional_tools {
+        if let Some(additional_tools) = dynamic_additional_tools {
             for tool in additional_tools {
                 // Today we automatically add dynamically configured tools to the allowed tools list but in future we may
                 // change this behavior to be more in line with OpenAI's (if allowed_tools is set do not add tools.
                 // This warning is unusable today.
-                if !allowed_tools.tools.contains(&tool.name) {
+                let name = tool.name().to_string();
+                if !allowed_tools.tools.contains(&name) {
                     tracing::info!(
-                        tool_name = %tool.name,
+                        tool_name = %name,
                         "Currently, the gateway automatically includes all dynamic tools in the list of allowed tools. \
                          In a near-future release, dynamic tools will no longer be included automatically. \
                          If you intend for your dynamic tools to be allowed, please allow them explicitly; \
                          otherwise, disregard this warning."
                     );
                 }
-                dynamic_tools_available.push(ToolConfig::Dynamic(DynamicToolConfig {
-                    description: tool.description,
-                    parameters: DynamicJSONSchema::new(tool.parameters),
-                    name: tool.name.clone(),
-                    strict: tool.strict,
-                }));
-                allowed_tools.tools.push(tool.name);
+                dynamic_tools_available.push(ToolConfig::Dynamic(tool.into_dynamic_tool_config()));
+                allowed_tools.tools.push(name);
             }
         }
 
@@ -308,9 +487,7 @@ impl ToolCallConfig {
             }
         }
 
-        let tool_choice = dynamic_tool_params
-            .tool_choice
-            .unwrap_or_else(|| function_tool_choice.clone());
+        let tool_choice = dynamic_tool_choice.unwrap_or_else(|| function_tool_choice.clone());
 
         // If the tool choice is a specific tool, make sure it's in the list of available tools
         if let ToolChoice::Specific(tool_name) = &tool_choice {
@@ -332,13 +509,11 @@ impl ToolCallConfig {
             }
         }
 
-        let parallel_tool_calls = dynamic_tool_params
-            .parallel_tool_calls
-            .or(function_parallel_tool_calls);
+        let parallel_tool_calls = dynamic_parallel_tool_calls.or(function_parallel_tool_calls);
 
         let tool_call_config_option = if static_tools_available.is_empty()
             && dynamic_tools_available.is_empty()
-            && dynamic_tool_params.provider_tools.is_none()
+            && dynamic_provider_tools.is_empty()
         {
             None
         } else {
@@ -346,7 +521,7 @@ impl ToolCallConfig {
                 static_tools_available,
                 dynamic_tools_available,
                 tool_choice,
-                provider_tools: dynamic_tool_params.provider_tools.unwrap_or_default(),
+                provider_tools: dynamic_provider_tools,
                 parallel_tool_calls,
                 allowed_tools,
             })
@@ -375,17 +550,6 @@ impl ToolCallConfig {
         })
     }
 
-    pub fn get_scoped_provider_tools(
-        &self,
-        model_name: &str,
-        model_provider_name: &str,
-    ) -> Vec<&ProviderTool> {
-        self.provider_tools
-            .iter()
-            .filter(|t| t.scope.matches(model_name, model_provider_name))
-            .collect()
-    }
-
     #[cfg(test)]
     pub fn with_tools_available(
         static_tools_available: Vec<ToolConfig>,
@@ -397,7 +561,19 @@ impl ToolCallConfig {
             ..Default::default()
         }
     }
+
+    pub fn get_scoped_provider_tools(
+        &self,
+        model_name: &str,
+        model_provider_name: &str,
+    ) -> Vec<&ProviderTool> {
+        self.provider_tools
+            .iter()
+            .filter(|t| t.scope.matches(model_name, model_provider_name))
+            .collect()
+    }
 }
+
 /// Storage representation of tool call configuration for database persistence.
 ///
 /// This type is the **database/storage format** for tool configurations, designed to be stored
@@ -423,8 +599,534 @@ impl ToolCallConfig {
 /// See also: [`DynamicToolParams`] for the wire/API format
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct ToolCallConfigDatabaseInsert {
+    pub dynamic_tools: Vec<Tool>,
+    pub dynamic_provider_tools: Vec<ProviderTool>,
+    pub allowed_tools: AllowedTools,
+    pub tool_choice: ToolChoice,
+    pub parallel_tool_calls: Option<bool>,
+    // We write this in case any legacy code reads the database; it should not be read in new code
+    #[serde(default)]
+    tool_params: LegacyToolCallConfigDatabaseInsert,
+}
+
+/// Custom deserializer implementation for ToolCallConfigDatabaseInsert that handles three formats:
+/// 1. Full format: Contains all fields (dynamic_tools, dynamic_provider_tools, allowed_tools, etc.)
+/// 2. Legacy format: Contains only tool_config field (for backwards compatibility)
+/// 3. Missing/Empty: Returns None
+///
+/// This deserializer is strict: if any tool-related fields are present, they must be valid and complete.
+/// It supports flatten by only consuming tool-related fields and leaving others for the parent struct.
+///
+/// ## Why a custom deserializer?
+///
+/// This cannot be simplified using an untagged enum or standard serde derives because:
+///
+/// 1. **Flatten support requires selective field consumption**: When used with `#[serde(flatten)]`,
+///    this deserializer must distinguish between tool-related fields (which it consumes) and
+///    other fields (which it skips). An untagged enum would attempt to consume all fields or fail,
+///    breaking the flatten behavior.
+///
+/// 2. **Overlapping field sets**: The `tool_params` field appears in both format variants:
+///    - Full format: includes `tool_params` alongside other fields (optional, for legacy compatibility)
+///    - Legacy format: contains only `tool_params`
+///    This overlap makes it impossible for an untagged enum to reliably distinguish between variants.
+///
+/// 3. **Complex parsing requirements**: The deserializer performs custom transformations that can't
+///    be expressed with derive macros:
+///    - Parsing JSON strings into nested types (e.g., `Vec<String>` → `Vec<Tool>`)
+///    - Handling multiple representations of the same field (e.g., `tool_choice` as plain string or JSON object)
+///    - Backward compatibility fallbacks for different serialization formats
+///
+/// 4. **The None case**: Returning `None` when no tool fields are present is essential for optional
+///    tool configurations. An untagged enum would fail to deserialize rather than gracefully returning None.
+pub fn deserialize_optional_tool_info<'de, D>(
+    deserializer: D,
+) -> Result<Option<ToolCallConfigDatabaseInsert>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct ToolInfoVisitor;
+
+    impl<'de> Visitor<'de> for ToolInfoVisitor {
+        type Value = Option<ToolCallConfigDatabaseInsert>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("tool call configuration")
+        }
+
+        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+        where
+            A: MapAccess<'de>,
+        {
+            // Collect only tool-related fields
+            let tool_fields = [
+                "dynamic_tools",
+                "dynamic_provider_tools",
+                "allowed_tools",
+                "tool_choice",
+                "parallel_tool_calls",
+                "tool_params",
+            ];
+
+            let mut values: HashMap<String, Value> = HashMap::new();
+
+            while let Some(key) = map.next_key::<String>()? {
+                if tool_fields.contains(&key.as_str()) {
+                    let value: Value = map.next_value()?;
+                    if !value.is_null() {
+                        values.insert(key, value);
+                    }
+                } else {
+                    // Skip non-tool fields (for flatten support)
+                    map.next_value::<serde::de::IgnoredAny>()?;
+                }
+            }
+
+            // Determine format based on which fields are present
+            // Since `dynamic_provider_tools` and `dynamic_tools` are going to return arrays
+            // and `tool_params` will be a string regardles of format, the distinguishing factor for new data
+            // is if `allowed_tools` is set (it always should be)
+            let has_full_fields =
+                values.contains_key("allowed_tools") || values.contains_key("tool_choice");
+
+            // If we're NOT in full format mode, filter out empty arrays for dynamic_tools and dynamic_provider_tools
+            // This handles the case where ClickHouse returns default values (empty arrays) for these columns
+            // when they weren't explicitly set (i.e., legacy data or data without tools)
+            if !has_full_fields {
+                values.retain(|key, value| {
+                    !(value.is_array()
+                        && value.as_array().is_some_and(|arr| arr.is_empty())
+                        && (key == "dynamic_tools" || key == "dynamic_provider_tools"))
+                });
+            }
+
+            // If no tool fields present, return None
+            if values.is_empty() {
+                return Ok(None);
+            }
+
+            if has_full_fields {
+                // Full format: require ALL full format fields
+                let dynamic_tools_value = values
+                    .get("dynamic_tools")
+                    .ok_or_else(|| de::Error::missing_field("dynamic_tools"))?;
+
+                // Parse as array of JSON strings (database storage format)
+                let tool_strings: Vec<String> = serde_json::from_value(dynamic_tools_value.clone())
+                    .map_err(|e| {
+                        de::Error::custom(format!(
+                            "dynamic_tools must be an array of JSON strings: {e}"
+                        ))
+                    })?;
+
+                let dynamic_tools: Vec<Tool> = tool_strings
+                    .iter()
+                    .map(|s| {
+                        serde_json::from_str(s).map_err(|e| {
+                            de::Error::custom(format!("failed to parse tool from JSON string: {e}"))
+                        })
+                    })
+                    .collect::<Result<Vec<Tool>, _>>()?;
+                let dynamic_provider_tools_value = values
+                    .get("dynamic_provider_tools")
+                    .ok_or_else(|| de::Error::missing_field("dynamic_provider_tools"))?;
+
+                // Parse as array of JSON strings (database storage format)
+                let provider_tool_strings: Vec<String> =
+                    serde_json::from_value(dynamic_provider_tools_value.clone()).map_err(|e| {
+                        de::Error::custom(format!(
+                            "dynamic_provider_tools must be an array of JSON strings: {e}"
+                        ))
+                    })?;
+
+                let dynamic_provider_tools: Vec<ProviderTool> = provider_tool_strings
+                    .iter()
+                    .map(|s| {
+                        serde_json::from_str(s).map_err(|e| {
+                            de::Error::custom(format!(
+                                "failed to parse provider tool from JSON string: {e}"
+                            ))
+                        })
+                    })
+                    .collect::<Result<Vec<ProviderTool>, _>>()?;
+
+                let allowed_tools_value = values
+                    .get("allowed_tools")
+                    .ok_or_else(|| de::Error::missing_field("allowed_tools"))?;
+
+                // Parse as JSON string (database storage format)
+                let allowed_tools: AllowedTools =
+                    if let Some(allowed_tools_str) = allowed_tools_value.as_str() {
+                        serde_json::from_str(allowed_tools_str).map_err(|e| {
+                            de::Error::custom(format!(
+                                "failed to parse allowed_tools from JSON string: {e}"
+                            ))
+                        })?
+                    } else {
+                        // Fallback: try to deserialize as object (for backwards compatibility)
+                        serde_json::from_value(allowed_tools_value.clone()).map_err(|e| {
+                            de::Error::custom(format!(
+                                "allowed_tools must be a JSON string or object: {e}"
+                            ))
+                        })?
+                    };
+
+                let tool_choice_value = values
+                    .get("tool_choice")
+                    .ok_or_else(|| de::Error::missing_field("tool_choice"))?;
+
+                // Parse tool_choice - it's stored as a string in ClickHouse
+                // Simple variants (auto, none, required) are stored as plain strings like "auto"
+                // Complex variants (specific) are stored as JSON strings like "{\"specific\":\"tool_name\"}"
+                let tool_choice: ToolChoice =
+                    if let Some(tool_choice_str) = tool_choice_value.as_str() {
+                        // Try parsing as a plain string first (for simple variants)
+                        serde_json::from_value(Value::String(tool_choice_str.to_string()))
+                            .or_else(|_| {
+                                // If that fails, try parsing the string as JSON (for complex variants)
+                                serde_json::from_str(tool_choice_str)
+                            })
+                            .map_err(|e| {
+                                de::Error::custom(format!("failed to parse tool_choice: {e}"))
+                            })?
+                    } else {
+                        // Fallback for non-string values (e.g., direct object for backwards compatibility)
+                        serde_json::from_value(tool_choice_value.clone()).map_err(|e| {
+                            de::Error::custom(format!("failed to parse tool_choice: {e}"))
+                        })?
+                    };
+
+                let parallel_tool_calls: Option<bool> = values
+                    .get("parallel_tool_calls")
+                    .map(|v| {
+                        if v.is_null() {
+                            Ok(None)
+                        } else {
+                            serde_json::from_value::<bool>(v.clone())
+                                .map(Some)
+                                .map_err(|e| {
+                                    de::Error::custom(format!("invalid parallel_tool_calls: {e}"))
+                                })
+                        }
+                    })
+                    .transpose()?
+                    .flatten();
+                // The tool params are serialized as a string in ClickHouse
+                // but an Object in Python. In the full format, tool_params is optional
+                // since the data is stored in the decomposed fields.
+                let tool_config: LegacyToolCallConfigDatabaseInsert =
+                    if let Some(tool_config_value) = values.get("tool_params") {
+                        // Handle null case
+                        if tool_config_value.is_null() {
+                            LegacyToolCallConfigDatabaseInsert::default()
+                        } else if let Some(tool_config_str) = tool_config_value.as_str() {
+                            // Handle string case (ClickHouse serialization)
+                            // ClickHouse empty string is None
+                            if tool_config_str.is_empty() {
+                                LegacyToolCallConfigDatabaseInsert::default()
+                            } else {
+                                serde_json::from_str(tool_config_str).map_err(|e| {
+                                    de::Error::custom(format!("invalid tool_params string: {e}"))
+                                })?
+                            }
+                        } else {
+                            // Handle object case (Python serialization)
+                            serde_json::from_value(tool_config_value.clone()).map_err(|e| {
+                                de::Error::custom(format!("invalid tool_params object: {e}"))
+                            })?
+                        }
+                    } else {
+                        // tool_params not present - use default
+                        LegacyToolCallConfigDatabaseInsert::default()
+                    };
+                Ok(Some(ToolCallConfigDatabaseInsert {
+                    dynamic_tools,
+                    dynamic_provider_tools,
+                    allowed_tools,
+                    tool_choice,
+                    parallel_tool_calls,
+                    tool_params: tool_config,
+                }))
+            } else if values.contains_key("tool_params") {
+                // Legacy format: only tool_config should be present
+                // The tool params are serialized as a string in ClickHouse
+                let tool_config_value = values
+                    .get("tool_params")
+                    .ok_or_else(|| de::Error::missing_field("tool_params"))?;
+
+                // Handle null case - return None if tool_params is explicitly null
+                if tool_config_value.is_null() {
+                    return Ok(None);
+                }
+
+                let tool_config: LegacyToolCallConfigDatabaseInsert =
+                    if let Some(tool_config_str) = tool_config_value.as_str() {
+                        // Handle string case (ClickHouse serialization)
+                        // ClickHouse empty string is None
+                        if tool_config_str.is_empty() {
+                            return Ok(None);
+                        }
+                        serde_json::from_str(tool_config_str).map_err(|e| {
+                            de::Error::custom(format!("invalid tool_params string: {e}"))
+                        })?
+                    } else {
+                        // Handle object case (Python serialization)
+                        serde_json::from_value(tool_config_value.clone()).map_err(|e| {
+                            de::Error::custom(format!("invalid tool_params object: {e}"))
+                        })?
+                    };
+
+                Ok(Some(ToolCallConfigDatabaseInsert {
+                    dynamic_tools: vec![],
+                    dynamic_provider_tools: vec![],
+                    allowed_tools: AllowedTools::default(),
+                    tool_choice: tool_config.tool_choice.clone(),
+                    parallel_tool_calls: tool_config.parallel_tool_calls,
+                    tool_params: tool_config,
+                }))
+            } else {
+                // Unknown tool fields without proper structure
+                Err(de::Error::custom(
+                    "invalid tool configuration: unrecognized field combination",
+                ))
+            }
+        }
+    }
+
+    deserializer.deserialize_map(ToolInfoVisitor)
+}
+
+/// Non-optional deserializer that uses the optional deserializer and defaults to empty if None
+pub fn deserialize_tool_info<'de, D>(
+    deserializer: D,
+) -> Result<ToolCallConfigDatabaseInsert, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserialize_optional_tool_info(deserializer).map(Option::unwrap_or_default)
+}
+
+impl std::fmt::Display for ToolCallConfigDatabaseInsert {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+impl ToolCallConfigDatabaseInsert {
+    /// Updates the fields of this ToolCallConfigDatabaseInsert with the provided values.
+    /// Each parameter is a double option:
+    /// - `None` means no update (leave unchanged)
+    /// - `Some(None)` means set to the default/empty value
+    /// - `Some(Some(value))` means set to the provided value
+    pub fn update(
+        &mut self,
+        dynamic_tools: Option<Option<Vec<Tool>>>,
+        dynamic_provider_tools: Option<Option<Vec<ProviderTool>>>,
+        allowed_tools: Option<Option<AllowedTools>>,
+        tool_choice: Option<Option<ToolChoice>>,
+        parallel_tool_calls: Option<Option<bool>>,
+    ) {
+        if let Some(value) = dynamic_tools {
+            self.dynamic_tools = value.unwrap_or_default();
+        }
+        if let Some(value) = dynamic_provider_tools {
+            self.dynamic_provider_tools = value.unwrap_or_default();
+        }
+        if let Some(value) = allowed_tools {
+            self.allowed_tools = value.unwrap_or_default();
+        }
+        if let Some(value) = tool_choice {
+            self.tool_choice = value.unwrap_or_default();
+        }
+        if let Some(value) = parallel_tool_calls {
+            self.parallel_tool_calls = value;
+        }
+    }
+
+    /// Creates a `ToolCallConfigDatabaseInsert` for testing purposes.
+    ///
+    /// # Understanding the Data Model
+    ///
+    /// `ToolCallConfigDatabaseInsert` stores tool configuration for database persistence.
+    /// The key insight is that **static tools are NOT stored** - they come from the function
+    /// config and are reconstructed when converting back to `ToolCallConfig`.
+    ///
+    /// ## Fields Explained
+    ///
+    /// - **`dynamic_tools`**: Tools provided at runtime (not in function config).
+    ///   These are the *only* tool definitions we store in the database.
+    ///
+    /// - **`allowed_tools`**: Which tools (by name) are allowed to be used.
+    ///   - `tools`: List of tool names (can be static, dynamic, or mixed)
+    ///   - `choice`: How the allowed tools were determined:
+    ///     - `FunctionDefault`: Use function's default tool list
+    ///     - `DynamicAllowedTools`: Explicitly specified tool list (possibly different from function defaults)
+    ///
+    /// ## Conversion Back to DynamicToolParams
+    ///
+    /// When `database_insert_to_dynamic_tool_params()` is called:
+    /// - If `choice == FunctionDefault` → `allowed_tools = None` (use function defaults)
+    /// - If `choice == DynamicAllowedTools` → `allowed_tools = Some(tools)` (explicit override)
+    /// - `additional_tools = Some(dynamic_tools)` if dynamic_tools is non-empty, else None
+    ///
+    /// ## Test Scenarios
+    ///
+    /// **Scenario 1: Only static tools (from function config)**
+    /// ```
+    /// // Function has: tools = ["tool1", "tool2"]
+    /// // User doesn't provide additional tools, just uses the function's tools
+    /// ToolCallConfigDatabaseInsert::new_for_test(
+    ///     vec![],  // No dynamic tools
+    ///     vec![],
+    ///     AllowedTools {
+    ///         tools: vec!["tool1".to_string(), "tool2".to_string()],
+    ///         choice: AllowedToolsChoice::DynamicAllowedTools,  // Explicit list
+    ///     },
+    ///     ...
+    /// )
+    /// // Converts back to: allowed_tools=Some(["tool1", "tool2"]), additional_tools=None
+    /// ```
+    ///
+    /// **Scenario 2: Only dynamic tools (not in function config)**
+    /// ```
+    /// // Function has: tools = ["static1"]
+    /// // User provides new tools at runtime
+    /// ToolCallConfigDatabaseInsert::new_for_test(
+    ///     vec![Tool::ClientSideFunction(dynamic1), Tool::ClientSideFunction(dynamic2)],
+    ///     vec![],
+    ///     AllowedTools {
+    ///         tools: vec![],  // Empty because these are dynamic, not in function config
+    ///         choice: AllowedToolsChoice::DynamicAllowedTools,
+    ///     },
+    ///     ...
+    /// )
+    /// // Converts back to: allowed_tools=Some([]), additional_tools=Some([dynamic1, dynamic2])
+    /// ```
+    ///
+    /// **Scenario 3: Mixed static and dynamic tools**
+    /// ```
+    /// // Function has: tools = ["a", "b"]
+    /// // User also provides dynamic tools x, y
+    /// ToolCallConfigDatabaseInsert::new_for_test(
+    ///     vec![Tool::ClientSideFunction(x), Tool::ClientSideFunction(y)],
+    ///     vec![],
+    ///     AllowedTools {
+    ///         tools: vec!["a".to_string(), "b".to_string()],
+    ///         choice: AllowedToolsChoice::DynamicAllowedTools,
+    ///     },
+    ///     ...
+    /// )
+    /// // Converts back to: allowed_tools=Some(["a", "b"]), additional_tools=Some([x, y])
+    /// ```
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub fn new_for_test(
+        dynamic_tools: Vec<Tool>,
+        dynamic_provider_tools: Vec<ProviderTool>,
+        allowed_tools: AllowedTools,
+        tool_choice: ToolChoice,
+        parallel_tool_calls: Option<bool>,
+    ) -> Self {
+        // Compute the legacy tool_config field
+        let tool_config = LegacyToolCallConfigDatabaseInsert {
+            tools_available: dynamic_tools
+                .iter()
+                .map(|t| match t {
+                    Tool::ClientSideFunction(csf) => csf.clone(),
+                })
+                .collect(),
+            tool_choice: tool_choice.clone(),
+            parallel_tool_calls,
+        };
+
+        Self {
+            dynamic_tools,
+            dynamic_provider_tools,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+            tool_params: tool_config,
+        }
+    }
+
+    /// Converts back from a `ToolCallConfigDatabaseInsert` (storage type) to
+    /// `ToolCallConfig` (internal type with nonserializable state).
+    pub fn into_tool_call_config(
+        self,
+        function_config: &FunctionConfig,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Result<Option<ToolCallConfig>, Error> {
+        match function_config {
+            FunctionConfig::Chat(params) => ToolCallConfig::new(ToolCallConfigConstructorArgs {
+                dynamic_allowed_tools: self.allowed_tools.into_dynamic_allowed_tools(),
+                dynamic_additional_tools: Some(self.dynamic_tools),
+                dynamic_parallel_tool_calls: self.parallel_tool_calls,
+                dynamic_provider_tools: self.dynamic_provider_tools,
+                dynamic_tool_choice: Some(self.tool_choice),
+                ..ToolCallConfigConstructorArgs::with_dynamic_tool_params(
+                    &params.tools,
+                    &params.tool_choice,
+                    params.parallel_tool_calls,
+                    static_tools,
+                )
+            }),
+            FunctionConfig::Json(_) => Ok(None),
+        }
+    }
+
+    pub fn tools_available(
+        &self,
+        function_name: &str,
+        config: &Config,
+    ) -> Result<impl Iterator<Item = Tool> + '_, Error> {
+        let function_config = config.get_function(function_name)?;
+
+        // Get the list of tool names from allowed_tools based on whether they were dynamically set
+        let tool_names = match self.allowed_tools.choice {
+            AllowedToolsChoice::FunctionDefault => {
+                // Use the function's configured tool names
+                function_config
+                    .tools()
+                    .map(str::to_string)
+                    .collect::<Vec<_>>()
+            }
+            AllowedToolsChoice::DynamicAllowedTools => {
+                // Use the dynamically specified tool names
+                self.allowed_tools.tools.clone()
+            }
+        };
+
+        // Collect static tools from config
+        let static_tools: Vec<Tool> = tool_names
+            .iter()
+            .filter_map(|tool_name| {
+                config.tools.get(tool_name).map(|static_tool| {
+                    Tool::ClientSideFunction(ClientSideFunctionTool {
+                        description: static_tool.description.clone(),
+                        parameters: static_tool.parameters.value.clone(),
+                        name: static_tool.name.clone(),
+                        strict: static_tool.strict,
+                    })
+                })
+            })
+            .collect();
+
+        // Combine static tools and dynamic tools
+        let all_tools = static_tools
+            .into_iter()
+            .chain(self.dynamic_tools.iter().cloned());
+
+        Ok(all_tools)
+    }
+}
+
+/// This is a legacy struct. We use it for deserializing historical data and
+/// continuing to write the same format only.
+/// This should not be used in new code.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct LegacyToolCallConfigDatabaseInsert {
     /// All tools available for this inference (merged static + dynamic tools)
-    pub tools_available: Vec<Tool>,
+    pub tools_available: Vec<ClientSideFunctionTool>,
     /// The tool choice strategy
     pub tool_choice: ToolChoice,
     // TODO: decide what we want the Python interface to be for ToolChoice
@@ -432,48 +1134,6 @@ pub struct ToolCallConfigDatabaseInsert {
     // struct arms. We would likely need to land on one of the serde options for enums (tagged?)
     /// Whether parallel tool calls are enabled
     pub parallel_tool_calls: Option<bool>,
-}
-
-impl ToolCallConfigDatabaseInsert {
-    /// Converts this database representation back into a `ToolCallConfig`.
-    /// Errors if there are tools specified in the function that are not in the
-    /// static tools (shouldn't happen). Or if the function is a JSON function (no tools).
-    ///
-    /// This method performs the reverse transformation of the lossy conversion that occurs
-    /// when storing `ToolCallConfig` in the database. It reconstructs the tool configuration
-    /// by:
-    /// 1. Converting the stored tools into `DynamicToolParams`
-    /// 2. Using the function config to prepare a full `ToolCallConfig`
-    ///
-    ///
-    /// # Lossy Conversion
-    /// Note that this conversion cannot fully restore the original `ToolCallConfig`:
-    /// - `provider_tools` are not stored in the database and will be `None`
-    /// - The distinction between static/dynamic tools is reconstructed based on function config
-    /// This will be fixed in a follow-up PR.
-    ///
-    /// # Parameters
-    /// - `function_config`: The function configuration containing static tool definitions
-    /// - `static_tools`: Map of static tool names to their compiled configurations
-    ///
-    /// # Returns
-    /// - `Ok(Some(ToolCallConfig))` if tools were configured
-    /// - `Ok(None)` if no tools were available (e.g., JSON functions)
-    /// - `Err(Error)` if reconstruction fails (e.g., tool not found, duplicate tools)
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let db_insert = get_tool_config_from_database();
-    /// let tool_config = db_insert.into_tool_call_config(&function_config, &static_tools)?;
-    /// ```
-    pub fn into_tool_call_config(
-        self,
-        function_config: &crate::function::FunctionConfig,
-        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
-    ) -> Result<Option<ToolCallConfig>, Error> {
-        let dynamic_params = function_config.database_insert_to_dynamic_tool_params(self);
-        function_config.prepare_tool_config(dynamic_params, static_tools)
-    }
 }
 
 /// Wire/API representation of dynamic tool parameters for inference requests.
@@ -553,7 +1213,7 @@ pub struct DynamicToolParams {
 
     /// Tools that the user provided at inference time (not in function config), in addition to the function-configured
     /// tools, that are also allowed.
-    pub additional_tools: Option<Vec<Tool>>,
+    pub additional_tools: Option<Vec<ClientSideFunctionTool>>,
     /// User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
     /// Optional.
     pub tool_choice: Option<ToolChoice>,
@@ -562,8 +1222,9 @@ pub struct DynamicToolParams {
     /// If provided during inference, it will override the function-configured parallel tool calls.
     pub parallel_tool_calls: Option<bool>,
 
-    /// Provider-specific tool configurations (not persisted to database)
-    pub provider_tools: Option<Vec<ProviderTool>>,
+    /// Provider-specific tool configurations
+    #[serde(default)]
+    pub provider_tools: Vec<ProviderTool>,
 }
 
 impl std::fmt::Display for DynamicToolParams {
@@ -582,7 +1243,7 @@ impl DynamicToolParams {
     }
 
     #[getter]
-    pub fn additional_tools(&self) -> Option<Vec<Tool>> {
+    pub fn additional_tools(&self) -> Option<Vec<ClientSideFunctionTool>> {
         self.additional_tools.clone()
     }
 
@@ -596,7 +1257,7 @@ impl DynamicToolParams {
     }
 
     #[getter]
-    pub fn provider_tools(&self) -> Option<Vec<ProviderTool>> {
+    pub fn provider_tools(&self) -> Vec<ProviderTool> {
         self.provider_tools.clone()
     }
 
@@ -608,7 +1269,7 @@ impl DynamicToolParams {
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct BatchDynamicToolParams {
     pub allowed_tools: Option<Vec<Option<Vec<String>>>>,
-    pub additional_tools: Option<Vec<Option<Vec<Tool>>>>,
+    pub additional_tools: Option<Vec<Option<Vec<ClientSideFunctionTool>>>>,
     pub tool_choice: Option<Vec<Option<ToolChoice>>>,
     pub parallel_tool_calls: Option<Vec<Option<bool>>>,
     pub provider_tools: Option<Vec<Option<Vec<ProviderTool>>>>,
@@ -673,6 +1334,8 @@ impl ToolCall {
 }
 
 /// `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
+/// Typically tool calls come from previous inferences and are therefore outputs of TensorZero (`InferenceResponseToolCall`)
+/// but they may also be constructed client side or through the OpenAI endpoint `ToolCall` so we support both via this wrapper.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(untagged)]
@@ -700,6 +1363,9 @@ impl TryFrom<ToolCallWrapper> for ToolCall {
 
 /// An InferenceResponseToolCall is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
+/// This includes some synactic sugar (parsing / validation of the tool arguments)
+/// in the `arguments` field and the name in the `name` field.
+/// We support looping this back through the TensorZero inference API via the ToolCallWrapper
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -916,29 +1582,69 @@ impl ToolConfig {
     }
 }
 
+fn tool_call_config_to_legacy_tool_database_insert(
+    tool_call_config: &ToolCallConfig,
+) -> LegacyToolCallConfigDatabaseInsert {
+    LegacyToolCallConfigDatabaseInsert {
+        tools_available: tool_call_config
+            .static_tools_available
+            .iter()
+            .chain(tool_call_config.dynamic_tools_available.iter())
+            .cloned()
+            .map(ToolConfig::into)
+            .collect(),
+        tool_choice: tool_call_config.tool_choice.clone(),
+        parallel_tool_calls: tool_call_config.parallel_tool_calls,
+    }
+}
+
+// For now, this is required to convert to LegacyToolCallConfigDatabaseInsert for writing to the databse
+impl From<ToolConfig> for ClientSideFunctionTool {
+    fn from(tool_config: ToolConfig) -> Self {
+        ClientSideFunctionTool {
+            description: tool_config.description().to_string(),
+            parameters: tool_config.parameters().clone(),
+            name: tool_config.name().to_string(),
+            strict: tool_config.strict(),
+        }
+    }
+}
+
 impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
     fn from(tool_call_config: ToolCallConfig) -> Self {
+        let legacy_config = tool_call_config_to_legacy_tool_database_insert(&tool_call_config);
+        let ToolCallConfig {
+            // We explicitly don't store static_tools_available in the new ToolCallConfigDatabaseInsert
+            // because we want these to be specified by the function and eventually function version.
+            static_tools_available: _,
+            dynamic_tools_available,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+            provider_tools,
+        } = tool_call_config;
         Self {
-            tools_available: tool_call_config
-                .static_tools_available
+            tool_params: legacy_config,
+            dynamic_tools: dynamic_tools_available
                 .into_iter()
-                .chain(tool_call_config.dynamic_tools_available)
-                .map(ToolConfig::into)
+                .map(Tool::from)
                 .collect(),
-            tool_choice: tool_call_config.tool_choice,
-            parallel_tool_calls: tool_call_config.parallel_tool_calls,
+            dynamic_provider_tools: provider_tools,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
         }
     }
 }
 
 impl From<ToolConfig> for Tool {
     fn from(tool_config: ToolConfig) -> Self {
-        Self {
+        Self::ClientSideFunction(ClientSideFunctionTool {
             description: tool_config.description().to_string(),
             parameters: tool_config.parameters().clone(),
             name: tool_config.name().to_string(),
             strict: tool_config.strict(),
-        }
+        })
     }
 }
 
@@ -972,7 +1678,7 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
                     additional_tools: None,
                     tool_choice: None,
                     parallel_tool_calls: None,
-                    provider_tools: None,
+                    provider_tools: vec![],
                 };
                 num_inferences
             ]);
@@ -1069,7 +1775,7 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
                 additional_tools: additional_tools_iter.next().unwrap_or(None),
                 tool_choice: tool_choice_iter.next().unwrap_or(None),
                 parallel_tool_calls: parallel_tool_calls_iter.next().unwrap_or(None),
-                provider_tools: provider_tools_iter.next().unwrap_or(None),
+                provider_tools: provider_tools_iter.next().flatten().unwrap_or(vec![]),
             });
         }
         Ok(all_dynamic_tool_params)
@@ -1156,25 +1862,25 @@ mod tests {
     async fn test_tool_call_config_new() {
         // Empty tools in function, no dynamic tools, tools are configured in the config
         // This should return no tools because the function does not specify any tools
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             DynamicToolParams::default(),
-        )
+        ))
         .unwrap();
         assert!(tool_call_config.is_none());
 
         // All tools available, no dynamic tools, tools are configured in the config
         // This should return all tools because the function specifies all tools
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             DynamicToolParams::default(),
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 2);
@@ -1189,13 +1895,13 @@ mod tests {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
             ..Default::default()
         };
-        let err = ToolCallConfig::new(
+        let err = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &EMPTY_TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap_err();
         assert_eq!(
             err,
@@ -1210,13 +1916,13 @@ mod tests {
             tool_choice: Some(ToolChoice::Specific("get_temperature".to_string())),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 2);
@@ -1231,13 +1937,13 @@ mod tests {
             tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
-        let err = ToolCallConfig::new(
+        let err = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap_err();
         assert_eq!(
             err,
@@ -1251,7 +1957,7 @@ mod tests {
         // This should remove all configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![Tool {
+            additional_tools: Some(vec![ClientSideFunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({}),
@@ -1259,13 +1965,13 @@ mod tests {
             }]),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 1);
@@ -1277,7 +1983,7 @@ mod tests {
         // This should remove the other configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![Tool {
+            additional_tools: Some(vec![ClientSideFunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({}),
@@ -1286,13 +1992,13 @@ mod tests {
             parallel_tool_calls: Some(false),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 2);
@@ -1307,7 +2013,7 @@ mod tests {
         // This should remove all configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![Tool {
+            additional_tools: Some(vec![ClientSideFunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({}),
@@ -1316,13 +2022,13 @@ mod tests {
             tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 1);
@@ -1343,13 +2049,13 @@ mod tests {
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
             id: "123".to_string(),
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             DynamicToolParams::default(),
-        )
+        ))
         .unwrap()
         .unwrap();
         // Tool call is valid, so we should get a valid InferenceResponseToolCall
@@ -1411,13 +2117,13 @@ mod tests {
         );
 
         // Make sure validation works with dynamic tools
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             DynamicToolParams {
-                additional_tools: Some(vec![Tool {
+                additional_tools: Some(vec![ClientSideFunctionTool {
                     name: "establish_campground".to_string(),
                     description: "Establish a campground".to_string(),
                     parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}),
@@ -1425,7 +2131,7 @@ mod tests {
                 }]),
                 ..Default::default()
             },
-        )
+        ))
         .unwrap()
         .unwrap();
         let tool_call = ToolCall {
@@ -1556,7 +2262,7 @@ mod tests {
     async fn test_duplicate_tool_names_error() {
         // Test case where dynamic tool params add a tool with the same name as a static tool
         let dynamic_tool_params = DynamicToolParams {
-            additional_tools: Some(vec![Tool {
+            additional_tools: Some(vec![ClientSideFunctionTool {
                 name: "get_temperature".to_string(), // Same name as static tool
                 description: "Another temperature tool".to_string(),
                 parameters: json!({
@@ -1571,13 +2277,13 @@ mod tests {
             ..Default::default()
         };
 
-        let err = ToolCallConfig::new(
+        let err = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap_err();
 
         assert_eq!(
@@ -1654,7 +2360,7 @@ mod tests {
                 "get_temperature".to_string(),
                 "establish_campground".to_string(),
             ]),
-            additional_tools: Some(vec![Tool {
+            additional_tools: Some(vec![ClientSideFunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
@@ -1663,13 +2369,13 @@ mod tests {
             ..Default::default()
         };
 
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
 
@@ -1695,7 +2401,7 @@ mod tests {
                 "get_temperature".to_string(),
                 "nonexistent_tool".to_string(),
             ]),
-            additional_tools: Some(vec![Tool {
+            additional_tools: Some(vec![ClientSideFunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({"type": "object"}),
@@ -1704,13 +2410,13 @@ mod tests {
             ..Default::default()
         };
 
-        let err = ToolCallConfig::new(
+        let err = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap_err();
 
         assert_eq!(
@@ -1728,7 +2434,7 @@ mod tests {
         // Test that dynamic tools are still auto-added even when not in allowed_tools (with warning)
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![Tool {
+            additional_tools: Some(vec![ClientSideFunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
@@ -1737,13 +2443,13 @@ mod tests {
             ..Default::default()
         };
 
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
 
@@ -1760,5 +2466,484 @@ mod tests {
         assert!(logs_contain(
             "Currently, the gateway automatically includes all dynamic tools"
         ));
+    }
+
+    // Helper struct to test deserialization with flattening
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct ToolCallConfigDeserializeTestHelper {
+        baz: String,
+        #[serde(flatten)]
+        #[serde(deserialize_with = "deserialize_optional_tool_info")]
+        tool_info: Option<ToolCallConfigDatabaseInsert>,
+    }
+
+    // Helper function to assert that deserialization results in None for tool_info
+    fn assert_deserialize_to_none(json: serde_json::Value, expected_baz: &str) {
+        let result: ToolCallConfigDeserializeTestHelper =
+            serde_json::from_value(json).expect("Deserialization should succeed");
+        assert_eq!(result.baz, expected_baz);
+        assert_eq!(result.tool_info, None, "tool_info should be None");
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_ragged_with_flatten() {
+        // Test with a flattened struct (ragged case)
+        // Note: dynamic_tools and dynamic_provider_tools are arrays of JSON strings
+        // allowed_tools is a JSON string, tool_choice is a bare string/object
+        let json = json!({
+            "baz": "test_value",
+            "dynamic_tools": [
+                r#"{"type":"client_side_function","name":"ragged_tool","description":"A ragged tool","parameters":{"type":"string"},"strict":true}"#
+            ],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":["ragged_tool"],"choice":"function_default"}"#,
+            "tool_choice": {"specific": "ragged_tool"},
+            "parallel_tool_calls": null,
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": {"specific": "ragged_tool"},
+                "parallel_tool_calls": null
+            }
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+
+        assert_eq!(result.baz, "test_value");
+        let tool_info = result.tool_info.unwrap();
+        assert_eq!(tool_info.dynamic_tools.len(), 1);
+        assert_eq!(tool_info.dynamic_tools[0].name(), "ragged_tool");
+        assert_eq!(tool_info.dynamic_provider_tools.len(), 0);
+        assert_eq!(tool_info.allowed_tools.tools, vec!["ragged_tool"]);
+        assert_eq!(
+            tool_info.tool_choice,
+            ToolChoice::Specific("ragged_tool".to_string())
+        );
+        assert_eq!(tool_info.parallel_tool_calls, None);
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_ragged_legacy() {
+        // Test legacy format with flattening
+        let json = json!({
+            "baz": "legacy_value",
+            "tool_params": {
+                "tools_available": [
+                    {
+                        "name": "legacy_ragged_tool",
+                        "description": "A legacy ragged tool",
+                        "parameters": {"type": "number"},
+                        "strict": false
+                    }
+                ],
+                "tool_choice": "none",
+                "parallel_tool_calls": true
+            }
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+
+        assert_eq!(result.baz, "legacy_value");
+        let tool_info = result.tool_info.unwrap();
+        assert_eq!(tool_info.dynamic_tools.len(), 0);
+        assert_eq!(tool_info.dynamic_provider_tools.len(), 0);
+        assert_eq!(tool_info.tool_choice, ToolChoice::None);
+        assert_eq!(tool_info.parallel_tool_calls, Some(true));
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_ragged_empty() {
+        // Test empty format with flattening
+        let json = json!({
+            "baz": "empty_value"
+        });
+        assert_deserialize_to_none(json, "empty_value");
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_legacy_null_tool_params() {
+        // Test legacy format with explicit null tool_params
+        // Should return None, same as missing tool_params
+        let json = json!({
+            "baz": "test_value",
+            "tool_params": null
+        });
+        assert_deserialize_to_none(json, "test_value");
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_legacy_empty_tool_params() {
+        // Test legacy format with empty string tool_params
+        // Should return None
+        let json = json!({
+            "baz": "test_value",
+            "tool_params": ""
+        });
+        assert_deserialize_to_none(json, "test_value");
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_legacy_missing_vs_null() {
+        // Test that missing tool_params behaves the same as null tool_params
+        // Both should return None for tool_info
+
+        // Missing tool_params
+        let json_missing = json!({
+            "baz": "test_missing"
+        });
+        assert_deserialize_to_none(json_missing, "test_missing");
+
+        // Null tool_params
+        let json_null = json!({
+            "baz": "test_null",
+            "tool_params": null
+        });
+        assert_deserialize_to_none(json_null, "test_null");
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_invalid_tool_type() {
+        // Test with an invalid tool type
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [
+                r#"{"type":"invalid_type","name":"test_tool","description":"A test tool","parameters":{"type":"object"}}"#
+            ],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":["test_tool"],"choice":"function_default"}"#,
+            "tool_choice": r#""auto""#,
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_missing_tool_name() {
+        // Test with missing required tool name field
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [
+                r#"{"type":"client_side_function","description":"A test tool","parameters":{"type":"object"}}"#
+            ],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":["test_tool"],"choice":"function_default"}"#,
+            "tool_choice": r#""auto""#,
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_invalid_tool_choice() {
+        // Test with invalid tool_choice enum value
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
+            "tool_choice": r#""invalid_choice""#,
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_invalid_allowed_tools_choice() {
+        // Test with invalid allowed_tools.choice enum value
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":[],"choice":"invalid_choice"}"#,
+            "tool_choice": r#""auto""#,
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_wrong_type_for_tools() {
+        // Test with wrong type for dynamic_tools (string instead of array)
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": "not_an_array",
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
+            "tool_choice": r#""auto""#,
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_wrong_type_for_parallel_tool_calls() {
+        // Test with wrong type for parallel_tool_calls (string instead of bool)
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
+            "tool_choice": r#""auto""#,
+            "parallel_tool_calls": "not_a_bool",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_malformed_provider_tool() {
+        // Test with provider tool missing scope field - should use default
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [
+                r#"{"tool":{"type":"test"}}"#
+                // Missing scope field - should default to Unscoped
+            ],
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+        assert_eq!(result.baz, "test");
+        let tool_info = result.tool_info.unwrap();
+        assert_eq!(tool_info.dynamic_provider_tools.len(), 1);
+        // Verify that scope defaulted to Unscoped
+        assert_eq!(
+            tool_info.dynamic_provider_tools[0].scope,
+            ProviderToolScope::Unscoped
+        );
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_null_required_field() {
+        // Test with null for a required field (tool_choice)
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
+            "tool_choice": null,
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_empty_tool_name() {
+        // Test with empty string for tool name
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [
+                r#"{"type":"client_side_function","name":"","description":"A test tool","parameters":{"type":"object"}}"#
+            ],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":[""],"choice":"function_default"}"#,
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        // Empty strings should deserialize successfully but may be caught by validation logic elsewhere
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_specific_tool_choice_with_value() {
+        // Test with specific tool choice that has a value
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [
+                r#"{"type":"client_side_function","name":"specific_tool","description":"A specific tool","parameters":{"type":"object"}}"#
+            ],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":["specific_tool"],"choice":"function_default"}"#,
+            "tool_choice": {"specific": "specific_tool"},
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": {"specific": "specific_tool"}
+            }
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+        assert_eq!(result.baz, "test");
+        let tool_info = result.tool_info.unwrap();
+        assert_eq!(
+            tool_info.tool_choice,
+            ToolChoice::Specific("specific_tool".to_string())
+        );
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_mixed_valid_invalid_tools() {
+        // Test with some valid and some invalid tools
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [
+                r#"{"type":"client_side_function","name":"valid_tool","description":"A valid tool","parameters":{"type":"object"}}"#,
+                r#"{"type":"invalid_type","name":"invalid_tool"}"#
+            ],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":["valid_tool"],"choice":"function_default"}"#,
+            "tool_choice": r#""auto""#,
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_extra_fields_ignored() {
+        // Test that extra unknown fields are ignored (thanks to flatten)
+        let json = json!({
+            "baz": "test",
+            "unknown_field": "should_be_ignored",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+        assert_eq!(result.baz, "test");
+        assert!(result.tool_info.is_some());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_legacy_empty_arrays_filtered() {
+        // Test that empty dynamic_tools and dynamic_provider_tools arrays are filtered out
+        // when NOT in full format mode (i.e., legacy data without allowed_tools/tool_choice)
+        // This handles the case where ClickHouse returns default values (empty arrays) for these columns
+        // when they weren't explicitly set
+        let json = json!({
+            "baz": "legacy_value",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "tool_params": {
+                "tools_available": [
+                    {
+                        "name": "get_temperature",
+                        "description": "Get temperature",
+                        "parameters": {"type": "object"},
+                        "strict": true
+                    }
+                ],
+                "tool_choice": "auto"
+            }
+        });
+
+        // This should deserialize successfully with tool_info:
+        // 1. We're NOT in full format mode (no allowed_tools/tool_choice fields)
+        // 2. Empty arrays for dynamic_tools and dynamic_provider_tools get filtered out
+        // 3. After filtering, only tool_params remains, which is legacy format
+        // 4. tool_params with tools_available is valid in legacy format
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+        assert_eq!(result.baz, "legacy_value");
+        assert!(
+            result.tool_info.is_some(),
+            "tool_info should be Some with valid tool_params"
+        );
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_full_format_empty_arrays_kept() {
+        // Test that empty dynamic_tools and dynamic_provider_tools arrays are KEPT
+        // when in full format mode (i.e., has allowed_tools and tool_choice fields)
+        // In full format, empty arrays are valid and should not be filtered out
+        let json = json!({
+            "baz": "full_format_value",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": r#"{"tools":[],"choice":"function_default"}"#,
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        // This should deserialize to Some because:
+        // 1. We ARE in full format mode (has allowed_tools and tool_choice)
+        // 2. Empty arrays are valid in full format and should not be filtered
+        // 3. The presence of allowed_tools/tool_choice indicates this is valid full format data
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+        assert_eq!(result.baz, "full_format_value");
+        assert!(
+            result.tool_info.is_some(),
+            "tool_info should be Some in full format mode even with empty arrays"
+        );
+
+        let tool_info = result.tool_info.unwrap();
+        assert_eq!(tool_info.tool_choice, ToolChoice::Auto);
+        assert_eq!(tool_info.dynamic_tools.len(), 0);
+        assert_eq!(tool_info.dynamic_provider_tools.len(), 0);
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_legacy_only_empty_arrays() {
+        // Test that when ONLY empty dynamic_tools and dynamic_provider_tools arrays are present
+        // (no tool_params, no allowed_tools/tool_choice), they get filtered out and we get None
+        // This handles the case where ClickHouse returns default empty arrays but no actual tool data
+        let json = json!({
+            "baz": "only_empty_arrays",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": []
+        });
+
+        // This should deserialize to None because:
+        // 1. We're NOT in full format mode (no allowed_tools/tool_choice)
+        // 2. Empty arrays for dynamic_tools and dynamic_provider_tools get filtered out
+        // 3. After filtering, values is empty
+        // 4. Empty values results in None
+        assert_deserialize_to_none(json, "only_empty_arrays");
     }
 }

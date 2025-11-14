@@ -190,3 +190,7 @@ async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost
 
     print(response)
 ```
+
+### Stubtest
+
+Run `uv run stubtest tensorzero.tensorzero` to confirm that the stub `tensorzero.pyi` file matches PyO3 compilation.

@@ -28,9 +28,31 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
 
       - name: Check version consistency
         run: ./ci/check-version-consistency.sh
+
+  # This checks for specific markers in the codebase that require multiple files to be edited together.
+  check-if-edited-then-edit:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    # Should run on all PRs from forks as well, if the label is not present
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b
+        with:
+          python-version: "3.9"
+
+      - name: Check coordinated edits
+        run: python3 ci/check_coordinated_edits.py
 
   # Like 'check-docker-compose', but loads the freshly built 'gateway' and 'ui' container images first
   # This checks that all of our docker-compose files work with the changes in the PR
@@ -299,7 +321,13 @@ jobs:
   lint-rust:
     permissions:
       contents: read
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Keep 'total_partitions' in sync with the number of entries in the 'partition' array
+        partition: [1, 2, 3, 4]
+        include:
+          - total_partitions: 4
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       # We install the latest rust when running lints, since we don't care if older rust versions lint successfully.
@@ -307,17 +335,11 @@ jobs:
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable --component clippy,rustfmt && rustup default stable; then
+            if rustup toolchain install stable --component clippy && rustup default stable; then
               break
             fi
           done
         shell: bash
-
-      - name: Configure Namespace cache for Rust
-        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
-        with:
-          cache: |
-            rust
 
       - name: Install cargo-hack
         uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
@@ -326,8 +348,7 @@ jobs:
 
       - name: Lint (Rust)
         run: |
-          cargo fmt --all --check
-          cargo hack clippy --all-targets --each-feature -- -D warnings
+          cargo hack --partition '${{ matrix.partition }}/${{ matrix.total_partitions }}' clippy --all-targets --each-feature -- -D warnings
 
   validate:
     permissions:
@@ -344,7 +365,7 @@ jobs:
       - name: Install Rust 1.88.0
         run: |
           for attempt in 1 2 3; do
-            if rustup install 1.88.0 && rustup default 1.88.0; then
+            if rustup install 1.88.0 --component rustfmt && rustup default 1.88.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -465,6 +486,9 @@ jobs:
 
       - name: Run cargo-deny
         run: cargo deny check
+
+      - name: Run cargo fmt
+        run: cargo fmt --all --check
 
       - name: Test (Rust)
         env:
@@ -886,6 +910,7 @@ jobs:
     needs:
       [
         check-version-consistency,
+        check-if-edited-then-edit,
         check-docker-compose,
         check-latest-docker-compose,
         check-python-client-build,
