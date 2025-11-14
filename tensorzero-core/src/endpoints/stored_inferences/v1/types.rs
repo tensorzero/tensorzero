@@ -159,7 +159,7 @@ pub enum InferenceFilter {
 
 /// Request to list inferences with pagination and filters.
 /// Used by the `POST /v1/inferences/list_inferences` endpoint.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Default, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 pub struct ListInferencesRequest {
     /// Optional function name to filter inferences by.
