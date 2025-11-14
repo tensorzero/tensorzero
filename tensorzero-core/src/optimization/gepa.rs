@@ -6,6 +6,7 @@ use pyo3::prelude::*;
 
 use crate::error::Error;
 use crate::model_table::ProviderTypeDefaultCredentials;
+use crate::utils::retries::RetryConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 
 // Default functions
@@ -82,6 +83,10 @@ pub struct GEPAConfig {
     /// Whether to include datapoint input in InferenceWithAnalysis for mutation
     /// If true, the mutate function will see the original datapoint inputs
     pub include_datapoint_input_for_mutation: bool,
+
+    /// Retry configuration for inference calls during GEPA optimization
+    /// Applies to analyze function calls, mutate function calls, and all mutated variants
+    pub retries: RetryConfig,
 }
 
 /// Uninitialized GEPA configuration (deserializable from TOML)
@@ -116,6 +121,9 @@ pub struct UninitializedGEPAConfig {
 
     #[serde(default = "default_include_datapoint_input_for_mutation")]
     pub include_datapoint_input_for_mutation: bool,
+
+    #[serde(default)]
+    pub retries: RetryConfig,
 }
 
 impl Default for UninitializedGEPAConfig {
@@ -133,6 +141,7 @@ impl Default for UninitializedGEPAConfig {
             seed: None,
             timeout: default_timeout(),
             include_datapoint_input_for_mutation: default_include_datapoint_input_for_mutation(),
+            retries: RetryConfig::default(),
         }
     }
 }
@@ -161,6 +170,7 @@ impl UninitializedGEPAConfig {
         seed=None,
         timeout=None,
         include_datapoint_input_for_mutation=None,
+        retries=None,
     ))]
     #[expect(clippy::too_many_arguments)]
     fn py_new(
@@ -176,6 +186,7 @@ impl UninitializedGEPAConfig {
         seed: Option<u32>,
         timeout: Option<u64>,
         include_datapoint_input_for_mutation: Option<bool>,
+        retries: Option<RetryConfig>,
     ) -> Self {
         Self {
             function_name,
@@ -191,6 +202,7 @@ impl UninitializedGEPAConfig {
             timeout: timeout.unwrap_or_else(default_timeout),
             include_datapoint_input_for_mutation: include_datapoint_input_for_mutation
                 .unwrap_or_else(default_include_datapoint_input_for_mutation),
+            retries: retries.unwrap_or_default(),
         }
     }
 
@@ -218,6 +230,7 @@ impl UninitializedGEPAConfig {
             seed: self.seed,
             timeout: self.timeout,
             include_datapoint_input_for_mutation: self.include_datapoint_input_for_mutation,
+            retries: self.retries,
         })
     }
 }

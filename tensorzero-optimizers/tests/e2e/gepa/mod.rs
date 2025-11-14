@@ -163,6 +163,7 @@ pub fn create_test_gepa_config() -> GEPAConfig {
         seed: Some(42),
         timeout: 300,
         include_datapoint_input_for_mutation: false,
+        retries: tensorzero_core::utils::retries::RetryConfig::default(),
     }
 }
 
@@ -181,6 +182,7 @@ pub fn create_test_gepa_config_echo() -> GEPAConfig {
         seed: Some(42),
         timeout: 300,
         include_datapoint_input_for_mutation: false,
+        retries: tensorzero_core::utils::retries::RetryConfig::default(),
     }
 }
 

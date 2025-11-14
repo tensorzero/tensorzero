@@ -207,6 +207,7 @@ pub async fn mutate_templates(
     let mut mutate_config = UninitializedChatCompletionConfig {
         model: mutation_model.clone().into(),
         weight: None,
+        retries: gepa_config.retries,
         ..Default::default()
     };
 
@@ -301,12 +302,16 @@ pub fn create_mutated_variant(
     iteration: usize,
     variant_prefix: &str,
     parent_name: &str,
+    retries: tensorzero_core::utils::retries::RetryConfig,
 ) -> (String, UninitializedChatCompletionConfig) {
     // Generate variant name: {prefix}_iter{iteration}_{parent_name}
     let new_variant_name = format!("{variant_prefix}_iter{iteration}_{parent_name}");
 
     // Clone parent config
     let mut new_config = parent_config.clone();
+
+    // Set retry configuration from GEPA config
+    new_config.retries = retries;
 
     // Clear existing templates (to ensure clean state)
     new_config.templates.inner.clear();
@@ -413,8 +418,14 @@ mod tests {
         };
 
         // Call create_mutated_variant
-        let (variant_name, new_config) =
-            create_mutated_variant(&parent_config, mutate_output, 1, "gepa", "baseline");
+        let (variant_name, new_config) = create_mutated_variant(
+            &parent_config,
+            mutate_output,
+            1,
+            "gepa",
+            "baseline",
+            tensorzero_core::utils::retries::RetryConfig::default(),
+        );
 
         // Verify variant name
         assert_eq!(variant_name, "gepa_iter1_baseline");
@@ -475,8 +486,14 @@ mod tests {
         };
 
         // Call create_mutated_variant
-        let (_variant_name, new_config) =
-            create_mutated_variant(&parent_config, mutate_output, 1, "gepa", "baseline");
+        let (_variant_name, new_config) = create_mutated_variant(
+            &parent_config,
+            mutate_output,
+            1,
+            "gepa",
+            "baseline",
+            tensorzero_core::utils::retries::RetryConfig::default(),
+        );
 
         // Verify parent_config was NOT mutated (defensive check for immutability)
         assert_eq!(

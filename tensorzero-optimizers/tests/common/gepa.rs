@@ -52,6 +52,7 @@ pub async fn test_gepa_optimization_chat() {
             seed: Some(42),
             timeout: 300,
             include_datapoint_input_for_mutation: false,
+            retries: tensorzero_core::utils::retries::RetryConfig::default(),
         }),
     };
 
@@ -261,6 +262,7 @@ async fn run_gepa_workflow_with_client(client: &tensorzero::Client) {
                 seed: Some(42),
                 timeout: 300,
                 include_datapoint_input_for_mutation: false,
+                retries: tensorzero_core::utils::retries::RetryConfig::default(),
             }),
         },
     };

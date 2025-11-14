@@ -23,6 +23,7 @@ use tensorzero_core::{
 /// are not extracted since `ChatCompletionConfig` has already unified them into `ChatTemplates`.
 pub fn extract_chat_completion_config(
     config: &ChatCompletionConfig,
+    retries: tensorzero_core::utils::retries::RetryConfig,
 ) -> UninitializedChatCompletionConfig {
     // Extract new-style templates from ChatTemplates
     // Since UninitializedChatTemplates has a private `inner` field with #[serde(flatten)],
@@ -86,7 +87,7 @@ pub fn extract_chat_completion_config(
         verbosity,
         // Other config
         json_mode: config.json_mode().cloned(),
-        retries: *config.retries(),
+        retries,
         extra_body: config.extra_body().cloned(),
         extra_headers: config.extra_headers().cloned(),
     }
@@ -103,11 +104,12 @@ pub fn extract_chat_completion_config(
 pub fn extract_chat_completion_from_variant_info(
     variant_info: &VariantInfo,
     variant_name: &str,
+    retries: tensorzero_core::utils::retries::RetryConfig,
 ) -> Option<UninitializedChatCompletionConfig> {
     match &variant_info.inner {
         VariantConfig::ChatCompletion(chat_config) => {
             // Use the pure conversion function to extract the config
-            let uninitialized = extract_chat_completion_config(chat_config);
+            let uninitialized = extract_chat_completion_config(chat_config, retries);
             tracing::debug!(
                 "Extracted ChatCompletion config for variant: {}",
                 variant_name
@@ -141,7 +143,10 @@ mod tests {
     #[test]
     fn test_extract_default_config() {
         let config = create_test_config();
-        let extracted = extract_chat_completion_config(&config);
+        let extracted = extract_chat_completion_config(
+            &config,
+            tensorzero_core::utils::retries::RetryConfig::default(),
+        );
 
         // Verify basic extraction works
         // Since we can only use default configs from outside tensorzero-core,
@@ -163,7 +168,10 @@ mod tests {
     #[test]
     fn test_serialization_roundtrip() {
         let config = create_test_config();
-        let extracted = extract_chat_completion_config(&config);
+        let extracted = extract_chat_completion_config(
+            &config,
+            tensorzero_core::utils::retries::RetryConfig::default(),
+        );
 
         // Verify the extracted config can be serialized and deserialized
         let serialized = serde_json::to_string(&extracted).expect("Failed to serialize");
@@ -180,7 +188,10 @@ mod tests {
     #[test]
     fn test_template_extraction_with_empty_templates() {
         let config = create_test_config();
-        let extracted = extract_chat_completion_config(&config);
+        let extracted = extract_chat_completion_config(
+            &config,
+            tensorzero_core::utils::retries::RetryConfig::default(),
+        );
 
         // Empty templates should serialize/deserialize correctly
         let serialized = serde_json::to_string(&extracted.templates).expect("Failed to serialize");
@@ -191,7 +202,10 @@ mod tests {
     fn test_function_runs_without_error() {
         // Test that the extraction function runs without panicking or errors
         let config = create_test_config();
-        let extracted = extract_chat_completion_config(&config);
+        let extracted = extract_chat_completion_config(
+            &config,
+            tensorzero_core::utils::retries::RetryConfig::default(),
+        );
 
         // Just verify the result is valid - model field exists (may be empty for default)
         // The important thing is the function completed without errors
@@ -201,11 +215,16 @@ mod tests {
     #[test]
     fn test_extracted_config_has_default_retries() {
         let config = create_test_config();
-        let extracted = extract_chat_completion_config(&config);
 
-        // Default RetryConfig should be preserved
-        let default_retries = RetryConfig::default();
-        assert_eq!(extracted.retries.num_retries, default_retries.num_retries);
-        assert_eq!(extracted.retries.max_delay_s, default_retries.max_delay_s);
+        // Test with custom retries to verify override works
+        let custom_retries = RetryConfig {
+            num_retries: 3,
+            max_delay_s: 5.0,
+        };
+        let extracted = extract_chat_completion_config(&config, custom_retries);
+
+        // The extracted config should use the provided retries, not the parent's
+        assert_eq!(extracted.retries.num_retries, 3);
+        assert_eq!(extracted.retries.max_delay_s, 5.0);
     }
 }

@@ -186,6 +186,7 @@ pub async fn analyze_inferences(
     let mut analyze_config = UninitializedChatCompletionConfig {
         model: analysis_model.clone().into(),
         weight: None,
+        retries: gepa_config.retries,
         ..Default::default()
     };
 

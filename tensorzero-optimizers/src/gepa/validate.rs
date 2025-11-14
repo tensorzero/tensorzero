@@ -518,6 +518,7 @@ mod tests {
             seed: None,
             timeout: 300,
             include_datapoint_input_for_mutation: false,
+            retries: tensorzero_core::utils::retries::RetryConfig::default(),
         };
 
         let tensorzero_config = create_minimal_config();
@@ -551,6 +552,7 @@ mod tests {
             seed: None,
             timeout: 300,
             include_datapoint_input_for_mutation: false,
+            retries: tensorzero_core::utils::retries::RetryConfig::default(),
         };
 
         // This would fail during validation if we had a proper test config

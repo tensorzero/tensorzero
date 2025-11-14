@@ -592,6 +592,7 @@ mod tests {
             seed: Some(42),
             timeout: 300,
             include_datapoint_input_for_mutation: false,
+            retries: tensorzero_core::utils::retries::RetryConfig::default(),
         }
     }
 

@@ -485,6 +485,7 @@ async fn process_gepa_iteration(
         iteration as usize,
         variant_prefix,
         parent_variant_name,
+        gepa_config.retries,
     );
 
     tracing::info!("Created mutation variant: {}", child_variant_name);
@@ -543,9 +544,11 @@ fn initialize_pareto_frontier(
                 })
             })?;
 
-            if let Some(chat_config) =
-                utils::extract_chat_completion_from_variant_info(variant_info, variant_name)
-            {
+            if let Some(chat_config) = utils::extract_chat_completion_from_variant_info(
+                variant_info,
+                variant_name,
+                config.retries,
+            ) {
                 frontier.insert(variant_name.clone(), chat_config);
                 tracing::info!("Using initial variant: {}", variant_name);
             }
@@ -553,9 +556,11 @@ fn initialize_pareto_frontier(
     } else {
         // Use all ChatCompletion variants from the function
         for (variant_name, variant_info) in variants {
-            if let Some(chat_config) =
-                utils::extract_chat_completion_from_variant_info(variant_info, variant_name)
-            {
+            if let Some(chat_config) = utils::extract_chat_completion_from_variant_info(
+                variant_info,
+                variant_name,
+                config.retries,
+            ) {
                 frontier.insert(variant_name.clone(), chat_config);
             }
         }
