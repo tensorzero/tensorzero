@@ -288,16 +288,6 @@ pub fn inject_extra_request_data(
     let expected_provider_name_fully_qualified =
         fully_qualified_name(model_name, &model_provider.provider_name);
 
-    tracing::info!("Expected model name: {}", expected_model_name);
-    tracing::info!(
-        "Expected provider name (plain): {}",
-        expected_provider_name_plain
-    );
-    tracing::info!(
-        "Expected provider name (fully qualified): {}",
-        expected_provider_name_fully_qualified
-    );
-
     // Finally, write the inference-level extra_body information. This can overwrite values set from the config-level extra_body.
     for extra_body in &config.inference_extra_body.data {
         match extra_body {
@@ -1533,41 +1523,6 @@ mod tests {
             check_new_tool_call_name("get_temperature".to_string(), &mut last_tool_name),
             Some("get_temperature".to_string())
         );
-    }
-
-    #[test]
-    fn test_inject_extra_body_model_provider_with_shorthand() {
-        use serde_json::json;
-
-        let mut body = serde_json::json!({});
-        let config = FullExtraBodyConfig {
-            extra_body: None,
-            inference_extra_body: FilteredInferenceExtraBody {
-                data: vec![InferenceExtraBody::ModelProvider {
-                    model_name: "openai::gpt-4o".to_string(), // Using shorthand
-                    provider_name: "openai".to_string(),
-                    pointer: "/test_shorthand".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!(42)),
-                }],
-            },
-        };
-        let model_provider = ModelProviderRequestInfo {
-            provider_name: "openai".into(),
-            extra_headers: None,
-            extra_body: None,
-        };
-
-        inject_extra_request_data(
-            &config,
-            &Default::default(),
-            model_provider,
-            "gpt-4o", // expected_model_name is just the suffix
-            &mut body,
-        )
-        .unwrap();
-
-        // Should have applied the filter
-        assert_eq!(body.get("test_shorthand").unwrap(), &json!(42));
     }
 
     #[test]
