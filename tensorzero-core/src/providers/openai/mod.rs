@@ -58,7 +58,9 @@ use crate::providers::openai::responses::{
     OpenAIResponsesInputMessage, OpenAIResponsesInputMessageContent, OpenAIResponsesRequest,
     OpenAIResponsesResponse,
 };
-use crate::tool::{ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{
+    ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig,
+};
 
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
@@ -1505,6 +1507,38 @@ pub async fn prepare_openai_messages<'a>(
     Ok(openai_messages)
 }
 
+/// Helper function to prepare allowed_tools constraint when dynamic allowed_tools are set.
+/// This returns the AllowedToolsChoice struct with the appropriate mode and tool references.
+///
+/// This is shared logic across OpenAI-compatible providers (OpenAI, Groq, OpenRouter).
+pub(crate) fn prepare_allowed_tools_constraint<'a>(
+    tool_config: &'a ToolCallConfig,
+) -> Option<AllowedToolsChoice<'a>> {
+    let allowed_tools_list = tool_config.allowed_tools.as_dynamic_allowed_tools()?;
+
+    // Construct the OpenAI spec-compliant allowed_tools structure
+    let mode = match &tool_config.tool_choice {
+        ToolChoice::Required => AllowedToolsMode::Required,
+        _ => AllowedToolsMode::Auto,
+    };
+
+    let tool_refs: Vec<ToolReference> = allowed_tools_list
+        .iter()
+        .map(|name| ToolReference {
+            r#type: OpenAIToolType::Function,
+            function: SpecificToolFunction { name },
+        })
+        .collect();
+
+    Some(AllowedToolsChoice {
+        r#type: "allowed_tools",
+        allowed_tools: AllowedToolsConstraint {
+            mode,
+            tools: tool_refs,
+        },
+    })
+}
+
 /// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
 /// Otherwise convert the tool choice and tools to OpenAI format
 pub(super) fn prepare_openai_tools<'a>(
@@ -1519,35 +1553,13 @@ pub(super) fn prepare_openai_tools<'a>(
             let tools = Some(tool_config.tools_available().map(Into::into).collect());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
 
-            // Check if we need to construct an AllowedToolsChoice variant
-            let allowed_tools_list = tool_config.allowed_tools.as_dynamic_allowed_tools();
-
-            let tool_choice = if let Some(allowed_tool_names) = allowed_tools_list {
-                // Construct the OpenAI spec-compliant allowed_tools structure
-                let mode = match &tool_config.tool_choice {
-                    ToolChoice::Required => AllowedToolsMode::Required,
-                    _ => AllowedToolsMode::Auto,
+            let tool_choice =
+                if let Some(allowed_tools_choice) = prepare_allowed_tools_constraint(tool_config) {
+                    Some(OpenAIToolChoice::AllowedTools(allowed_tools_choice))
+                } else {
+                    // No allowed_tools constraint, use regular tool_choice
+                    Some((&tool_config.tool_choice).into())
                 };
-
-                let tool_refs: Vec<ToolReference> = allowed_tool_names
-                    .iter()
-                    .map(|name| ToolReference {
-                        r#type: OpenAIToolType::Function,
-                        function: SpecificToolFunction { name },
-                    })
-                    .collect();
-
-                Some(OpenAIToolChoice::AllowedTools(AllowedToolsChoice {
-                    r#type: "allowed_tools",
-                    allowed_tools: AllowedToolsConstraint {
-                        mode,
-                        tools: tool_refs,
-                    },
-                }))
-            } else {
-                // No allowed_tools constraint, use regular tool_choice
-                Some((&tool_config.tool_choice).into())
-            };
 
             (tools, tool_choice, parallel_tool_calls)
         }

@@ -39,10 +39,10 @@ use crate::providers::helpers::{
 };
 
 // Import unified OpenAI types for allowed_tools support
+#[cfg(test)]
+use super::openai::AllowedToolsMode;
 use super::openai::{
-    AllowedToolsChoice as OpenAIAllowedToolsChoice,
-    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode, OpenAIToolType,
-    SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
+    prepare_allowed_tools_constraint, AllowedToolsChoice as OpenAIAllowedToolsChoice,
 };
 
 const PROVIDER_NAME: &str = "Groq";
@@ -578,35 +578,13 @@ pub(super) fn prepare_groq_tools<'a>(
             let tools = Some(tool_config.tools_available().map(Into::into).collect());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
 
-            // Check if we need to construct an AllowedToolsChoice variant
-            let allowed_tools_list = tool_config.allowed_tools.as_dynamic_allowed_tools();
-
-            let tool_choice = if let Some(allowed_tool_names) = allowed_tools_list {
-                // Construct the OpenAI spec-compliant allowed_tools structure
-                let mode = match &tool_config.tool_choice {
-                    ToolChoice::Required => AllowedToolsMode::Required,
-                    _ => AllowedToolsMode::Auto,
+            let tool_choice =
+                if let Some(allowed_tools_choice) = prepare_allowed_tools_constraint(tool_config) {
+                    Some(GroqToolChoice::AllowedTools(allowed_tools_choice))
+                } else {
+                    // No allowed_tools constraint, use regular tool_choice
+                    Some((&tool_config.tool_choice).into())
                 };
-
-                let tool_refs: Vec<ToolReference> = allowed_tool_names
-                    .iter()
-                    .map(|name| ToolReference {
-                        r#type: OpenAIToolType::Function,
-                        function: OpenAISpecificToolFunction { name },
-                    })
-                    .collect();
-
-                Some(GroqToolChoice::AllowedTools(OpenAIAllowedToolsChoice {
-                    r#type: "allowed_tools",
-                    allowed_tools: OpenAIAllowedToolsConstraint {
-                        mode,
-                        tools: tool_refs,
-                    },
-                }))
-            } else {
-                // No allowed_tools constraint, use regular tool_choice
-                Some((&tool_config.tool_choice).into())
-            };
 
             (tools, tool_choice, parallel_tool_calls)
         }
