@@ -4,4 +4,8 @@ import type { UninitializedVariantConfig } from "./UninitializedVariantConfig";
 
 export type OptimizerOutput =
   | { type: "variant"; content: UninitializedVariantConfig }
-  | { type: "model"; content: UninitializedModelConfig };
+  | { type: "model"; content: UninitializedModelConfig }
+  | {
+      type: "variants";
+      content: { [key in string]?: UninitializedVariantConfig };
+    };

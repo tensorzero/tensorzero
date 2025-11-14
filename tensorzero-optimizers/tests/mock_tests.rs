@@ -1,4 +1,5 @@
 use common::dicl::{test_dicl_workflow_with_embedded_client, test_dicl_workflow_with_http_client};
+use common::gepa::{test_gepa_workflow_with_embedded_client, test_gepa_workflow_with_http_client};
 
 mod common;
 
@@ -24,4 +25,15 @@ async fn test_embedded_slow_optimization_dicl() {
 #[tokio::test]
 async fn test_http_slow_optimization_dicl() {
     test_dicl_workflow_with_http_client().await;
+}
+
+// GEPA workflow tests
+#[tokio::test(flavor = "multi_thread")]
+async fn test_embedded_slow_optimization_gepa() {
+    test_gepa_workflow_with_embedded_client().await;
+}
+
+#[tokio::test]
+async fn test_http_slow_optimization_gepa() {
+    test_gepa_workflow_with_http_client().await;
 }

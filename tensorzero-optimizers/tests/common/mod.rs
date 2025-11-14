@@ -41,6 +41,7 @@ pub mod dicl;
 pub mod evaluations;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
+pub mod gepa;
 pub mod openai_rft;
 pub mod openai_sft;
 pub mod together_sft;

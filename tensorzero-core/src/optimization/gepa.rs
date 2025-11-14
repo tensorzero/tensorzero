@@ -207,35 +207,45 @@ impl UninitializedGEPAConfig {
 
 /// Job handle for GEPA optimization
 ///
-/// Contains the final Pareto frontier of optimized variants. GEPA optimization is
-/// synchronous, so polling immediately returns the completed results.
+/// Contains the final Pareto frontier of optimized variants or an error message.
+/// GEPA optimization is synchronous, so polling immediately returns the completed
+/// results or failure status.
 #[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct GEPAJobHandle {
-    /// Map of variant names to their configurations
-    /// This represents the final Pareto frontier of optimized variants
-    pub variant_configs: HashMap<String, UninitializedChatCompletionConfig>,
+    /// Result of the GEPA optimization - either a map of variant names to their
+    /// configurations (the Pareto frontier) or an error message
+    pub result: Result<HashMap<String, UninitializedChatCompletionConfig>, String>,
 }
 
 impl std::fmt::Display for GEPAJobHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
-        write!(f, "{json}")
+        match &self.result {
+            Ok(variants) => {
+                let json = serde_json::to_string_pretty(variants).map_err(|_| std::fmt::Error)?;
+                write!(f, "Success: {json}")
+            }
+            Err(msg) => write!(f, "Failed: {msg}"),
+        }
     }
 }
 
 // Manual PartialEq implementation since UninitializedChatCompletionConfig doesn't derive PartialEq
-// We compare based on variant names only (not the full configs)
+// We compare based on success/failure status and variant names (not the full configs)
 impl PartialEq for GEPAJobHandle {
     fn eq(&self, other: &Self) -> bool {
-        // Compare by checking if both have the same set of variant names
-        if self.variant_configs.len() != other.variant_configs.len() {
-            return false;
+        match (&self.result, &other.result) {
+            (Ok(self_variants), Ok(other_variants)) => {
+                // Compare by checking if both have the same set of variant names
+                if self_variants.len() != other_variants.len() {
+                    return false;
+                }
+                self_variants.keys().all(|k| other_variants.contains_key(k))
+            }
+            (Err(self_msg), Err(other_msg)) => self_msg == other_msg,
+            _ => false,
         }
-        self.variant_configs
-            .keys()
-            .all(|k| other.variant_configs.contains_key(k))
     }
 }
 

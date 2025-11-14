@@ -1,11 +1,14 @@
 //! Utility functions for GEPA optimization
 use std::collections::HashMap;
 
-use tensorzero_core::variant::{
-    chat_completion::{
-        ChatCompletionConfig, UninitializedChatCompletionConfig, UninitializedChatTemplate,
+use tensorzero_core::{
+    config::path::ResolvedTomlPath,
+    variant::{
+        chat_completion::{
+            ChatCompletionConfig, UninitializedChatCompletionConfig, UninitializedChatTemplate,
+        },
+        VariantConfig, VariantInfo,
     },
-    VariantConfig, VariantInfo,
 };
 
 /// Extract an `UninitializedChatCompletionConfig` from a `ChatCompletionConfig`
@@ -26,15 +29,23 @@ pub fn extract_chat_completion_config(
     // we construct it via serde (serialize HashMap, then deserialize to UninitializedChatTemplates)
     let templates = {
         let mut inner = HashMap::new();
-        for path_with_contents in config.templates().get_all_template_paths() {
-            // Use the template key as the name
-            let template_key = path_with_contents.path.get_template_key();
-            inner.insert(
-                template_key,
-                UninitializedChatTemplate {
-                    path: path_with_contents.path.clone(),
-                },
-            );
+
+        // Get all explicit template names (filters out deprecated legacy templates with no schema)
+        let template_names = config.templates().get_all_explicit_template_names();
+
+        for template_name in template_names {
+            if let Some(template_with_schema) =
+                config.templates().get_named_template(&template_name)
+            {
+                // Create a new fake path with inline content to avoid duplicate path errors
+                // when multiple variants use the same template files
+                let fake_path = ResolvedTomlPath::new_fake_path(
+                    format!("gepa_extracted/{template_name}"),
+                    template_with_schema.template.contents.clone(),
+                );
+
+                inner.insert(template_name, UninitializedChatTemplate { path: fake_path });
+            }
         }
         // Use serde to construct UninitializedChatTemplates from HashMap
         // The #[serde(flatten)] attribute makes this work correctly

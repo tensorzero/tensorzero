@@ -48,7 +48,7 @@ impl Optimizer for GEPAConfig {
         config: std::sync::Arc<Config>,
     ) -> Result<Self::Handle, Error> {
         // Run the GEPA optimization algorithm
-        let variant_configs = lib::run_gepa_optimization(
+        let result = lib::run_gepa_optimization(
             self,
             client,
             train_examples,
@@ -57,10 +57,17 @@ impl Optimizer for GEPAConfig {
             clickhouse_connection_info,
             config,
         )
-        .await?;
+        .await;
 
-        // Return a job handle containing the Pareto frontier of variants
-        Ok(GEPAJobHandle { variant_configs })
+        // Convert the result to store either success or failure
+        // For synchronous optimizers, we store the result in the handle
+        // rather than returning an error from launch()
+        let handle_result = result.map_err(|e| e.to_string());
+
+        // Return a job handle containing the result (success or failure)
+        Ok(GEPAJobHandle {
+            result: handle_result,
+        })
     }
 }
 
@@ -72,20 +79,32 @@ impl JobHandle for GEPAJobHandle {
         _credentials: &InferenceCredentials,
         _default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        // GEPA optimization is synchronous, so it's always complete once launched
-        // Return the Pareto frontier of variant configurations
-        Ok(OptimizationJobInfo::Completed {
-            output: OptimizerOutput::Variants(
-                self.variant_configs
-                    .iter()
-                    .map(|(k, v)| {
-                        (
-                            k.clone(),
-                            Box::new(UninitializedVariantConfig::ChatCompletion(v.clone())),
-                        )
-                    })
-                    .collect(),
-            ),
-        })
+        // GEPA optimization is synchronous, so the result is available immediately
+        // Check if optimization succeeded or failed
+        match &self.result {
+            Ok(variant_configs) => {
+                // Return the Pareto frontier of variant configurations
+                Ok(OptimizationJobInfo::Completed {
+                    output: OptimizerOutput::Variants(
+                        variant_configs
+                            .iter()
+                            .map(|(k, v)| {
+                                (
+                                    k.clone(),
+                                    Box::new(UninitializedVariantConfig::ChatCompletion(v.clone())),
+                                )
+                            })
+                            .collect(),
+                    ),
+                })
+            }
+            Err(error_message) => {
+                // Return failure status with the error message
+                Ok(OptimizationJobInfo::Failed {
+                    message: error_message.clone(),
+                    error: None,
+                })
+            }
+        }
     }
 }

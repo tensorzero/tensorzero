@@ -2,6 +2,7 @@
 import type { UninitializedDiclOptimizationConfig } from "./UninitializedDiclOptimizationConfig";
 import type { UninitializedFireworksSFTConfig } from "./UninitializedFireworksSFTConfig";
 import type { UninitializedGCPVertexGeminiSFTConfig } from "./UninitializedGCPVertexGeminiSFTConfig";
+import type { UninitializedGEPAConfig } from "./UninitializedGEPAConfig";
 import type { UninitializedOpenAIRFTConfig } from "./UninitializedOpenAIRFTConfig";
 import type { UninitializedOpenAISFTConfig } from "./UninitializedOpenAISFTConfig";
 import type { UninitializedTogetherSFTConfig } from "./UninitializedTogetherSFTConfig";
@@ -12,4 +13,5 @@ export type UninitializedOptimizerInfo =
   | ({ type: "openai_rft" } & UninitializedOpenAIRFTConfig)
   | ({ type: "fireworks_sft" } & UninitializedFireworksSFTConfig)
   | ({ type: "gcp_vertex_gemini_sft" } & UninitializedGCPVertexGeminiSFTConfig)
-  | ({ type: "together_sft" } & UninitializedTogetherSFTConfig);
+  | ({ type: "together_sft" } & UninitializedTogetherSFTConfig)
+  | ({ type: "gepa" } & UninitializedGEPAConfig);

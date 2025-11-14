@@ -80,8 +80,7 @@ pub async fn run_gepa_optimization(
         val_examples.len()
     );
 
-    // Build the gateway client ONCE for the entire optimization run
-    // This avoids creating ~201 gateway instances (each with background tasks)
+    // Build the gateway client once for the entire optimization run
     let gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
         config: tensorzero_config.clone(),
         clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -101,6 +100,16 @@ pub async fn run_gepa_optimization(
 
     // Initialize the Pareto frontier with baseline or provided variants
     let pareto_frontier = initialize_pareto_frontier(config, function_config)?;
+
+    // Track original variant names to filter them out at the end
+    let original_variant_names: std::collections::HashSet<String> =
+        pareto_frontier.keys().cloned().collect();
+
+    tracing::info!(
+        "Initialized with {} baseline variants: {:?}",
+        original_variant_names.len(),
+        original_variant_names
+    );
 
     // Create validation dataset for Pareto filtering
     let val_dataset_name = format!(
@@ -215,8 +224,7 @@ pub async fn run_gepa_optimization(
     tracing::info!("Initial evaluation complete");
 
     // Filter initial Pareto frontier using instance-wise dominance
-    #[expect(unused_mut)] // Will be mutated in step 7
-    let (pareto_frontier, mut frequencies) =
+    let (mut pareto_frontier, mut frequencies) =
         update_pareto_frontier(pareto_frontier, &val_scores_map, config, &tensorzero_config)?;
 
     // Update scores map
@@ -306,15 +314,69 @@ pub async fn run_gepa_optimization(
         .await?;
 
         // If mutation improved over parent, evaluate on validation and update Pareto frontier
-        if let Some((_child_variant_name, _child_variant_config)) = mutation_result {
+        if let Some((child_variant_name, child_variant_config)) = mutation_result {
             tracing::info!(
                 "Mutation '{}' improved over parent, evaluating on validation set",
-                _child_variant_name
+                child_variant_name
             );
 
-            // TODO: Step 7a: Evaluate child on validation set
-            // TODO: Step 7b: Add to val_scores_map
-            // TODO: Step 7c: Update Pareto frontier
+            // Step 7a: Evaluate child on validation set
+            let child_val_results = evaluate_variant(EvaluateVariantParams {
+                gateway_client: gateway_client.clone(),
+                clickhouse_connection_info: clickhouse_connection_info.clone(),
+                tensorzero_config: Arc::clone(&tensorzero_config),
+                evaluation_config: Arc::clone(&evaluation_config),
+                evaluation_name: config.evaluation_name.clone(),
+                variant_name: child_variant_name.clone(),
+                variant_config: child_variant_config.clone(),
+                dataset_name: val_dataset_name.clone(),
+                concurrency: config.max_concurrency as usize,
+            })
+            .await?;
+
+            tracing::info!(
+                "Child validation evaluation complete: {} datapoints",
+                child_val_results.evaluation_infos.len()
+            );
+
+            // Step 7b: Add child scores to val_scores_map
+            let child_scores = child_val_results.per_datapoint_scores();
+            val_scores_map.insert(child_variant_name.clone(), child_scores);
+
+            // Step 7c: Update Pareto frontier with new child variant
+            // First add child to frontier HashMap
+            pareto_frontier.insert(child_variant_name.clone(), child_variant_config);
+
+            // Re-filter Pareto frontier with updated val_scores_map
+            let (new_frontier, new_frequencies) = update_pareto_frontier(
+                pareto_frontier,
+                &val_scores_map,
+                config,
+                &tensorzero_config,
+            )?;
+
+            // Update frontier and frequencies
+            pareto_frontier = new_frontier;
+            frequencies = new_frequencies;
+
+            // Keep val_scores_map in sync with filtered frontier
+            val_scores_map.retain(|variant_name, _| pareto_frontier.contains_key(variant_name));
+
+            // Assert consistency
+            debug_assert_eq!(
+                frequencies.keys().collect::<std::collections::HashSet<_>>(),
+                val_scores_map
+                    .keys()
+                    .collect::<std::collections::HashSet<_>>(),
+                "frequencies and val_scores_map must have the same keys after Pareto update"
+            );
+
+            tracing::info!(
+                "Pareto frontier updated: {} variants (child {} retained: {})",
+                pareto_frontier.len(),
+                child_variant_name,
+                pareto_frontier.contains_key(&child_variant_name)
+            );
         } else {
             tracing::debug!("Mutation did not improve over parent, skipping validation");
         }
@@ -326,9 +388,30 @@ pub async fn run_gepa_optimization(
         );
     }
 
-    // Return the final Pareto frontier
+    // Filter out original baseline variants from final Pareto frontier
     tracing::info!(
-        "GEPA optimization complete. Final Pareto frontier size: {}",
+        "GEPA optimization complete. Filtering out {} original baseline variants",
+        original_variant_names.len()
+    );
+
+    pareto_frontier.retain(|name, _| !original_variant_names.contains(name));
+
+    // Sync val_scores_map after filtering
+    val_scores_map.retain(|name, _| pareto_frontier.contains_key(name));
+
+    // Return error if no GEPA-generated variants survived
+    if pareto_frontier.is_empty() {
+        return Err(Error::new(ErrorDetails::InternalError {
+            message: format!(
+                "GEPA optimization failed to produce any variants that survived Pareto filtering. \
+                All {} generated variants were dominated by or equal to baseline variants.",
+                config.max_iterations
+            ),
+        }));
+    }
+
+    tracing::info!(
+        "Final Pareto frontier contains {} GEPA-evolved variants (originals filtered out)",
         pareto_frontier.len()
     );
 
@@ -511,18 +594,4 @@ fn initialize_pareto_frontier(
     }
 
     Ok(frontier)
-}
-
-/// Convert candidate variants to output format for the job handle
-/// This is the final step before returning the Pareto frontier
-#[expect(dead_code)]
-fn convert_variants_to_output(
-    variants: &HashMap<String, UninitializedChatCompletionConfig>,
-) -> HashMap<String, UninitializedChatCompletionConfig> {
-    // TODO: Implement conversion if needed
-    // For now, the variants are already in the correct format (UninitializedChatCompletionConfig)
-    // This function exists as a placeholder in case we need to do any transformations
-    // or validation before returning the final results
-
-    variants.clone()
 }
