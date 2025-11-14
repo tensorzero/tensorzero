@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   ui-tests:
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
 
     strategy:
