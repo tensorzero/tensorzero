@@ -37,7 +37,7 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 #[ts(export)]
 pub struct RateLimitingConfig {
     rules: Vec<RateLimitingConfigRule>,
-    enabled: bool, // TODO (#3643): default true, Postgres required if rules is nonempty.
+    enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,7 +45,7 @@ pub struct UninitializedRateLimitingConfig {
     #[serde(default)]
     rules: Vec<RateLimitingConfigRule>,
     #[serde(default = "default_enabled")]
-    enabled: bool, // TODO (#3643): default true, Postgres required if rules is nonempty.
+    enabled: bool,
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {

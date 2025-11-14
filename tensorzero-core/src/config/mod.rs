@@ -1,4 +1,5 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
+use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
@@ -100,6 +101,8 @@ pub struct Config {
     pub optimizers: HashMap<String, OptimizerInfo>,
     pub postgres: PostgresConfig,
     pub rate_limiting: RateLimitingConfig,
+    #[serde(skip)]
+    pub http_client: TensorzeroHttpClient,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -745,6 +748,7 @@ impl Config {
             optimizers: Default::default(),
             postgres: Default::default(),
             rate_limiting: Default::default(),
+            http_client: Default::default(),
         }
     }
 
@@ -804,6 +808,8 @@ impl Config {
             .gateway
             .load(object_store_info.as_ref())?;
 
+        let http_client = TensorzeroHttpClient::new(gateway_config.global_outbound_http_timeout)?;
+
         // Load built-in functions first
         let mut functions = built_in::get_all_built_in_functions()?;
 
@@ -845,6 +851,7 @@ impl Config {
                         &name,
                         &uninitialized_config.provider_types,
                         &provider_type_default_credentials,
+                        http_client.clone(),
                     )
                     .await
                     .map(|c| (name, c))
@@ -860,6 +867,7 @@ impl Config {
                     .load(
                         &uninitialized_config.provider_types,
                         &provider_type_default_credentials,
+                        http_client.clone(),
                     )
                     .await
                     .map(|c| (name, c))
@@ -915,6 +923,7 @@ impl Config {
             optimizers,
             postgres: uninitialized_config.postgres,
             rate_limiting: uninitialized_config.rate_limiting.try_into()?,
+            http_client,
         };
 
         // Initialize the templates
@@ -927,7 +936,7 @@ impl Config {
                     })
                 })?.to_owned())
             } else if let Some(single_file) = span_map.get_single_file() {
-                tracing::warn!("Deprecation warning: `[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
+                crate::utils::deprecation_warning("`[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
                 Some(
                     single_file
                         .parent()
@@ -1753,11 +1762,11 @@ impl PathWithContents {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[serde(default)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct PostgresConfig {
+    pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,
 }
@@ -1769,6 +1778,7 @@ fn default_connection_pool_size() -> u32 {
 impl Default for PostgresConfig {
     fn default() -> Self {
         Self {
+            enabled: None,
             connection_pool_size: 20,
         }
     }

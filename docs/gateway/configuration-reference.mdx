@@ -7,7 +7,7 @@ The configuration file is the backbone of TensorZero.
 It defines the behavior of the gateway, including the models and their providers, functions and their variants, tools, metrics, and more.
 Developers express the behavior of LLM calls by defining the relevant prompt templates, schemas, and other parameters in this configuration file.
 
-The configuration file is a <a href="https://toml.io/en/" target="_blank">TOML</a> file with a few major sections (TOML tables): `gateway`, `clickhouse`, `models`, `model_providers`, `functions`, `variants`, `tools`, `metrics`, `rate_limiting`, and `object_storage`.
+The configuration file is a <a href="https://toml.io/en/" target="_blank">TOML</a> file with a few major sections (TOML tables): `gateway`, `clickhouse`, `postgres`, `models`, `model_providers`, `functions`, `variants`, `tools`, `metrics`, `rate_limiting`, and `object_storage`.
 
 ## `[gateway]`
 
@@ -4217,6 +4217,32 @@ If you set `type = "disabled"`, the TensorZero Gateway will not store or retriev
 There are no additional fields available for this type.
 
 </Accordion>
+
+## `[postgres]`
+
+The `[postgres]` section defines the configuration for PostgreSQL connectivity.
+
+PostgreSQL is required for certain TensorZero features including [rate limiting](/operations/enforce-custom-rate-limits/) and [Track-and-Stop experimentation](/experimentation/run-adaptive-ab-tests/).
+You can connect to PostgreSQL by setting the `TENSORZERO_POSTGRES_URL` environment variable.
+
+### `connection_pool_size`
+
+- **Type:** integer
+- **Required:** no (default: `20`)
+
+Defines the maximum number of connections in the PostgreSQL connection pool.
+
+### `enabled`
+
+- **Type:** boolean
+- **Required:** no (default: `null`)
+
+Enable PostgreSQL connectivity.
+If `true`, the gateway will throw an error on startup if it fails to connect to PostgreSQL (requires `TENSORZERO_POSTGRES_URL` environment variable).
+If `false`, the gateway will not use PostgreSQL even if the `TENSORZERO_POSTGRES_URL` environment variable is set.
+If omitted, the gateway will connect to PostgreSQL if the `TENSORZERO_POSTGRES_URL` environment variable is set, otherwise it will disable PostgreSQL with a warning.
+
+If you have features that require PostgreSQL (rate limiting or Track-and-Stop experimentation) configured but set `postgres.enabled = false` or don't provide the `TENSORZERO_POSTGRES_URL` environment variable, the gateway will fail to start with a configuration error.
 
 ## `[rate_limiting]`
 
