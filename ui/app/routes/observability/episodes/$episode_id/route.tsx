@@ -26,7 +26,6 @@ import {
   SectionHeader,
 } from "~/components/layout/PageLayout";
 import { addHumanFeedback } from "~/utils/tensorzero.server";
-import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
@@ -48,54 +47,93 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const afterInference = url.searchParams.get("afterInference");
   const beforeFeedback = url.searchParams.get("beforeFeedback");
   const afterFeedback = url.searchParams.get("afterFeedback");
-  const pageSize = Number(url.searchParams.get("pageSize")) || 10;
+  const limit = Number(url.searchParams.get("limit")) || 10;
   const newFeedbackId = url.searchParams.get("newFeedbackId");
-  if (pageSize > 100) {
-    throw data("Page size cannot exceed 100", { status: 400 });
+  if (limit > 100) {
+    throw data("Limit cannot exceed 100", { status: 400 });
   }
 
   const dbClient = await getNativeDatabaseClient();
 
   // If there is a freshly inserted feedback, ClickHouse may take some time to
-  // update the feedback table as it is eventually consistent.
+  // update the feedback table and materialized views as it is eventually consistent.
   // In this case, we poll for the feedback item until it is found but time out and log a warning.
+  // When polling for new feedback, we also need to query feedbackBounds and latestFeedbackByMetric
+  // AFTER the polling completes to ensure the materialized views have caught up.
   const feedbackDataPromise = newFeedbackId
-    ? pollForFeedbackItem(episode_id, newFeedbackId, pageSize)
+    ? pollForFeedbackItem(episode_id, newFeedbackId, limit)
     : dbClient.queryFeedbackByTargetId({
         target_id: episode_id,
         before: beforeFeedback || undefined,
         after: afterFeedback || undefined,
-        page_size: pageSize,
+        limit,
       });
 
-  const [
-    inferences,
+  let inferences,
     inference_bounds,
     feedbacks,
     feedbackBounds,
     num_inferences,
     num_feedbacks,
-    latestFeedbackByMetric,
-  ] = await Promise.all([
-    queryInferenceTableByEpisodeId({
-      episode_id,
-      before: beforeInference ?? undefined,
-      after: afterInference ?? undefined,
-      page_size: pageSize,
-    }),
-    queryInferenceTableBoundsByEpisodeId({
-      episode_id,
-    }),
-    feedbackDataPromise,
-    dbClient.queryFeedbackBoundsByTargetId({
-      target_id: episode_id,
-    }),
-    countInferencesForEpisode(episode_id),
-    dbClient.countFeedbackByTargetId({
-      target_id: episode_id,
-    }),
-    queryLatestFeedbackIdByMetric({ target_id: episode_id }),
-  ]);
+    latestFeedbackByMetric;
+
+  if (newFeedbackId) {
+    // When there's new feedback, wait for polling to complete before querying
+    // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
+    [inferences, inference_bounds, feedbacks, num_inferences, num_feedbacks] =
+      await Promise.all([
+        queryInferenceTableByEpisodeId({
+          episode_id,
+          before: beforeInference ?? undefined,
+          after: afterInference ?? undefined,
+          limit,
+        }),
+        queryInferenceTableBoundsByEpisodeId({
+          episode_id,
+        }),
+        feedbackDataPromise,
+        countInferencesForEpisode(episode_id),
+        dbClient.countFeedbackByTargetId({
+          target_id: episode_id,
+        }),
+      ]);
+
+    // Query these after polling completes to avoid race condition with materialized views
+    [feedbackBounds, latestFeedbackByMetric] = await Promise.all([
+      dbClient.queryFeedbackBoundsByTargetId({ target_id: episode_id }),
+      queryLatestFeedbackIdByMetric({ target_id: episode_id }),
+    ]);
+  } else {
+    // Normal case: execute all queries in parallel
+    [
+      inferences,
+      inference_bounds,
+      feedbacks,
+      feedbackBounds,
+      num_inferences,
+      num_feedbacks,
+      latestFeedbackByMetric,
+    ] = await Promise.all([
+      queryInferenceTableByEpisodeId({
+        episode_id,
+        before: beforeInference ?? undefined,
+        after: afterInference ?? undefined,
+        limit,
+      }),
+      queryInferenceTableBoundsByEpisodeId({
+        episode_id,
+      }),
+      feedbackDataPromise,
+      dbClient.queryFeedbackBoundsByTargetId({
+        target_id: episode_id,
+      }),
+      countInferencesForEpisode(episode_id),
+      dbClient.countFeedbackByTargetId({
+        target_id: episode_id,
+      }),
+      queryLatestFeedbackIdByMetric({ target_id: episode_id }),
+    ]);
+  }
   if (inferences.length === 0) {
     throw data(`No inferences found for episode ${episode_id}.`, {
       status: 404,
@@ -203,10 +241,10 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const { toast } = useToast();
   useEffect(() => {
     if (newFeedbackId) {
-      toast({
-        title: "Feedback Added",
-      });
+      const { dismiss } = toast.success({ title: "Feedback Added" });
+      return () => dismiss({ immediate: true });
     }
+    return;
   }, [newFeedbackId, toast]);
   // These are swapped because the table is sorted in descending order
   const disablePreviousFeedbackPage =
@@ -303,7 +341,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           />
         </SectionLayout>
       </SectionsGroup>
-      <Toaster />
     </PageLayout>
   );
 }

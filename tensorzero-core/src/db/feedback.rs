@@ -64,7 +64,7 @@ pub trait FeedbackQueries {
         target_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<FeedbackRow>, Error>;
 
     /// Queries feedback bounds for a given target ID
@@ -81,7 +81,7 @@ pub trait FeedbackQueries {
         target_id: Uuid,
         before: Option<Uuid>,
         after: Option<Uuid>,
-        page_size: Option<u32>,
+        limit: Option<u32>,
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error>;
 }
 

@@ -7,9 +7,14 @@ use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use dataset::query_dataset;
 use evaluators::{evaluate_inference, EvaluateInferenceParams};
-use helpers::{get_cache_options, get_tool_params_args};
+use helpers::get_cache_options;
 use serde::{Deserialize, Serialize};
-use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
+
+// Public re-exports for external consumers
+pub use stats::{
+    mean, std_deviation, EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate,
+    EvaluatorStats,
+};
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
@@ -17,7 +22,7 @@ use tensorzero_core::client::{
     InferenceResponse,
 };
 use tensorzero_core::client::{ClientInput, StoragePath};
-use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize};
+use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo};
 use tensorzero_core::error::Error;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::inference::types::stored_input::StoragePathResolver;
@@ -90,6 +95,16 @@ pub struct Clients {
     pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
+/// Specifies which variant to use for evaluation.
+/// Either a variant name from the config, or a dynamic variant configuration.
+#[derive(Clone, Debug)]
+pub enum EvaluationVariant {
+    /// Use a variant by name from the config file
+    Name(String),
+    /// Use a dynamically provided variant configuration
+    Info(Box<UninitializedVariantInfo>),
+}
+
 /// Parameters for running an evaluation using run_evaluation_core
 /// This struct encapsulates all the necessary components for evaluation execution
 pub struct EvaluationCoreArgs {
@@ -111,8 +126,9 @@ pub struct EvaluationCoreArgs {
     /// Name of the dataset to run on.
     pub dataset_name: String,
 
-    /// Name of the variant to run.
-    pub variant_name: String,
+    /// Variant to use for evaluation.
+    /// Either a variant name from the config file, or a dynamic variant configuration.
+    pub variant: EvaluationVariant,
 
     /// Number of concurrent requests to make.
     pub concurrency: usize,
@@ -215,7 +231,7 @@ pub async fn run_evaluation(
         clickhouse_client: clickhouse_client.clone(),
         config,
         dataset_name: args.dataset_name,
-        variant_name: args.variant_name,
+        variant: EvaluationVariant::Name(args.variant_name),
         evaluation_name: args.evaluation_name,
         evaluation_run_id,
         inference_cache: args.inference_cache,
@@ -332,7 +348,7 @@ pub async fn run_evaluation(
 /// rather than failing the entire evaluation. Error messages include context:
 /// - Inference errors: Include the datapoint_id
 /// - Evaluation errors: Include both the inference_id and datapoint_id
-#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant = ?args.variant, concurrency = %args.concurrency))]
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
 ) -> Result<EvaluationStreamResult> {
@@ -379,7 +395,7 @@ pub async fn run_evaluation_core_streaming(
     .await?;
     info!(dataset_size = dataset.len(), "Dataset loaded successfully");
     let dataset_name = Arc::new(args.dataset_name);
-    let variant_name = Arc::new(args.variant_name);
+    let variant = Arc::new(args.variant);
     let evaluation_name = Arc::new(args.evaluation_name);
     let dataset_len = dataset.len();
     let mut task_id_to_datapoint_id = HashMap::new();
@@ -401,8 +417,8 @@ pub async fn run_evaluation_core_streaming(
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
         let clients_clone = clients.clone();
-        let variant_name = variant_name.clone();
-        let function_config = function_config.clone();
+        let config = args.config.clone();
+        let variant = variant.clone();
         let evaluation_config = evaluation_config.clone();
         let dataset_name = dataset_name.clone();
         let function_name = inference_evaluation_config.function_name.clone();
@@ -411,18 +427,21 @@ pub async fn run_evaluation_core_streaming(
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let inference_cache = args.inference_cache;
+        // Skip feedback for dynamic variants (they're not production-ready)
+        // Named variants: send_feedback=true, Dynamic variants: send_feedback=false
+        let send_feedback = !matches!(variant.as_ref(), EvaluationVariant::Info(_));
         let abort_handle = join_set.spawn(async move {
             let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?)?);
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
                     clients: &clients_clone,
                     function_name: &function_name,
-                    variant_name: &variant_name,
+                    variant: &variant,
                     evaluation_run_id: evaluation_run_id_clone,
                     dataset_name: &dataset_name,
                     datapoint: &datapoint,
                     evaluation_name: &evaluation_name,
-                    function_config: &function_config,
+                    config: &config,
                     input: &input,
                     inference_cache,
                 })
@@ -440,6 +459,7 @@ pub async fn run_evaluation_core_streaming(
                     clients: clients_clone.clone(),
                     evaluation_run_id: evaluation_run_id_clone,
                     inference_cache,
+                    send_feedback,
                 })
                 .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
             debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
@@ -542,36 +562,49 @@ pub fn format_cutoff_failures(failures: &[(String, f32, f32)]) -> String {
 struct InferDatapointParams<'a> {
     clients: &'a Clients,
     function_name: &'a str,
-    variant_name: &'a str,
+    variant: &'a EvaluationVariant,
     evaluation_run_id: Uuid,
     dataset_name: &'a str,
     datapoint: &'a StoredDatapoint,
     input: &'a ClientInput,
     evaluation_name: &'a str,
-    function_config: &'a FunctionConfig,
+    config: &'a Config,
     inference_cache: CacheEnabledMode,
 }
 
-#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name, variant_name = %params.variant_name))]
+#[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), function_name = %params.function_name))]
 async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceResponse> {
     let InferDatapointParams {
         clients,
         function_name,
-        variant_name,
+        variant,
         evaluation_run_id,
         dataset_name,
         datapoint,
         evaluation_name,
-        function_config,
+        config,
         input,
         inference_cache,
     } = params;
 
+    // Extract variant_name, dynamic_variant_config, and dryrun from the variant enum
+    let (variant_name, dynamic_variant_config, dryrun) = match variant {
+        EvaluationVariant::Name(name) => (Some(name.clone()), None, false),
+        EvaluationVariant::Info(info) => {
+            // When using dynamic variant config, we must set dryrun=true to bypass
+            // the safety check that prevents production use of unregistered variants.
+            // For evaluations, this is safe because we're testing candidate variants.
+            (None, Some((**info).clone()), true)
+        }
+    };
+
     debug!("Processing tool parameters");
+    let function_config = config.get_function(function_name)?;
     let dynamic_tool_params = match datapoint.tool_call_config() {
         Some(tool_params) => {
             debug!("Tool parameters found, processing");
-            get_tool_params_args(tool_params, function_config).await
+            let function_config = config.get_function(function_name)?;
+            function_config.database_insert_to_dynamic_tool_params(tool_params.clone())
         }
         None => {
             debug!("No tool parameters found");
@@ -579,7 +612,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         }
     };
     debug!("Processing output schema");
-    let output_schema = match (datapoint.output_schema(), function_config) {
+    let output_schema = match (datapoint.output_schema(), &**function_config) {
         // If the datapoint has an output schema, use it only in the case where it is not the same as the output schema of the function
         (Some(output_schema), FunctionConfig::Json(json_function_config)) => {
             if output_schema == &json_function_config.output_schema.value {
@@ -600,7 +633,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
     };
     let params = ClientInferenceParams {
         function_name: Some(function_name.to_string()),
-        variant_name: Some(variant_name.to_string()),
+        variant_name,
         input: input.clone(),
         tags: HashMap::from([
             (
@@ -624,7 +657,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         output_schema: output_schema.cloned(),
         credentials: HashMap::new(),
         cache_options: get_cache_options(inference_cache),
-        dryrun: Some(false),
+        dryrun: Some(dryrun),
         episode_id: None,
         model_name: None,
         stream: Some(false),
@@ -633,7 +666,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         internal: true,
         extra_body: Default::default(),
         extra_headers: Default::default(),
-        internal_dynamic_variant_config: None,
+        internal_dynamic_variant_config: dynamic_variant_config.clone(),
         otlp_traces_extra_headers: HashMap::new(),
     };
     debug!("Making inference request");

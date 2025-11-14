@@ -13,11 +13,11 @@ use crate::config::Config;
 use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
-use crate::serde_util::{deserialize_defaulted_string, deserialize_json_string};
+use crate::serde_util::deserialize_json_string;
 use crate::stored_inference::{
     StoredChatInferenceDatabase, StoredInferenceDatabase, StoredJsonInference,
 };
-use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::{deserialize_tool_info, ToolCallConfigDatabaseInsert};
 
 #[derive(Debug, Deserialize)]
 pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
@@ -32,7 +32,7 @@ pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<String>,
-    #[serde(deserialize_with = "deserialize_defaulted_string")]
+    #[serde(flatten, deserialize_with = "deserialize_tool_info")]
     pub tool_params: ToolCallConfigDatabaseInsert,
     pub tags: HashMap<String, String>,
 }

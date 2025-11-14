@@ -155,10 +155,10 @@ export async function action({ request }: ActionFunctionArgs) {
       }
     } else if (action === "rename") {
       await renameDatapoint({
-        functionType: functionType,
         datasetName: parsedFormData.dataset_name,
-        datapoint: parsedFormData,
-        newName: parsedFormData.name || "",
+        datapointId: parsedFormData.id,
+        // Explicitly set to null to unset the name
+        name: parsedFormData.name ?? null,
       });
       return data({ success: true });
     }

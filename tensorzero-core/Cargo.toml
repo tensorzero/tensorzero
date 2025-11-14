@@ -4,6 +4,7 @@ version.workspace = true
 rust-version.workspace = true
 edition = "2021"
 license.workspace = true
+exclude = ["tests/", "fixtures/"]
 
 
 [features]
@@ -16,18 +17,6 @@ pyo3 = ["dep:pyo3"]
 [[test]]
 name = "e2e"
 path = "tests/e2e/tests.rs"
-required-features = ["e2e_tests"]
-
-# Runs live optimizations tests (which start actual SFT jobs and poll them)
-[[test]]
-name = "optimization-live"
-path = "tests/optimization/live_tests.rs"
-required-features = ["optimization_tests"]
-
-# Runs mock optimizations tests (which use a mock-inference-provider server)
-[[test]]
-name = "optimization-mock"
-path = "tests/optimization/mock_tests.rs"
 required-features = ["e2e_tests"]
 
 [lints]
@@ -82,7 +71,6 @@ http = { workspace = true }
 serde_path_to_error = { workspace = true }
 sha2 = "0.10.9"
 strum = { version = "0.27.1", features = ["derive"] }
-strum_macros = "0.27.1"
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 toml = { workspace = true }
@@ -103,7 +91,6 @@ aws-sdk-sagemakerruntime = { version = "1.91.0", features = [
 ], default-features = false }
 aws-smithy-runtime-api = "1.9.1"
 eventsource-stream = "0.2.3"
-scoped-tls = "1.0.1"
 opentelemetry_sdk = "0.31.0"
 opentelemetry = "0.31.0"
 tracing-opentelemetry = "0.32.0"
@@ -118,10 +105,8 @@ tracing-futures = { version = "0.2.5", features = ["futures-03"] }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
     "http",
 ] }
-tower-http = { workspace = true }
-tower-layer = "0.3.3"
 pyo3 = { workspace = true, optional = true }
-google-cloud-auth = "1.1.0"
+google-cloud-auth = { workspace = true }
 mime = { workspace = true }
 mime_guess = "2.0.5"
 indexmap = "2.12.0"
@@ -145,7 +130,7 @@ urlencoding = "2.1.3"
 http-body = "1.0.1"
 tensorzero-auth = { path = "../internal/tensorzero-auth" }
 git2 = { workspace = true }
-tempfile = { version = "3.21.0" }
+schemars = { workspace = true, features = ["uuid1"] }
 
 [dev-dependencies]
 tempfile = "3.21.0"
@@ -153,14 +138,11 @@ rand_distr = "0.5.1"
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 paste = "1.0.15"
 base64 = "0.22.1"
-aws-credential-types = { version = "1.2.2", features = [
-    "hardcoded-credentials",
-] }
+tensorzero-derive = { path = "../internal/tensorzero-derive" }
 http-body-util = "0.1.3"
 image = "0.25.6"
 gag = "1.0.0"
 log = "0.4.28"
-tracing-core = "0.1.34"
 mockall = "0.13"
 
 [build-dependencies]

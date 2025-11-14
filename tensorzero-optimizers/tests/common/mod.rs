@@ -2,12 +2,11 @@
 use base64::Engine;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tensorzero_core::rate_limiting::ScopeInfo;
+use tensorzero_core::{rate_limiting::ScopeInfo, tool::InferenceResponseToolCall};
 use tokio::time::{sleep, Duration};
+use tracing_subscriber::{self, EnvFilter};
 use url::Url;
 use uuid::Uuid;
-
-use tracing_subscriber::{self, EnvFilter};
 
 use tensorzero::{
     ClientExt, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
@@ -30,22 +29,23 @@ use tensorzero_core::{
         Text,
     },
     model_table::ProviderTypeDefaultCredentials,
-    optimization::{
-        JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
-    },
+    optimization::{OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerInfo},
     stored_inference::StoredOutput,
-    tool::{DynamicToolParams, InferenceResponseToolCall, Tool, ToolCall, ToolChoice, ToolResult},
+    tool::{ClientSideFunctionTool, DynamicToolParams, ToolCall, ToolChoice, ToolResult},
     variant::JsonMode,
 };
+use tensorzero_optimizers::{JobHandle, Optimizer};
 
 pub mod dicl;
+pub mod evaluations;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
 pub mod openai_rft;
 pub mod openai_sft;
 pub mod together_sft;
 
-static FERRIS_PNG: &[u8] = include_bytes!("../../e2e/providers/ferris.png");
+static FERRIS_PNG: &[u8] =
+    include_bytes!("../../../tensorzero-core/tests/e2e/providers/ferris.png");
 
 fn use_mock_inference_provider() -> bool {
     std::env::var("TENSORZERO_USE_MOCK_INFERENCE_PROVIDER").is_ok()
@@ -83,7 +83,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
 
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("tests/e2e/tensorzero.toml");
+    config_path.push("../tensorzero-core/tests/e2e/tensorzero.toml");
 
     // Create an embedded client so that we run migrations
     let tensorzero_client =
@@ -119,7 +119,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             val_examples,
             &credentials,
             &clickhouse,
-            &config,
+            Arc::new(config),
         )
         .await
         .unwrap();
@@ -160,6 +160,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                     "test-fine-tuned-model",
                     &ProviderTypesConfig::default(),
                     &ProviderTypeDefaultCredentials::default(),
+                    TensorzeroHttpClient::new_testing().unwrap(),
                 )
                 .await
                 .unwrap();
@@ -437,7 +438,7 @@ fn generate_tool_call_example() -> RenderedSample {
         stored_output: Some(StoredOutput::Chat(inference_response_tool_call)),
         tool_params: DynamicToolParams {
             allowed_tools: None,
-            additional_tools: Some(vec![Tool {
+            additional_tools: Some(vec![ClientSideFunctionTool {
                 name: "get_weather".to_string(),
                 description: "Get the weather for a location".to_string(),
                 parameters: serde_json::json!({
@@ -454,7 +455,7 @@ fn generate_tool_call_example() -> RenderedSample {
             }]),
             tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
         },
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
@@ -493,6 +494,7 @@ fn generate_image_example() -> RenderedSample {
                                 ).unwrap(),
                             },
                             detail: None,
+                            filename: None,
                         },
                         data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
                     })),
@@ -518,6 +520,7 @@ fn generate_image_example() -> RenderedSample {
                                 ).unwrap(),
                             },
                             detail: None,
+                            filename: None,
                         },
                     ))),
                 ],

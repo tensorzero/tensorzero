@@ -1,11 +1,8 @@
 # Deploying TensorZero on Kubernetes with Helm
 
-> [!IMPORTANT]
->
-> This is a reference deployment setup contributed by the community.
-> Feedback and enhancements are welcome!
-
 This example shows how to deploy the TensorZero (including the TensorZero Gateway, the TensorZero UI, and a ClickHouse database) on Kubernetes using Helm.
+
+Our CI pipeline automatically bumps the chart's version and publishes it to [ArtifactHub](https://artifacthub.io/packages/helm/tensorzero/tensorzero) when a new GitHub release is created.
 
 ## Prerequisites
 
@@ -84,7 +81,7 @@ The following table lists the configurable parameters of the chart and their def
 ### UI Configuration
 
 | Parameter               | Description                 | Default                         |
-|-------------------------|-----------------------------|---------------------------------|
+| ----------------------- | --------------------------- | ------------------------------- |
 | `ui.deploy`             | Whether to deploy the UI    | `true`                          |
 | `ui.replicaCount`       | Number of UI replicas       | `1`                             |
 | `ui.serviceAccountName` | Service account for UI pods | `""`                            |
@@ -101,18 +98,18 @@ The following table lists the configurable parameters of the chart and their def
 
 ### Persistence Configuration
 
-| Parameter                    | Description                | Default                         |
-| ---------------------------- | -------------------------- | ------------------------------- |
-| `persistence.enabled`        | Enable persistent storage  | `false`                         |
-| `persistence.size`           | Storage size               | `10Gi`                          |
-| `persistence.accessModes`    | Access modes               | `["ReadWriteOnce"]`             |
-| `persistence.storageClass`   | Storage class name         | `""`                            |
-| `persistence.mountPath`      | Mount path in containers   | `/app/storage`                  |
+| Parameter                  | Description               | Default             |
+| -------------------------- | ------------------------- | ------------------- |
+| `persistence.enabled`      | Enable persistent storage | `false`             |
+| `persistence.size`         | Storage size              | `10Gi`              |
+| `persistence.accessModes`  | Access modes              | `["ReadWriteOnce"]` |
+| `persistence.storageClass` | Storage class name        | `""`                |
+| `persistence.mountPath`    | Mount path in containers  | `/app/storage`      |
 
 ### Monitoring Configuration
 
 | Parameter                     | Description                                   | Default |
-|-------------------------------|-----------------------------------------------|---------|
+| ----------------------------- | --------------------------------------------- | ------- |
 | `monitoring.metrics.enabled`  | Enable ServiceMonitor creation                | `false` |
 | `monitoring.metrics.interval` | Scrape interval                               | `"30s"` |
 | `monitoring.metrics.labels`   | Additional labels to attach to ServiceMonitor | `{}`    |

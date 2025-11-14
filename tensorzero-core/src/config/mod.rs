@@ -1,4 +1,5 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
+use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
@@ -53,6 +54,7 @@ use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
+pub mod built_in;
 pub mod gateway;
 pub mod path;
 pub mod provider_types;
@@ -83,7 +85,7 @@ pub fn skip_credential_validation() -> bool {
 // Note - the `Default` impl only exists for convenience in tests
 // It might produce a completely broken config - if a test fails,
 // use one of the public `Config` constructors instead.
-#[cfg_attr(test, derive(Default))]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(Default))]
 pub struct Config {
     pub gateway: GatewayConfig,
     pub models: Arc<ModelTable>, // model name => model config
@@ -99,6 +101,8 @@ pub struct Config {
     pub optimizers: HashMap<String, OptimizerInfo>,
     pub postgres: PostgresConfig,
     pub rate_limiting: RateLimitingConfig,
+    #[serde(skip)]
+    pub http_client: TensorzeroHttpClient,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -744,6 +748,7 @@ impl Config {
             optimizers: Default::default(),
             postgres: Default::default(),
             rate_limiting: Default::default(),
+            http_client: Default::default(),
         }
     }
 
@@ -803,15 +808,32 @@ impl Config {
             .gateway
             .load(object_store_info.as_ref())?;
 
-        let functions = uninitialized_config
+        let http_client = TensorzeroHttpClient::new(gateway_config.global_outbound_http_timeout)?;
+
+        // Load built-in functions first
+        let mut functions = built_in::get_all_built_in_functions()?;
+
+        // Load user-defined functions and ensure they don't use tensorzero:: prefix
+        let user_functions = uninitialized_config
             .functions
             .into_iter()
             .map(|(name, config)| {
+                // Prevent user functions from using tensorzero:: prefix
+                if name.starts_with("tensorzero::") {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "User-defined function name cannot start with 'tensorzero::': {name}"
+                        ),
+                    }));
+                }
                 config
                     .load(&name, &uninitialized_config.metrics)
                     .map(|c| (name, Arc::new(c)))
             })
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
+
+        // Merge user functions into the functions map
+        functions.extend(user_functions);
 
         let tools = uninitialized_config
             .tools
@@ -829,6 +851,7 @@ impl Config {
                         &name,
                         &uninitialized_config.provider_types,
                         &provider_type_default_credentials,
+                        http_client.clone(),
                     )
                     .await
                     .map(|c| (name, c))
@@ -844,6 +867,7 @@ impl Config {
                     .load(
                         &uninitialized_config.provider_types,
                         &provider_type_default_credentials,
+                        http_client.clone(),
                     )
                     .await
                     .map(|c| (name, c))
@@ -899,6 +923,7 @@ impl Config {
             optimizers,
             postgres: uninitialized_config.postgres,
             rate_limiting: uninitialized_config.rate_limiting.try_into()?,
+            http_client,
         };
 
         // Initialize the templates
@@ -911,7 +936,7 @@ impl Config {
                     })
                 })?.to_owned())
             } else if let Some(single_file) = span_map.get_single_file() {
-                tracing::warn!("Deprecation warning: `[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
+                crate::utils::deprecation_warning("`[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
                 Some(
                     single_file
                         .parent()
@@ -1026,15 +1051,10 @@ impl Config {
             .into());
         }
         // Validate each function
+        // Note: We don't check for tensorzero:: prefix here because:
+        // 1. Built-in functions are allowed to have this prefix
+        // 2. User-defined functions are prevented from using it during loading
         for (function_name, function) in &self.functions {
-            if function_name.starts_with("tensorzero::") {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Function name cannot start with 'tensorzero::': {function_name}"
-                    ),
-                }
-                .into());
-            }
             function
                 .validate(
                     &self.tools,
@@ -1742,11 +1762,11 @@ impl PathWithContents {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[serde(default)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct PostgresConfig {
+    pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,
 }
@@ -1758,6 +1778,7 @@ fn default_connection_pool_size() -> u32 {
 impl Default for PostgresConfig {
     fn default() -> Self {
         Self {
+            enabled: None,
             connection_pool_size: 20,
         }
     }

@@ -38,7 +38,7 @@ use crate::inference::types::chat_completion_inference_params::{
     warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::file::{mime_type_to_ext, Detail};
+use crate::inference::types::file::{mime_type_to_audio_format, mime_type_to_ext, Detail};
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
@@ -58,7 +58,7 @@ use crate::providers::openai::responses::{
     OpenAIResponsesInputMessage, OpenAIResponsesInputMessageContent, OpenAIResponsesRequest,
     OpenAIResponsesResponse,
 };
-use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
@@ -69,7 +69,7 @@ use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
 use crate::inference::TensorZeroEventError;
 use crate::inference::WrappedProvider;
 
-pub mod optimization;
+pub mod grader;
 mod responses;
 
 lazy_static! {
@@ -1265,11 +1265,18 @@ pub struct OpenAIFile<'a> {
     filename: Option<Cow<'a, str>>,
 }
 
+#[derive(Clone, Deserialize, Debug, PartialEq, Serialize)]
+pub struct OpenAIInputAudio<'a> {
+    data: Cow<'a, str>,
+    format: Cow<'a, str>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum OpenAIContentBlock<'a> {
     Text { text: Cow<'a, str> },
     ImageUrl { image_url: OpenAIImageUrl },
     File { file: OpenAIFile<'a> },
+    InputAudio { input_audio: OpenAIInputAudio<'a> },
     Unknown { data: Cow<'a, Value> },
 }
 
@@ -1281,9 +1288,18 @@ impl Serialize for OpenAIContentBlock<'_> {
         #[derive(Serialize)]
         #[serde(tag = "type", rename_all = "snake_case")]
         enum Helper<'a> {
-            Text { text: &'a str },
-            ImageUrl { image_url: &'a OpenAIImageUrl },
-            File { file: &'a OpenAIFile<'a> },
+            Text {
+                text: &'a str,
+            },
+            ImageUrl {
+                image_url: &'a OpenAIImageUrl,
+            },
+            File {
+                file: &'a OpenAIFile<'a>,
+            },
+            InputAudio {
+                input_audio: &'a OpenAIInputAudio<'a>,
+            },
         }
         match self {
             OpenAIContentBlock::Text { text } => Helper::Text { text }.serialize(serializer),
@@ -1291,6 +1307,9 @@ impl Serialize for OpenAIContentBlock<'_> {
                 Helper::ImageUrl { image_url }.serialize(serializer)
             }
             OpenAIContentBlock::File { file } => Helper::File { file }.serialize(serializer),
+            OpenAIContentBlock::InputAudio { input_audio } => {
+                Helper::InputAudio { input_audio }.serialize(serializer)
+            }
             OpenAIContentBlock::Unknown { data } => data.serialize(serializer),
         }
     }
@@ -1390,7 +1409,9 @@ impl OpenAIRequestMessage<'_> {
             OpenAIRequestMessage::Developer(msg) => msg.content.to_lowercase().contains(value),
             OpenAIRequestMessage::User(msg) => msg.content.iter().any(|c| match c {
                 OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => false,
+                OpenAIContentBlock::ImageUrl { .. }
+                | OpenAIContentBlock::File { .. }
+                | OpenAIContentBlock::InputAudio { .. } => false,
                 // Don't inspect the contents of 'unknown' blocks
                 OpenAIContentBlock::Unknown { data: _ } => false,
             }),
@@ -1398,9 +1419,9 @@ impl OpenAIRequestMessage<'_> {
                 if let Some(content) = &msg.content {
                     content.iter().any(|c| match c {
                         OpenAIContentBlock::Text { text } => text.to_lowercase().contains(value),
-                        OpenAIContentBlock::ImageUrl { .. } | OpenAIContentBlock::File { .. } => {
-                            false
-                        }
+                        OpenAIContentBlock::ImageUrl { .. }
+                        | OpenAIContentBlock::File { .. }
+                        | OpenAIContentBlock::InputAudio { .. } => false,
                         // Don't inspect the contents of 'unknown' blocks
                         OpenAIContentBlock::Unknown { data: _ } => false,
                     })
@@ -1688,20 +1709,35 @@ pub(super) async fn prepare_file_message(
                         detail: detail_to_use,
                     },
                 })
+            } else if file.mime_type.type_() == mime::AUDIO {
+                // Audio files use the input_audio format with unprefixed base64 and format field
+                let format = mime_type_to_audio_format(&file.mime_type)?;
+                Ok(OpenAIContentBlock::InputAudio {
+                    input_audio: OpenAIInputAudio {
+                        data: Cow::Owned(data.clone()),
+                        format: Cow::Owned(format.to_string()),
+                    },
+                })
             } else {
                 // OpenAI doesn't document how they determine the content type of the base64 blob
                 // - let's try to pick a good suffix for the filename, in case they don't sniff
                 // the mime type from the actual file content.
-                let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
-                    Error::new(ErrorDetails::InvalidMessage {
-                        message: format!("Mime type {} has no filetype suffix", file.mime_type),
-                    })
-                })?;
+                let filename = if let Some(ref user_filename) = file.filename {
+                    // Use the user-provided filename if available
+                    Cow::Owned(user_filename.clone())
+                } else {
+                    // Otherwise, generate a filename with the appropriate extension
+                    let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidMessage {
+                            message: format!("Mime type {} has no filetype suffix", file.mime_type),
+                        })
+                    })?;
+                    Cow::Owned(format!("input.{suffix}"))
+                };
                 Ok(OpenAIContentBlock::File {
                     file: OpenAIFile {
                         file_data: Some(Cow::Owned(base64_url)),
-                        // TODO - should we allow the user to specify the file name?
-                        filename: Some(Cow::Owned(format!("input.{suffix}"))),
+                        filename: Some(filename),
                     },
                 })
             }
@@ -1941,8 +1977,8 @@ pub struct OpenAISFTTool<'a> {
     pub function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<&'a Tool> for OpenAISFTTool<'a> {
-    fn from(tool: &'a Tool) -> Self {
+impl<'a> From<&'a ClientSideFunctionTool> for OpenAISFTTool<'a> {
+    fn from(tool: &'a ClientSideFunctionTool) -> Self {
         OpenAISFTTool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {
@@ -1954,8 +1990,8 @@ impl<'a> From<&'a Tool> for OpenAISFTTool<'a> {
     }
 }
 
-impl<'a> From<&'a Tool> for OpenAITool<'a> {
-    fn from(tool: &'a Tool) -> Self {
+impl<'a> From<&'a ClientSideFunctionTool> for OpenAITool<'a> {
+    fn from(tool: &'a ClientSideFunctionTool) -> Self {
         OpenAITool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {
@@ -4120,6 +4156,7 @@ mod tests {
                 mime_type: mime::TEXT_PLAIN,
                 storage_path: dummy_storage_path.clone(),
                 detail: None,
+                filename: None,
             },
             data: BASE64_STANDARD.encode(b"Hello, world!"),
         }));
@@ -4174,6 +4211,7 @@ mod tests {
                 mime_type: mime::IMAGE_PNG,
                 storage_path: dummy_storage_path.clone(),
                 detail: Some(Detail::High),
+                filename: None,
             },
             data: BASE64_STANDARD.encode(b"fake image data"),
         }));
@@ -4230,6 +4268,7 @@ mod tests {
                             mime_type: mime::IMAGE_JPEG,
                             storage_path: dummy_storage_path.clone(),
                             detail: None,
+                            filename: None,
                         },
                         data: BASE64_STANDARD.encode(FERRIS_PNG),
                     })
@@ -4286,6 +4325,7 @@ mod tests {
                             mime_type: mime::IMAGE_JPEG,
                             storage_path: dummy_storage_path.clone(),
                             detail: None,
+                            filename: None,
                         },
                         data: BASE64_STANDARD.encode(FERRIS_PNG),
                     })
@@ -4481,6 +4521,7 @@ mod tests {
                                 path: object_store::path::Path::parse("dummy-path").unwrap(),
                             },
                             detail: None,
+                            filename: None,
                         },
                         data: BASE64_STANDARD.encode(FERRIS_PNG),
                     })
@@ -4639,5 +4680,145 @@ mod tests {
 
         // Test that verbosity is applied correctly
         assert_eq!(openai_request.verbosity, Some("low".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_prepare_file_message_with_custom_filename() {
+        // Test that custom filename is preserved and used instead of fallback
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let file = LazyFile::Base64(PendingObjectStoreFile(ObjectStorageFile {
+            file: ObjectStoragePointer {
+                source_url: None,
+                mime_type: mime::TEXT_PLAIN,
+                storage_path: dummy_storage_path.clone(),
+                detail: None,
+                filename: Some("my_document.txt".to_string()),
+            },
+            data: BASE64_STANDARD.encode(b"Hello, world!"),
+        }));
+
+        let res = prepare_file_message(
+            &file,
+            OpenAIMessagesConfig {
+                fetch_and_encode_input_files_before_inference: true,
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            res,
+            OpenAIContentBlock::File {
+                file: OpenAIFile {
+                    file_data: Some(Cow::Owned(format!(
+                        "data:text/plain;base64,{}",
+                        BASE64_STANDARD.encode("Hello, world!")
+                    ))),
+                    filename: Some(Cow::Owned("my_document.txt".to_string())),
+                },
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prepare_file_message_with_custom_pdf_filename() {
+        // Test custom filename with PDF file
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let file = LazyFile::Base64(PendingObjectStoreFile(ObjectStorageFile {
+            file: ObjectStoragePointer {
+                source_url: None,
+                mime_type: mime::APPLICATION_PDF,
+                storage_path: dummy_storage_path.clone(),
+                detail: None,
+                filename: Some("report_2024.pdf".to_string()),
+            },
+            data: BASE64_STANDARD.encode(b"%PDF-1.4"),
+        }));
+
+        let res = prepare_file_message(
+            &file,
+            OpenAIMessagesConfig {
+                fetch_and_encode_input_files_before_inference: true,
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            res,
+            OpenAIContentBlock::File {
+                file: OpenAIFile {
+                    file_data: Some(Cow::Owned(format!(
+                        "data:application/pdf;base64,{}",
+                        BASE64_STANDARD.encode(b"%PDF-1.4")
+                    ))),
+                    filename: Some(Cow::Owned("report_2024.pdf".to_string())),
+                },
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prepare_file_message_fallback_various_mime_types() {
+        // Test that None filename falls back to "input.{ext}" for various MIME types
+        let test_cases = vec![
+            (mime::APPLICATION_PDF, "pdf"),
+            (mime::IMAGE_JPEG, "jpg"),
+            (mime::IMAGE_PNG, "png"),
+        ];
+
+        for (mime_type, expected_ext) in test_cases {
+            let dummy_storage_path = StoragePath {
+                kind: StorageKind::Disabled,
+                path: object_store::path::Path::parse("dummy-path").unwrap(),
+            };
+            let file = LazyFile::Base64(PendingObjectStoreFile(ObjectStorageFile {
+                file: ObjectStoragePointer {
+                    source_url: None,
+                    mime_type: mime_type.clone(),
+                    storage_path: dummy_storage_path.clone(),
+                    detail: None,
+                    filename: None,
+                },
+                data: BASE64_STANDARD.encode(b"test data"),
+            }));
+
+            let res = prepare_file_message(
+                &file,
+                OpenAIMessagesConfig {
+                    fetch_and_encode_input_files_before_inference: true,
+                    json_mode: None,
+                    provider_type: PROVIDER_TYPE,
+                },
+            )
+            .await
+            .unwrap();
+
+            let expected_filename = format!("input.{expected_ext}");
+            match res {
+                OpenAIContentBlock::File { file } => {
+                    assert_eq!(
+                        file.filename,
+                        Some(Cow::Owned(expected_filename)),
+                        "Failed for MIME type: {mime_type}"
+                    );
+                }
+                OpenAIContentBlock::ImageUrl { .. } => {
+                    // Images use data URLs without filename field, which is fine
+                    continue;
+                }
+                _ => panic!("Unexpected content block type for MIME type: {mime_type}"),
+            }
+        }
     }
 }

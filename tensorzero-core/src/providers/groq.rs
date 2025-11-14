@@ -2581,6 +2581,7 @@ mod tests {
                     mime_type: mime::IMAGE_PNG,
                     storage_path: dummy_storage_path,
                     detail: Some(Detail::High),
+                    filename: None,
                 },
                 data: BASE64_STANDARD.encode(b"fake image data"),
             }),

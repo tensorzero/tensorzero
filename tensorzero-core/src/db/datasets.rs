@@ -13,9 +13,9 @@ use crate::error::Error;
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
 use crate::serde_util::{
     deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json,
-    serialize_none_as_empty_map, serialize_none_as_empty_string,
+    serialize_none_as_empty_map,
 };
-use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::{deserialize_optional_tool_info, ToolCallConfigDatabaseInsert};
 
 /// Datapoint types that are directly serialized and inserted into ClickHouse.
 /// These should be internal-only types but are exposed to tensorzero-node.
@@ -70,11 +70,7 @@ pub struct ChatInferenceDatapointInsert {
     pub output: Option<Vec<ContentBlockChatOutput>>,
 
     /// Tool parameters used to generate this datapoint. Optional.
-    #[serde(
-        default,
-        deserialize_with = "deserialize_optional_string_or_parsed_json",
-        serialize_with = "serialize_none_as_empty_string"
-    )]
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
 
     /// Tags associated with this datapoint. Optional.
@@ -194,7 +190,7 @@ pub struct DatasetQueryParams {
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct GetDatasetRowsParams {
     pub dataset_name: String,
-    pub page_size: u32,
+    pub limit: u32,
     pub offset: u32,
 }
 
