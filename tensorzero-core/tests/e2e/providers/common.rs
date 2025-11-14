@@ -87,6 +87,7 @@ pub struct ModelTestProvider {
 #[derive(Clone, Debug)]
 pub struct EmbeddingTestProvider {
     pub model_name: String,
+    pub dimensions: usize,
 }
 
 /// Enforce that every provider implements a common set of tests.

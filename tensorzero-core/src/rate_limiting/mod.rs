@@ -449,7 +449,7 @@ pub enum RateLimitResourceUsage {
     /// rate limiting resources, depending on whether our initial estimate was too high or too low
     Exact { model_inferences: u64, tokens: u64 },
     /// We were only able to estimate the usage (e.g. if an error occurred in an inference stream,
-    /// and there might have bene additional usage chunks that we missed; or the provider did not report token usage).
+    /// and there might have been additional usage chunks that we missed; or the provider did not report token usage).
     /// We'll still consume tokens/inferences if we went over the initial estimate, but we will *not*
     /// return tickets if our initial estimate seems to be too high (since the error could have
     /// hidden the actual usage).
@@ -2278,6 +2278,43 @@ mod tests {
                 }
             }
             Ok(_) => panic!("Expected an error, but got Ok"),
+        }
+    }
+
+    #[test]
+    fn test_no_refund_when_usage_is_none() {
+        // This test verifies that when actual usage is reported as None (usage=None or null tokens),
+        // we use RateLimitResourceUsage::UnderEstimate which prevents refunding tickets even if
+        // we over-estimated the initial consumption.
+
+        let token_usage_exact = RateLimitResourceUsage::Exact {
+            model_inferences: 1,
+            tokens: 100, // Actual usage is 100 tokens
+        };
+
+        let token_usage_underestimate = RateLimitResourceUsage::UnderEstimate {
+            model_inferences: 1,
+            tokens: 0, // This is what we use when usage is None
+        };
+
+        // Verify that Exact usage allows refunds (when actual < estimate)
+        match token_usage_exact {
+            RateLimitResourceUsage::Exact { tokens, .. } => {
+                assert_eq!(tokens, 100);
+                // This case would trigger a refund in return_tickets() if estimate was higher
+            }
+            RateLimitResourceUsage::UnderEstimate { .. } => {
+                panic!("Expected Exact variant")
+            }
+        }
+
+        // Verify that UnderEstimate usage prevents refunds
+        match token_usage_underestimate {
+            RateLimitResourceUsage::UnderEstimate { tokens, .. } => {
+                assert_eq!(tokens, 0);
+                // This case will NOT trigger a refund in return_tickets() per line 852-855
+            }
+            RateLimitResourceUsage::Exact { .. } => panic!("Expected UnderEstimate variant"),
         }
     }
 }

@@ -780,7 +780,7 @@ fn create_stream(
 ) -> impl FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
-        let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).sum());
+        let mut extra_usage = Some(Usage::sum_usage_strict(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached)));
         if extra_usage == Some(Usage { input_tokens: Some(0), output_tokens: Some(0) }) {
             extra_usage = None;
         }

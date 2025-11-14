@@ -764,8 +764,8 @@ fn validate_pinocchio_pattern(text: &str) {
 /// Validates usage metrics and DICL token count expectations
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 fn validate_usage_metrics(usage: Usage) {
-    assert!(usage.input_tokens > Some(0));
-    assert!(usage.output_tokens > Some(0));
+    assert!(usage.input_tokens.unwrap() > 0);
+    assert!(usage.output_tokens.unwrap() > 0);
 }
 
 /// Validates ClickHouse inference data for both chat and JSON responses

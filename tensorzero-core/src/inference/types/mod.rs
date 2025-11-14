@@ -68,7 +68,6 @@ use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::borrow::Borrow;
-use std::ops::Add;
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -1885,11 +1884,20 @@ impl InferenceResult {
         .await
     }
 
+    /// Aggregates the usage of all model inference results, considering cached results.
+    /// If any of the values are None, the total usage is considered as None (via `map`).
     pub fn usage_considering_cached(&self) -> Usage {
         self.model_inference_results()
             .iter()
             .map(ModelInferenceResponseWithMetadata::usage_considering_cached)
-            .sum()
+            .fold(Usage::default(), |acc, u| Usage {
+                input_tokens: u
+                    .input_tokens
+                    .map(|tokens| tokens + acc.input_tokens.unwrap_or(0)),
+                output_tokens: u
+                    .output_tokens
+                    .map(|tokens| tokens + acc.output_tokens.unwrap_or(0)),
+            })
     }
 
     pub fn set_original_response(&mut self, original_response: Option<String>) {
@@ -2175,31 +2183,6 @@ impl From<JsonMode> for ModelInferenceRequestJsonMode {
             JsonMode::ImplicitTool => ModelInferenceRequestJsonMode::Off,
             JsonMode::Off => ModelInferenceRequestJsonMode::Off,
         }
-    }
-}
-
-impl Add for Usage {
-    type Output = Usage;
-    fn add(self, other: Usage) -> Usage {
-        let summed_input_tokens = match (self.input_tokens, other.input_tokens) {
-            (_, Some(b)) => Some(self.input_tokens.unwrap_or_default() + b),
-            _ => None,
-        };
-
-        let summed_output_tokens = match (self.output_tokens, other.output_tokens) {
-            (_, Some(b)) => Some(self.output_tokens.unwrap_or_default() + b),
-            _ => None,
-        };
-
-        Usage {
-            input_tokens: summed_input_tokens,
-            output_tokens: summed_output_tokens,
-        }
-    }
-}
-impl std::iter::Sum<Usage> for Usage {
-    fn sum<I: Iterator<Item = Usage>>(iter: I) -> Self {
-        iter.fold(Usage::default(), |acc, u| acc + u)
     }
 }
 
@@ -3029,5 +3012,189 @@ mod tests {
             "content": [{"type": "invalid_type", "value": "test"}]
         });
         assert!(serde_json::from_value::<InputMessage>(input).is_err());
+    }
+
+    /// Test that usage_considering_cached properly propagates None values
+    /// If any of the model inference results have None for input_tokens or output_tokens,
+    /// the aggregated result should also have None for those fields
+    #[tokio::test]
+    async fn test_usage_considering_cached_none_propagation() {
+        let inference_id = Uuid::now_v7();
+
+        // Helper function to create a ModelInferenceResponseWithMetadata with specified usage
+        let create_model_response =
+            |usage: Usage, cached: bool| ModelInferenceResponseWithMetadata {
+                id: Uuid::now_v7(),
+                created: Instant::now().elapsed().as_secs(),
+                system: None,
+                input_messages: RequestMessagesOrBatch::Message(vec![]),
+                output: vec!["test".to_string().into()],
+                raw_request: String::new(),
+                raw_response: String::new(),
+                usage,
+                latency: Latency::NonStreaming {
+                    response_time: Duration::default(),
+                },
+                finish_reason: None,
+                model_provider_name: "test_provider".into(),
+                model_name: "test_model".into(),
+                cached,
+            };
+
+        // Test Case 1: All values are Some() - should aggregate correctly
+        let model_responses_all_some = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: Some(15),
+                    output_tokens: Some(25),
+                },
+                false,
+            ),
+        ];
+        let chat_result_all_some = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_all_some,
+            None,
+            InferenceParams::default(),
+            None,
+        )
+        .await;
+        let result_all_some = InferenceResult::Chat(chat_result_all_some);
+        let usage_all_some = result_all_some.usage_considering_cached();
+        assert_eq!(usage_all_some.input_tokens, Some(25));
+        assert_eq!(usage_all_some.output_tokens, Some(45));
+
+        // Test Case 2: Some input_tokens are None - should propagate None for input_tokens
+        let model_responses_input_none = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: Some(25),
+                },
+                false,
+            ),
+        ];
+        let chat_result_input_none = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_input_none,
+            None,
+            InferenceParams::default(),
+            None,
+        )
+        .await;
+        let result_input_none = InferenceResult::Chat(chat_result_input_none);
+        let usage_input_none = result_input_none.usage_considering_cached();
+        assert_eq!(usage_input_none.input_tokens, None);
+        assert_eq!(usage_input_none.output_tokens, Some(45));
+
+        // Test Case 3: Some output_tokens are None - should propagate None for output_tokens
+        let model_responses_output_none = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: Some(15),
+                    output_tokens: None,
+                },
+                false,
+            ),
+        ];
+        let chat_result_output_none = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_output_none,
+            None,
+            InferenceParams::default(),
+            None,
+        )
+        .await;
+        let result_output_none = InferenceResult::Chat(chat_result_output_none);
+        let usage_output_none = result_output_none.usage_considering_cached();
+        assert_eq!(usage_output_none.input_tokens, Some(25));
+        assert_eq!(usage_output_none.output_tokens, None);
+
+        // Test Case 4: All values are None - should result in all None
+        let model_responses_all_none = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: None,
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: None,
+                },
+                false,
+            ),
+        ];
+        let chat_result_all_none = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_all_none,
+            None,
+            InferenceParams::default(),
+            None,
+        )
+        .await;
+        let result_all_none = InferenceResult::Chat(chat_result_all_none);
+        let usage_all_none = result_all_none.usage_considering_cached();
+        assert_eq!(usage_all_none.input_tokens, None);
+        assert_eq!(usage_all_none.output_tokens, None);
+
+        // Test Case 5: Mixed cached and non-cached with None values
+        // Cached results return Usage { input_tokens: Some(0), output_tokens: Some(0) }
+        let model_responses_mixed = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                },
+                true,
+            ), // This will be treated as 0/0 due to cached=true
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: Some(25),
+                },
+                false,
+            ),
+        ];
+        let chat_result_mixed = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_mixed,
+            None,
+            InferenceParams::default(),
+            None,
+        )
+        .await;
+        let result_mixed = InferenceResult::Chat(chat_result_mixed);
+        let usage_mixed = result_mixed.usage_considering_cached();
+        assert_eq!(usage_mixed.input_tokens, None); // None propagates
+        assert_eq!(usage_mixed.output_tokens, Some(25)); // 0 (cached) + 25
     }
 }

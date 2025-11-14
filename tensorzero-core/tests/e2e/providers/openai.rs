@@ -232,9 +232,16 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let embedding_providers = vec![EmbeddingTestProvider {
-        model_name: "text-embedding-3-small".into(),
-    }];
+    let embedding_providers = vec![
+        EmbeddingTestProvider {
+            model_name: "text-embedding-3-small".into(),
+            dimensions: 1536,
+        },
+        EmbeddingTestProvider {
+            model_name: "gemini_embedding_001_openrouter".to_string(),
+            dimensions: 3072,
+        },
+    ];
 
     let provider_type_default_credentials_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
@@ -1302,7 +1309,7 @@ async fn test_embedding_request() {
         "Unexpected input tokens: {:?}",
         response.usage.input_tokens
     );
-    assert_eq!(response.usage.output_tokens, Some(0));
+    assert_eq!(response.usage.output_tokens, None);
     match response.latency {
         Latency::NonStreaming { response_time } => {
             assert!(

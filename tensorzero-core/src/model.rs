@@ -646,7 +646,12 @@ async fn wrap_provider_stream(
         while let Some(chunk) = stream.next().await {
             if let Ok(chunk) = chunk.as_ref() {
                 if let Some(chunk_usage) = &chunk.usage {
-                    total_usage = total_usage + *chunk_usage;
+                    if let Some(input_tokens) = chunk_usage.input_tokens {
+                        total_usage.input_tokens = Some(total_usage.input_tokens.unwrap_or(0) + input_tokens);
+                    }
+                    if let Some(output_tokens) = chunk_usage.output_tokens {
+                        total_usage.output_tokens = Some(total_usage.output_tokens.unwrap_or(0) + output_tokens);
+                    }
                 }
             }
             // We can skip cloning the chunk if we know we're not going to write to the cache
