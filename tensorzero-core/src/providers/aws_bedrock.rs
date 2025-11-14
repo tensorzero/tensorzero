@@ -56,8 +56,6 @@ pub struct AWSBedrockProvider {
     model_id: String,
     #[serde(skip)]
     client: aws_sdk_bedrockruntime::Client,
-    #[serde(skip)]
-    base_config: aws_sdk_bedrockruntime::config::Builder,
 }
 
 fn apply_inference_params(
@@ -170,15 +168,19 @@ fn number_from_i32(value: i32) -> Number {
 }
 
 impl AWSBedrockProvider {
-    pub async fn new(model_id: String, region: Option<Region>) -> Result<Self, Error> {
-        let config = aws_common::config_with_region(PROVIDER_TYPE, region).await?;
-        let client = aws_sdk_bedrockruntime::Client::new(&config);
+    pub async fn new(
+        model_id: String,
+        region: Option<Region>,
+        http_client: TensorzeroHttpClient,
+    ) -> Result<Self, Error> {
+        let config = aws_sdk_bedrockruntime::config::Builder::from(
+            &aws_common::config_with_region(PROVIDER_TYPE, region).await?,
+        )
+        .http_client(super::aws_http_client::Client::new(http_client))
+        .build();
+        let client = aws_sdk_bedrockruntime::Client::from_conf(config);
 
-        Ok(Self {
-            model_id,
-            client,
-            base_config: aws_sdk_bedrockruntime::config::Builder::from(&config),
-        })
+        Ok(Self { model_id, client })
     }
 
     pub fn model_id(&self) -> &str {
@@ -195,7 +197,8 @@ impl InferenceProvider for AWSBedrockProvider {
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a TensorzeroHttpClient,
+        // We've already taken in this client when the provider was constructed
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
@@ -288,14 +291,9 @@ impl InferenceProvider for AWSBedrockProvider {
             get_raw_response,
         } = build_interceptor(request, model_provider, model_name.to_string());
 
-        let new_config = self
-            .base_config
-            .clone()
-            .http_client(super::aws_http_client::Client::new(http_client.clone()));
         let start_time = Instant::now();
         let output = bedrock_request
             .customize()
-            .config_override(new_config)
             .interceptor(interceptor)
             .send()
             .await
@@ -340,7 +338,8 @@ impl InferenceProvider for AWSBedrockProvider {
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
-        http_client: &'a TensorzeroHttpClient,
+        // We've already taken in this client when the provider was constructed
+        _http_client: &'a TensorzeroHttpClient,
         _dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
@@ -434,15 +433,9 @@ impl InferenceProvider for AWSBedrockProvider {
             get_raw_response,
         } = build_interceptor(request, model_provider, model_name.to_string());
 
-        let new_config = self
-            .base_config
-            .clone()
-            .http_client(super::aws_http_client::Client::new(http_client.clone()));
-
         let start_time = Instant::now();
         let stream = bedrock_request
             .customize()
-            .config_override(new_config)
             .interceptor(interceptor)
             .send()
             .await
@@ -1174,9 +1167,13 @@ mod tests {
     async fn test_get_aws_bedrock_client_no_aws_credentials() {
         let logs_contain = crate::utils::testing::capture_logs();
         // Every call should trigger client creation since each provider has its own AWS Bedrock client
-        AWSBedrockProvider::new("test".to_string(), Some(Region::new("uk-hogwarts-1")))
-            .await
-            .unwrap();
+        AWSBedrockProvider::new(
+            "test".to_string(),
+            Some(Region::new("uk-hogwarts-1")),
+            TensorzeroHttpClient::new_testing().unwrap(),
+        )
+        .await
+        .unwrap();
 
         assert!(logs_contain(
             "Creating new AWS config for region: uk-hogwarts-1"
@@ -1184,9 +1181,13 @@ mod tests {
 
         reset_capture_logs();
 
-        AWSBedrockProvider::new("test".to_string(), Some(Region::new("uk-hogwarts-1")))
-            .await
-            .unwrap();
+        AWSBedrockProvider::new(
+            "test".to_string(),
+            Some(Region::new("uk-hogwarts-1")),
+            TensorzeroHttpClient::new_testing().unwrap(),
+        )
+        .await
+        .unwrap();
 
         assert!(logs_contain(
             "Creating new AWS config for region: uk-hogwarts-1"
@@ -1198,9 +1199,13 @@ mod tests {
         // We use 'nextest' as our runner, so each test runs in its own process
         std::env::remove_var("AWS_REGION");
         std::env::remove_var("AWS_DEFAULT_REGION");
-        let err = AWSBedrockProvider::new("test".to_string(), None)
-            .await
-            .expect_err("AWS bedrock provider should fail when it cannot detect region");
+        let err = AWSBedrockProvider::new(
+            "test".to_string(),
+            None,
+            TensorzeroHttpClient::new_testing().unwrap(),
+        )
+        .await
+        .expect_err("AWS bedrock provider should fail when it cannot detect region");
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("Failed to determine AWS region."),
@@ -1211,9 +1216,13 @@ mod tests {
 
         reset_capture_logs();
 
-        AWSBedrockProvider::new("test".to_string(), Some(Region::new("me-shire-2")))
-            .await
-            .unwrap();
+        AWSBedrockProvider::new(
+            "test".to_string(),
+            Some(Region::new("me-shire-2")),
+            TensorzeroHttpClient::new_testing().unwrap(),
+        )
+        .await
+        .unwrap();
 
         assert!(logs_contain(
             "Creating new AWS config for region: me-shire-2"

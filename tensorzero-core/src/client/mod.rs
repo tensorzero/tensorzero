@@ -360,13 +360,7 @@ impl ClientBuilder {
                         },
                     ));
                 } else {
-                    TensorzeroHttpClient::new(config.gateway.global_outbound_http_timeout).map_err(
-                        |e| {
-                            ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
-                                source: e.into(),
-                            })
-                        },
-                    )?
+                    config.http_client.clone()
                 };
                 Ok(Client {
                     mode: Arc::new(ClientMode::EmbeddedGateway {

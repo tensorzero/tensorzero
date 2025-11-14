@@ -1415,6 +1415,7 @@ impl TensorZeroGateway {
     // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
     // is written as an ellipsis object.
     #[expect(clippy::too_many_arguments)]
+    #[expect(deprecated)]
     fn experimental_list_inferences(
         this: PyRef<'_, Self>,
         function_name: String,
@@ -2525,6 +2526,7 @@ impl AsyncTensorZeroGateway {
     // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
     // is written as an ellipsis object.
     #[expect(clippy::too_many_arguments)]
+    #[expect(deprecated)]
     fn experimental_list_inferences<'a>(
         this: PyRef<'a, Self>,
         function_name: String,

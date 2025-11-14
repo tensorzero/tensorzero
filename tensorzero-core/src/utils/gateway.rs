@@ -181,7 +181,7 @@ impl GatewayHandle {
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
-        let http_client = TensorzeroHttpClient::new(config.gateway.global_outbound_http_timeout)?;
+        let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
             config,
             clickhouse_connection_info,
@@ -226,12 +226,23 @@ impl GatewayHandle {
         http_client: TensorzeroHttpClient,
         drop_wrapper: Option<DropWrapper>,
     ) -> Result<Self, Error> {
+        // Validate that rate limiting is not configured when Postgres is disabled
+        if config.rate_limiting.enabled()
+            && !config.rate_limiting.rules().is_empty()
+            && matches!(postgres_connection_info, PostgresConnectionInfo::Disabled)
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "Rate limiting is configured but PostgreSQL is disabled. Rate limiting requires PostgreSQL to be configured. Please set the `TENSORZERO_POSTGRES_URL` environment variable and ensure `gateway.postgres.enabled` is not set to false, or disable rate limiting.".to_string(),
+            }));
+        }
+
         let cancel_token = CancellationToken::new();
         setup_howdy(
             &config,
             clickhouse_connection_info.clone(),
             cancel_token.clone(),
         );
+
         for (function_name, function_config) in &config.functions {
             function_config
                 .experimentation()
@@ -326,25 +337,15 @@ pub async fn setup_clickhouse(
     Ok(clickhouse_connection_info)
 }
 
-pub async fn setup_postgres(
-    config: &Config,
-    postgres_url: Option<String>,
+async fn create_postgres_connection(
+    postgres_url: &str,
+    connection_pool_size: u32,
 ) -> Result<PostgresConnectionInfo, Error> {
-    let Some(postgres_url) = postgres_url else {
-        // Check if rate limiting is configured but Postgres is not available
-        if config.rate_limiting.enabled() && !config.rate_limiting.rules().is_empty() {
-            return Err(Error::new(ErrorDetails::Config {
-                message: "Rate limiting is configured but PostgreSQL is not available. Rate limiting requires PostgreSQL to be configured. Please set the TENSORZERO_POSTGRES_URL environment variable or disable rate limiting.".to_string(),
-            }));
-        }
-        return Ok(PostgresConnectionInfo::Disabled);
-    };
-
     // TODO - decide how we should handle apply `connection_pool_size` to two pools
     // Hopefully, sqlx does a stable release before we actually start using `alpha_pool`
     let pool = PgPoolOptions::new()
-        .max_connections(config.postgres.connection_pool_size)
-        .connect(&postgres_url)
+        .max_connections(connection_pool_size)
+        .connect(postgres_url)
         .await
         .map_err(|err| {
             Error::new(ErrorDetails::PostgresConnectionInitialization {
@@ -353,8 +354,8 @@ pub async fn setup_postgres(
         })?;
 
     let alpha_pool = sqlx_alpha::postgres::PgPoolOptions::new()
-        .max_connections(config.postgres.connection_pool_size)
-        .connect(&postgres_url)
+        .max_connections(connection_pool_size)
+        .connect(postgres_url)
         .await
         .map_err(|err| {
             Error::new(ErrorDetails::PostgresConnectionInitialization {
@@ -365,6 +366,45 @@ pub async fn setup_postgres(
     let connection_info = PostgresConnectionInfo::new_with_pool(pool, Some(alpha_pool));
     connection_info.check_migrations().await?;
     Ok(connection_info)
+}
+
+pub async fn setup_postgres(
+    config: &Config,
+    postgres_url: Option<String>,
+) -> Result<PostgresConnectionInfo, Error> {
+    let postgres_connection_info = match (config.postgres.enabled, postgres_url.as_deref()) {
+        // Postgres disabled by config
+        (Some(false), _) => {
+            tracing::info!(
+                "Disabling Postgres: `gateway.postgres.enabled` is set to false in config."
+            );
+            PostgresConnectionInfo::Disabled
+        }
+        // Postgres enabled but no URL
+        (Some(true), None) => {
+            return Err(ErrorDetails::AppState {
+                message: "Missing environment variable `TENSORZERO_POSTGRES_URL`.".to_string(),
+            }
+            .into())
+        }
+        // Postgres enabled and URL provided
+        (Some(true), Some(postgres_url)) => {
+            create_postgres_connection(postgres_url, config.postgres.connection_pool_size).await?
+        }
+        // Postgres default and no URL
+        (None, None) => {
+            tracing::debug!(
+                "Disabling Postgres: `gateway.postgres.enabled` is not explicitly specified in config and `TENSORZERO_POSTGRES_URL` is not set."
+            );
+            PostgresConnectionInfo::Disabled
+        }
+        // Postgres default and URL provided
+        (None, Some(postgres_url)) => {
+            create_postgres_connection(postgres_url, config.postgres.connection_pool_size).await?
+        }
+    };
+
+    Ok(postgres_connection_info)
 }
 
 /// Custom Axum extractor that validates the JSON body and deserializes it into a custom type
@@ -489,7 +529,7 @@ pub struct GatewayHandleTestOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{gateway::GatewayConfig, ObservabilityConfig};
+    use crate::config::{gateway::GatewayConfig, ObservabilityConfig, PostgresConfig};
 
     #[tokio::test]
     async fn test_setup_clickhouse() {
@@ -658,5 +698,126 @@ mod tests {
         ));
         // We do not test the case where a ClickHouse URL is provided and observability is on,
         // as this would require a working ClickHouse and we don't have one in unit tests.
+    }
+
+    #[tokio::test]
+    async fn test_setup_postgres_disabled() {
+        let logs_contain = crate::utils::testing::capture_logs();
+
+        // Postgres disabled by config
+        let config = Box::leak(Box::new(Config {
+            postgres: PostgresConfig {
+                enabled: Some(false),
+                connection_pool_size: 20,
+            },
+            ..Default::default()
+        }));
+
+        let postgres_connection_info = setup_postgres(config, None).await.unwrap();
+        assert!(matches!(
+            postgres_connection_info,
+            PostgresConnectionInfo::Disabled
+        ));
+        assert!(logs_contain(
+            "Disabling Postgres: `gateway.postgres.enabled` is set to false in config."
+        ));
+
+        // Postgres disabled even with URL provided
+        let config = Box::leak(Box::new(Config {
+            postgres: PostgresConfig {
+                enabled: Some(false),
+                connection_pool_size: 20,
+            },
+            ..Default::default()
+        }));
+
+        let postgres_connection_info = setup_postgres(
+            config,
+            Some("postgresql://user:pass@localhost:5432/db".to_string()),
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            postgres_connection_info,
+            PostgresConnectionInfo::Disabled
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_setup_postgres_default_no_url() {
+        // Default postgres config (enabled: None) and no URL
+        let config = Box::leak(Box::new(Config {
+            postgres: PostgresConfig {
+                enabled: None,
+                connection_pool_size: 20,
+            },
+            ..Default::default()
+        }));
+
+        let postgres_connection_info = setup_postgres(config, None).await.unwrap();
+        assert!(matches!(
+            postgres_connection_info,
+            PostgresConnectionInfo::Disabled
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_setup_postgres_enabled_no_url() {
+        // Postgres enabled but URL is missing
+        let config = Box::leak(Box::new(Config {
+            postgres: PostgresConfig {
+                enabled: Some(true),
+                connection_pool_size: 20,
+            },
+            ..Default::default()
+        }));
+
+        let err = setup_postgres(config, None).await.unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("Missing environment variable `TENSORZERO_POSTGRES_URL`."));
+    }
+
+    #[tokio::test]
+    async fn test_setup_postgres_bad_url() {
+        // Postgres enabled with bad URL
+        let config = Box::leak(Box::new(Config {
+            postgres: PostgresConfig {
+                enabled: Some(true),
+                connection_pool_size: 20,
+            },
+            ..Default::default()
+        }));
+
+        setup_postgres(config, Some("bad_url".to_string()))
+            .await
+            .expect_err("Postgres setup should fail given a bad URL");
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiting_requires_postgres() {
+        // Rate limiting enabled=false should not fail validation (no rules configured)
+        let config_no_rules = Arc::new(Config {
+            postgres: PostgresConfig {
+                enabled: Some(false),
+                connection_pool_size: 20,
+            },
+            rate_limiting: Default::default(),
+            ..Default::default()
+        });
+
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
+        let postgres_connection_info = PostgresConnectionInfo::Disabled;
+        let http_client = TensorzeroHttpClient::new_testing().unwrap();
+
+        // This should succeed because rate limiting has no rules
+        let _gateway = GatewayHandle::new_with_database_and_http_client(
+            config_no_rules,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            http_client,
+        )
+        .await
+        .expect("Gateway setup should succeed when rate limiting has no rules");
     }
 }
