@@ -59,7 +59,8 @@ use crate::providers::openai::responses::{
     OpenAIResponsesResponse,
 };
 use crate::tool::{
-    ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig, ToolTypeFilter,
+    ClientSideFunctionTool, ClientSideFunctionToolConfig, OpenAICustomTool, ToolCall,
+    ToolCallChunk, ToolChoice,
 };
 
 use crate::providers::helpers::{
@@ -1528,10 +1529,17 @@ pub(super) fn prepare_openai_tools<'a>(
             }
             let tools = Some(
                 tool_config
-                    .tools_available(ToolTypeFilter::All)
+                    .tools_available()
                     .map(Into::into)
+                    .chain(
+                        tool_config
+                            .openai_custom_tools
+                            .iter()
+                            .map(OpenAITool::Custom),
+                    )
                     .collect(),
             );
+
             let parallel_tool_calls = tool_config.parallel_tool_calls;
 
             // Check if we need to construct an AllowedToolsChoice variant
@@ -1998,16 +2006,18 @@ pub struct OpenAIFunction<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub struct OpenAITool<'a> {
-    pub r#type: OpenAIToolType,
-    pub function: OpenAIFunction<'a>,
-    pub strict: bool,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAITool<'a> {
+    Function {
+        function: OpenAIFunction<'a>,
+        strict: bool,
+    },
+    Custom(&'a OpenAICustomTool),
 }
 
-impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
-    fn from(tool: &'a ToolConfig) -> Self {
-        OpenAITool {
-            r#type: OpenAIToolType::Function,
+impl<'a> From<&'a ClientSideFunctionToolConfig> for OpenAITool<'a> {
+    fn from(tool: &'a ClientSideFunctionToolConfig) -> Self {
+        OpenAITool::Function {
             function: OpenAIFunction {
                 name: tool.name(),
                 description: Some(tool.description()),
@@ -2039,8 +2049,7 @@ impl<'a> From<&'a ClientSideFunctionTool> for OpenAISFTTool<'a> {
 
 impl<'a> From<&'a ClientSideFunctionTool> for OpenAITool<'a> {
     fn from(tool: &'a ClientSideFunctionTool) -> Self {
-        OpenAITool {
-            r#type: OpenAIToolType::Function,
+        OpenAITool::Function {
             function: OpenAIFunction {
                 name: &tool.name,
                 description: Some(&tool.description),

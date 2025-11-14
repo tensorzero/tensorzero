@@ -66,8 +66,8 @@ use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultC
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
 use crate::tool::{
-    ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig,
-    ToolTypeFilter,
+    ClientSideFunctionTool, ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig,
+    ToolChoice,
 };
 
 use super::helpers::{convert_stream_error, parse_jsonl_batch_file, JsonlBatchFileInfo};
@@ -1686,8 +1686,8 @@ pub enum GCPVertexGeminiTool<'a> {
     FunctionDeclarations(Vec<GCPVertexGeminiFunctionDeclaration<'a>>),
 }
 
-impl<'a> From<&'a ToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
-    fn from(tool: &'a ToolConfig) -> Self {
+impl<'a> From<&'a ClientSideFunctionToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
+    fn from(tool: &'a ClientSideFunctionToolConfig) -> Self {
         GCPVertexGeminiFunctionDeclaration {
             name: tool.name(),
             description: Some(tool.description()),
@@ -1696,8 +1696,8 @@ impl<'a> From<&'a ToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
     }
 }
 
-impl<'a> From<&'a Vec<ToolConfig>> for GCPVertexGeminiTool<'a> {
-    fn from(tools: &'a Vec<ToolConfig>) -> Self {
+impl<'a> From<&'a Vec<ClientSideFunctionToolConfig>> for GCPVertexGeminiTool<'a> {
+    fn from(tools: &'a Vec<ClientSideFunctionToolConfig>) -> Self {
         let function_declarations: Vec<GCPVertexGeminiFunctionDeclaration<'a>> =
             tools.iter().map(Into::into).collect();
         GCPVertexGeminiTool::FunctionDeclarations(function_declarations)
@@ -2059,7 +2059,7 @@ fn prepare_tools<'a>(
             }
             let tools = Some(vec![GCPVertexGeminiTool::FunctionDeclarations(
                 tool_config
-                    .tools_available(ToolTypeFilter::FunctionOnly)
+                    .tools_available()
                     .map(GCPVertexGeminiFunctionDeclaration::from)
                     .collect(),
             )]);
@@ -2848,9 +2848,7 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG
-            .tools_available(ToolTypeFilter::FunctionOnly)
-            .collect();
+        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
         let tools_vec_owned: Vec<ToolConfig> = tools_vec.iter().map(|&t| t.clone()).collect();
         let tool = GCPVertexGeminiTool::from(&tools_vec_owned);
         assert_eq!(
@@ -2878,6 +2876,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
+            openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
@@ -2899,6 +2898,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
+            openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: None,
@@ -2920,6 +2920,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
+            openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Specific("get_temperature".to_string()),
             parallel_tool_calls: None,
@@ -2944,6 +2945,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
+            openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
@@ -2971,6 +2973,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
+            openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: None,
@@ -2994,6 +2997,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
+            openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,

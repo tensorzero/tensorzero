@@ -37,7 +37,7 @@ use crate::{
         check_new_tool_call_name, convert_stream_error, inject_extra_request_data_and_send,
         inject_extra_request_data_and_send_eventsource,
     },
-    tool::{ToolCall, ToolCallChunk, ToolChoice, ToolTypeFilter},
+    tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 
 use super::openai::{
@@ -496,7 +496,7 @@ pub(super) fn prepare_mistral_tools<'a>(
             }
             let tools = Some(
                 tool_config
-                    .strict_tools_available(ToolTypeFilter::FunctionOnly)
+                    .strict_tools_available()
                     .map(|t| MistralTool::from(OpenAITool::from(t)))
                     .collect(),
             );

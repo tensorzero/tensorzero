@@ -44,7 +44,7 @@ use crate::inference::types::{
 use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
 use crate::inference::InferenceProvider;
 use crate::model::ModelProvider;
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig, ToolTypeFilter};
+use crate::tool::{ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 const PROVIDER_NAME: &str = "AWS Bedrock";
 pub const PROVIDER_TYPE: &str = "aws_bedrock";
@@ -252,7 +252,7 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(tool_config) = &request.tool_config {
             if !matches!(tool_config.tool_choice, ToolChoice::None) {
                 let tools: Vec<Tool> = tool_config
-                    .strict_tools_available(ToolTypeFilter::FunctionOnly)
+                    .strict_tools_available()
                     .map(Tool::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
 
@@ -397,7 +397,7 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(tool_config) = &request.tool_config {
             if !matches!(tool_config.tool_choice, ToolChoice::None) {
                 let tools: Vec<Tool> = tool_config
-                    .strict_tools_available(ToolTypeFilter::FunctionOnly)
+                    .strict_tools_available()
                     .map(Tool::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
 
@@ -1094,10 +1094,10 @@ fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String
     })
 }
 
-impl TryFrom<&ToolConfig> for Tool {
+impl TryFrom<&ClientSideFunctionToolConfig> for Tool {
     type Error = Error;
 
-    fn try_from(tool_config: &ToolConfig) -> Result<Self, Error> {
+    fn try_from(tool_config: &ClientSideFunctionToolConfig) -> Result<Self, Error> {
         let tool_input_schema = ToolInputSchema::Json(
             serde_json::from_value(tool_config.parameters().clone()).map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {

@@ -40,7 +40,7 @@ use crate::{
         InferenceProvider,
     },
     model::{Credential, ModelProvider},
-    tool::{ToolCall, ToolCallChunk, ToolTypeFilter},
+    tool::{ToolCall, ToolCallChunk},
 };
 
 use super::{
@@ -399,7 +399,7 @@ pub(super) fn prepare_fireworks_tools<'a>(
             }
             let tools = Some(
                 tool_config
-                    .strict_tools_available(ToolTypeFilter::FunctionOnly)
+                    .strict_tools_available()
                     .map(Into::into)
                     .collect(),
             );

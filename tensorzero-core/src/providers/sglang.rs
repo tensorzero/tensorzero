@@ -32,7 +32,7 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::providers::openai::{check_api_base_suffix, OpenAIMessagesConfig};
-use crate::tool::{ToolCallChunk, ToolTypeFilter};
+use crate::tool::ToolCallChunk;
 
 use super::openai::{
     get_chat_url, handle_openai_error, prepare_openai_messages, OpenAIRequestMessage,
@@ -591,7 +591,7 @@ pub(super) fn prepare_sglang_tools<'a>(
             }
             let tools = Some(
                 tool_config
-                    .strict_tools_available(ToolTypeFilter::FunctionOnly)
+                    .strict_tools_available()
                     .map(Into::into)
                     .collect(),
             );

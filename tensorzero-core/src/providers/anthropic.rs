@@ -42,7 +42,7 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::tool::{
-    ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig, ToolTypeFilter,
+    ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig,
 };
 
 use super::helpers::convert_stream_error;
@@ -484,8 +484,8 @@ pub(super) struct AnthropicTool<'a> {
     pub(super) input_schema: &'a Value,
 }
 
-impl<'a> From<&'a ToolConfig> for AnthropicTool<'a> {
-    fn from(value: &'a ToolConfig) -> Self {
+impl<'a> From<&'a ClientSideFunctionToolConfig> for AnthropicTool<'a> {
+    fn from(value: &'a ClientSideFunctionToolConfig) -> Self {
         // In case we add more tool types in the future, the compiler will complain here.
         AnthropicTool {
             name: value.name(),
@@ -794,7 +794,7 @@ impl<'a> AnthropicRequestBody<'a> {
                 None
             } else {
                 Some(
-                    c.strict_tools_available(ToolTypeFilter::FunctionOnly)
+                    c.strict_tools_available()
                         .map(Into::into)
                         .collect::<Vec<_>>(),
                 )
@@ -3395,6 +3395,7 @@ mod tests {
             static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
@@ -3405,7 +3406,7 @@ mod tests {
 
         // Convert to Anthropic tools
         let tools: Vec<AnthropicTool> = tool_config
-            .strict_tools_available(ToolTypeFilter::FunctionOnly)
+            .strict_tools_available()
             .map(AnthropicTool::from)
             .collect();
 

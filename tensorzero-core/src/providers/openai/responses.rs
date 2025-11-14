@@ -1,11 +1,14 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::inference::types::{
-    chat_completion_inference_params::{
-        warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
+use crate::{
+    inference::types::{
+        chat_completion_inference_params::{
+            warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
+        },
+        ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
     },
-    ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
+    tool::OpenAICustomTool,
 };
 
 const PROVIDER_NAME: &str = "OpenAI Responses";
@@ -33,7 +36,7 @@ use crate::{
         OpenAIFile, OpenAIMessagesConfig, OpenAITool, OpenAIToolType, SystemOrDeveloper,
         PROVIDER_TYPE,
     },
-    tool::{ToolCall, ToolCallChunk, ToolChoice, ToolTypeFilter},
+    tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 
 #[derive(Serialize, Debug)]
@@ -274,6 +277,7 @@ impl<'a> OpenAITool<'a> {
 pub enum OpenAIResponsesTool<'a> {
     Function(OpenAIResponsesFunctionTool<'a>),
     BuiltIn(&'a Value),
+    Custom(&'a OpenAICustomTool),
 }
 
 #[derive(Serialize, Debug)]
@@ -345,11 +349,20 @@ impl<'a> OpenAIResponsesRequest<'a> {
             .as_ref()
             .map(|tool_config| {
                 tool_config
-                    .tools_available(ToolTypeFilter::All)
+                    .tools_available()
                     .map(|tool| OpenAITool::from(tool).into_openai_responses_tool())
                     .collect()
             })
             .unwrap_or_default();
+        // If we have custom tools we should extend with those also
+        if let Some(tool_config) = request.tool_config.as_ref() {
+            tools.extend(
+                tool_config
+                    .openai_custom_tools
+                    .iter()
+                    .map(OpenAIResponsesTool::Custom),
+            );
+        }
         // If we have built_in_tools we should extend the list with them
         tools.extend(built_in_tools.iter().map(OpenAIResponsesTool::BuiltIn));
         if let Some(tc) = request.tool_config.as_ref() {
