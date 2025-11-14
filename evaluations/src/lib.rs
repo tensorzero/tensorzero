@@ -592,16 +592,11 @@ pub async fn run_evaluation_core_streaming(
                                     }
                                 }
 
-                                // Check if all evaluators with precision limits are now cancelled
+                                // Check if all evaluators (not just those with specified precision limits) are now cancelled
                                 let all_evaluators_stopped =
-                                    precision_map.keys().all(|evaluator_name| {
-                                        tokens
-                                            .get(evaluator_name)
-                                            .map(|token| token.is_cancelled())
-                                            .unwrap_or(false)
-                                    });
+                                    tokens.values().all(|token| token.is_cancelled());
 
-                                // Abort remaining inference tasks if all evaluators have hit their precision target
+                                // If they are, then abort remaining inference tasks
                                 if all_evaluators_stopped {
                                     join_set.abort_all();
                                 }
