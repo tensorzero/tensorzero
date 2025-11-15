@@ -23,8 +23,8 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::tool::{
-    deserialize_optional_tool_info, ClientSideFunctionToolConfig, StaticToolConfig, ToolCall,
-    ToolCallConfig, ToolCallConfigDatabaseInsert, ToolConfig,
+    deserialize_optional_tool_info, StaticToolConfig, ToolCall, ToolCallConfig,
+    ToolCallConfigDatabaseInsert,
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
@@ -936,7 +936,9 @@ mod tests {
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
-    use crate::tool::{InferenceResponseToolCall, StaticToolConfig, ToolChoice, ToolConfig};
+    use crate::tool::{
+        ClientSideFunctionToolConfig, InferenceResponseToolCall, StaticToolConfig, ToolChoice,
+    };
 
     #[tokio::test]
     async fn test_get_feedback_metadata() {
@@ -1362,7 +1364,7 @@ mod tests {
                 tools
                     .values()
                     .cloned()
-                    .map(|t| ClientSideFunctionToolConfig::Static(t))
+                    .map(ClientSideFunctionToolConfig::Static)
                     .collect(),
                 vec![],
             )));
@@ -1390,7 +1392,7 @@ mod tests {
                 tools
                     .values()
                     .cloned()
-                    .map(|t| ClientSideFunctionToolConfig::Static(t))
+                    .map(ClientSideFunctionToolConfig::Static)
                     .collect(),
                 vec![],
             )));
@@ -1427,7 +1429,7 @@ mod tests {
                 tools
                     .values()
                     .cloned()
-                    .map(|t| ClientSideFunctionToolConfig::Static(t))
+                    .map(ClientSideFunctionToolConfig::Static)
                     .collect(),
                 vec![],
             )));
@@ -1454,7 +1456,7 @@ mod tests {
                 tools
                     .values()
                     .cloned()
-                    .map(|t| ClientSideFunctionToolConfig::Static(t))
+                    .map(ClientSideFunctionToolConfig::Static)
                     .collect(),
                 vec![],
             )));
@@ -1556,7 +1558,7 @@ mod tests {
                 tools
                     .values()
                     .cloned()
-                    .map(|t| ClientSideFunctionToolConfig::Static(t))
+                    .map(ClientSideFunctionToolConfig::Static)
                     .collect(),
                 vec![],
             )));

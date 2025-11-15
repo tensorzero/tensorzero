@@ -37,12 +37,12 @@ use crate::{
         check_new_tool_call_name, convert_stream_error, inject_extra_request_data_and_send,
         inject_extra_request_data_and_send_eventsource,
     },
-    tool::{ToolCall, ToolCallChunk, ToolChoice},
+    tool::{ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice},
 };
 
 use super::openai::{
     get_chat_url, tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage,
-    OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
+    OpenAISystemRequestMessage, OpenAIToolType,
 };
 
 lazy_static! {
@@ -474,21 +474,15 @@ pub(super) struct MistralTool<'a> {
     function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<OpenAITool<'a>> for MistralTool<'a> {
-    fn from(tool: OpenAITool<'a>) -> Self {
-        match tool {
-            OpenAITool::Function {
-                function,
-                strict: _,
-            } => MistralTool {
-                r#type: OpenAIToolType::Function,
-                function,
+impl<'a> From<&'a ClientSideFunctionToolConfig> for MistralTool<'a> {
+    fn from(tool: &'a ClientSideFunctionToolConfig) -> Self {
+        MistralTool {
+            r#type: OpenAIToolType::Function,
+            function: OpenAIFunction {
+                name: tool.name(),
+                description: Some(tool.description()),
+                parameters: tool.parameters(),
             },
-            OpenAITool::Custom(_) => {
-                // Mistral doesn't support custom tools, so this shouldn't happen
-                // But if it does, we'll just skip it by panicking
-                panic!("Mistral provider does not support custom tools")
-            }
         }
     }
 }
@@ -507,7 +501,7 @@ pub(super) fn prepare_mistral_tools<'a>(
             let tools = Some(
                 tool_config
                     .strict_tools_available()
-                    .map(|t| MistralTool::from(OpenAITool::from(t)))
+                    .map(Into::into)
                     .collect(),
             );
             let parallel_tool_calls = tool_config.parallel_tool_calls;

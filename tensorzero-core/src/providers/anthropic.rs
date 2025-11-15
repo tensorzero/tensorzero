@@ -1559,7 +1559,7 @@ mod tests {
     use crate::inference::types::{ContentBlock, FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
-    use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
+    use crate::tool::{DynamicToolConfig, ToolResult};
     use crate::utils::testing::capture_logs;
 
     #[test]

@@ -1146,10 +1146,7 @@ mod tests {
     fn test_validate_function_config_json_valid() {
         let function_config = create_test_json_function_config();
         let result = validate_function_config("test_json_function", &function_config);
-        if let Err(e) = &result {
-            eprintln!("Validation error: {:?}", e);
-        }
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Validation error: {result:?}");
     }
 
     #[test]

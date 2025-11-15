@@ -99,9 +99,8 @@ use crate::rate_limiting::{
 };
 use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::tool::{
-    deserialize_optional_tool_info, ClientSideFunctionToolConfig, DynamicToolConfig,
-    InferenceResponseToolCall, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
-    ToolCallWrapper, ToolConfig, ToolResult,
+    deserialize_optional_tool_info, InferenceResponseToolCall, ToolCall, ToolCallConfig,
+    ToolCallConfigDatabaseInsert, ToolCallWrapper, ToolResult,
 };
 use crate::variant::{InferenceConfig, JsonMode};
 
@@ -2256,7 +2255,7 @@ mod tests {
     use super::*;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{DynamicToolConfig, ToolChoice, ToolConfig};
+    use crate::tool::{ClientSideFunctionToolConfig, DynamicToolConfig, ToolChoice};
     use serde_json::json;
     use tokio::time::Instant;
 

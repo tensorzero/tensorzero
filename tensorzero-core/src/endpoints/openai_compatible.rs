@@ -384,8 +384,12 @@ impl std::fmt::Display for JsonSchemaInfo {
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 enum OpenAICompatibleTool {
-    Function { function: OpenAICompatibleFunctionTool },
-    Custom { custom: OpenAICustomTool },
+    Function {
+        function: OpenAICompatibleFunctionTool,
+    },
+    Custom {
+        custom: OpenAICustomTool,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -3150,10 +3154,13 @@ mod tests {
         match tool {
             OpenAICompatibleTool::Function { function } => {
                 assert_eq!(function.name, "get_weather");
-                assert_eq!(function.description, Some("Get the current weather".to_string()));
+                assert_eq!(
+                    function.description,
+                    Some("Get the current weather".to_string())
+                );
                 assert!(function.strict);
             }
-            _ => panic!("Expected Function variant"),
+            OpenAICompatibleTool::Custom { .. } => panic!("Expected Function variant"),
         }
 
         // Test Custom variant with text format
@@ -3175,7 +3182,7 @@ mod tests {
                 assert_eq!(custom.description, Some("A custom tool".to_string()));
                 assert!(custom.format.is_some());
             }
-            _ => panic!("Expected Custom variant"),
+            OpenAICompatibleTool::Function { .. } => panic!("Expected Custom variant"),
         }
 
         // Test Custom variant with grammar format
@@ -3199,7 +3206,7 @@ mod tests {
                 assert_eq!(custom.name, "grammar_tool");
                 assert!(custom.format.is_some());
             }
-            _ => panic!("Expected Custom variant"),
+            OpenAICompatibleTool::Function { .. } => panic!("Expected Custom variant"),
         }
 
         // Test conversion to Tool
@@ -3217,7 +3224,7 @@ mod tests {
             Tool::ClientSideFunction(func) => {
                 assert_eq!(func.name, "test_function");
             }
-            _ => panic!("Expected ClientSideFunction variant"),
+            Tool::OpenAICustom(_) => panic!("Expected ClientSideFunction variant"),
         }
 
         // Test conversion of custom tool to Tool
@@ -3234,7 +3241,7 @@ mod tests {
             Tool::OpenAICustom(custom) => {
                 assert_eq!(custom.name, "custom_test");
             }
-            _ => panic!("Expected OpenAICustom variant"),
+            Tool::ClientSideFunction(_) => panic!("Expected OpenAICustom variant"),
         }
     }
 }

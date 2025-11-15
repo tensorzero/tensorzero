@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
 use crate::jsonschema_util::StaticJSONSchema;
-use crate::tool::{
-    ClientSideFunctionToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
-};
+use crate::tool::{ClientSideFunctionToolConfig, StaticToolConfig, ToolCallConfig, ToolChoice};
 use lazy_static::lazy_static;
 use serde_json::json;
 

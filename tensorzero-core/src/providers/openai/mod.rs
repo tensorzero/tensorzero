@@ -3135,7 +3135,7 @@ mod tests {
                 assert_eq!(function.name, WEATHER_TOOL.name());
                 assert_eq!(function.parameters, WEATHER_TOOL.parameters());
             }
-            _ => panic!("Expected Function tool"),
+            OpenAITool::Custom(_) => panic!("Expected Function tool"),
         }
         assert_eq!(
             openai_request.tool_choice,
@@ -3630,14 +3630,14 @@ mod tests {
                 assert_eq!(function.name, WEATHER_TOOL.name());
                 assert_eq!(function.parameters, WEATHER_TOOL.parameters());
             }
-            _ => panic!("Expected Function tool"),
+            OpenAITool::Custom(_) => panic!("Expected Function tool"),
         }
         match &tools[1] {
             OpenAITool::Function { function, .. } => {
                 assert_eq!(function.name, QUERY_TOOL.name());
                 assert_eq!(function.parameters, QUERY_TOOL.parameters());
             }
-            _ => panic!("Expected Function tool"),
+            OpenAITool::Custom(_) => panic!("Expected Function tool"),
         }
         let tool_choice = tool_choice.unwrap();
         assert_eq!(

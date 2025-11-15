@@ -2748,7 +2748,7 @@ mod tests {
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::tool::{StaticToolConfig, ToolCallConfig, ToolConfig, ToolResult};
+    use crate::tool::{StaticToolConfig, ToolCallConfig, ToolResult};
     use serde_json::json;
     use std::borrow::Cow;
     use std::sync::Arc;

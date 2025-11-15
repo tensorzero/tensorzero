@@ -367,7 +367,7 @@ async fn test_create_delete_datapoint_chat() {
                         })
                     );
                 }
-                _ => panic!("Expected ClientSideFunction tool"),
+                Tool::OpenAICustom(_) => panic!("Expected ClientSideFunction tool"),
             }
         }
 

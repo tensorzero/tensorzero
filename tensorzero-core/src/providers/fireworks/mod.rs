@@ -40,15 +40,15 @@ use crate::{
         InferenceProvider,
     },
     model::{Credential, ModelProvider},
-    tool::{ToolCall, ToolCallChunk},
+    tool::{ClientSideFunctionToolConfig, ToolCall, ToolCallChunk},
 };
 
 use super::{
     helpers_thinking_block::{process_think_blocks, ThinkingState},
     openai::{
         get_chat_url, handle_openai_error, tensorzero_to_openai_messages, OpenAIFunction,
-        OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
-        OpenAIToolType, OpenAIUsage,
+        OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAIToolChoice, OpenAIToolType,
+        OpenAIUsage,
     },
 };
 
@@ -381,7 +381,7 @@ struct FireworksRequest<'a> {
 }
 
 type PreparedFireworksToolsResult<'a> = (
-    Option<Vec<OpenAITool<'a>>>,
+    Option<Vec<FireworksTool<'a>>>,
     Option<OpenAIToolChoice<'a>>,
     Option<bool>,
 );
@@ -471,7 +471,6 @@ impl<'a> FireworksRequest<'a> {
         )
         .await?;
         let (tools, tool_choice, _) = prepare_fireworks_tools(request);
-        let tools = tools.map(|t| t.into_iter().map(OpenAITool::into).collect());
 
         let mut fireworks_request = FireworksRequest {
             messages,
@@ -539,21 +538,15 @@ impl<'a> From<&'a ClientSideFunctionTool> for FireworksTool<'a> {
     }
 }
 
-impl<'a> From<OpenAITool<'a>> for FireworksTool<'a> {
-    fn from(tool: OpenAITool<'a>) -> Self {
-        match tool {
-            OpenAITool::Function {
-                function,
-                strict: _,
-            } => FireworksTool {
-                r#type: OpenAIToolType::Function,
-                function,
+impl<'a> From<&'a ClientSideFunctionToolConfig> for FireworksTool<'a> {
+    fn from(tool: &'a ClientSideFunctionToolConfig) -> Self {
+        FireworksTool {
+            r#type: OpenAIToolType::Function,
+            function: OpenAIFunction {
+                name: tool.name(),
+                description: Some(tool.description()),
+                parameters: tool.parameters(),
             },
-            OpenAITool::Custom(_) => {
-                // Fireworks doesn't support custom tools, so this shouldn't happen
-                // But if it does, we'll just skip it by panicking
-                panic!("Fireworks provider does not support custom tools")
-            }
         }
     }
 }

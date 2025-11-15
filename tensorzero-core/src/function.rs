@@ -43,6 +43,7 @@ use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[expect(clippy::large_enum_variant)]
 pub enum FunctionConfig {
     Chat(FunctionConfigChat),
     Json(FunctionConfigJson),
@@ -2494,11 +2495,11 @@ mod tests {
             assert_eq!(result.additional_tools.as_ref().unwrap().len(), 2);
             match &result.additional_tools.as_ref().unwrap()[0].0 {
                 Tool::ClientSideFunction(tool) => assert_eq!(tool.name, "dynamic1"),
-                _ => panic!("Expected ClientSideFunction"),
+                Tool::OpenAICustom(_) => panic!("Expected ClientSideFunction"),
             }
             match &result.additional_tools.as_ref().unwrap()[1].0 {
                 Tool::ClientSideFunction(tool) => assert_eq!(tool.name, "dynamic2"),
-                _ => panic!("Expected ClientSideFunction"),
+                Tool::OpenAICustom(_) => panic!("Expected ClientSideFunction"),
             }
 
             // Test 3: Mixed static and dynamic tools
@@ -2530,14 +2531,14 @@ mod tests {
                     assert_eq!(tool.name, "x");
                     assert!(tool.strict);
                 }
-                _ => panic!("Expected ClientSideFunction"),
+                Tool::OpenAICustom(_) => panic!("Expected ClientSideFunction"),
             }
             match &additional[1].0 {
                 Tool::ClientSideFunction(tool) => {
                     assert_eq!(tool.name, "y");
                     assert!(tool.strict);
                 }
-                _ => panic!("Expected ClientSideFunction"),
+                Tool::OpenAICustom(_) => panic!("Expected ClientSideFunction"),
             }
 
             // Test 4: Empty tools list
@@ -2668,7 +2669,7 @@ mod tests {
                     assert_eq!(result_tool_inner.parameters, tool.parameters);
                     assert_eq!(result_tool_inner.strict, tool.strict);
                 }
-                _ => panic!("Expected ClientSideFunction"),
+                Tool::OpenAICustom(_) => panic!("Expected ClientSideFunction"),
             }
         }
     }
