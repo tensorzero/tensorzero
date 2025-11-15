@@ -1303,7 +1303,7 @@ async fn test_embedding_request() {
         "Unexpected input tokens: {:?}",
         response.usage.input_tokens
     );
-    assert_eq!(response.usage.output_tokens, None);
+    assert_eq!(response.usage.output_tokens, Some(0));
     match response.latency {
         Latency::NonStreaming { response_time } => {
             assert!(
