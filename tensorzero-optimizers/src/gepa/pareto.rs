@@ -114,15 +114,17 @@ pub fn update_pareto_frontier(
         }
     }
 
-    // Get all datapoint IDs from the first valid score
+    // Get union of all datapoint IDs across all variants
+    // This ensures we analyze ALL datapoints that ANY variant was evaluated on
     let datapoint_ids: Vec<String> = val_scores_map
         .values()
-        .next()
-        .map(|scores| scores.keys().cloned().collect())
-        .unwrap_or_default();
+        .flat_map(|scores| scores.keys().cloned())
+        .collect::<HashSet<_>>() // Deduplicate
+        .into_iter()
+        .collect();
 
     tracing::debug!(
-        "Step 1: Building instance-wise Pareto sets for {} datapoints",
+        "Step 1: Building instance-wise Pareto sets for {} datapoints (union across all variants)",
         datapoint_ids.len()
     );
 
