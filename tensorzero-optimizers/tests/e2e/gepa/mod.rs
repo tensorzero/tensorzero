@@ -42,6 +42,32 @@ pub fn create_test_function_config() -> FunctionConfig {
     })
 }
 
+/// Create a minimal JSON FunctionConfig for testing
+pub fn create_test_json_function_config() -> FunctionConfig {
+    use tensorzero_core::{function::FunctionConfigJson, tool::create_implicit_tool_call_config};
+
+    let output_schema = StaticJSONSchema::from_value(serde_json::json!({
+        "type": "object",
+        "properties": {
+            "result": {"type": "string"}
+        },
+        "required": ["result"]
+    }))
+    .expect("Failed to create JSON output schema");
+
+    let implicit_tool_call_config = create_implicit_tool_call_config(output_schema.clone());
+
+    FunctionConfig::Json(FunctionConfigJson {
+        variants: HashMap::new(),
+        schemas: SchemaData::default(),
+        output_schema,
+        implicit_tool_call_config,
+        description: Some("Test JSON function for GEPA e2e tests".to_string()),
+        all_explicit_template_names: std::collections::HashSet::new(),
+        experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+    })
+}
+
 /// Create a Chat FunctionConfig with schemas for validation tests
 pub fn create_test_function_config_with_schemas() -> FunctionConfig {
     let system_schema = StaticJSONSchema::from_value(serde_json::json!({
@@ -105,6 +131,81 @@ pub fn create_test_config_and_tools_with_schemas() -> FunctionConfigAndTools {
     FunctionConfigAndTools {
         function_config: Arc::new(create_test_function_config_with_schemas()),
         static_tools: None,
+    }
+}
+
+/// Create a minimal JSON FunctionConfigAndTools for testing (no tools)
+pub fn create_test_json_config_and_tools() -> FunctionConfigAndTools {
+    FunctionConfigAndTools {
+        function_config: Arc::new(create_test_json_function_config()),
+        static_tools: None,
+    }
+}
+
+/// Create a FunctionConfigAndTools with static tools (calculator and weather) for testing
+pub fn create_test_config_and_tools_with_static_tools() -> FunctionConfigAndTools {
+    use tensorzero_core::tool::StaticToolConfig;
+
+    // Create calculator tool
+    let calculator_schema = StaticJSONSchema::from_value(serde_json::json!({
+        "type": "object",
+        "properties": {
+            "expression": {
+                "type": "string",
+                "description": "Mathematical expression to evaluate"
+            }
+        },
+        "required": ["expression"]
+    }))
+    .expect("Failed to create calculator schema");
+
+    let calculator_tool = StaticToolConfig {
+        name: "calculator".to_string(),
+        description: "Evaluates mathematical expressions".to_string(),
+        parameters: calculator_schema,
+        strict: true,
+    };
+
+    // Create weather tool
+    let weather_schema = StaticJSONSchema::from_value(serde_json::json!({
+        "type": "object",
+        "properties": {
+            "location": {
+                "type": "string",
+                "description": "Location to get weather for"
+            }
+        },
+        "required": ["location"]
+    }))
+    .expect("Failed to create weather schema");
+
+    let weather_tool = StaticToolConfig {
+        name: "weather".to_string(),
+        description: "Gets weather information".to_string(),
+        parameters: weather_schema,
+        strict: true,
+    };
+
+    // Create FunctionConfig with tools
+    let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+        variants: HashMap::new(),
+        schemas: SchemaData::default(),
+        tools: vec!["calculator".to_string(), "weather".to_string()],
+        tool_choice: tensorzero_core::tool::ToolChoice::Auto,
+        parallel_tool_calls: None,
+        description: Some("Test function with static tools".to_string()),
+        all_explicit_templates_names: std::collections::HashSet::new(),
+        experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
+    }));
+
+    // Create static_tools HashMap
+    let mut static_tools = HashMap::new();
+    static_tools.insert("calculator".to_string(), Arc::new(calculator_tool));
+    static_tools.insert("weather".to_string(), Arc::new(weather_tool));
+
+    FunctionConfigAndTools {
+        function_config,
+        static_tools: Some(static_tools),
     }
 }
 

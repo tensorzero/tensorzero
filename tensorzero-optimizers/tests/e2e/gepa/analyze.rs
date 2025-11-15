@@ -6,7 +6,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use tensorzero::test_helpers::make_embedded_gateway;
-use tensorzero_core::{endpoints::inference::InferenceResponse, function::FunctionConfig};
+use tensorzero_core::endpoints::inference::InferenceResponse;
 use tensorzero_optimizers::gepa::analyze_inferences;
 
 use super::*;
@@ -262,83 +262,8 @@ async fn test_analyze_inferences_parallel_execution() {
 // ============================================================================
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_inferences_graceful_degradation() {
-    // Setup: Create gateway client with mix of valid and potentially problematic inputs
-    let client = make_embedded_gateway().await;
-
-    let eval_infos = vec![
-        create_test_evaluation_info("test_function", "Normal input", "Normal output"),
-        create_test_evaluation_info(
-            "test_function",
-            "Another normal input",
-            "Another normal output",
-        ),
-    ];
-
-    let config_and_tools = create_test_config_and_tools();
-    let variant_config = create_test_variant_config();
-    let gepa_config = create_test_gepa_config();
-
-    // Execute: Should handle any issues gracefully
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &config_and_tools,
-        &variant_config,
-        &gepa_config,
-    )
-    .await;
-
-    // Assert: Should succeed even if some analyses have issues
-    assert!(
-        result.is_ok(),
-        "analyze_inferences should handle errors gracefully"
-    );
-    let analyses = result.unwrap();
-    assert!(
-        !analyses.is_empty(),
-        "Should return at least some successful analyses"
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_inferences_invalid_model() {
-    // Setup: Create gateway client with invalid model
-    let client = make_embedded_gateway().await;
-
-    let eval_infos = vec![create_test_evaluation_info(
-        "test_function",
-        "Test input",
-        "Test output",
-    )];
-
-    let config_and_tools = create_test_config_and_tools();
-    let variant_config = create_test_variant_config();
-    let mut gepa_config = create_test_gepa_config();
-    gepa_config.analysis_model = "nonexistent::invalid_model".to_string();
-
-    // Execute: Should fail gracefully
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &config_and_tools,
-        &variant_config,
-        &gepa_config,
-    )
-    .await;
-
-    // Assert: Should return an error
-    assert!(
-        result.is_err(),
-        "analyze_inferences should error with invalid model"
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_inferences_all_failures_error() {
-    // Setup: This test verifies that if all analyses fail, we get a proper error
-    // Note: With dummy::echo_request_messages, failures are rare, so we test the error path
-    // by using an invalid configuration
+    // Setup: Test that invalid model causes all analyses to fail with proper error
     let client = make_embedded_gateway().await;
 
     let eval_infos = vec![create_test_evaluation_info(
@@ -352,7 +277,7 @@ async fn test_analyze_inferences_all_failures_error() {
     let mut gepa_config = create_test_gepa_config();
     gepa_config.analysis_model = "invalid_provider::nonexistent_model".to_string();
 
-    // Execute
+    // Execute: Should fail when all analyses fail
     let result = analyze_inferences(
         &client,
         &eval_infos,
@@ -362,7 +287,7 @@ async fn test_analyze_inferences_all_failures_error() {
     )
     .await;
 
-    // Assert: Should return error when all analyses fail
+    // Assert: Should return error with appropriate message
     assert!(result.is_err(), "Should error when all analyses fail");
     let error = result.unwrap_err();
     let error_msg = error.to_string();
@@ -411,75 +336,91 @@ async fn test_analyze_inferences_with_schemas() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_inferences_with_tools() {
-    // Setup: Use Chat function with tools
-    let client = make_embedded_gateway().await;
-
-    let eval_infos = vec![create_test_evaluation_info(
-        "test_function",
-        "Test input",
-        "Test output",
-    )];
-
-    // Create function config with tools
-    use std::collections::HashMap;
-    use std::sync::Arc;
-    use tensorzero_core::config::SchemaData;
-    use tensorzero_core::function::FunctionConfigChat;
-    use tensorzero_optimizers::gepa::FunctionConfigAndTools;
-
-    let config_and_tools = FunctionConfigAndTools {
-        function_config: Arc::new(FunctionConfig::Chat(FunctionConfigChat {
-            variants: HashMap::new(),
-            schemas: SchemaData::default(),
-            tools: vec![], // Tools would be added here in a real scenario
-            tool_choice: tensorzero_core::tool::ToolChoice::None,
-            parallel_tool_calls: None,
-            description: Some("Test function with tools".to_string()),
-            all_explicit_templates_names: std::collections::HashSet::new(),
-            experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
-        })),
-        static_tools: None,
+async fn test_analyze_inferences_json_function() {
+    use tensorzero_core::{
+        endpoints::{
+            datasets::{JsonInferenceDatapoint, StoredDatapoint},
+            inference::JsonInferenceResponse,
+        },
+        inference::types::{Input, JsonInferenceOutput},
     };
 
-    let variant_config = create_test_variant_config();
-    let gepa_config = create_test_gepa_config();
-
-    // Execute
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &config_and_tools,
-        &variant_config,
-        &gepa_config,
-    )
-    .await;
-
-    // Assert: Should succeed with tools
-    assert!(result.is_ok(), "analyze_inferences should work with tools");
-    let analyses = result.unwrap();
-    assert_eq!(analyses.len(), 1, "Should return 1 analysis");
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_inferences_json_function() {
-    // Setup: For JSON functions, we would need different datapoint structure
-    // This test is a placeholder showing how it would be structured
+    // Setup: Test with actual JSON function and StoredDatapoint::Json
     let client = make_embedded_gateway().await;
 
-    // Note: JSON functions require different StoredDatapoint::Json variant
-    // For this test, we use Chat to verify the code path still works
-    let eval_infos = vec![create_test_evaluation_info(
-        "test_function",
-        "Test input",
-        "Test output",
-    )];
-
-    let config_and_tools = create_test_config_and_tools();
+    // Use JSON function config
+    let config_and_tools = create_test_json_config_and_tools();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
 
-    // Execute
+    // Create a proper JSON datapoint
+    let input = Input {
+        messages: vec![],
+        system: None,
+    };
+    let stored_input =
+        serde_json::from_value(serde_json::to_value(&input).expect("Failed to serialize input"))
+            .expect("Failed to deserialize stored input");
+
+    let output_json = serde_json::json!({
+        "result": "This is a test JSON output"
+    });
+
+    let output_schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "result": {"type": "string"}
+        },
+        "required": ["result"]
+    });
+
+    let datapoint = JsonInferenceDatapoint {
+        dataset_name: "test_dataset".to_string(),
+        function_name: "test_json_function".to_string(),
+        id: uuid::Uuid::now_v7(),
+        episode_id: Some(uuid::Uuid::now_v7()),
+        input: stored_input,
+        output: Some(JsonInferenceOutput {
+            raw: Some(output_json.to_string()),
+            parsed: Some(output_json.clone()),
+        }),
+        output_schema,
+        tags: Some(HashMap::from([(
+            "test_type".to_string(),
+            "json_function_test".to_string(),
+        )])),
+        auxiliary: String::new(),
+        is_deleted: false,
+        is_custom: false,
+        source_inference_id: None,
+        staled_at: None,
+        updated_at: "2025-01-01T00:00:00Z".to_string(),
+        name: None,
+    };
+
+    let response = InferenceResponse::Json(JsonInferenceResponse {
+        inference_id: uuid::Uuid::now_v7(),
+        episode_id: uuid::Uuid::now_v7(),
+        variant_name: "test_variant".to_string(),
+        output: JsonInferenceOutput {
+            raw: Some(output_json.to_string()),
+            parsed: Some(output_json),
+        },
+        usage: tensorzero_core::inference::types::Usage::default(),
+        original_response: None,
+        finish_reason: Some(tensorzero_core::inference::types::FinishReason::Stop),
+    });
+
+    let eval_info = evaluations::stats::EvaluationInfo {
+        datapoint: StoredDatapoint::Json(datapoint),
+        response,
+        evaluations: HashMap::new(),
+        evaluator_errors: HashMap::new(),
+    };
+
+    let eval_infos = vec![eval_info];
+
+    // Execute: Should handle JSON functions correctly
     let result = analyze_inferences(
         &client,
         &eval_infos,
@@ -489,56 +430,40 @@ async fn test_analyze_inferences_json_function() {
     )
     .await;
 
-    // Assert
-    assert!(result.is_ok(), "analyze_inferences should work");
+    // Assert: Should succeed with JSON function
+    assert!(
+        result.is_ok(),
+        "analyze_inferences should work with JSON functions"
+    );
     let analyses = result.unwrap();
     assert_eq!(analyses.len(), 1, "Should return 1 analysis");
+
+    // Verify the inference_output is Json variant
+    match &analyses[0].inference_output {
+        InferenceResponse::Json(json_response) => {
+            assert_eq!(
+                json_response.variant_name, "test_variant",
+                "Should preserve variant name"
+            );
+            assert!(
+                json_response
+                    .output
+                    .parsed
+                    .as_ref()
+                    .and_then(|v| v.get("result"))
+                    .is_some(),
+                "Should have JSON output with 'result' field"
+            );
+        }
+        InferenceResponse::Chat(_) => {
+            panic!("Expected Json response, got Chat");
+        }
+    }
 }
 
 // ============================================================================
 // Response Parsing Tests
 // ============================================================================
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_inferences_xml_extraction() {
-    // Setup: Test that XML content is correctly extracted from responses
-    let client = make_embedded_gateway().await;
-
-    let eval_infos = vec![create_test_evaluation_info(
-        "test_function",
-        "Test input",
-        "Test output",
-    )];
-
-    let config_and_tools = create_test_config_and_tools();
-    let variant_config = create_test_variant_config();
-    let gepa_config = create_test_gepa_config();
-
-    // Execute
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &config_and_tools,
-        &variant_config,
-        &gepa_config,
-    )
-    .await;
-
-    // Assert: Verify XML content is present
-    assert!(result.is_ok(), "analyze_inferences should succeed");
-    let analyses = result.unwrap();
-    assert_eq!(analyses.len(), 1, "Should return 1 analysis");
-
-    // The analysis field should contain XML with expected tags
-    assert!(
-        !analyses[0].analysis.is_empty(),
-        "Analysis should contain XML or text content"
-    );
-    assert!(
-        contains_expected_xml_tag(&analyses[0].analysis),
-        "Analysis should contain expected XML tags"
-    );
-}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_inferences_response_structure() {
@@ -660,8 +585,9 @@ async fn test_analyze_input_includes_evaluations() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_input_includes_function_context() {
-    // Setup: Create gateway client with echo model
+async fn test_analyze_input_includes_required_fields() {
+    // Setup: Create gateway client with echo model to verify all required template fields
+    // Use basic config with no schemas, tools, or tags to verify conditional fields don't appear
     let client = make_embedded_gateway().await;
 
     let eval_infos = vec![create_test_evaluation_info(
@@ -684,12 +610,12 @@ async fn test_analyze_input_includes_function_context() {
     )
     .await;
 
-    // Assert: Verify function context is included
+    // Assert: Verify all required fields are present
     assert!(result.is_ok(), "analyze_inferences should succeed");
     let analyses = result.unwrap();
-
     let user_message = extract_user_message_from_echo(&analyses[0].analysis);
 
+    // Required: <function_context> section
     assert!(
         user_message.contains("<function_context>"),
         "User message should contain <function_context> section"
@@ -714,6 +640,57 @@ async fn test_analyze_input_includes_function_context() {
         user_message.contains("<message_templates>"),
         "User message should contain <message_templates> section"
     );
+
+    // Required: <inference_context> section
+    assert!(
+        user_message.contains("<inference_context>"),
+        "User message should contain <inference_context> section"
+    );
+    assert!(
+        user_message.contains("<inference_input>"),
+        "User message should contain <inference_input>"
+    );
+
+    // Required: <inference_output> section
+    assert!(
+        user_message.contains("<inference_output>"),
+        "User message should contain <inference_output>"
+    );
+
+    // Required: <evaluations> section (even if empty)
+    assert!(
+        user_message.contains("<evaluations>"),
+        "User message should contain <evaluations> section"
+    );
+
+    // Required: <task> section
+    assert!(
+        user_message.contains("<task>"),
+        "User message should contain <task> section"
+    );
+
+    // Conditional fields should NOT appear when empty:
+    // - No schemas configured, so <message_schemas> should not appear
+    assert!(
+        !user_message.contains("<message_schemas>"),
+        "User message should NOT contain <message_schemas> when no schemas are configured"
+    );
+
+    // - No output_schema configured (Chat function), so <output_schema> should not appear
+    assert!(
+        !user_message.contains("<output_schema>"),
+        "User message should NOT contain <output_schema> for Chat functions without output schema"
+    );
+
+    // - No tools configured, so <available_tools> should not appear
+    assert!(
+        !user_message.contains("<available_tools>"),
+        "User message should NOT contain <available_tools> when no tools are configured"
+    );
+
+    // - No tags in datapoint, so <metadata> should not appear
+    // Note: create_test_evaluation_info includes one tag "test_input", so metadata will appear
+    // This is fine - the important thing is we're testing the field presence/absence logic
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -757,123 +734,17 @@ async fn test_analyze_input_includes_schemas() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_input_includes_tools() {
-    // Setup: Create function config with tools (even if empty for now)
-    let client = make_embedded_gateway().await;
-
-    let eval_infos = vec![create_test_evaluation_info(
-        "test_function",
-        "Test input",
-        "Test output",
-    )];
-
-    use std::collections::HashMap;
-    use std::sync::Arc;
-    use tensorzero_core::config::SchemaData;
-    use tensorzero_core::function::FunctionConfigChat;
-    use tensorzero_optimizers::gepa::FunctionConfigAndTools;
-
-    let config_and_tools = FunctionConfigAndTools {
-        function_config: Arc::new(FunctionConfig::Chat(FunctionConfigChat {
-            variants: HashMap::new(),
-            schemas: SchemaData::default(),
-            tools: vec![], // Tools would be added here in a real scenario
-            tool_choice: tensorzero_core::tool::ToolChoice::None,
-            parallel_tool_calls: None,
-            description: Some("Test function with tools".to_string()),
-            all_explicit_templates_names: std::collections::HashSet::new(),
-            experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
-        })),
-        static_tools: None,
-    };
-
-    let variant_config = create_test_variant_config();
-    let gepa_config = create_test_gepa_config_echo();
-
-    // Execute
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &config_and_tools,
-        &variant_config,
-        &gepa_config,
-    )
-    .await;
-
-    // Assert: This test verifies the template handles tools section correctly
-    assert!(
-        result.is_ok(),
-        "analyze_inferences should work with tools config"
-    );
-    let analyses = result.unwrap();
-    assert_eq!(analyses.len(), 1, "Should return 1 analysis");
-
-    let user_message = extract_user_message_from_echo(&analyses[0].analysis);
-
-    // When tools is empty, the template should not include the tools section
-    // (due to {% if tools %} condition in the template)
-    assert!(
-        !user_message.contains("<available_tools>"),
-        "User message should not contain <available_tools> when tools is empty"
-    );
-}
-
 // ============================================================================
 // Tool Handling Tests
 // ============================================================================
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_input_with_static_tools() {
-    use std::sync::Arc;
-    use tensorzero_core::{
-        function::FunctionConfigChat, jsonschema_util::StaticJSONSchema, tool::StaticToolConfig,
-    };
-    use tensorzero_optimizers::gepa::FunctionConfigAndTools;
-
-    // Setup: Create gateway client
+    // Setup: Create gateway client with static tools (calculator and weather)
     let client = make_embedded_gateway().await;
 
-    // Create a static tool configuration
-    let tool_schema = StaticJSONSchema::from_value(serde_json::json!({
-        "type": "object",
-        "properties": {
-            "expression": {
-                "type": "string",
-                "description": "Mathematical expression to evaluate"
-            }
-        },
-        "required": ["expression"]
-    }))
-    .expect("Failed to create tool schema");
-
-    let calculator_tool = StaticToolConfig {
-        name: "calculator".to_string(),
-        description: "Evaluates mathematical expressions".to_string(),
-        parameters: tool_schema,
-        strict: true,
-    };
-
-    // Create FunctionConfig with tools
-    let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
-        variants: HashMap::new(),
-        schemas: tensorzero_core::config::SchemaData::default(),
-        tools: vec!["calculator".to_string()],
-        tool_choice: tensorzero_core::tool::ToolChoice::Auto,
-        parallel_tool_calls: None,
-        description: Some("Test function with tools".to_string()),
-        all_explicit_templates_names: std::collections::HashSet::new(),
-        experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
-    }));
-
-    // Create FunctionConfigAndTools with static_tools populated
-    let mut static_tools = HashMap::new();
-    static_tools.insert("calculator".to_string(), Arc::new(calculator_tool));
-
-    let config_and_tools = FunctionConfigAndTools {
-        function_config,
-        static_tools: Some(static_tools),
-    };
+    // Use helper to get function config with static tools
+    let config_and_tools = create_test_config_and_tools_with_static_tools();
 
     // Create test evaluation info
     let eval_infos = vec![create_test_evaluation_info(
@@ -912,91 +783,47 @@ async fn test_analyze_input_with_static_tools() {
         "User message should contain <available_tools> section when tools are configured"
     );
 
+    // Verify both tools appear (calculator and weather)
     assert!(
         user_message.contains("calculator"),
         "User message should contain the calculator tool"
     );
+    assert!(
+        user_message.contains("weather"),
+        "User message should contain the weather tool"
+    );
 
     assert!(
         user_message.contains("Evaluates mathematical expressions"),
-        "User message should contain the tool description"
+        "User message should contain the calculator tool description"
+    );
+    assert!(
+        user_message.contains("Gets weather information"),
+        "User message should contain the weather tool description"
     );
 
     assert!(
         user_message.contains("expression"),
-        "User message should contain the tool parameter"
+        "User message should contain the calculator tool parameter"
+    );
+    assert!(
+        user_message.contains("location"),
+        "User message should contain the weather tool parameter"
     );
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_input_with_datapoint_tool_params() {
-    use std::sync::Arc;
     use tensorzero_core::{
         endpoints::datasets::StoredChatInferenceDatapoint,
-        function::FunctionConfigChat,
-        jsonschema_util::StaticJSONSchema,
-        tool::{
-            AllowedTools, AllowedToolsChoice, StaticToolConfig, ToolCallConfigDatabaseInsert,
-            ToolChoice,
-        },
+        tool::{AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert, ToolChoice},
     };
-    use tensorzero_optimizers::gepa::FunctionConfigAndTools;
 
     // Setup: Create gateway client
     let client = make_embedded_gateway().await;
 
-    // Create two static tools
-    let calculator_schema = StaticJSONSchema::from_value(serde_json::json!({
-        "type": "object",
-        "properties": {
-            "expression": {"type": "string"}
-        }
-    }))
-    .expect("Failed to create calculator schema");
-
-    let weather_schema = StaticJSONSchema::from_value(serde_json::json!({
-        "type": "object",
-        "properties": {
-            "location": {"type": "string"}
-        }
-    }))
-    .expect("Failed to create weather schema");
-
-    let calculator_tool = StaticToolConfig {
-        name: "calculator".to_string(),
-        description: "Evaluates mathematical expressions".to_string(),
-        parameters: calculator_schema,
-        strict: true,
-    };
-
-    let weather_tool = StaticToolConfig {
-        name: "weather".to_string(),
-        description: "Gets weather information".to_string(),
-        parameters: weather_schema,
-        strict: true,
-    };
-
-    // Create FunctionConfig with both tools
-    let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
-        variants: HashMap::new(),
-        schemas: tensorzero_core::config::SchemaData::default(),
-        tools: vec!["calculator".to_string(), "weather".to_string()],
-        tool_choice: tensorzero_core::tool::ToolChoice::Auto,
-        parallel_tool_calls: None,
-        description: Some("Test function with tools".to_string()),
-        all_explicit_templates_names: std::collections::HashSet::new(),
-        experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
-    }));
-
-    // Create FunctionConfigAndTools with static_tools
-    let mut static_tools = HashMap::new();
-    static_tools.insert("calculator".to_string(), Arc::new(calculator_tool));
-    static_tools.insert("weather".to_string(), Arc::new(weather_tool));
-
-    let config_and_tools = FunctionConfigAndTools {
-        function_config,
-        static_tools: Some(static_tools),
-    };
+    // Use helper to get function config with static tools (calculator and weather)
+    let config_and_tools = create_test_config_and_tools_with_static_tools();
 
     // Create datapoint with tool_params that restricts to only calculator
     let tool_params = ToolCallConfigDatabaseInsert::new_for_test(
