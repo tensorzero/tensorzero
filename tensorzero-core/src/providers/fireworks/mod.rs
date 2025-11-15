@@ -542,7 +542,10 @@ impl<'a> From<&'a ClientSideFunctionTool> for FireworksTool<'a> {
 impl<'a> From<OpenAITool<'a>> for FireworksTool<'a> {
     fn from(tool: OpenAITool<'a>) -> Self {
         match tool {
-            OpenAITool::Function { function, strict: _ } => FireworksTool {
+            OpenAITool::Function {
+                function,
+                strict: _,
+            } => FireworksTool {
                 r#type: OpenAIToolType::Function,
                 function,
             },

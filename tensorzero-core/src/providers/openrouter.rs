@@ -697,7 +697,11 @@ pub(super) fn prepare_openrouter_tools<'a>(
     // Convert from ChatCompletionToolChoice to OpenRouterToolChoice
     let openrouter_tool_choice = tool_choice.map(OpenRouterToolChoice::from);
 
-    (openrouter_tools, openrouter_tool_choice, parallel_tool_calls)
+    (
+        openrouter_tools,
+        openrouter_tool_choice,
+        parallel_tool_calls,
+    )
 }
 
 /// This function is complicated only by the fact that OpenRouter and Azure require

@@ -1008,12 +1008,13 @@ mod tests {
         );
 
         // Specific tool choice is converted to Specific
-        let specific_tool_choice = ChatCompletionToolChoice::Specific(ChatCompletionSpecificToolChoice {
-            r#type: ChatCompletionToolType::Function,
-            function: ChatCompletionSpecificToolFunction {
-                name: "test_function",
-            },
-        });
+        let specific_tool_choice =
+            ChatCompletionToolChoice::Specific(ChatCompletionSpecificToolChoice {
+                r#type: ChatCompletionToolType::Function,
+                function: ChatCompletionSpecificToolFunction {
+                    name: "test_function",
+                },
+            });
         let azure_specific_tool_choice = AzureToolChoice::from(specific_tool_choice);
         assert_eq!(
             azure_specific_tool_choice,
@@ -1026,7 +1027,8 @@ mod tests {
         );
 
         // None is converted to None
-        let none_tool_choice = ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::None);
+        let none_tool_choice =
+            ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::None);
         let azure_none_tool_choice = AzureToolChoice::from(none_tool_choice);
         assert_eq!(
             azure_none_tool_choice,
@@ -1034,7 +1036,8 @@ mod tests {
         );
 
         // Auto is converted to Auto
-        let auto_tool_choice = ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::Auto);
+        let auto_tool_choice =
+            ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::Auto);
         let azure_auto_tool_choice = AzureToolChoice::from(auto_tool_choice);
         assert_eq!(
             azure_auto_tool_choice,

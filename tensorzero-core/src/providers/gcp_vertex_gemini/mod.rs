@@ -2848,8 +2848,10 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&ClientSideFunctionToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
-        let tools_vec_owned: Vec<ClientSideFunctionToolConfig> = tools_vec.iter().map(|&t| t.clone()).collect();
+        let tools_vec: Vec<&ClientSideFunctionToolConfig> =
+            MULTI_TOOL_CONFIG.tools_available().collect();
+        let tools_vec_owned: Vec<ClientSideFunctionToolConfig> =
+            tools_vec.iter().map(|&t| t.clone()).collect();
         let tool = GCPVertexGeminiTool::from(&tools_vec_owned);
         assert_eq!(
             tool,

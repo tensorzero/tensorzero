@@ -38,9 +38,9 @@ use crate::inference::types::{
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::InferenceProvider;
 use crate::model::{fully_qualified_name, Credential, ModelProvider};
-use crate::tool::{ClientSideFunctionToolConfig, ToolConfig};
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
+use crate::tool::{ClientSideFunctionToolConfig, ToolConfig};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
 
 use super::gcp_vertex_gemini::process_jsonschema_for_gcp_vertex_gemini;
@@ -1615,7 +1615,8 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&ClientSideFunctionToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
+        let tools_vec: Vec<&ClientSideFunctionToolConfig> =
+            MULTI_TOOL_CONFIG.tools_available().collect();
         let tool = GeminiTool {
             function_declarations: tools_vec
                 .iter()

@@ -1,10 +1,10 @@
 pub mod anthropic;
 pub mod aws_bedrock;
 pub mod aws_common;
-pub mod common;
 mod aws_http_client;
 pub mod aws_sagemaker;
 pub mod azure;
+pub mod common;
 pub mod deepseek;
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod dummy;

@@ -101,7 +101,7 @@ use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_stri
 use crate::tool::{
     deserialize_optional_tool_info, ClientSideFunctionToolConfig, DynamicToolConfig,
     InferenceResponseToolCall, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
-    ToolConfig, ToolCallWrapper, ToolResult,
+    ToolCallWrapper, ToolConfig, ToolResult,
 };
 use crate::variant::{InferenceConfig, JsonMode};
 

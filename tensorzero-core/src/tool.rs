@@ -1736,7 +1736,8 @@ impl ToolCallConfig {
     #[expect(clippy::missing_panics_doc)]
     pub fn implicit_from_value(value: &Value) -> Self {
         let parameters = StaticJSONSchema::from_value(value.clone()).unwrap();
-        let implicit_tool_config = ClientSideFunctionToolConfig::Implicit(ImplicitToolConfig { parameters });
+        let implicit_tool_config =
+            ClientSideFunctionToolConfig::Implicit(ImplicitToolConfig { parameters });
         Self {
             static_tools_available: vec![implicit_tool_config],
             dynamic_tools_available: vec![],
@@ -3954,7 +3955,10 @@ mod tests {
 
         // Custom tools are separate - check that the custom tool is in the list
         assert_eq!(tool_call_config.openai_custom_tools.len(), 1);
-        assert_eq!(tool_call_config.openai_custom_tools[0].name, "dynamic_custom");
+        assert_eq!(
+            tool_call_config.openai_custom_tools[0].name,
+            "dynamic_custom"
+        );
     }
 
     /// Test ToolCallConfig construction creates correct ToolConfig variants
@@ -3992,10 +3996,15 @@ mod tests {
 
         // Verify function tool became DynamicToolConfig
         let func_config = tool_call_config.get_function_tool("dynamic_func").unwrap();
-        assert!(matches!(func_config, ClientSideFunctionToolConfig::Dynamic(_)));
+        assert!(matches!(
+            func_config,
+            ClientSideFunctionToolConfig::Dynamic(_)
+        ));
 
         // Verify custom tool is in the custom tools list
-        let custom_config = tool_call_config.openai_custom_tools.iter()
+        let custom_config = tool_call_config
+            .openai_custom_tools
+            .iter()
             .find(|t| t.name == "dynamic_custom")
             .expect("dynamic_custom should be in openai_custom_tools");
         assert_eq!(custom_config.description, Some("Custom".to_string()));

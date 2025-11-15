@@ -477,7 +477,10 @@ pub(super) struct MistralTool<'a> {
 impl<'a> From<OpenAITool<'a>> for MistralTool<'a> {
     fn from(tool: OpenAITool<'a>) -> Self {
         match tool {
-            OpenAITool::Function { function, strict: _ } => MistralTool {
+            OpenAITool::Function {
+                function,
+                strict: _,
+            } => MistralTool {
                 r#type: OpenAIToolType::Function,
                 function,
             },
