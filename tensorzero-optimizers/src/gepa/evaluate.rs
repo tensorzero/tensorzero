@@ -38,25 +38,54 @@ use evaluations::{
 
 // Type aliases for cleaner score map signatures
 
-/// An evaluator/metric name
+/// Name of an evaluator/metric (e.g., "accuracy", "latency", "f1_score")
+///
+/// Used to identify specific evaluation metrics across the system.
 pub type EvaluatorName = String;
 
-/// A datapoint/example identifier
+/// Unique identifier for a datapoint/example in a dataset
+///
+/// Typically a UUID or other unique string identifying a specific test case.
 pub type DatapointId = String;
 
-/// A variant name identifier
+/// Name of a variant being evaluated
+///
+/// Corresponds to variant names in the TensorZero configuration.
 pub type VariantName = String;
 
 /// Scores for all evaluators on a single datapoint
-/// Key: evaluator_name, Value: score (None if evaluation failed)
+///
+/// Maps each evaluator name to its score for this specific datapoint.
+/// The score is `Option<f32>` because evaluation may fail (returns `None`).
+///
+/// # Structure
+/// - Key: evaluator name (e.g., "accuracy")
+/// - Value: score (e.g., `Some(0.85)`) or `None` if evaluation failed
 pub type DatapointScores = HashMap<EvaluatorName, Option<f32>>;
 
 /// Scores for all datapoints for a single variant
-/// Key: datapoint_id, Value: scores for all evaluators on that datapoint
+///
+/// Maps each datapoint ID to the scores for all evaluators on that datapoint.
+///
+/// # Structure
+/// - Key: datapoint ID (unique identifier for the test case)
+/// - Value: `DatapointScores` (all evaluator scores for that datapoint)
 pub type VariantScores = HashMap<DatapointId, DatapointScores>;
 
 /// Scores for all variants on the validation set
-/// Key: variant_name, Value: scores for all datapoints for that variant
+///
+/// Top-level structure containing complete evaluation results across all variants
+/// and datapoints. This is the primary data structure used in GEPA's Pareto frontier
+/// analysis.
+///
+/// # Structure
+/// - Key: variant name (e.g., "baseline", "mutated_iter_3")
+/// - Value: `VariantScores` (all datapoint scores for that variant)
+///
+/// # Example Access Pattern
+/// ```ignore
+/// let score = validation_scores_map["variant_a"]["datapoint_123"]["accuracy"];
+/// ```
 pub type ValidationScoresMap = HashMap<VariantName, VariantScores>;
 
 /// Holds the results of evaluating variants on a dataset
@@ -170,7 +199,7 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
 ///
 /// Uses EvaluationStats infrastructure to handle stream consumption and statistics computation,
 /// following the same pattern as the evaluations CLI for consistency and maintainability.
-pub async fn consume_evaluation_stream(
+pub(crate) async fn consume_evaluation_stream(
     mut receiver: mpsc::Receiver<EvaluationUpdate>,
     evaluation_config: &std::sync::Arc<EvaluationConfig>,
     dataset_len: usize,

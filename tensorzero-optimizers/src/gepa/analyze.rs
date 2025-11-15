@@ -29,7 +29,7 @@ use tensorzero_core::{
 
 use evaluations::stats::EvaluationInfo;
 
-use crate::gepa::validate::FunctionConfigAndTools;
+use crate::gepa::{utils, validate::FunctionConfigAndTools};
 
 /// Serialize values to JSON with contextual error messages
 fn serialize_to_value<T: serde::Serialize>(
@@ -69,24 +69,11 @@ pub fn build_analyze_input(
     config_and_tools: &FunctionConfigAndTools,
     variant_config: &UninitializedChatCompletionConfig,
 ) -> Result<Arguments, Error> {
-    // Extract all templates from templates.inner HashMap using idiomatic iterators
-    let templates_map: HashMap<String, String> = variant_config
-        .templates
-        .inner
-        .iter()
-        .map(|(name, config)| config.path.read().map(|content| (name.clone(), content)))
-        .collect::<Result<_, _>>()?;
+    // Extract all templates using helper function
+    let templates_map = utils::extract_templates_map(variant_config)?;
 
-    // Extract all schemas from function config using the new schemas.inner pattern
-    let schemas_map: HashMap<String, serde_json::Value> = config_and_tools
-        .function_config
-        .schemas()
-        .inner
-        .iter()
-        .map(|(name, schema_with_metadata)| {
-            (name.clone(), schema_with_metadata.schema.value.clone())
-        })
-        .collect();
+    // Extract all schemas using method on FunctionConfigAndTools
+    let schemas_map = config_and_tools.extract_schemas_map();
 
     // Extract output schema for JSON functions
     let output_schema = match &*config_and_tools.function_config {

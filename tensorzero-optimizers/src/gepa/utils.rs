@@ -3,6 +3,7 @@ use std::collections::HashMap;
 
 use tensorzero_core::{
     config::path::ResolvedTomlPath,
+    error::{Error, ErrorDetails},
     variant::{
         chat_completion::{
             ChatCompletionConfig, UninitializedChatCompletionConfig, UninitializedChatTemplate,
@@ -127,6 +128,37 @@ pub fn extract_chat_completion_from_variant_info(
             None
         }
     }
+}
+
+/// Extract all templates from a variant config as a HashMap
+///
+/// Reads the template content from each template's path and returns a map
+/// of template names to their content strings.
+///
+/// # Arguments
+/// * `variant_config` - The variant configuration containing templates
+///
+/// # Returns
+/// * `Result<HashMap<String, String>, Error>` - Map of template names to content, or error if reading fails
+pub(crate) fn extract_templates_map(
+    variant_config: &UninitializedChatCompletionConfig,
+) -> Result<HashMap<String, String>, Error> {
+    variant_config
+        .templates
+        .inner
+        .iter()
+        .map(|(name, config)| {
+            config
+                .path
+                .read()
+                .map(|content| (name.clone(), content))
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to read template '{name}': {e}"),
+                    })
+                })
+        })
+        .collect()
 }
 
 #[cfg(test)]

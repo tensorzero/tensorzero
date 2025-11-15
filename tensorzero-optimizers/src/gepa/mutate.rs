@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use tensorzero_core::{
     client::{
@@ -23,7 +24,7 @@ use tensorzero_core::{
 };
 
 use super::analyze::InferenceWithAnalysis;
-use super::validate::FunctionConfigAndTools;
+use super::{utils, validate::FunctionConfigAndTools};
 
 /// Output from the GEPA mutate function
 ///
@@ -53,15 +54,8 @@ pub fn build_mutate_input(
     config_and_tools: &FunctionConfigAndTools,
     parent_variant_config: &UninitializedChatCompletionConfig,
 ) -> Result<Arguments, Error> {
-    use serde_json::json;
-
-    // Extract templates from variant_config.templates.inner (new format only)
-    let templates_map: HashMap<String, String> = parent_variant_config
-        .templates
-        .inner
-        .iter()
-        .map(|(name, config)| config.path.read().map(|content| (name.clone(), content)))
-        .collect::<Result<_, _>>()?;
+    // Extract templates using helper function
+    let templates_map = utils::extract_templates_map(parent_variant_config)?;
 
     // Error if empty templates
     if templates_map.is_empty() {
@@ -70,16 +64,8 @@ pub fn build_mutate_input(
         }));
     }
 
-    // Extract schemas from function_config.schemas.inner (matching analyze.rs pattern)
-    let schemas_map: HashMap<String, serde_json::Value> = config_and_tools
-        .function_config
-        .schemas()
-        .inner
-        .iter()
-        .map(|(name, schema_with_metadata)| {
-            (name.clone(), schema_with_metadata.schema.value.clone())
-        })
-        .collect();
+    // Extract schemas using method on FunctionConfigAndTools
+    let schemas_map = config_and_tools.extract_schemas_map();
 
     // Extract output schema for JSON functions
     let output_schema = match &*config_and_tools.function_config {

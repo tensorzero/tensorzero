@@ -26,6 +26,23 @@ pub struct FunctionConfigAndTools {
     pub static_tools: Option<HashMap<String, Arc<StaticToolConfig>>>,
 }
 
+impl FunctionConfigAndTools {
+    /// Extract schemas as a HashMap for serialization
+    ///
+    /// # Returns
+    /// HashMap mapping schema names to their JSON schema values
+    pub fn extract_schemas_map(&self) -> HashMap<String, serde_json::Value> {
+        self.function_config
+            .schemas()
+            .inner
+            .iter()
+            .map(|(name, schema_with_metadata)| {
+                (name.clone(), schema_with_metadata.schema.value.clone())
+            })
+            .collect()
+    }
+}
+
 /// Validates the GEPA configuration and checks that required resources exist
 /// Returns the FunctionConfig and associated static tools for the function being optimized
 pub fn validate_gepa_config(

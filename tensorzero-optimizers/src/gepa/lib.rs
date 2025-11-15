@@ -11,10 +11,11 @@ use futures::future::join_all;
 use tokio::sync::Semaphore;
 
 use tensorzero_core::{
-    client::{ClientBuilder, ClientBuilderMode},
+    client::{Client, ClientBuilder, ClientBuilderMode},
     config::Config,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     error::{Error, ErrorDetails},
+    evaluations::EvaluationConfig,
     http::TensorzeroHttpClient,
     optimization::gepa::GEPAConfig,
     stored_inference::RenderedSample,
@@ -404,10 +405,10 @@ pub async fn run_gepa_optimization(
 
 /// Parameters for a single GEPA iteration step
 pub(crate) struct GEPAStepParams<'a> {
-    pub gateway_client: tensorzero_core::client::Client,
+    pub gateway_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub tensorzero_config: Arc<Config>,
-    pub evaluation_config: Arc<tensorzero_core::evaluations::EvaluationConfig>,
+    pub evaluation_config: Arc<EvaluationConfig>,
     pub gepa_config: &'a GEPAConfig,
     pub config_and_tools: &'a FunctionConfigAndTools,
     pub parent_variant_name: &'a str,
