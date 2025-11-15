@@ -411,7 +411,7 @@ pub async fn update_datapoint_handler(
             };
 
             // For demonstration validation, convert to ToolCallConfig
-            let dynamic_demonstration_info = if let Some(ref tool_params) = tool_params_new {
+            let dynamic_demonstration_info = if let Some(tool_params) = &tool_params_new {
                 DynamicDemonstrationInfo::Chat(
                     tool_params
                         .clone()
@@ -598,9 +598,8 @@ pub async fn create_datapoints_handler(
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
-    tracing::warn!(
-        "DEPRECATION WARNING: The `/datasets/{dataset_name}/datapoints` endpoint is deprecated. Please use `/v1/datasets/{dataset_name}/datapoints` instead.",
-        dataset_name = path_params.dataset_name
+    crate::utils::deprecation_warning(
+        &format!("The `/datasets/{}/datapoints` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.", path_params.dataset_name, path_params.dataset_name)
     );
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
@@ -624,9 +623,8 @@ pub async fn bulk_insert_datapoints_handler(
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
-    tracing::warn!(
-        "DEPRECATION WARNING: The `/datasets/{dataset_name}/datapoints/bulk` endpoint is deprecated. Please use `/v1/datasets/{dataset_name}/datapoints` instead.",
-        dataset_name = path_params.dataset_name
+    crate::utils::deprecation_warning(
+        &format!("The `/datasets/{}/datapoints/bulk` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.", path_params.dataset_name, path_params.dataset_name)
     );
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
@@ -1505,12 +1503,9 @@ impl std::fmt::Display for ChatInferenceDatapoint {
 }
 
 impl StoredChatInferenceDatapoint {
-    /// Convert to wire type, properly handling tool params by subtracting static tools
-    pub fn into_datapoint(self, function_config: &FunctionConfig) -> ChatInferenceDatapoint {
-        let tool_params = self
-            .tool_params
-            .map(|tp| function_config.database_insert_to_dynamic_tool_params(tp))
-            .unwrap_or_default();
+    /// Convert to wire type, converting tool params from storage format to wire format using From<> trait
+    pub fn into_datapoint(self, _function_config: &FunctionConfig) -> ChatInferenceDatapoint {
+        let tool_params = self.tool_params.map(|tp| tp.into()).unwrap_or_default();
 
         ChatInferenceDatapoint {
             dataset_name: self.dataset_name,

@@ -1371,25 +1371,39 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::RateLimitExceeded { failed_rate_limits } => {
                 if failed_rate_limits.len() == 1 {
                     let limit = &failed_rate_limits[0];
+                    let scope = limit
+                        .scope_key
+                        .iter()
+                        .map(|key| key.to_config_representation())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+
                     write!(
                         f,
-                        "TensorZero rate limit exceeded for rule {}. Requested {} units but only {} available.",
-                        limit.key, limit.requested, limit.available
+                        "TensorZero rate limit exceeded for `{}` resource.\nScope: {}\nRequested: {}\nAvailable: {}",
+                        limit.resource.as_str(), scope, limit.requested, limit.available
                     )
                 } else {
-                    write!(
+                    writeln!(
                         f,
-                        "TensorZero rate limits exceeded for {} rules: ",
+                        "TensorZero rate limits exceeded for {} rules:",
                         failed_rate_limits.len()
                     )?;
                     for (i, limit) in failed_rate_limits.iter().enumerate() {
                         if i > 0 {
-                            write!(f, ", ")?;
+                            writeln!(f)?;
                         }
+                        let scope = limit
+                            .scope_key
+                            .iter()
+                            .map(|key| key.to_config_representation())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+
                         write!(
                             f,
-                            "{} (requested {}, available {})",
-                            limit.key, limit.requested, limit.available
+                            "- Resource: `{}`\n    ├ Scope: {}\n    ├ Requested: {}\n    └ Available: {}",
+                            limit.resource.as_str(), scope, limit.requested, limit.available
                         )?;
                     }
                     Ok(())

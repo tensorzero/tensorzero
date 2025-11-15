@@ -24,6 +24,8 @@ use python_helpers::{
     parse_inference_response, parse_tool, parse_workflow_evaluation_run_episode_response,
     parse_workflow_evaluation_run_response, python_uuid_to_uuid,
 };
+
+use crate::gil_helpers::in_tokio_runtime_no_gil;
 use tensorzero_core::{
     config::{ConfigPyClass, FunctionsConfigPyClass, UninitializedVariantInfo},
     db::clickhouse::query_builder::OrderBy,
@@ -197,7 +199,10 @@ fn _start_http_gateway(
 // TODO - this should extend the python `ABC` class once pyo3 supports it: https://github.com/PyO3/pyo3/issues/991
 #[pyclass(subclass, frozen)]
 struct BaseTensorZeroGateway {
-    client: DropInTokio<Client>,
+    // Note - `Client` is cloneable, so we don't wrap in `DropInTokio`
+    // Instead, the stored `GatewayHandle` has customizable drop behavior,
+    // which we configure with `.with_drop_wrapper` when we build an embedded gateway for PyO3
+    client: Client,
 }
 
 #[pyclass(frozen)]
@@ -293,11 +298,7 @@ impl Drop for StreamWrapper {
     }
 }
 
-/// Constructs a dummy embedded client. We use this so that we can move out of the real 'client'
-/// field of `BaseTensorZeroGateway` when it is dropped.
-fn make_dummy_client() -> Client {
-    ClientBuilder::build_dummy()
-}
+const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 
 #[pymethods]
 impl BaseTensorZeroGateway {
@@ -611,10 +612,8 @@ impl TensorZeroGateway {
                 )?);
             }
         };
-        let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-            client: DropInTokio::new(client, make_dummy_client),
-        })
-        .add_subclass(TensorZeroGateway {});
+        let instance = PyClassInitializer::from(BaseTensorZeroGateway { client })
+            .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
     }
 
@@ -668,6 +667,9 @@ impl TensorZeroGateway {
             verify_credentials: true,
             allow_batch_writes: false,
         })
+        // When the underlying `GatewayHandle` is dropped, we need to be in the Tokio runtime
+        // with the GIL released (since we might block on the ClickHouse batcher shutting down)
+        .with_drop_wrapper(in_tokio_runtime_no_gil)
         .build();
         let client = tokio_block_on_without_gil(cls.py(), client_fut);
         let client = match client {
@@ -680,10 +682,8 @@ impl TensorZeroGateway {
             }
         };
         // Construct an instance of `TensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
-        let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-            client: DropInTokio::new(client, make_dummy_client),
-        })
-        .add_subclass(TensorZeroGateway {});
+        let instance = PyClassInitializer::from(BaseTensorZeroGateway { client })
+            .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
     }
 
@@ -1365,7 +1365,7 @@ impl TensorZeroGateway {
             construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
 
         let core_args = EvaluationCoreArgs {
-            tensorzero_client: (*client).clone(),
+            tensorzero_client: client.clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
             config: app_state.config.clone(),
             evaluation_name,
@@ -1417,6 +1417,7 @@ impl TensorZeroGateway {
     // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
     // is written as an ellipsis object.
     #[expect(clippy::too_many_arguments)]
+    #[expect(deprecated)]
     fn experimental_list_inferences(
         this: PyRef<'_, Self>,
         function_name: String,
@@ -1424,8 +1425,8 @@ impl TensorZeroGateway {
         filters: Option<Bound<'_, PyAny>>,
         output_source: String,
         order_by: Option<Bound<'_, PyAny>>,
-        limit: Option<u64>,
-        offset: Option<u64>,
+        limit: Option<u32>,
+        offset: Option<u32>,
     ) -> PyResult<Vec<StoredInference>> {
         let client = this.as_super().client.clone();
         let filters = filters
@@ -1449,8 +1450,8 @@ impl TensorZeroGateway {
             filters: filters.as_ref(),
             output_source,
             order_by: order_by.as_deref(),
-            limit,
-            offset,
+            limit: limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
+            offset: offset.unwrap_or(0),
             ..Default::default()
         };
         let fut = client.experimental_list_inferences(params);
@@ -1645,10 +1646,8 @@ impl AsyncTensorZeroGateway {
                 };
 
                 // Construct an instance of `AsyncTensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
-                let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-                    client: DropInTokio::new(client, make_dummy_client),
-                })
-                .add_subclass(AsyncTensorZeroGateway {});
+                let instance = PyClassInitializer::from(BaseTensorZeroGateway { client })
+                    .add_subclass(AsyncTensorZeroGateway {});
                 Py::new(py, instance)
             })
         };
@@ -1717,6 +1716,9 @@ impl AsyncTensorZeroGateway {
             verify_credentials: true,
             allow_batch_writes: false,
         })
+        // When the underlying `GatewayHandle` is dropped, we need to be in the Tokio runtime
+        // with the GIL released (since we might block on the ClickHouse batcher shutting down)
+        .with_drop_wrapper(in_tokio_runtime_no_gil)
         .build();
         let fut = async move {
             let client = client_fut.await;
@@ -1734,10 +1736,8 @@ impl AsyncTensorZeroGateway {
                 };
 
                 // Construct an instance of `AsyncTensorZeroGateway` (while providing the fields from the `BaseTensorZeroGateway` superclass).
-                let instance = PyClassInitializer::from(BaseTensorZeroGateway {
-                    client: DropInTokio::new(client, make_dummy_client),
-                })
-                .add_subclass(AsyncTensorZeroGateway {});
+                let instance = PyClassInitializer::from(BaseTensorZeroGateway { client })
+                    .add_subclass(AsyncTensorZeroGateway {});
                 Py::new(py, instance)
             })
         };
@@ -2472,7 +2472,7 @@ impl AsyncTensorZeroGateway {
             let evaluation_run_id = uuid::Uuid::now_v7();
 
             let core_args = EvaluationCoreArgs {
-                tensorzero_client: (*client).clone(),
+                tensorzero_client: client.clone(),
                 clickhouse_client: app_state.clickhouse_connection_info.clone(),
                 config: app_state.config.clone(),
                 evaluation_name,
@@ -2528,6 +2528,7 @@ impl AsyncTensorZeroGateway {
     // The text_signature is a workaround to weird behavior in pyo3 where the default for an option
     // is written as an ellipsis object.
     #[expect(clippy::too_many_arguments)]
+    #[expect(deprecated)]
     fn experimental_list_inferences<'a>(
         this: PyRef<'a, Self>,
         function_name: String,
@@ -2535,8 +2536,8 @@ impl AsyncTensorZeroGateway {
         filters: Option<Bound<'a, PyAny>>,
         output_source: String,
         order_by: Option<Bound<'a, PyAny>>,
-        limit: Option<u64>,
-        offset: Option<u64>,
+        limit: Option<u32>,
+        offset: Option<u32>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
         let filters = filters
@@ -2561,8 +2562,8 @@ impl AsyncTensorZeroGateway {
                 filters: filters.as_ref(),
                 output_source,
                 order_by: order_by.as_deref(),
-                limit,
-                offset,
+                limit: limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
+                offset: offset.unwrap_or(0),
                 ..Default::default()
             };
             let res = client.experimental_list_inferences(params).await;

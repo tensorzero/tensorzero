@@ -1,5 +1,5 @@
 [project]
-name = "tensorzero-examples-docs-gateway-call-the-openai-responses-api"
+name = "tensorzero-examples-docs-guides-gateway-call-the-openai-responses-api"
 version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"

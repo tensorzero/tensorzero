@@ -2351,7 +2351,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "fireworks" => {
             assert!(
-                res["error"].as_str().unwrap().contains("unauthorized"),
+                res["error"]
+                    .as_str()
+                    .unwrap()
+                    .to_lowercase()
+                    .contains("unauthorized"),
                 "Unexpected error: {res}"
             );
         }
