@@ -29,7 +29,7 @@ use tensorzero_core::{
 
 use evaluations::stats::EvaluationInfo;
 
-use crate::gepa::utils::serialize_to_value;
+use crate::gepa::utils::{extract_templates_map, serialize_to_value};
 use crate::gepa::validate::FunctionConfigAndTools;
 
 /// Represents an inference output paired with its analysis feedback
@@ -59,7 +59,7 @@ pub fn build_analyze_input(
     variant_config: &UninitializedChatCompletionConfig,
 ) -> Result<Arguments, Error> {
     // Extract all templates using helper function
-    let templates_map = utils::extract_templates_map(variant_config)?;
+    let templates_map = extract_templates_map(variant_config)?;
 
     // Extract all schemas using method on FunctionConfigAndTools
     let schemas_map = config_and_tools.extract_schemas_map();
