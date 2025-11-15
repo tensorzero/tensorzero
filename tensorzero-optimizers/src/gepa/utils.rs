@@ -12,6 +12,18 @@ use tensorzero_core::{
     },
 };
 
+/// Helper function to serialize a value to JSON with consistent error handling
+pub fn serialize_to_value<T: serde::Serialize>(
+    value: &T,
+    context: &str,
+) -> Result<serde_json::Value, Error> {
+    serde_json::to_value(value).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize {context}: {e}"),
+        })
+    })
+}
+
 /// Extract an `UninitializedChatCompletionConfig` from a `ChatCompletionConfig`
 ///
 /// This is needed for GEPA to create new variant configurations at runtime.

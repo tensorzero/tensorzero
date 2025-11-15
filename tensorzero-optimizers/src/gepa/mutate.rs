@@ -20,11 +20,16 @@ use tensorzero_core::{
     error::{Error, ErrorDetails},
     function::FunctionConfig,
     inference::types::{Arguments, Role, Template},
+    tool::ToolCallConfigDatabaseInsert,
+    utils::retries::RetryConfig,
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
 use super::analyze::InferenceWithAnalysis;
-use super::{utils, validate::FunctionConfigAndTools};
+use super::{
+    utils::{extract_templates_map, serialize_to_value},
+    validate::FunctionConfigAndTools,
+};
 
 /// Output from the GEPA mutate function
 ///
@@ -55,7 +60,7 @@ pub fn build_mutate_input(
     parent_variant_config: &UninitializedChatCompletionConfig,
 ) -> Result<Arguments, Error> {
     // Extract templates using helper function
-    let templates_map = utils::extract_templates_map(parent_variant_config)?;
+    let templates_map = extract_templates_map(parent_variant_config)?;
 
     // Error if empty templates
     if templates_map.is_empty() {
@@ -73,11 +78,25 @@ pub fn build_mutate_input(
         FunctionConfig::Chat(_) => None,
     };
 
-    // Serialize static_tools (already filtered to this function's tools during validation)
-    let tools = config_and_tools
-        .static_tools
-        .as_ref()
-        .map(|tools| json!(tools));
+    // Extract and serialize tool configuration as ToolCallConfig
+    let tools = {
+        let empty_tools = HashMap::new();
+        // Use default ToolCallConfigDatabaseInsert (no datapoint tool_params in mutate)
+        let tool_params = ToolCallConfigDatabaseInsert::default();
+
+        let tool_config = tool_params.into_tool_call_config(
+            &config_and_tools.function_config,
+            config_and_tools
+                .static_tools
+                .as_ref()
+                .unwrap_or(&empty_tools),
+        )?;
+
+        // Serialize full ToolCallConfig
+        tool_config
+            .map(|config| serialize_to_value(&config, "tool config"))
+            .transpose()?
+    };
 
     // Serialize analyses array
     let analyses_json = serde_json::to_value(analyses).map_err(|e| {
@@ -284,7 +303,7 @@ pub fn create_mutated_variant(
     iteration: usize,
     variant_prefix: &str,
     parent_name: &str,
-    retries: tensorzero_core::utils::retries::RetryConfig,
+    retries: RetryConfig,
 ) -> (String, UninitializedChatCompletionConfig) {
     // Generate variant name: {prefix}_iter{iteration}_{parent_name}
     let new_variant_name = format!("{variant_prefix}_iter{iteration}_{parent_name}");
@@ -406,7 +425,7 @@ mod tests {
             1,
             "gepa",
             "baseline",
-            tensorzero_core::utils::retries::RetryConfig::default(),
+            RetryConfig::default(),
         );
 
         // Verify variant name
@@ -474,7 +493,7 @@ mod tests {
             1,
             "gepa",
             "baseline",
-            tensorzero_core::utils::retries::RetryConfig::default(),
+            RetryConfig::default(),
         );
 
         // Verify parent_config was NOT mutated (defensive check for immutability)

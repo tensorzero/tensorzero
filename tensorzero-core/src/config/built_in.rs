@@ -140,10 +140,31 @@ fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
             },
             "tools": {
                 "type": ["object", "null"],
-                "description": "Optional dictionary of tool names to tool schemas",
-                "additionalProperties": {
-                    "type": "object",
-                    "description": "Tool schema"
+                "description": "Optional tool configuration including available tools and tool call settings",
+                "properties": {
+                    "static_tools_available": {
+                        "type": "array",
+                        "description": "Static tools available from the config"
+                    },
+                    "dynamic_tools_available": {
+                        "type": "array",
+                        "description": "Dynamic tools provided at inference time"
+                    },
+                    "provider_tools": {
+                        "type": "array",
+                        "description": "Provider-specific tools"
+                    },
+                    "tool_choice": {
+                        "description": "Tool choice configuration"
+                    },
+                    "parallel_tool_calls": {
+                        "type": ["boolean", "null"],
+                        "description": "Whether parallel tool calls are enabled"
+                    },
+                    "allowed_tools": {
+                        "type": "object",
+                        "description": "Specification of which tools are allowed"
+                    }
                 }
             },
             "input": {
@@ -232,10 +253,31 @@ fn get_gepa_mutate_function() -> Result<Arc<FunctionConfig>, Error> {
             },
             "tools": {
                 "type": ["object", "null"],
-                "description": "Optional dictionary of tool names to tool schemas",
-                "additionalProperties": {
-                    "type": "object",
-                    "description": "Tool schema"
+                "description": "Optional tool configuration including available tools and tool call settings",
+                "properties": {
+                    "static_tools_available": {
+                        "type": "array",
+                        "description": "Static tools available from the config"
+                    },
+                    "dynamic_tools_available": {
+                        "type": "array",
+                        "description": "Dynamic tools provided at inference time"
+                    },
+                    "provider_tools": {
+                        "type": "array",
+                        "description": "Provider-specific tools"
+                    },
+                    "tool_choice": {
+                        "description": "Tool choice configuration"
+                    },
+                    "parallel_tool_calls": {
+                        "type": ["boolean", "null"],
+                        "description": "Whether parallel tool calls are enabled"
+                    },
+                    "allowed_tools": {
+                        "type": "object",
+                        "description": "Specification of which tools are allowed"
+                    }
                 }
             },
             "analyses": {

@@ -29,19 +29,8 @@ use tensorzero_core::{
 
 use evaluations::stats::EvaluationInfo;
 
-use crate::gepa::{utils, validate::FunctionConfigAndTools};
-
-/// Serialize values to JSON with contextual error messages
-fn serialize_to_value<T: serde::Serialize>(
-    value: &T,
-    context: &str,
-) -> Result<serde_json::Value, Error> {
-    serde_json::to_value(value).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize {context}: {e}"),
-        })
-    })
-}
+use crate::gepa::utils::serialize_to_value;
+use crate::gepa::validate::FunctionConfigAndTools;
 
 /// Represents an inference output paired with its analysis feedback
 #[derive(Debug, Clone, Serialize)]
@@ -81,28 +70,25 @@ pub fn build_analyze_input(
         FunctionConfig::Chat(_) => None,
     };
 
-    // Extract and serialize tool configuration using into_tool_call_config
+    // Extract and serialize tool configuration as ToolCallConfig
     let tools = match &eval_info.datapoint {
         StoredDatapoint::Chat(dp) => {
-            match &dp.tool_params {
-                Some(tool_params) => {
-                    // Clone because into_tool_call_config consumes self
-                    let empty_tools = HashMap::new();
-                    let tool_config = tool_params.clone().into_tool_call_config(
-                        &config_and_tools.function_config,
-                        config_and_tools
-                            .static_tools
-                            .as_ref()
-                            .unwrap_or(&empty_tools),
-                    )?;
-                    // tool_config is Option<ToolCallConfig>
-                    // Convert Option<ToolCallConfig> to Option<serde_json::Value>
-                    tool_config
-                        .map(|config| serialize_to_value(&config, "tool config"))
-                        .transpose()?
-                }
-                None => None,
-            }
+            let empty_tools = HashMap::new();
+            // Always create ToolCallConfig (use defaults if no datapoint tool_params)
+            let tool_params = dp.tool_params.clone().unwrap_or_default();
+
+            let tool_config = tool_params.into_tool_call_config(
+                &config_and_tools.function_config,
+                config_and_tools
+                    .static_tools
+                    .as_ref()
+                    .unwrap_or(&empty_tools),
+            )?;
+
+            // Serialize full ToolCallConfig
+            tool_config
+                .map(|config| serialize_to_value(&config, "tool config"))
+                .transpose()?
         }
         StoredDatapoint::Json(_) => None,
     };

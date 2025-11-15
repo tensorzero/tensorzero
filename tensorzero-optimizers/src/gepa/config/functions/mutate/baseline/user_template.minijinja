@@ -26,11 +26,7 @@
 
 {% if tools %}
 <available_tools>
-{% for tool_name in tools %}
-<tool name="{{tool_name}}">
-{{tools[tool_name] | tojson(indent=2)}}
-</tool>
-{% endfor %}
+{{tools | tojson(indent=2)}}
 </available_tools>
 {% endif %}
 
