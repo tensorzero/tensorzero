@@ -5,8 +5,6 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::collections::HashMap;
-
 use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero_optimizers::gepa::{analyze_inferences, mutate_templates};
 
@@ -42,12 +40,7 @@ async fn test_mutate_templates_success() {
 
     // Create function and variant configs
     let config_and_tools = create_test_config_and_tools();
-    let mut template_map = HashMap::new();
-    template_map.insert(
-        "system".to_string(),
-        "You are a helpful assistant.".to_string(),
-    );
-    template_map.insert("user".to_string(), "User: {{input}}".to_string());
+    let template_map = create_simple_template_map();
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
     let gepa_config = create_test_gepa_config();
 
@@ -66,17 +59,24 @@ async fn test_mutate_templates_success() {
         panic!("mutate_templates should succeed but got error: {e}");
     });
 
-    // Verify templates HashMap is non-empty
+    // Verify both template names are preserved
     assert!(
-        !mutate_output.templates.is_empty(),
-        "Should return non-empty templates HashMap"
+        mutate_output.templates.contains_key("system"),
+        "Should preserve 'system' template name"
+    );
+    assert!(
+        mutate_output.templates.contains_key("user"),
+        "Should preserve 'user' template name"
     );
 
-    // Verify original template names are preserved
+    // Verify templates have non-empty content
     assert!(
-        mutate_output.templates.contains_key("system")
-            || mutate_output.templates.contains_key("user"),
-        "Should preserve at least one original template name"
+        !mutate_output.templates["system"].is_empty(),
+        "System template should have content"
+    );
+    assert!(
+        !mutate_output.templates["user"].is_empty(),
+        "User template should have content"
     );
 }
 
@@ -92,11 +92,7 @@ async fn test_mutate_templates_single_analysis() {
     )];
 
     let config_and_tools = create_test_config_and_tools();
-    let mut template_map = HashMap::new();
-    template_map.insert(
-        "system".to_string(),
-        "You are a test assistant.".to_string(),
-    );
+    let template_map = create_custom_template_map(vec![("system", "You are a test assistant.")]);
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
     let gepa_config = create_test_gepa_config();
 
@@ -114,9 +110,15 @@ async fn test_mutate_templates_single_analysis() {
     let mutate_output = result.unwrap_or_else(|e| {
         panic!("mutate_templates should succeed with single analysis but got error: {e}");
     });
+
+    // Verify system template is preserved and has content
     assert!(
-        !mutate_output.templates.is_empty(),
-        "Should generate templates even with single analysis"
+        mutate_output.templates.contains_key("system"),
+        "Should preserve 'system' template name"
+    );
+    assert!(
+        !mutate_output.templates["system"].is_empty(),
+        "System template should have content even with single analysis"
     );
 }
 
@@ -128,11 +130,7 @@ async fn test_mutate_templates_empty_analyses() {
     let analyses: Vec<InferenceWithAnalysis> = vec![];
 
     let config_and_tools = create_test_config_and_tools();
-    let mut template_map = HashMap::new();
-    template_map.insert(
-        "system".to_string(),
-        "You are a helpful assistant.".to_string(),
-    );
+    let template_map = create_simple_template_map();
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
     let gepa_config = create_test_gepa_config();
 
@@ -150,9 +148,15 @@ async fn test_mutate_templates_empty_analyses() {
     let mutate_output = result.unwrap_or_else(|e| {
         panic!("mutate_templates should handle empty analyses gracefully but got error: {e}");
     });
+
+    // Verify template names are preserved even with empty analyses
     assert!(
-        !mutate_output.templates.is_empty(),
-        "Should return templates even with empty analyses"
+        mutate_output.templates.contains_key("system"),
+        "Should preserve 'system' template name"
+    );
+    assert!(
+        !mutate_output.templates["system"].is_empty(),
+        "System template should have content even with empty analyses"
     );
 }
 
@@ -172,11 +176,7 @@ async fn test_mutate_templates_invalid_model() {
     )];
 
     let config_and_tools = create_test_config_and_tools();
-    let mut template_map = HashMap::new();
-    template_map.insert(
-        "system".to_string(),
-        "You are a helpful assistant.".to_string(),
-    );
+    let template_map = create_simple_template_map();
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
 
     // Create config with invalid model
@@ -226,12 +226,10 @@ async fn test_mutate_templates_with_schemas() {
     ];
 
     let config_and_tools = create_test_config_and_tools_with_schemas();
-    let mut template_map = HashMap::new();
-    template_map.insert(
-        "system".to_string(),
-        "You are a greeting assistant with {{greeting}}.".to_string(),
-    );
-    template_map.insert("user".to_string(), "Greet {{name}}".to_string());
+    let template_map = create_custom_template_map(vec![
+        ("system", "You are a greeting assistant with {{greeting}}."),
+        ("user", "Greet {{name}}"),
+    ]);
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
     let gepa_config = create_test_gepa_config();
 
@@ -249,9 +247,28 @@ async fn test_mutate_templates_with_schemas() {
     let mutate_output = result.unwrap_or_else(|e| {
         panic!("mutate_templates should work with schemas but got error: {e}");
     });
+
+    // Verify template names are preserved
     assert!(
-        !mutate_output.templates.is_empty(),
-        "Should generate templates with schemas"
+        mutate_output.templates.contains_key("system"),
+        "Should preserve 'system' template name"
+    );
+    assert!(
+        mutate_output.templates.contains_key("user"),
+        "Should preserve 'user' template name"
+    );
+
+    // Verify schema variables are preserved in mutated templates
+    let system_template = &mutate_output.templates["system"];
+    let user_template = &mutate_output.templates["user"];
+
+    assert!(
+        system_template.contains("{{greeting}}") || system_template.contains("greeting"),
+        "System template should preserve {{greeting}} variable or reference 'greeting'"
+    );
+    assert!(
+        user_template.contains("{{name}}") || user_template.contains("name"),
+        "User template should preserve {{name}} variable or reference 'name'"
     );
 }
 
@@ -313,9 +330,25 @@ async fn test_mutate_templates_end_to_end() {
     let mutate_output = result.unwrap_or_else(|e| {
         panic!("mutate_templates should succeed in end-to-end pipeline but got error: {e}");
     });
+
+    // Verify template names from variant_config are preserved
     assert!(
-        !mutate_output.templates.is_empty(),
-        "Should generate mutated templates from analyses"
+        mutate_output.templates.contains_key("system"),
+        "Should preserve 'system' template name"
+    );
+    assert!(
+        mutate_output.templates.contains_key("user"),
+        "Should preserve 'user' template name"
+    );
+
+    // Verify templates have non-empty content
+    assert!(
+        !mutate_output.templates["system"].is_empty(),
+        "System template should have content"
+    );
+    assert!(
+        !mutate_output.templates["user"].is_empty(),
+        "User template should have content"
     );
 }
 
@@ -333,13 +366,11 @@ async fn test_mutate_templates_preserves_template_names() {
     let config_and_tools = create_test_config_and_tools();
 
     // Create variant with specific template names
-    let mut template_map = HashMap::new();
-    template_map.insert(
-        "system".to_string(),
-        "You are a helpful assistant.".to_string(),
-    );
-    template_map.insert("user".to_string(), "User: {{input}}".to_string());
-    template_map.insert("custom".to_string(), "Custom template content".to_string());
+    let template_map = create_custom_template_map(vec![
+        ("system", "You are a helpful assistant."),
+        ("user", "User: {{input}}"),
+        ("custom", "Custom template content"),
+    ]);
 
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
     let gepa_config = create_test_gepa_config();
@@ -359,19 +390,33 @@ async fn test_mutate_templates_preserves_template_names() {
         panic!("mutate_templates should succeed but got error: {e}");
     });
 
-    // Note: The dummy model may or may not preserve all template names exactly
-    // but it should return at least some templates
+    // Verify all template names are preserved
     assert!(
-        !mutate_output.templates.is_empty(),
-        "Should return templates"
+        mutate_output.templates.contains_key("system"),
+        "Should preserve 'system' template name"
+    );
+    assert!(
+        mutate_output.templates.contains_key("user"),
+        "Should preserve 'user' template name"
+    );
+    assert!(
+        mutate_output.templates.contains_key("custom"),
+        "Should preserve 'custom' template name"
     );
 
-    // The mutate function should ideally preserve template names, but with dummy model
-    // we just verify that we get some output back
-    // In a real scenario with a proper LLM, we would check:
-    // assert!(mutate_output.templates.contains_key("system"));
-    // assert!(mutate_output.templates.contains_key("user"));
-    // assert!(mutate_output.templates.contains_key("custom"));
+    // Verify templates have non-empty content
+    assert!(
+        !mutate_output.templates["system"].is_empty(),
+        "System template should have content"
+    );
+    assert!(
+        !mutate_output.templates["user"].is_empty(),
+        "User template should have content"
+    );
+    assert!(
+        !mutate_output.templates["custom"].is_empty(),
+        "Custom template should have content"
+    );
 }
 
 // ============================================================================
@@ -392,19 +437,11 @@ async fn test_mutate_templates_with_new_template_format() {
     let config_and_tools = create_test_config_and_tools();
 
     // Use custom template names (not just system/user/assistant)
-    let mut template_map = HashMap::new();
-    template_map.insert(
-        "context".to_string(),
-        "Context template content".to_string(),
-    );
-    template_map.insert(
-        "instruction".to_string(),
-        "Instruction template content".to_string(),
-    );
-    template_map.insert(
-        "examples".to_string(),
-        "Examples template content".to_string(),
-    );
+    let template_map = create_custom_template_map(vec![
+        ("context", "Context template content"),
+        ("instruction", "Instruction template content"),
+        ("examples", "Examples template content"),
+    ]);
 
     let variant_config = create_test_variant_config_with_templates_inner(template_map);
     let gepa_config = create_test_gepa_config();
@@ -441,8 +478,32 @@ async fn test_mutate_templates_with_new_template_format() {
     let mutate_output = result.unwrap_or_else(|e| {
         panic!("mutate_templates should work with new template format but got error: {e}");
     });
+
+    // Verify all custom template names are preserved
     assert!(
-        !mutate_output.templates.is_empty(),
-        "Should generate templates using new format"
+        mutate_output.templates.contains_key("context"),
+        "Should preserve 'context' template name"
+    );
+    assert!(
+        mutate_output.templates.contains_key("instruction"),
+        "Should preserve 'instruction' template name"
+    );
+    assert!(
+        mutate_output.templates.contains_key("examples"),
+        "Should preserve 'examples' template name"
+    );
+
+    // Verify templates have non-empty content
+    assert!(
+        !mutate_output.templates["context"].is_empty(),
+        "Context template should have content"
+    );
+    assert!(
+        !mutate_output.templates["instruction"].is_empty(),
+        "Instruction template should have content"
+    );
+    assert!(
+        !mutate_output.templates["examples"].is_empty(),
+        "Examples template should have content"
     );
 }

@@ -266,6 +266,25 @@ pub fn create_test_variant_config_with_templates_inner(
     config
 }
 
+/// Create a simple template map with basic system and user templates
+pub fn create_simple_template_map() -> HashMap<String, String> {
+    let mut template_map = HashMap::new();
+    template_map.insert(
+        "system".to_string(),
+        "You are a helpful assistant.".to_string(),
+    );
+    template_map.insert("user".to_string(), "User: {{input}}".to_string());
+    template_map
+}
+
+/// Create a custom template map from a list of (name, content) pairs
+pub fn create_custom_template_map(templates: Vec<(&str, &str)>) -> HashMap<String, String> {
+    templates
+        .into_iter()
+        .map(|(name, content)| (name.to_string(), content.to_string()))
+        .collect()
+}
+
 /// Create a test GEPAConfig with reasonable defaults
 pub fn create_test_gepa_config() -> GEPAConfig {
     GEPAConfig {
