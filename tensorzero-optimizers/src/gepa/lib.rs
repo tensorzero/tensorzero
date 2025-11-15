@@ -28,8 +28,8 @@ use super::validate::FunctionConfigAndTools;
 pub use super::analyze::{analyze_inferences, InferenceWithAnalysis};
 #[expect(unused_imports)]
 pub use super::evaluate::{
-    create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, EvaluationResults,
-    ValidationScoresMap,
+    cleanup_temporary_dataset, create_evaluation_dataset, evaluate_variant, EvaluateVariantParams,
+    EvaluationResults, ValidationScoresMap,
 };
 #[expect(unused_imports)]
 pub use super::mutate::{create_mutated_variant, mutate_templates, MutateOutput};
@@ -118,6 +118,10 @@ pub async fn run_gepa_optimization(
         config.evaluation_name,
         uuid::Uuid::now_v7()
     );
+
+    // Track all temporary datasets for cleanup at the end
+    let mut temporary_datasets = vec![val_dataset_name.clone()];
+
     tracing::info!(
         "Creating validation dataset '{}' with {} examples",
         val_dataset_name,
@@ -259,6 +263,9 @@ pub async fn run_gepa_optimization(
             iteration,
             uuid::Uuid::now_v7()
         );
+
+        // Track this dataset for cleanup
+        temporary_datasets.push(batch_dataset_name.clone());
 
         if let Err(e) = create_evaluation_dataset(
             &tensorzero_config,
@@ -425,6 +432,16 @@ pub async fn run_gepa_optimization(
 
     // Return error if no GEPA-generated variants survived
     if frontier.variants.is_empty() {
+        // Clean up temporary datasets before returning error
+        tracing::info!(
+            "Cleaning up {} temporary datasets before returning error",
+            temporary_datasets.len()
+        );
+
+        for dataset_name in temporary_datasets {
+            cleanup_temporary_dataset(clickhouse_connection_info, &dataset_name).await;
+        }
+
         return Err(Error::new(ErrorDetails::InternalError {
             message: format!(
                 "GEPA optimization failed to produce any variants that survived Pareto filtering. \
@@ -438,6 +455,16 @@ pub async fn run_gepa_optimization(
         "Final Pareto frontier contains {} GEPA-evolved variants (originals filtered out)",
         frontier.variants.len()
     );
+
+    // Clean up temporary datasets
+    tracing::info!(
+        "Cleaning up {} temporary datasets created during GEPA optimization",
+        temporary_datasets.len()
+    );
+
+    for dataset_name in temporary_datasets {
+        cleanup_temporary_dataset(clickhouse_connection_info, &dataset_name).await;
+    }
 
     Ok(frontier.variants)
 }

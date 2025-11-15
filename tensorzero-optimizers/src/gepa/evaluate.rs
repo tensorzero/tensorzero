@@ -17,7 +17,7 @@ use tensorzero_core::{
     config::{Config, UninitializedVariantConfig, UninitializedVariantInfo},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::datasets::v1::{
-        create_datapoints,
+        create_datapoints, delete_dataset,
         types::{
             CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest,
             CreateJsonDatapointRequest, JsonDatapointOutputUpdate,
@@ -319,4 +319,34 @@ pub async fn create_evaluation_dataset(
     .await?;
 
     Ok(())
+}
+
+/// Delete a temporary dataset created during GEPA optimization
+///
+/// Logs warnings on failure but does not return errors, since cleanup
+/// is best-effort and shouldn't fail the optimization.
+///
+/// # Arguments
+/// * `clickhouse_connection_info` - ClickHouse connection for dataset operations
+/// * `dataset_name` - Name of the temporary dataset to delete
+pub async fn cleanup_temporary_dataset(
+    clickhouse_connection_info: &ClickHouseConnectionInfo,
+    dataset_name: &str,
+) {
+    match delete_dataset(clickhouse_connection_info, dataset_name).await {
+        Ok(response) => {
+            tracing::debug!(
+                "Cleaned up temporary dataset '{}': deleted {} datapoints",
+                dataset_name,
+                response.num_deleted_datapoints
+            );
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Failed to cleanup temporary dataset '{}': {}",
+                dataset_name,
+                e
+            );
+        }
+    }
 }
