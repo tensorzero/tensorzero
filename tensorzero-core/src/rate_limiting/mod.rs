@@ -246,7 +246,7 @@ fn align_and_check_limits(
         .into_iter()
         .map(|r| (r.key.clone(), r))
         .collect::<HashMap<_, _>>();
-    // Next, check if any reciept has failed
+    // Next, check if any receipt has failed
     if receipts_map.values().any(|r| !r.success) {
         return Err(get_failed_rate_limits_err(requests, &receipts_map, limits));
     }
@@ -446,6 +446,16 @@ pub enum RateLimitResource {
     ModelInference,
     Token,
     // Cent, // or something more granular?
+}
+
+impl RateLimitResource {
+    /// Returns the snake_case string representation matching the serde serialization
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RateLimitResource::ModelInference => "model_inference",
+            RateLimitResource::Token => "token",
+        }
+    }
 }
 
 #[derive(Debug)]

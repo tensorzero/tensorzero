@@ -1371,7 +1371,6 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::RateLimitExceeded { failed_rate_limits } => {
                 if failed_rate_limits.len() == 1 {
                     let limit = &failed_rate_limits[0];
-                    let resource = format!("{:?}", limit.resource).to_lowercase();
                     let scope = limit
                         .scope_key
                         .iter()
@@ -1382,7 +1381,7 @@ impl std::fmt::Display for ErrorDetails {
                     write!(
                         f,
                         "TensorZero rate limit exceeded for `{}` resource.\nScope: {}\nRequested: {}\nAvailable: {}",
-                        resource, scope, limit.requested, limit.available
+                        limit.resource.as_str(), scope, limit.requested, limit.available
                     )
                 } else {
                     writeln!(
@@ -1394,7 +1393,6 @@ impl std::fmt::Display for ErrorDetails {
                         if i > 0 {
                             writeln!(f)?;
                         }
-                        let resource = format!("{:?}", limit.resource).to_lowercase();
                         let scope = limit
                             .scope_key
                             .iter()
@@ -1405,7 +1403,7 @@ impl std::fmt::Display for ErrorDetails {
                         write!(
                             f,
                             "- Resource: `{}`\n    ├ Scope: {}\n    ├ Requested: {}\n    └ Available: {}",
-                            resource, scope, limit.requested, limit.available
+                            limit.resource.as_str(), scope, limit.requested, limit.available
                         )?;
                     }
                     Ok(())
