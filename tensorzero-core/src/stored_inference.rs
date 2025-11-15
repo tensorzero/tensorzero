@@ -434,13 +434,10 @@ impl StoredInference {
 
 impl StoredInferenceDatabase {
     /// Convert to wire type, properly handling tool params by subtracting static tools
-    pub fn into_stored_inference(self, config: &Config) -> Result<StoredInference, Error> {
+    pub fn into_stored_inference(self) -> Result<StoredInference, Error> {
         match self {
             StoredInferenceDatabase::Chat(chat) => {
-                let function_config = config.get_function(&chat.function_name)?;
-                Ok(StoredInference::Chat(
-                    chat.into_stored_inference(&function_config),
-                ))
+                Ok(StoredInference::Chat(chat.into_stored_inference()))
             }
             StoredInferenceDatabase::Json(json) => Ok(StoredInference::Json(json)),
         }
@@ -448,7 +445,7 @@ impl StoredInferenceDatabase {
 }
 
 impl StoredInference {
-    /// Convert to storage type, properly handling tool params with function config
+    /// Convert to storage type, converting tool params from wire format to storage format
     pub fn to_storage(self, config: &Config) -> Result<StoredInferenceDatabase, Error> {
         match self {
             StoredInference::Chat(chat) => {
@@ -549,10 +546,8 @@ impl StoredChatInference {
 }
 
 impl StoredChatInferenceDatabase {
-    /// Convert to wire type, properly handling tool params by subtracting static tools
-    pub fn into_stored_inference(self, function_config: &FunctionConfig) -> StoredChatInference {
-        let tool_params = function_config.database_insert_to_dynamic_tool_params(self.tool_params);
-
+    /// Convert to wire type, converting tool params from storage format to wire format
+    pub fn into_stored_inference(self) -> StoredChatInference {
         StoredChatInference {
             function_name: self.function_name,
             variant_name: self.variant_name,
@@ -562,7 +557,7 @@ impl StoredChatInferenceDatabase {
             timestamp: self.timestamp,
             episode_id: self.episode_id,
             inference_id: self.inference_id,
-            tool_params,
+            tool_params: self.tool_params.into(),
             tags: self.tags,
         }
     }
@@ -966,10 +961,9 @@ pub async fn render_stored_sample<T: StoredSample>(
     } = stored_sample.owned_simple_info();
     let model_input = render_model_input(&resolved_input, &function_name, config, variants).await?;
 
-    // Convert tool_params from storage format to wire format, subtracting static tools
-    let function_config = config.get_function(&function_name)?;
+    // Convert tool_params from storage format to wire format
     let dynamic_tool_params = tool_params
-        .map(|tp| function_config.database_insert_to_dynamic_tool_params(tp))
+        .map(|tp| tp.into())
         // should default for JSON functions or functions with no tools to a default DynamicToolParams
         // where everything is empty
         .unwrap_or_default();
