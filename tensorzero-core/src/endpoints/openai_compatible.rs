@@ -45,7 +45,7 @@ use crate::inference::types::{
 
 use crate::tool::{
     ClientSideFunctionTool, DynamicTool, DynamicToolParams, InferenceResponseToolCall,
-    ProviderTool, Tool, ToolCallWrapper, ToolChoice, ToolResult,
+    OpenAICustomTool, ProviderTool, Tool, ToolCallWrapper, ToolChoice, ToolResult,
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::JsonMode;
@@ -382,16 +382,19 @@ impl std::fmt::Display for JsonSchemaInfo {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(tag = "type", content = "function")]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 enum OpenAICompatibleTool {
-    Function {
-        description: Option<String>,
-        name: String,
-        parameters: Value,
-        #[serde(default)]
-        strict: bool,
-    },
+    Function { function: OpenAICompatibleFunctionTool },
+    Custom { custom: OpenAICustomTool },
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+struct OpenAICompatibleFunctionTool {
+    description: Option<String>,
+    name: String,
+    parameters: Value,
+    #[serde(default)]
+    strict: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -1174,27 +1177,25 @@ fn convert_openai_message_content(
     }
 }
 
-impl From<OpenAICompatibleTool> for ClientSideFunctionTool {
-    fn from(tool: OpenAICompatibleTool) -> Self {
-        match tool {
-            OpenAICompatibleTool::Function {
-                description,
-                name,
-                parameters,
-                strict,
-            } => ClientSideFunctionTool {
-                description: description.unwrap_or_default(),
-                parameters,
-                name,
-                strict,
-            },
+impl From<OpenAICompatibleFunctionTool> for ClientSideFunctionTool {
+    fn from(tool: OpenAICompatibleFunctionTool) -> Self {
+        ClientSideFunctionTool {
+            description: tool.description.unwrap_or_default(),
+            parameters: tool.parameters,
+            name: tool.name,
+            strict: tool.strict,
         }
     }
 }
 
 impl From<OpenAICompatibleTool> for Tool {
     fn from(tool: OpenAICompatibleTool) -> Self {
-        Tool::ClientSideFunction(ClientSideFunctionTool::from(tool))
+        match tool {
+            OpenAICompatibleTool::Function { function } => {
+                Tool::ClientSideFunction(ClientSideFunctionTool::from(function))
+            }
+            OpenAICompatibleTool::Custom { custom } => Tool::OpenAICustom(custom),
+        }
     }
 }
 
@@ -3124,6 +3125,116 @@ mod tests {
                 assert_eq!(base64_file.mime_type, mime::APPLICATION_PDF);
             }
             _ => panic!("Expected Base64File without filename"),
+        }
+    }
+
+    #[test]
+    fn test_openai_compatible_tool_deserialization() {
+        // Test Function variant
+        let function_json = json!({
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "description": "Get the current weather",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {"type": "string"}
+                    }
+                },
+                "strict": true
+            }
+        });
+
+        let tool: OpenAICompatibleTool = serde_json::from_value(function_json).unwrap();
+        match tool {
+            OpenAICompatibleTool::Function { function } => {
+                assert_eq!(function.name, "get_weather");
+                assert_eq!(function.description, Some("Get the current weather".to_string()));
+                assert!(function.strict);
+            }
+            _ => panic!("Expected Function variant"),
+        }
+
+        // Test Custom variant with text format
+        let custom_text_json = json!({
+            "type": "custom",
+            "custom": {
+                "name": "custom_tool",
+                "description": "A custom tool",
+                "format": {
+                    "type": "text"
+                }
+            }
+        });
+
+        let tool: OpenAICompatibleTool = serde_json::from_value(custom_text_json).unwrap();
+        match tool {
+            OpenAICompatibleTool::Custom { custom } => {
+                assert_eq!(custom.name, "custom_tool");
+                assert_eq!(custom.description, Some("A custom tool".to_string()));
+                assert!(custom.format.is_some());
+            }
+            _ => panic!("Expected Custom variant"),
+        }
+
+        // Test Custom variant with grammar format
+        let custom_grammar_json = json!({
+            "type": "custom",
+            "custom": {
+                "name": "grammar_tool",
+                "format": {
+                    "type": "grammar",
+                    "grammar": {
+                        "syntax": "lark",
+                        "definition": "start: /[a-z]+/"
+                    }
+                }
+            }
+        });
+
+        let tool: OpenAICompatibleTool = serde_json::from_value(custom_grammar_json).unwrap();
+        match tool {
+            OpenAICompatibleTool::Custom { custom } => {
+                assert_eq!(custom.name, "grammar_tool");
+                assert!(custom.format.is_some());
+            }
+            _ => panic!("Expected Custom variant"),
+        }
+
+        // Test conversion to Tool
+        let function_json = json!({
+            "type": "function",
+            "function": {
+                "name": "test_function",
+                "parameters": {}
+            }
+        });
+
+        let openai_tool: OpenAICompatibleTool = serde_json::from_value(function_json).unwrap();
+        let tool: Tool = openai_tool.into();
+        match tool {
+            Tool::ClientSideFunction(func) => {
+                assert_eq!(func.name, "test_function");
+            }
+            _ => panic!("Expected ClientSideFunction variant"),
+        }
+
+        // Test conversion of custom tool to Tool
+        let custom_json = json!({
+            "type": "custom",
+            "custom": {
+                "name": "custom_test"
+            }
+        });
+
+        let openai_tool: OpenAICompatibleTool = serde_json::from_value(custom_json).unwrap();
+        let tool: Tool = openai_tool.into();
+        match tool {
+            Tool::OpenAICustom(custom) => {
+                assert_eq!(custom.name, "custom_test");
+            }
+            _ => panic!("Expected OpenAICustom variant"),
         }
     }
 }

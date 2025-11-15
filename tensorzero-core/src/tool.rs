@@ -723,8 +723,7 @@ impl ToolCallConfig {
 
         let mut tool_display_names = HashSet::new();
 
-        // Check for duplicate tool names.
-        // TODO (Viraj, now): make sure the tool names for OpenAI tools are checked here.
+        // Check for duplicate tool names among function tools
         for tool in static_tools_available
             .iter()
             .chain(dynamic_tools_available.iter())
@@ -733,6 +732,17 @@ impl ToolCallConfig {
             if duplicate {
                 return Err(Error::new(ErrorDetails::DuplicateTool {
                     name: tool.name().to_string(),
+                }));
+            }
+        }
+
+        // Check for duplicate tool names in OpenAI custom tools
+        // and ensure they don't conflict with function tool names
+        for custom_tool in &openai_custom_tools {
+            let duplicate = !tool_display_names.insert(custom_tool.name.as_str());
+            if duplicate {
+                return Err(Error::new(ErrorDetails::DuplicateTool {
+                    name: custom_tool.name.clone(),
                 }));
             }
         }
@@ -2617,6 +2627,73 @@ mod tests {
                     strict: false,
                 },
             ))]),
+            ..Default::default()
+        };
+
+        let err = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        ))
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            ErrorDetails::DuplicateTool {
+                name: "get_temperature".to_string()
+            }
+            .into()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_custom_tool_names_error() {
+        // Test case where two custom tools have the same name
+        let dynamic_tool_params = DynamicToolParams {
+            additional_tools: Some(vec![
+                DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
+                    name: "custom_tool".to_string(),
+                    description: Some("First custom tool".to_string()),
+                    format: None,
+                })),
+                DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
+                    name: "custom_tool".to_string(), // Duplicate name
+                    description: Some("Second custom tool".to_string()),
+                    format: Some(CustomToolFormat::Text),
+                })),
+            ]),
+            ..Default::default()
+        };
+
+        let err = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &EMPTY_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        ))
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            ErrorDetails::DuplicateTool {
+                name: "custom_tool".to_string()
+            }
+            .into()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_custom_tool_conflicts_with_function_tool() {
+        // Test case where a custom tool has the same name as a function tool
+        let dynamic_tool_params = DynamicToolParams {
+            additional_tools: Some(vec![DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
+                name: "get_temperature".to_string(), // Same name as static function tool
+                description: Some("Custom temperature tool".to_string()),
+                format: None,
+            }))]),
             ..Default::default()
         };
 
