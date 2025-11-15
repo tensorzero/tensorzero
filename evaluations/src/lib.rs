@@ -135,12 +135,6 @@ pub struct EvaluationCoreArgs {
 
     /// Cache configuration for inference requests
     pub inference_cache: CacheEnabledMode,
-
-    /// Maximum number of datapoints to evaluate (None = no limit)
-    pub limit: Option<usize>,
-
-    /// Number of datapoints to skip before starting evaluation (None = no offset)
-    pub offset: Option<usize>,
 }
 
 /// High-level wrapper function for running evaluations called from the CLI.
@@ -242,8 +236,6 @@ pub async fn run_evaluation(
         evaluation_run_id,
         inference_cache: args.inference_cache,
         concurrency: args.concurrency,
-        limit: None,
-        offset: None,
     };
 
     let output_format = args.format.clone();
@@ -399,8 +391,6 @@ pub async fn run_evaluation_core_streaming(
         &args.dataset_name,
         &inference_evaluation_config.function_name,
         &function_config,
-        args.limit,
-        args.offset,
     )
     .await?;
     info!(dataset_size = dataset.len(), "Dataset loaded successfully");
