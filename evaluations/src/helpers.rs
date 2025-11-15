@@ -115,7 +115,7 @@ mod tests {
             vec![],
             AllowedTools {
                 tools: vec![], // Explicitly empty (no static tools)
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Specific("tool_1".to_string()),
             None,
@@ -144,7 +144,7 @@ mod tests {
             vec![],
             AllowedTools {
                 tools: vec!["tool_1".to_string()],
-                choice: AllowedToolsChoice::DynamicAllowedTools, // Explicit list
+                choice: AllowedToolsChoice::Explicit, // Explicit list
             },
             ToolChoice::Required,
             None,

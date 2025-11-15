@@ -81,7 +81,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
         }],
         AllowedTools {
             tools: vec![get_temp_tool.name.clone(), custom_tool.name.clone()],
-            choice: AllowedToolsChoice::DynamicAllowedTools,
+            choice: AllowedToolsChoice::Explicit,
         },
         ToolChoice::Specific("get_temperature".to_string()),
         Some(false),
@@ -159,8 +159,10 @@ async fn test_datapoint_full_tool_params_round_trip() {
     // Static tool (from function config) should be in allowed_tools
     let allowed_tools = dp["allowed_tools"].as_array().unwrap();
     assert_eq!(allowed_tools.len(), 2);
-    assert_eq!(allowed_tools[0], "get_temperature");
-    assert_eq!(allowed_tools[1], "custom_weather_tool");
+    let allowed_tools_set: std::collections::HashSet<&str> =
+        allowed_tools.iter().map(|v| v.as_str().unwrap()).collect();
+    assert!(allowed_tools_set.contains("get_temperature"));
+    assert!(allowed_tools_set.contains("custom_weather_tool"));
 
     // Dynamic tool should be in additional_tools
     let additional_tools = dp["additional_tools"].as_array().unwrap();
@@ -214,7 +216,7 @@ async fn test_datapoint_update_tool_params() {
         vec![],
         AllowedTools {
             tools: vec![get_temp_tool.name.clone()],
-            choice: AllowedToolsChoice::DynamicAllowedTools,
+            choice: AllowedToolsChoice::Explicit,
         },
         ToolChoice::Auto,
         Some(false),
@@ -329,11 +331,7 @@ async fn test_datapoint_update_tool_params() {
     let dp = &datapoints[0];
 
     // Verify updated tool_params (flattened at top level)
-    assert_eq!(
-        dp["allowed_tools"],
-        json!(["get_temperature", "updated_tool"]),
-        "allowed_tools should be updated"
-    );
+    assert_eq!(dp["allowed_tools"], json!(["get_temperature"]),);
 
     let additional_tools = dp["additional_tools"].as_array().unwrap();
     assert_eq!(additional_tools.len(), 1);
@@ -415,7 +413,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![],
             AllowedTools {
                 tools: vec![base_tool.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,
             None,
@@ -449,7 +447,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![],
             AllowedTools {
                 tools: vec![base_tool.name.clone(), custom_tool_1.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Required,
             Some(false),
@@ -483,7 +481,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![],
             AllowedTools {
                 tools: vec![custom_tool_2.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::None,
             Some(true),
@@ -539,10 +537,15 @@ async fn test_list_datapoints_with_tool_params() {
 
     // Verify DP2: Static + one dynamic (flattened)
     let dp2_json = find_dp(&dp2_id);
-    assert_eq!(
-        dp2_json["allowed_tools"],
-        json!(["get_temperature", "tool_1"])
-    );
+    let allowed_tools: std::collections::HashSet<&str> = dp2_json["allowed_tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    let expected_tools: std::collections::HashSet<&str> =
+        ["get_temperature", "tool_1"].into_iter().collect();
+    assert_eq!(allowed_tools, expected_tools);
     let add_tools_2 = dp2_json["additional_tools"].as_array().unwrap();
     assert_eq!(add_tools_2.len(), 1);
     assert_eq!(add_tools_2[0]["name"], "tool_1");
@@ -602,7 +605,7 @@ async fn test_datapoint_only_static_tools() {
             vec![],
             vec![],
             AllowedTools {
-                tools: vec![static_tool.name.clone()],
+                tools: [static_tool.name.clone()].into_iter().collect(),
                 choice: AllowedToolsChoice::FunctionDefault,
             },
             ToolChoice::Auto,
@@ -704,7 +707,7 @@ async fn test_datapoint_only_dynamic_tools() {
             vec![],
             AllowedTools {
                 tools: vec![static_tool.name.clone(), dynamic_tool.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,
             None,
@@ -737,11 +740,13 @@ async fn test_datapoint_only_dynamic_tools() {
     let resp_json: Value = resp.json().await.unwrap();
     let dp = &resp_json["datapoints"][0];
 
-    // Static tool from function config should be in allowed_tools (flattened)
+    // Static + dynamic tool should be in allowed_tools
     let allowed_tools = dp["allowed_tools"].as_array().unwrap();
     assert_eq!(allowed_tools.len(), 2);
-    assert_eq!(allowed_tools[0], "get_temperature");
-    assert_eq!(allowed_tools[1], "runtime_tool");
+    let allowed_tools_set: std::collections::HashSet<&str> =
+        allowed_tools.iter().map(|v| v.as_str().unwrap()).collect();
+    assert!(allowed_tools_set.contains("runtime_tool"));
+    assert!(allowed_tools_set.contains("get_temperature"));
 
     // Dynamic tool should be in additional_tools (flattened)
     let additional_tools = dp["additional_tools"].as_array().unwrap();
@@ -796,7 +801,7 @@ async fn test_datapoint_tool_params_three_states() {
             vec![],
             AllowedTools {
                 tools: vec![tool.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,
             None,

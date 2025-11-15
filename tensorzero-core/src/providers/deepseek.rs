@@ -462,6 +462,7 @@ impl<'a> DeepSeekRequest<'a> {
             response_format,
             tools,
             tool_choice,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
         };
 
         apply_inference_params(&mut deepseek_request, &request.inference_params_v2);

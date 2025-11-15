@@ -18,6 +18,7 @@ test-all = "nextest run --features e2e_tests"
 test-live-batch = ["nextest", "run", "--features", "e2e_tests", "--profile", "live-batch"]
 test-mock-batch = ["nextest", "run", "--features", "e2e_tests", "--profile", "mock-batch"]
 test-e2e = ["nextest", "run", "--features", "e2e_tests", "--profile", "e2e"]
+test-e2e-fast = ["nextest", "run", "--features", "e2e_tests", "--profile", "e2e", "--retries", "0", "--no-fail-fast"]
 test-optimization = [
     "nextest",
     "run",

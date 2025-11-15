@@ -791,7 +791,11 @@ impl<'a> AnthropicRequestBody<'a> {
             if matches!(c.tool_choice, ToolChoice::None) {
                 None
             } else {
-                Some(c.tools_available().map(Into::into).collect::<Vec<_>>())
+                Some(
+                    c.strict_tools_available()
+                        .map(Into::into)
+                        .collect::<Vec<_>>(),
+                )
             }
         });
 
@@ -3377,5 +3381,34 @@ mod tests {
         assert!(logs_contain(
             "The image detail parameter is not supported by Anthropic"
         ));
+    }
+
+    #[test]
+    fn test_anthropic_respects_allowed_tools() {
+        use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_TOOL};
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+
+        // Create a ToolCallConfig with two tools but only allow one
+        let tool_config = ToolCallConfig {
+            static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools {
+                tools: vec!["get_temperature".to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+
+        // Convert to Anthropic tools
+        let tools: Vec<AnthropicTool> = tool_config
+            .strict_tools_available()
+            .map(AnthropicTool::from)
+            .collect();
+
+        // Verify only the allowed tool is included
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "get_temperature");
     }
 }
