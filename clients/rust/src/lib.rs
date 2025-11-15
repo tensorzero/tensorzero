@@ -4,7 +4,6 @@ use tensorzero_core::client::DisplayOrDebug;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
-use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inferences::render_samples;
 use tensorzero_core::endpoints::validate_tags;
 use tensorzero_core::endpoints::workflow_evaluation_run::{
@@ -12,6 +11,9 @@ use tensorzero_core::endpoints::workflow_evaluation_run::{
 };
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::stored_inference::StoredSample;
+use tensorzero_optimizers::endpoints::{
+    launch_optimization, launch_optimization_workflow, poll_optimization,
+};
 use uuid::Uuid;
 
 // Re-export the core client from tensorzero-core
@@ -40,16 +42,27 @@ pub use tensorzero_core::client::input_handling;
 // Re-export other commonly used types from tensorzero-core
 pub use tensorzero_core::config::Config;
 pub use tensorzero_core::db::clickhouse::query_builder::{
-    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
-    TagComparisonOperator, TagFilter, TimeComparisonOperator, TimeFilter,
+    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter, OrderBy,
+    OrderByTerm, OrderDirection, TagComparisonOperator, TagFilter, TimeComparisonOperator,
+    TimeFilter,
 };
 pub use tensorzero_core::db::datasets::{
     AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetDetailRow, DatasetQueries, DatasetQueryParams, GetAdjacentDatapointIdsParams,
-    GetDatapointParams, GetDatasetMetadataParams, GetDatasetRowsParams, StaleDatapointParams,
+    GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams, GetDatasetRowsParams,
+    StaleDatapointParams,
 };
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
 pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};
+pub use tensorzero_core::endpoints::datasets::v1::types::{
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceOutputSource,
+    CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
+    CreateDatapointsRequest, CreateDatapointsResponse, CreateJsonDatapointRequest,
+    DeleteDatapointsRequest, DeleteDatapointsResponse, GetDatapointsRequest, GetDatapointsResponse,
+    JsonDatapointOutputUpdate, ListDatapointsRequest, UpdateChatDatapointRequest,
+    UpdateDatapointMetadataRequest, UpdateDatapointRequest, UpdateDatapointsMetadataRequest,
+    UpdateDatapointsRequest, UpdateDatapointsResponse, UpdateJsonDatapointRequest,
+};
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
     StoredChatInferenceDatapoint, StoredDatapoint,
@@ -60,8 +73,8 @@ pub use tensorzero_core::endpoints::inference::{
     InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
 };
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
-pub use tensorzero_core::endpoints::optimization::{
-    LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
+pub use tensorzero_core::endpoints::stored_inferences::v1::types::{
+    GetInferencesRequest, GetInferencesResponse, ListInferencesRequest,
 };
 pub use tensorzero_core::endpoints::variant_probabilities::{
     GetVariantSamplingProbabilitiesParams, GetVariantSamplingProbabilitiesResponse,
@@ -79,11 +92,16 @@ pub use tensorzero_core::stored_inference::{
     RenderedSample, StoredChatInference, StoredChatInferenceDatabase, StoredInference,
     StoredInferenceDatabase, StoredJsonInference,
 };
-pub use tensorzero_core::tool::{DynamicToolParams, Tool, ToolCallWrapper};
+pub use tensorzero_core::tool::{ClientSideFunctionTool, DynamicToolParams, ToolCallWrapper};
 pub use tensorzero_core::utils::gateway::setup_clickhouse_without_config;
 
 // Export quantile array from migration_0037
 pub use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0037::QUANTILES;
+
+// Re-export optimization types from tensorzero-optimizers
+pub use tensorzero_optimizers::endpoints::{
+    LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
+};
 
 // Keep git module for Git-related extension traits
 mod git;
@@ -97,32 +115,66 @@ pub use tensorzero_core::observability;
 
 use crate::git::GitInfo;
 
+// NOTE(shuyangli): For methods that delegate to APIs in the gateway, the arguments generally are flattened from the request type for
+// ease of use, except when the type contains more than 2-3 fields or multiple fields with the same type (e.g. `ListDatapointsRequest`).
+// This is because when reading the code outside of an IDE, it's often difficult to tell the arguments apart without argument names.
+//
+// To illustrate:
+//
+// It's easy to understand the semantics of methods that take few, unambiguous arguments:
+// ```rust
+// client.delete_datapoints("dataset-name", vec![uuid1, uuid2]);
+// ```
+//
+// But it quickly gets confusing with more arguments or arguments with similar types:
+// ```rust
+// client.list_datapoints("dataset-name", None, Some(100), Some(0), None);
+// ```
+//
+// In these cases, using the request type directly makes the code much more readable:
+// ```rust
+// client.list_datapoints("dataset-name", ListDatapointsRequest {
+//     function_name: None,
+//     limit: Some(100),
+//     offset: Some(0),
+//     filter: None,
+// });
+// ```
+
 /// Extension trait for additional Client methods
 #[async_trait::async_trait]
 pub trait ClientExt {
+    // ================================================================
     // Health checking
+    // ================================================================
     async fn clickhouse_health(&self) -> Result<(), TensorZeroError>;
 
+    // ================================================================
     // Dataset operations
-    async fn create_datapoints(
+    // ================================================================
+    #[deprecated(since = "2025.11.3", note = "Use `create_datapoints` instead.")]
+    async fn create_datapoints_legacy(
         &self,
         dataset_name: String,
         params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError>;
 
+    #[deprecated(since = "2025.11.3", note = "Use `create_datapoints` instead.")]
     async fn bulk_insert_datapoints(
         &self,
         dataset_name: String,
         params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError>;
 
+    #[deprecated(since = "2025.11.3", note = "Use `delete_datapoints` instead.")]
     async fn delete_datapoint(
         &self,
         dataset_name: String,
         datapoint_id: Uuid,
     ) -> Result<(), TensorZeroError>;
 
-    async fn list_datapoints(
+    #[deprecated(since = "2025.11.3", note = "Use `list_datapoints` instead.")]
+    async fn list_datapoints_legacy(
         &self,
         dataset_name: String,
         function_name: Option<String>,
@@ -130,18 +182,180 @@ pub trait ClientExt {
         offset: Option<u32>,
     ) -> Result<Vec<Datapoint>, TensorZeroError>;
 
+    #[deprecated(since = "2025.11.3", note = "Use `get_datapoints` instead.")]
     async fn get_datapoint(
         &self,
         dataset_name: String,
         datapoint_id: Uuid,
     ) -> Result<Datapoint, TensorZeroError>;
 
+    #[deprecated(since = "2025.11.3", note = "Use `delete_dataset` instead")]
     async fn stale_dataset(
         &self,
         dataset_name: String,
     ) -> Result<StaleDatasetResponse, TensorZeroError>;
 
+    /// Creates new datapoints in the dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to create the datapoints in.
+    /// * `datapoints` - The datapoints to create.
+    ///
+    /// # Returns
+    ///
+    /// A `CreateDatapointsResponse` containing the IDs of the newly-created datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn create_datapoints(
+        &self,
+        dataset_name: String,
+        datapoints: Vec<CreateDatapointRequest>,
+    ) -> Result<CreateDatapointsResponse, TensorZeroError>;
+
+    /// Lists datapoints in the dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to list the datapoints from.
+    /// * `request` - The request to list the datapoints.
+    ///
+    /// # Returns
+    ///
+    /// A `GetDatapointsResponse` containing the datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn list_datapoints(
+        &self,
+        dataset_name: String,
+        request: ListDatapointsRequest,
+    ) -> Result<GetDatapointsResponse, TensorZeroError>;
+
+    /// Updates datapoints in the dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to update the datapoints in.
+    /// * `datapoints` - The datapoints to update.
+    ///
+    /// # Returns
+    ///
+    /// A `UpdateDatapointsResponse` containing the IDs of the updated datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn update_datapoints(
+        &self,
+        dataset_name: String,
+        datapoints: Vec<UpdateDatapointRequest>,
+    ) -> Result<UpdateDatapointsResponse, TensorZeroError>;
+
+    /// Gets datapoints by their IDs.
+    ///
+    /// # Arguments
+    ///
+    /// * `datapoint_ids` - The IDs of the datapoints to get.
+    ///
+    /// # Returns
+    ///
+    /// A `GetDatapointsResponse` containing the datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn get_datapoints(
+        &self,
+        datapoint_ids: Vec<Uuid>,
+    ) -> Result<GetDatapointsResponse, TensorZeroError>;
+
+    /// Updates the metadata of datapoints in the dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to update the metadata of.
+    /// * `datapoints` - The datapoints to update the metadata of.
+    ///
+    /// # Returns
+    ///
+    /// A `UpdateDatapointsResponse` containing the IDs of the updated datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn update_datapoints_metadata(
+        &self,
+        dataset_name: String,
+        datapoints: Vec<UpdateDatapointMetadataRequest>,
+    ) -> Result<UpdateDatapointsResponse, TensorZeroError>;
+
+    /// Deletes datapoints from the dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to delete the datapoints from.
+    /// * `datapoint_ids` - The IDs of the datapoints to delete.
+    ///
+    /// # Returns
+    ///
+    /// A `DeleteDatapointsResponse` containing the number of deleted datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn delete_datapoints(
+        &self,
+        dataset_name: String,
+        datapoint_ids: Vec<Uuid>,
+    ) -> Result<DeleteDatapointsResponse, TensorZeroError>;
+
+    /// Deletes a dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to delete.
+    ///
+    /// # Returns
+    ///
+    /// A `DeleteDatapointsResponse` containing the number of deleted datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn delete_dataset(
+        &self,
+        dataset_name: String,
+    ) -> Result<DeleteDatapointsResponse, TensorZeroError>;
+
+    /// Creates datapoints from inferences.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to create the datapoints from.
+    /// * `params` - The parameters for the creation.
+    /// * `output_source` - The output source for the creation.
+    ///
+    /// # Returns
+    ///
+    /// A `CreateDatapointsResponse` containing the IDs of the newly-created datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn create_datapoints_from_inferences(
+        &self,
+        dataset_name: String,
+        params: CreateDatapointsFromInferenceRequestParams,
+        output_source: Option<CreateDatapointsFromInferenceOutputSource>,
+    ) -> Result<CreateDatapointsResponse, TensorZeroError>;
+
+    // ================================================================
     // Workflow evaluation operations
+    // ================================================================
     async fn workflow_evaluation_run(
         &self,
         params: WorkflowEvaluationRunParams,
@@ -153,7 +367,9 @@ pub trait ClientExt {
         params: WorkflowEvaluationRunEpisodeParams,
     ) -> Result<WorkflowEvaluationRunEpisodeResponse, TensorZeroError>;
 
+    // ================================================================
     // Inference operations
+    // ================================================================
     #[cfg(feature = "e2e_tests")]
     async fn start_batch_inference(
         &self,
@@ -163,12 +379,55 @@ pub trait ClientExt {
         TensorZeroError,
     >;
 
+    #[deprecated(since = "2025.11.4", note = "Use `list_inferences` instead.")]
     async fn experimental_list_inferences(
         &self,
         params: ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInference>, TensorZeroError>;
 
+    /// Gets specific inferences by their IDs.
+    ///
+    /// # Arguments
+    ///
+    /// * `inference_ids` - The IDs of the inferences to retrieve.
+    /// * `function_name` - Optional function name to filter by (improves query performance).
+    /// * `output_source` - Whether to return inference or demonstration output.
+    ///
+    /// # Returns
+    ///
+    /// A `GetInferencesResponse` containing the requested inferences.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn get_inferences(
+        &self,
+        inference_ids: Vec<Uuid>,
+        function_name: Option<String>,
+        output_source: InferenceOutputSource,
+    ) -> Result<GetInferencesResponse, TensorZeroError>;
+
+    /// Lists inferences with optional filtering, pagination, and sorting.
+    ///
+    /// # Arguments
+    ///
+    /// * `request` - The request parameters for listing inferences.
+    ///
+    /// # Returns
+    ///
+    /// A `GetInferencesResponse` containing the inferences that match the criteria.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn list_inferences(
+        &self,
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroError>;
+
+    // ================================================================
     // Optimization operations
+    // ================================================================
     async fn experimental_render_samples<T: StoredSample + Send>(
         &self,
         stored_samples: Vec<T>,
@@ -190,13 +449,17 @@ pub trait ClientExt {
         handle: &OptimizationJobHandle,
     ) -> Result<OptimizationJobInfo, TensorZeroError>;
 
+    // ================================================================
     // Variant sampling operations
+    // ================================================================
     async fn get_variant_sampling_probabilities(
         &self,
         function_name: &str,
     ) -> Result<HashMap<String, f64>, TensorZeroError>;
 
+    // ================================================================
     // Config access
+    // ================================================================
     fn config(&self) -> Option<&Config>;
 
     fn get_config(&self) -> Result<Arc<Config>, TensorZeroError>;
@@ -379,11 +642,13 @@ impl ClientExt for Client {
         }
     }
 
-    async fn create_datapoints(
+    /// DEPRECATED: Use `create_datapoints` instead.
+    async fn create_datapoints_legacy(
         &self,
         dataset_name: String,
         params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError> {
+        // No warning because the python client still uses it.
         create_datapoints_internal(self, dataset_name, params, "datapoints").await
     }
 
@@ -397,97 +662,49 @@ impl ClientExt for Client {
         create_datapoints_internal(self, dataset_name, params, "datapoints/bulk").await
     }
 
-    async fn delete_datapoint(
-        &self,
-        dataset_name: String,
-        datapoint_id: Uuid,
-    ) -> Result<(), TensorZeroError> {
-        match self.mode() {
-            ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/{datapoint_id}")).map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint: {e}"),
-                    })
-                    .into(),
-                })?;
-                let builder = client.http_client.delete(url);
-                let resp = builder.send().await.map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::JsonRequest {
-                        message: format!("Error deleting datapoint: {e:?}"),
-                    })
-                    .into(),
-                })?;
-                if resp.status().is_success() {
-                    Ok(())
-                } else {
-                    Err(TensorZeroError::Other {
-                        source: Error::new(ErrorDetails::JsonRequest {
-                            message: format!(
-                                "Error deleting datapoint: {}",
-                                resp.text().await.unwrap_or_default()
-                            ),
-                        })
-                        .into(),
-                    })
-                }
-            }
-            ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::datasets::delete_datapoint(
-                        dataset_name,
-                        datapoint_id,
-                        &gateway.handle.app_state.clickhouse_connection_info,
-                    )
-                    .await
-                    .map_err(err_to_http)
-                })
-                .await?)
-            }
-        }
-    }
-
-    async fn list_datapoints(
+    /// DEPRECATED: Use `list_datapoints` instead.
+    async fn list_datapoints_legacy(
         &self,
         dataset_name: String,
         function_name: Option<String>,
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> Result<Vec<Datapoint>, TensorZeroError> {
-        match self.mode() {
-            ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints")).map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints endpoint: {e}"),
-                    })
-                    .into(),
-                })?;
-                let mut query_params = Vec::new();
-                query_params.push(("limit", limit.unwrap_or(100).to_string()));
-                query_params.push(("offset", offset.unwrap_or(0).to_string()));
-                if let Some(function_name) = function_name {
-                    query_params.push(("function_name", function_name));
-                }
-                let builder = client.http_client.get(url).query(&query_params);
-                self.parse_http_response(builder.send().await).await
-            }
-            ClientMode::EmbeddedGateway { gateway, timeout } => {
-                with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::datasets::list_datapoints(
-                        dataset_name,
-                        &gateway.handle.app_state.clickhouse_connection_info,
-                        &gateway.handle.app_state.config,
-                        function_name,
-                        limit,
-                        offset,
-                    )
-                    .await
-                    .map_err(err_to_http)
-                })
-                .await
-            }
-        }
+        let response = self
+            .list_datapoints(
+                dataset_name,
+                ListDatapointsRequest {
+                    function_name,
+                    limit,
+                    offset,
+                    ..Default::default()
+                },
+            )
+            .await?;
+        Ok(response.datapoints)
     }
 
+    /// DEPRECATED: Use `delete_datapoints` instead.
+    async fn delete_datapoint(
+        &self,
+        dataset_name: String,
+        datapoint_id: Uuid,
+    ) -> Result<(), TensorZeroError> {
+        let response = self
+            .delete_datapoints(dataset_name, vec![datapoint_id])
+            .await?;
+        if response.num_deleted_datapoints == 0 {
+            return Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Datapoint with ID {datapoint_id} not found"),
+                })
+                .into(),
+            });
+        }
+        Ok(())
+    }
+
+    /// DEPRECATED: Use `get_datapoints` instead.
     async fn get_datapoint(
         &self,
         dataset_name: String,
@@ -496,39 +713,41 @@ impl ClientExt for Client {
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/{datapoint_id}")).map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint: {e}"),
-                    })
-                    .into(),
-                })?;
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint: {e}"),
+                        })
+                        .into(),
+                    })?;
                 let builder = client.http_client.get(url);
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                let datapoint = with_embedded_timeout(*timeout, async {
-                    gateway
-                        .handle
-                        .app_state
-                        .clickhouse_connection_info
-                        .get_datapoint(&GetDatapointParams {
+                with_embedded_timeout(*timeout, async {
+                    let mut response = tensorzero_core::endpoints::datasets::v1::get_datapoints(
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.config,
+                        GetDatapointsRequest {
+                            ids: vec![datapoint_id],
+                        },
+                    )
+                    .await
+                    .map_err(err_to_http)?;
+
+                    if response.datapoints.is_empty() {
+                        // We explicitly construct an HTTP error here because python client expects it.
+                        return Err(err_to_http(Error::new(ErrorDetails::DatapointNotFound {
                             dataset_name,
                             datapoint_id,
-                            // By default, we don't return stale datapoints.
-                            allow_stale: None,
-                        })
-                        .await
-                        .map_err(err_to_http)
+                        })));
+                    }
+                    Ok(response.datapoints.swap_remove(0))
                 })
-                .await?;
-
-                // Convert storage type to wire type
-                datapoint
-                    .into_datapoint(&gateway.handle.app_state.config)
-                    .map_err(|e| TensorZeroError::Other { source: e.into() })
+                .await
             }
         }
     }
 
+    /// DEPRECATED: Use `delete_dataset` instead.
     /// Stales all datapoints in a dataset that have not been staled yet.
     /// This is a soft deletion, so evaluation runs will still refer to it.
     /// Returns the number of datapoints that were staled as {num_staled_datapoints: u64}.
@@ -550,13 +769,272 @@ impl ClientExt for Client {
             }
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}")).map_err(|e| TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!("Failed to join base URL with /datasets/{dataset_name} endpoint: {e}"),
+                        })
+                        .into(),
+                    })?;
+                let builder = client.http_client.delete(url);
+                self.parse_http_response(builder.send().await).await
+            }
+        }
+    }
+
+    async fn create_datapoints(
+        &self,
+        dataset_name: String,
+        datapoints: Vec<CreateDatapointRequest>,
+    ) -> Result<CreateDatapointsResponse, TensorZeroError> {
+        let request = CreateDatapointsRequest { datapoints };
+        match self.mode() {
+            ClientMode::HTTPGateway(http_client) => {
+                let url = http_client.base_url.join(&format!("v1/datasets/{dataset_name}/datapoints")).map_err(|e| TensorZeroError::Other {
                     source: Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /datasets/{dataset_name} endpoint: {e}"),
+                        message: format!("Failed to join base URL with /v1/datasets/{dataset_name}/datapoints endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = http_client.http_client.post(url).json(&request);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::datasets::v1::create_datapoints(
+                        &gateway.handle.app_state.config,
+                        &gateway.handle.app_state.http_client,
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &dataset_name,
+                        request,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
+            }
+        }
+    }
+
+    async fn update_datapoints(
+        &self,
+        dataset_name: String,
+        datapoints: Vec<UpdateDatapointRequest>,
+    ) -> Result<UpdateDatapointsResponse, TensorZeroError> {
+        let request = UpdateDatapointsRequest { datapoints };
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join(&format!("v1/datasets/{dataset_name}/datapoints")).map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /v1/datasets/{dataset_name}/datapoints endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.patch(url).json(&request);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::datasets::v1::update_datapoints(
+                        &gateway.handle.app_state,
+                        &dataset_name,
+                        request,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
+            }
+        }
+    }
+
+    async fn get_datapoints(
+        &self,
+        datapoint_ids: Vec<Uuid>,
+    ) -> Result<GetDatapointsResponse, TensorZeroError> {
+        let request = GetDatapointsRequest { ids: datapoint_ids };
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("v1/datasets/get_datapoints").map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /v1/datasets/get_datapoints endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.post(url).json(&request);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::datasets::v1::get_datapoints(
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.config,
+                        request,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
+            }
+        }
+    }
+
+    async fn list_datapoints(
+        &self,
+        dataset_name: String,
+        request: ListDatapointsRequest,
+    ) -> Result<GetDatapointsResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join(&format!("v1/datasets/{dataset_name}/list_datapoints")).map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /v1/datasets/{dataset_name}/list_datapoints endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.post(url).json(&request);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::datasets::v1::list_datapoints(
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.config,
+                        dataset_name,
+                        request,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
+            }
+        }
+    }
+
+    async fn update_datapoints_metadata(
+        &self,
+        dataset_name: String,
+        datapoints: Vec<UpdateDatapointMetadataRequest>,
+    ) -> Result<UpdateDatapointsResponse, TensorZeroError> {
+        let request = UpdateDatapointsMetadataRequest { datapoints };
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join(&format!("v1/datasets/{dataset_name}/datapoints/metadata")).map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /v1/datasets/{dataset_name}/datapoints/metadata endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.patch(url).json(&request);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::datasets::v1::update_datapoints_metadata(
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &dataset_name,
+                        request,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
+            }
+        }
+    }
+
+    async fn delete_datapoints(
+        &self,
+        dataset_name: String,
+        datapoint_ids: Vec<Uuid>,
+    ) -> Result<DeleteDatapointsResponse, TensorZeroError> {
+        let request = DeleteDatapointsRequest { ids: datapoint_ids };
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join(&format!("v1/datasets/{dataset_name}/datapoints")).map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /v1/datasets/{dataset_name}/datapoints endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.delete(url).json(&request);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::datasets::v1::delete_datapoints(
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &dataset_name,
+                        request,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
+            }
+        }
+    }
+
+    async fn delete_dataset(
+        &self,
+        dataset_name: String,
+    ) -> Result<DeleteDatapointsResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join(&format!("v1/datasets/{dataset_name}")).map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /v1/datasets/{dataset_name} endpoint: {e}"),
                     })
                     .into(),
                 })?;
                 let builder = client.http_client.delete(url);
                 self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::datasets::v1::delete_dataset(
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &dataset_name,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
+            }
+        }
+    }
+
+    async fn create_datapoints_from_inferences(
+        &self,
+        dataset_name: String,
+        params: CreateDatapointsFromInferenceRequestParams,
+        output_source: Option<CreateDatapointsFromInferenceOutputSource>,
+    ) -> Result<CreateDatapointsResponse, TensorZeroError> {
+        let request = CreateDatapointsFromInferenceRequest {
+            params,
+            output_source,
+        };
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join(&format!("v1/datasets/{dataset_name}/from_inferences")).map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /v1/datasets/{dataset_name}/from_inferences endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.post(url).json(&request);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::datasets::v1::create_from_inferences(
+                        &gateway.handle.app_state.config,
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        dataset_name,
+                        request,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
             }
         }
     }
@@ -581,7 +1059,7 @@ impl ClientExt for Client {
         // TODO: consider adding a flag that returns the generated sql query
         let ClientMode::EmbeddedGateway { gateway, .. } = self.mode() else {
             return Err(TensorZeroError::Other {
-                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
+                source: Error::new(ErrorDetails::InvalidClientMode {
                     mode: "Http".to_string(),
                     message: "This function is only available in EmbeddedGateway mode".to_string(),
                 })
@@ -603,6 +1081,73 @@ impl ClientExt for Client {
             .collect();
 
         wire_inferences.map_err(|e| TensorZeroError::Other { source: e.into() })
+    }
+
+    async fn get_inferences(
+        &self,
+        inference_ids: Vec<Uuid>,
+        function_name: Option<String>,
+        output_source: InferenceOutputSource,
+    ) -> Result<GetInferencesResponse, TensorZeroError> {
+        let request = GetInferencesRequest {
+            ids: inference_ids,
+            function_name,
+            output_source,
+        };
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("v1/inferences/get_inferences").map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /v1/inferences/get_inferences endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.post(url).json(&request);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::stored_inferences::v1::get_inferences(
+                        &gateway.handle.app_state.config,
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        request,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
+            }
+        }
+    }
+
+    async fn list_inferences(
+        &self,
+        request: ListInferencesRequest,
+    ) -> Result<GetInferencesResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join("v1/inferences/list_inferences").map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /v1/inferences/list_inferences endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.post(url).json(&request);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::stored_inferences::v1::list_inferences(
+                        &gateway.handle.app_state.config,
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        request,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
+            }
+        }
     }
 
     /// There are two things that need to happen in this function:
@@ -726,7 +1271,7 @@ impl ClientExt for Client {
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::optimization::poll_optimization(
+                    poll_optimization(
                         &gateway.handle.app_state.http_client,
                         job_handle,
                         &gateway.handle.app_state.config.models.default_credentials,

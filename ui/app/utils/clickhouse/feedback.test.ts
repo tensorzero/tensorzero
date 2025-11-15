@@ -100,13 +100,13 @@ describe("queryMetricsWithFeedback", () => {
 
 test("pollForFeedbackItem should find feedback when it exists", async () => {
   const targetId = "01942e26-4693-7e80-8591-47b98e25d721";
-  const pageSize = 10;
+  const limit = 10;
 
   const dbClient = await getNativeDatabaseClient();
   // Run the queryFeedbackByTargetId function to return feedback with the target ID
   const originalQueryFeedback = await dbClient.queryFeedbackByTargetId({
     target_id: targetId,
-    page_size: pageSize,
+    limit,
   });
 
   // Ensure we have feedback to test with
@@ -119,7 +119,7 @@ test("pollForFeedbackItem should find feedback when it exists", async () => {
   const feedback = await pollForFeedbackItem(
     targetId,
     existingFeedbackId,
-    pageSize,
+    limit,
     3, // Fewer retries for faster test
     50, // Shorter delay for faster test
   );
@@ -135,7 +135,7 @@ test("pollForFeedbackItem should find feedback when it exists", async () => {
   const emptyFeedback = await pollForFeedbackItem(
     targetId,
     nonExistentId,
-    pageSize,
+    limit,
     2, // Fewer retries for faster test
     50, // Shorter delay for faster test
   );

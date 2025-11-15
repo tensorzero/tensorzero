@@ -35,13 +35,13 @@ use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{
-    DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolCallConfigDatabaseInsert, ToolChoice,
+    AllowedToolsChoice, DynamicToolParams, StaticToolConfig, Tool, ToolCallConfig,
+    ToolCallConfigConstructorArgs, ToolCallConfigDatabaseInsert, ToolChoice,
 };
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum FunctionConfig {
     Chat(FunctionConfigChat),
@@ -102,6 +102,13 @@ impl FunctionConfig {
         match self {
             FunctionConfig::Chat(config) => &config.experimentation,
             FunctionConfig::Json(config) => &config.experimentation,
+        }
+    }
+
+    pub fn tools(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+        match self {
+            FunctionConfig::Chat(config) => Box::new(config.tools.iter().map(String::as_str)),
+            FunctionConfig::Json(_config) => Box::new(std::iter::empty()),
         }
     }
 }
@@ -238,9 +245,8 @@ impl VariantsConfigPyClass {
     }
 }
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FunctionConfigChat {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub schemas: SchemaData,
@@ -266,9 +272,8 @@ pub struct FunctionConfigChat {
     pub all_explicit_templates_names: HashSet<String>,
 }
 
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FunctionConfigJson {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub schemas: SchemaData,
@@ -340,13 +345,27 @@ impl FunctionConfig {
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
     ) -> Result<Option<ToolCallConfig>, Error> {
         match self {
-            FunctionConfig::Chat(params) => Ok(ToolCallConfig::new(
-                &params.tools,
-                &params.tool_choice,
-                params.parallel_tool_calls,
-                static_tools,
-                dynamic_tool_params,
-            )?),
+            FunctionConfig::Chat(params) => {
+                let DynamicToolParams {
+                    allowed_tools,
+                    additional_tools,
+                    parallel_tool_calls,
+                    provider_tools,
+                    tool_choice,
+                } = dynamic_tool_params;
+                Ok(ToolCallConfig::new(ToolCallConfigConstructorArgs {
+                    function_tools: &params.tools,
+                    function_tool_choice: &params.tool_choice,
+                    function_parallel_tool_calls: params.parallel_tool_calls,
+                    static_tools,
+                    dynamic_allowed_tools: allowed_tools,
+                    dynamic_additional_tools: additional_tools
+                        .map(|tools| tools.into_iter().map(Tool::ClientSideFunction).collect()),
+                    dynamic_tool_choice: tool_choice,
+                    dynamic_parallel_tool_calls: parallel_tool_calls,
+                    dynamic_provider_tools: provider_tools,
+                })?)
+            }
             FunctionConfig::Json(_) => {
                 if dynamic_tool_params.allowed_tools.is_some() {
                     return Err(ErrorDetails::InvalidRequest {
@@ -388,39 +407,46 @@ impl FunctionConfig {
         Ok(tool_config.map(std::convert::Into::into))
     }
 
-    /// Convert ToolCallConfigDatabaseInsert back to DynamicToolParams by subtracting static tools
-    /// Static tools (from function config) become allowed_tools, additional tools remain as additional_tools
+    /// Convert ToolCallConfigDatabaseInsert back to DynamicToolParams
     pub fn database_insert_to_dynamic_tool_params(
         &self,
         db_insert: ToolCallConfigDatabaseInsert,
     ) -> DynamicToolParams {
-        // Get static tool names from function config
-        let static_tool_names: HashSet<&str> = match self {
-            FunctionConfig::Chat(c) => c.tools.iter().map(std::string::String::as_str).collect(),
-            FunctionConfig::Json(_) => HashSet::new(),
+        let ToolCallConfigDatabaseInsert {
+            dynamic_tools,
+            dynamic_provider_tools,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+            .. // TODO: Ideally we can say all but private fields must be destructured here.
+        } = db_insert;
+
+        let allowed_tools = match allowed_tools.choice {
+            AllowedToolsChoice::FunctionDefault => None,
+            AllowedToolsChoice::DynamicAllowedTools => Some(allowed_tools.tools),
         };
 
-        // Partition tools into static (allowed) and dynamic (additional)
-        let (static_tools, additional_tools): (Vec<_>, Vec<_>) = db_insert
-            .tools_available
-            .into_iter()
-            .partition(|tool| static_tool_names.contains(tool.name.as_str()));
+        let additional_tools = if dynamic_tools.is_empty() {
+            None
+        } else {
+            Some(
+                dynamic_tools
+                    .into_iter()
+                    .map(|tool| match tool {
+                        Tool::ClientSideFunction(client_tool) => client_tool,
+                        // When new Tool variants are added, this will cause a compile error,
+                        // forcing us to handle them explicitly
+                    })
+                    .collect(),
+            )
+        };
 
         DynamicToolParams {
-            allowed_tools: if static_tools.is_empty() {
-                None
-            } else {
-                Some(static_tools.into_iter().map(|t| t.name).collect())
-            },
-            additional_tools: if additional_tools.is_empty() {
-                None
-            } else {
-                Some(additional_tools)
-            },
-            tool_choice: Some(db_insert.tool_choice),
-            parallel_tool_calls: db_insert.parallel_tool_calls,
-            // TODO(#4271): store and restore the provider_tools from DB
-            provider_tools: None,
+            allowed_tools,
+            additional_tools,
+            tool_choice: Some(tool_choice),
+            parallel_tool_calls,
+            provider_tools: dynamic_provider_tools,
         }
     }
 
@@ -2404,10 +2430,13 @@ mod tests {
 
     mod database_insert_to_dynamic_tool_params_tests {
         use super::*;
-        use crate::tool::{Tool, ToolCallConfigDatabaseInsert};
+        use crate::tool::{
+            AllowedTools, AllowedToolsChoice, ClientSideFunctionTool, Tool,
+            ToolCallConfigDatabaseInsert,
+        };
 
-        fn create_test_tool(name: &str, strict: bool) -> Tool {
-            Tool {
+        fn create_test_tool(name: &str, strict: bool) -> ClientSideFunctionTool {
+            ClientSideFunctionTool {
                 name: name.to_string(),
                 description: format!("Description for {name}"),
                 parameters: json!({"type": "object", "properties": {"input": {"type": "string"}}}),
@@ -2429,15 +2458,18 @@ mod tests {
         #[test]
         fn test_tool_partitioning() {
             // Test 1: Only static tools (all match function config)
+            // Static tools are NOT stored in dynamic_tools, only their names in allowed_tools
             let function_config = create_chat_function(vec!["tool1", "tool2"]);
-            let db_insert = ToolCallConfigDatabaseInsert {
-                tools_available: vec![
-                    create_test_tool("tool1", false),
-                    create_test_tool("tool2", true),
-                ],
-                tool_choice: ToolChoice::Required,
-                parallel_tool_calls: Some(false),
-            };
+            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
+                vec![], // No dynamic tools - these are static from function config
+                vec![],
+                AllowedTools {
+                    tools: vec!["tool1".to_string(), "tool2".to_string()],
+                    choice: AllowedToolsChoice::DynamicAllowedTools, // Explicit list
+                },
+                ToolChoice::Required,
+                Some(false),
+            );
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
             assert_eq!(
                 result.allowed_tools,
@@ -2446,15 +2478,21 @@ mod tests {
             assert_eq!(result.additional_tools, None);
 
             // Test 2: Only dynamic tools (none match function config)
+            // Dynamic tools are stored in dynamic_tools, allowed_tools uses function defaults
             let function_config = create_chat_function(vec!["static1"]);
-            let db_insert = ToolCallConfigDatabaseInsert {
-                tools_available: vec![
-                    create_test_tool("dynamic1", false),
-                    create_test_tool("dynamic2", true),
+            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
+                vec![
+                    Tool::ClientSideFunction(create_test_tool("dynamic1", false)),
+                    Tool::ClientSideFunction(create_test_tool("dynamic2", true)),
                 ],
-                tool_choice: ToolChoice::None,
-                parallel_tool_calls: Some(true),
-            };
+                vec![],
+                AllowedTools {
+                    tools: vec![], // Empty, will use function's defaults (static1)
+                    choice: AllowedToolsChoice::FunctionDefault, // Use function defaults
+                },
+                ToolChoice::None,
+                Some(true),
+            );
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
             assert_eq!(result.allowed_tools, None);
             assert_eq!(result.additional_tools.as_ref().unwrap().len(), 2);
@@ -2468,17 +2506,21 @@ mod tests {
             );
 
             // Test 3: Mixed static and dynamic tools
+            // Static tools (a, b) go in allowed_tools, dynamic tools (x, y) go in dynamic_tools
             let function_config = create_chat_function(vec!["a", "b"]);
-            let db_insert = ToolCallConfigDatabaseInsert {
-                tools_available: vec![
-                    create_test_tool("a", false),
-                    create_test_tool("x", true),
-                    create_test_tool("b", false),
-                    create_test_tool("y", true),
+            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
+                vec![
+                    Tool::ClientSideFunction(create_test_tool("x", true)),
+                    Tool::ClientSideFunction(create_test_tool("y", true)),
                 ],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: None,
-            };
+                vec![],
+                AllowedTools {
+                    tools: vec!["a".to_string(), "b".to_string()], // Only static tools
+                    choice: AllowedToolsChoice::DynamicAllowedTools,
+                },
+                ToolChoice::Auto,
+                None,
+            );
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
             assert_eq!(
                 result.allowed_tools,
@@ -2493,25 +2535,36 @@ mod tests {
 
             // Test 4: Empty tools list
             let function_config = create_chat_function(vec!["tool1"]);
-            let db_insert = ToolCallConfigDatabaseInsert {
-                tools_available: vec![],
-                tool_choice: ToolChoice::None,
-                parallel_tool_calls: None,
-            };
+            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![],
+                AllowedTools {
+                    tools: vec![],
+                    choice: AllowedToolsChoice::FunctionDefault,
+                },
+                ToolChoice::None,
+                None,
+            );
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
             assert_eq!(result.allowed_tools, None);
             assert_eq!(result.additional_tools, None);
 
-            // Test 5: Chat function with no tools in config
+            // Test 5: Chat function with no tools in config, all provided dynamically
+            // Function has no static tools, so allowed_tools should be None (use function defaults)
             let function_config = create_chat_function(vec![]);
-            let db_insert = ToolCallConfigDatabaseInsert {
-                tools_available: vec![
-                    create_test_tool("tool1", false),
-                    create_test_tool("tool2", true),
+            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
+                vec![
+                    Tool::ClientSideFunction(create_test_tool("tool1", false)),
+                    Tool::ClientSideFunction(create_test_tool("tool2", true)),
                 ],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: None,
-            };
+                vec![],
+                AllowedTools {
+                    tools: vec![], // Function has no defaults
+                    choice: AllowedToolsChoice::FunctionDefault,
+                },
+                ToolChoice::Auto,
+                None,
+            );
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
             assert_eq!(result.allowed_tools, None);
             assert_eq!(result.additional_tools.as_ref().unwrap().len(), 2);
@@ -2522,46 +2575,62 @@ mod tests {
             let function_config = create_chat_function(vec!["tool1"]);
 
             // Test tool_choice variants
+            // tool1 is a static tool (in function config), so don't store in dynamic_tools
             for choice in [
                 ToolChoice::None,
                 ToolChoice::Auto,
                 ToolChoice::Required,
                 ToolChoice::Specific("tool1".to_string()),
             ] {
-                let db_insert = ToolCallConfigDatabaseInsert {
-                    tools_available: vec![create_test_tool("tool1", false)],
-                    tool_choice: choice.clone(),
-                    parallel_tool_calls: None,
-                };
+                let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
+                    vec![], // Empty - tool1 is static
+                    vec![],
+                    AllowedTools {
+                        tools: vec!["tool1".to_string()],
+                        choice: AllowedToolsChoice::DynamicAllowedTools,
+                    },
+                    choice.clone(),
+                    None,
+                );
                 let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
                 assert_eq!(result.tool_choice, Some(choice));
             }
 
             // Test parallel_tool_calls variants
             for ptc in [None, Some(true), Some(false)] {
-                let db_insert = ToolCallConfigDatabaseInsert {
-                    tools_available: vec![create_test_tool("tool1", false)],
-                    tool_choice: ToolChoice::Auto,
-                    parallel_tool_calls: ptc,
-                };
+                let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
+                    vec![], // Empty - tool1 is static
+                    vec![],
+                    AllowedTools {
+                        tools: vec!["tool1".to_string()],
+                        choice: AllowedToolsChoice::DynamicAllowedTools,
+                    },
+                    ToolChoice::Auto,
+                    ptc,
+                );
                 let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
                 assert_eq!(result.parallel_tool_calls, ptc);
             }
 
-            // Test provider_tools is always None (lossy conversion)
-            let db_insert = ToolCallConfigDatabaseInsert {
-                tools_available: vec![create_test_tool("tool1", false)],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: None,
-            };
+            // Test provider_tools are preserved (no longer lossy!)
+            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
+                vec![], // Empty - tool1 is static
+                vec![], // Empty provider tools
+                AllowedTools {
+                    tools: vec!["tool1".to_string()],
+                    choice: AllowedToolsChoice::DynamicAllowedTools,
+                },
+                ToolChoice::Auto,
+                None,
+            );
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-            assert_eq!(result.provider_tools, None);
+            assert_eq!(result.provider_tools, vec![]);
         }
 
         #[test]
         fn test_tool_metadata_preservation() {
             let function_config = create_chat_function(vec![]);
-            let tool = Tool {
+            let tool = ClientSideFunctionTool {
                 name: "test_tool".to_string(),
                 description: "A detailed description".to_string(),
                 parameters: json!({
@@ -2572,11 +2641,16 @@ mod tests {
                 strict: true,
             };
 
-            let db_insert = ToolCallConfigDatabaseInsert {
-                tools_available: vec![tool.clone()],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: Some(false),
-            };
+            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
+                vec![Tool::ClientSideFunction(tool.clone())],
+                vec![],
+                AllowedTools {
+                    tools: vec![], // Function has no defaults
+                    choice: AllowedToolsChoice::FunctionDefault,
+                },
+                ToolChoice::Auto,
+                Some(false),
+            );
             let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
 
             let result_tool = &result.additional_tools.unwrap()[0];

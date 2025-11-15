@@ -11,9 +11,9 @@ use crate::inference::types::pyo3_helpers::{
 };
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{RequestMessage, ResolvedRequestMessage, Text};
-use crate::tool::{DynamicToolParams, StaticToolConfig};
+use crate::tool::{deserialize_tool_info, DynamicToolParams, StaticToolConfig};
 #[cfg(feature = "pyo3")]
-use crate::tool::{ProviderTool, Tool, ToolChoice};
+use crate::tool::{ClientSideFunctionTool, ProviderTool, ToolChoice};
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
@@ -60,11 +60,10 @@ pub struct SimpleStoredSampleInfo {
 
 /// Wire variant of StoredInference for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "StoredInference"))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 pub enum StoredInference {
     Chat(StoredChatInference),
     Json(StoredJsonInference),
@@ -209,7 +208,7 @@ impl StoredInference {
                         .transpose()?;
 
                 // Build DynamicToolParams from flattened fields
-                let additional_tools: Option<Vec<Tool>> = additional_tools
+                let additional_tools: Option<Vec<ClientSideFunctionTool>> = additional_tools
                     .as_ref()
                     .map(|x| deserialize_from_pyobj(py, x))
                     .transpose()?;
@@ -217,10 +216,11 @@ impl StoredInference {
                     .as_ref()
                     .map(|x| deserialize_from_pyobj(py, x))
                     .transpose()?;
-                let provider_tools: Option<Vec<ProviderTool>> = provider_tools
+                let provider_tools: Vec<ProviderTool> = provider_tools
                     .as_ref()
                     .map(|x| deserialize_from_pyobj(py, x))
-                    .transpose()?;
+                    .transpose()?
+                    .unwrap_or_default();
 
                 let tool_params = DynamicToolParams {
                     allowed_tools,
@@ -513,10 +513,9 @@ impl StoredInferenceDatabase {
 }
 
 /// Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 pub struct StoredChatInference {
     pub function_name: String,
     pub variant_name: String,
@@ -581,7 +580,7 @@ pub struct StoredChatInferenceDatabase {
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    #[serde(default)]
+    #[serde(flatten, deserialize_with = "deserialize_tool_info")]
     pub tool_params: ToolCallConfigDatabaseInsert,
     #[serde(default)]
     pub tags: HashMap<String, String>,
@@ -594,10 +593,9 @@ impl std::fmt::Display for StoredChatInferenceDatabase {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 pub struct StoredJsonInference {
     pub function_name: String,
     pub variant_name: String,
@@ -703,8 +701,8 @@ fn json_output_to_content_block_chat_output(
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(untagged)]
 pub enum StoredOutput {
     Chat(Vec<ContentBlockChatOutput>),
@@ -716,9 +714,9 @@ pub enum StoredOutput {
 /// and by resolving all network resources (e.g. images).
 /// This is a wire type - it uses DynamicToolParams and has Python/TypeScript bindings.
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, ts_rs::TS)]
 #[cfg_attr(any(feature = "e2e_tests", test), derive(PartialEq))]
+#[ts(export)]
 pub struct RenderedSample {
     pub function_name: String,
     pub input: ModelInput,
@@ -981,7 +979,7 @@ pub async fn render_stored_sample<T: StoredSample>(
         episode_id,
         inference_id,
         input: model_input,
-        stored_input: resolved_input.into_stored_input()?,
+        stored_input: resolved_input.into_stored_input(),
         output,
         stored_output,
         dispreferred_outputs,

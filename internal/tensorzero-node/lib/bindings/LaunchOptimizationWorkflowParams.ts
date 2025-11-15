@@ -11,8 +11,8 @@ export type LaunchOptimizationWorkflowParams = {
   filters: InferenceFilter | null;
   output_source: InferenceOutputSource;
   order_by: Array<OrderBy> | null;
-  limit: bigint | null;
-  offset: bigint | null;
+  limit: number | null;
+  offset: number | null;
   val_fraction: number | null;
   optimizer_config: UninitializedOptimizerInfo;
 };

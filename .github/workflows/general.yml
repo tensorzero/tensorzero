@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.ref == 'refs/heads/main' && github.run_id || format('{0}-{1}', github.workflow, github.ref) }}
+  group: ${{ github.ref == 'refs/heads/main' && github.run_id || format('general-{0}-{1}', github.workflow, github.ref) }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
@@ -19,6 +19,7 @@ env:
   SQLX_OFFLINE: 1
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  RUST_MSRV: 1.88.0
 
 jobs:
   check-version-consistency:
@@ -28,9 +29,31 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
 
       - name: Check version consistency
         run: ./ci/check-version-consistency.sh
+
+  # This checks for specific markers in the codebase that require multiple files to be edited together.
+  check-if-edited-then-edit:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    # Should run on all PRs from forks as well, if the label is not present
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-if-edited-check') }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b
+        with:
+          python-version: "3.9"
+
+      - name: Check coordinated edits
+        run: python3 ci/check_coordinated_edits.py
 
   # Like 'check-docker-compose', but loads the freshly built 'gateway' and 'ui' container images first
   # This checks that all of our docker-compose files work with the changes in the PR
@@ -91,6 +114,14 @@ jobs:
           cd examples/docs/guides/experimentation/run-adaptive-ab-tests
           OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
           OPENAI_API_KEY=dummy docker compose down
+
+      - name: Apply Postgres migrations for examples/blog/bandits-in-your-llm-gateway
+        # Note: In isolation, applying migrations should not require `ANTHROPIC_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/blog/bandits-in-your-llm-gateway
+          ANTHROPIC_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          ANTHROPIC_API_KEY=dummy docker compose down
 
       - name: Check latest docker-compose
         run: ./ci/check-all-docker-compose.sh
@@ -154,6 +185,14 @@ jobs:
           OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
           OPENAI_API_KEY=dummy docker compose down
 
+      - name: Apply Postgres migrations for examples/blog/bandits-in-your-llm-gateway
+        # Note: In isolation, applying migrations should not require `ANTHROPIC_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/blog/bandits-in-your-llm-gateway
+          ANTHROPIC_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          ANTHROPIC_API_KEY=dummy docker compose down
+
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
 
@@ -175,7 +214,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "22.9.0"
+          node-version: "24.11.0"
 
       - name: Install pnpm
         run: |
@@ -214,6 +253,43 @@ jobs:
       - name: Check tensorzero-node bindings are properly exported
         run: pnpm --filter=tensorzero-node run check-exports
 
+  check-python-schemas:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "24.11.0"
+
+      - name: Install pnpm
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Install uv
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Generate Python schemas
+        run: pnpm generate-python-schemas
+
+      - name: Check for git diff after generating schemas
+        id: git_diff_check
+        run: git diff --exit-code
+
   build-windows:
     permissions:
       contents: read
@@ -246,7 +322,13 @@ jobs:
   lint-rust:
     permissions:
       contents: read
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Keep 'total_partitions' in sync with the number of entries in the 'partition' array
+        partition: [1, 2, 3, 4]
+        include:
+          - total_partitions: 4
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       # We install the latest rust when running lints, since we don't care if older rust versions lint successfully.
@@ -254,17 +336,11 @@ jobs:
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable --component clippy,rustfmt && rustup default stable; then
+            if rustup toolchain install stable --component clippy && rustup default stable; then
               break
             fi
           done
         shell: bash
-
-      - name: Configure Namespace cache for Rust
-        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
-        with:
-          cache: |
-            rust
 
       - name: Install cargo-hack
         uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
@@ -273,8 +349,75 @@ jobs:
 
       - name: Lint (Rust)
         run: |
-          cargo fmt --all --check
-          cargo hack clippy --all-targets --each-feature -- -D warnings
+          cargo hack --partition '${{ matrix.partition }}/${{ matrix.total_partitions }}' clippy --all-targets --each-feature -- -D warnings
+
+  validate-node:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
+      - name: Install Rust ${{ env.RUST_MSRV }}
+        run: |
+          for attempt in 1 2 3; do
+            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Print Rust version
+        run: rustc --version
+
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "24.11.0"
+
+      - name: Install pnpm
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build npm workspace
+        run: pnpm -r build
+
+      - name: Format tensorzero-node package
+        run: pnpm --filter=tensorzero-node run format:check
+
+      - name: Lint tensorzero-node package
+        run: pnpm --filter=tensorzero-node run lint:check
+
+      - name: Typecheck tensorzero-node package
+        run: pnpm --filter=tensorzero-node run typecheck
+
+      - name: Run ESLint
+        run: pnpm --filter=tensorzero-ui run lint:check
+
+      - name: Run Prettier
+        run: pnpm --filter=tensorzero-ui run format:check
+
+      - name: pnpm TypeScript type checking
+        run: pnpm --filter=tensorzero-ui run typecheck
 
   validate:
     permissions:
@@ -288,14 +431,14 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust 1.88.0
+      - name: Install Rust ${{ env.RUST_MSRV }}
         run: |
           for attempt in 1 2 3; do
-            if rustup install 1.88.0 && rustup default 1.88.0; then
+            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust 1.88.0 after 3 attempts"
+              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -308,7 +451,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
         with:
-          node-version: "22.9.0"
+          node-version: "24.11.0"
 
       - name: Install pnpm
         run: |
@@ -413,6 +556,9 @@ jobs:
       - name: Run cargo-deny
         run: cargo deny check
 
+      - name: Run cargo fmt
+        run: cargo fmt --all --check
+
       - name: Test (Rust)
         env:
           # Write the exported bindings to somewhere we don't care about
@@ -466,27 +612,6 @@ jobs:
         run: |
           uv run pyright
 
-      - name: Build npm workspace
-        run: pnpm -r build
-
-      - name: Format tensorzero-node package
-        run: pnpm --filter=tensorzero-node run format:check
-
-      - name: Lint tensorzero-node package
-        run: pnpm --filter=tensorzero-node run lint:check
-
-      - name: Typecheck tensorzero-node package
-        run: pnpm --filter=tensorzero-node run typecheck
-
-      - name: Run ESLint
-        run: pnpm --filter=tensorzero-ui run lint:check
-
-      - name: Run Prettier
-        run: pnpm --filter=tensorzero-ui run format:check
-
-      - name: pnpm TypeScript type checking
-        run: pnpm --filter=tensorzero-ui run typecheck
-
       - name: Compile / validate notebooks
         run: ci/compile-check-notebooks.sh
 
@@ -511,15 +636,15 @@ jobs:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        # TODO: Temporarily using 25.9-alpine instead of latest
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"25.9-alpine","prefix":"25.9","allow_failure":false}]') || fromJSON('[{"tag":"25.9-alpine","prefix":"25.9","allow_failure":false}]') }}
+        # TODO: Temporarily using 25.9 instead of latest
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12","prefix":"24.12","allow_failure":false},{"tag":"25.9","prefix":"25.9","allow_failure":false}]') || fromJSON('[{"tag":"25.9","prefix":"25.9","allow_failure":false}]') }}
         exclude:
-          # Use 25.7-alpine instead of 25.9-alpine for replicated tests in merge group
+          # Use 25.7 instead of 25.9 for replicated tests in merge group
           - replicated: true
             clickhouse_version:
-              { "tag": "25.9-alpine", "prefix": "25.9", "allow_failure": false }
-          # Add 25.7-alpine for replicated tests in merge group
-        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.7-alpine","prefix":"25.7","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
+              { "tag": "25.9", "prefix": "25.9", "allow_failure": false }
+          # Add 25.7 for replicated tests in merge group
+        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.7","prefix":"25.7","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -833,15 +958,18 @@ jobs:
     needs:
       [
         check-version-consistency,
+        check-if-edited-then-edit,
         check-docker-compose,
         check-latest-docker-compose,
         check-python-client-build,
         check-node-bindings,
+        check-python-schemas,
         build-windows,
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
         validate,
+        validate-node,
         lint-rust,
         clickhouse-tests,
         ui-tests,

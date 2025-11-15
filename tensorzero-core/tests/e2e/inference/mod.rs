@@ -3229,6 +3229,7 @@ async fn test_image_inference_without_object_store() {
                                 mime::IMAGE_PNG,
                                 BASE64_STANDARD.encode(FERRIS_PNG),
                                 None,
+                                None,
                             )
                             .expect("test data should be valid"),
                         )),

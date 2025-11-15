@@ -13,28 +13,17 @@ required-features = ["e2e_tests"]
 [dependencies]
 async-trait = { workspace = true }
 reqwest = { workspace = true }
-futures = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
-secrecy = { workspace = true }
 uuid = { workspace = true }
-reqwest-eventsource = { workspace = true }
-async-stream = { workspace = true }
 tokio-stream = { workspace = true }
 tensorzero-core = { path = "../../tensorzero-core" }
-tensorzero-auth = { path = "../../internal/tensorzero-auth" }
-ts-rs = { workspace = true }
+tensorzero-optimizers = { path = "../../tensorzero-optimizers" }
 url = { workspace = true }
-thiserror = "2.0.16"
 pyo3 = { workspace = true, optional = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
-serde-untagged = { workspace = true }
 git2 = { workspace = true }
-serde_path_to_error = { workspace = true }
-tensorzero-derive = { path = "../../internal/tensorzero-derive" }
 mime = { workspace = true }
-tokio-util = "0.7.17"
 tempfile = { version = "3.21.0" }
 paste = { version = "1.0.15", optional = true }
 lazy_static = { workspace = true }
@@ -45,7 +34,6 @@ workspace = true
 [dev-dependencies]
 clap = { workspace = true }
 lazy_static = { workspace = true }
-object_store = { workspace = true }
 tokio = { workspace = true }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.20"
@@ -58,3 +46,10 @@ default = []
 # Forward this feature to 'tensorzero-core', so that our embedded
 # client can recognize things like the `dummy` provider
 e2e_tests = ["tensorzero-core/e2e_tests", "dep:paste"]
+
+# Ignore the `pyo3` crate (used by our own `pyo3` feature above)
+[package.metadata.cargo-machete]
+ignored = ["pyo3"]
+
+[package.metadata.cargo-shear]
+ignored = ["pyo3"]

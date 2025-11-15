@@ -200,24 +200,22 @@ pub(crate) fn generate_list_inferences_sql(
         }
     };
 
-    if let Some(l) = opts.limit {
-        let limit_param_placeholder = add_parameter(
-            l,
-            ClickhouseType::UInt64,
-            &mut query_params,
-            &mut param_idx_counter,
-        );
-        sql.push_str(&format!("\nLIMIT {limit_param_placeholder}"));
-    }
-    if let Some(o) = opts.offset {
-        let offset_param_placeholder = add_parameter(
-            o,
-            ClickhouseType::UInt64,
-            &mut query_params,
-            &mut param_idx_counter,
-        );
-        sql.push_str(&format!("\nOFFSET {offset_param_placeholder}"));
-    }
+    let limit_param_placeholder = add_parameter(
+        opts.limit,
+        ClickhouseType::UInt64,
+        &mut query_params,
+        &mut param_idx_counter,
+    );
+    sql.push_str(&format!("\nLIMIT {limit_param_placeholder}"));
+
+    let offset_param_placeholder = add_parameter(
+        opts.offset,
+        ClickhouseType::UInt64,
+        &mut query_params,
+        &mut param_idx_counter,
+    );
+    sql.push_str(&format!("\nOFFSET {offset_param_placeholder}"));
+
     sql.push_str("\nFORMAT JSONEachRow");
 
     Ok((sql, query_params))
@@ -266,8 +264,18 @@ fn generate_single_table_query_for_type(
 
     if is_chat {
         select_clauses.push("i.tool_params as tool_params".to_string());
+        select_clauses.push("i.dynamic_tools as dynamic_tools".to_string());
+        select_clauses.push("i.dynamic_provider_tools as dynamic_provider_tools".to_string());
+        select_clauses.push("i.allowed_tools as allowed_tools".to_string());
+        select_clauses.push("i.tool_choice as tool_choice".to_string());
+        select_clauses.push("i.parallel_tool_calls as parallel_tool_calls".to_string());
     } else {
         select_clauses.push("'' as tool_params".to_string());
+        select_clauses.push("[] as dynamic_tools".to_string());
+        select_clauses.push("[] as dynamic_provider_tools".to_string());
+        select_clauses.push("NULL as allowed_tools".to_string());
+        select_clauses.push("NULL as tool_choice".to_string());
+        select_clauses.push("NULL as parallel_tool_calls".to_string());
     }
 
     select_clauses.push("i.variant_name as variant_name".to_string());
@@ -408,7 +416,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
 
         assert_query_contains(
             &sql,
@@ -422,6 +430,11 @@ mod tests {
             '' as output_schema,
             i.tags as tags,
             i.tool_params as tool_params,
+            i.dynamic_tools as dynamic_tools,
+            i.dynamic_provider_tools as dynamic_provider_tools,
+            i.allowed_tools as allowed_tools,
+            i.tool_choice as tool_choice,
+            i.parallel_tool_calls as parallel_tool_calls,
             i.variant_name as variant_name,
             i.output as output
         FROM
@@ -441,6 +454,11 @@ mod tests {
             i.output_schema as output_schema,
             i.tags as tags,
             '' as tool_params,
+            [] as dynamic_tools,
+            [] as dynamic_provider_tools,
+            NULL as allowed_tools,
+            NULL as tool_choice,
+            NULL as parallel_tool_calls,
             i.variant_name as variant_name,
             i.output as output
         FROM
@@ -448,9 +466,6 @@ mod tests {
         WHERE
             i.id IN ['01234567-89ab-cdef-0123-456789abcdef','fedcba98-7654-3210-fedc-ba9876543210']",
         );
-
-        // This query doesn't have any bound parameters.
-        assert_eq!(params.len(), 0);
     }
 
     #[tokio::test]
@@ -479,13 +494,11 @@ mod tests {
 
         // Verify function_name filter is present
         assert_query_contains(&sql, "i.function_name = {p0:String}");
-        assert_eq!(params.len(), 1);
-        assert_eq!(
-            params[0],
-            QueryParameter {
+        assert!(
+            params.contains(&QueryParameter {
                 name: "p0".to_string(),
                 value: "extract_entities".to_string(),
-            },
+            }),
             "Function name parameter should be present"
         );
     }

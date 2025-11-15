@@ -297,8 +297,8 @@ pub async fn inference(
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
         function.variants().clone().into_iter().collect();
 
-    // If the function has no variants, return an error
-    if candidate_variants.is_empty() {
+    // If the function has no variants and no dynamic variant config, return an error
+    if candidate_variants.is_empty() && params.internal_dynamic_variant_config.is_none() {
         return Err(ErrorDetails::InvalidFunctionVariants {
             message: format!("Function `{function_name}` has no variants"),
         }
@@ -1023,30 +1023,22 @@ async fn write_inference(
     futures.push(Box::pin(async {
         // Write the inference to the Inference table
         match result {
-            InferenceResult::Chat(result) => match input.clone().into_stored_input() {
-                Ok(stored_input) => {
-                    let chat_inference =
-                        ChatInferenceDatabaseInsert::new(result, stored_input, metadata);
-                    let _ = clickhouse_connection_info
-                        .write_batched(&[chat_inference], TableName::ChatInference)
-                        .await;
-                }
-                Err(e) => {
-                    tracing::error!("Failed to convert input to stored input: {e:?}");
-                }
-            },
-            InferenceResult::Json(result) => match input.clone().into_stored_input() {
-                Ok(stored_input) => {
-                    let json_inference =
-                        JsonInferenceDatabaseInsert::new(result, stored_input, metadata);
-                    let _ = clickhouse_connection_info
-                        .write_batched(&[json_inference], TableName::JsonInference)
-                        .await;
-                }
-                Err(e) => {
-                    tracing::error!("Failed to convert input to stored input: {e:?}");
-                }
-            },
+            InferenceResult::Chat(result) => {
+                let stored_input = input.clone().into_stored_input();
+                let chat_inference =
+                    ChatInferenceDatabaseInsert::new(result, stored_input, metadata);
+                let _ = clickhouse_connection_info
+                    .write_batched(&[chat_inference], TableName::ChatInference)
+                    .await;
+            }
+            InferenceResult::Json(result) => {
+                let stored_input = input.clone().into_stored_input();
+                let json_inference =
+                    JsonInferenceDatabaseInsert::new(result, stored_input, metadata);
+                let _ = clickhouse_connection_info
+                    .write_batched(&[json_inference], TableName::JsonInference)
+                    .await;
+            }
         }
     }));
     futures::future::join_all(futures).await;
@@ -1748,6 +1740,7 @@ mod tests {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: Some(mime::IMAGE_PNG),
                 detail: None,
+                filename: None,
             }))
         );
     }
@@ -1777,8 +1770,14 @@ mod tests {
         assert_eq!(
             input_with_base64.messages[0].content[0],
             InputMessageContent::File(File::Base64(
-                Base64File::new(None, mime::IMAGE_PNG, "fake_base64_data".to_string(), None,)
-                    .expect("test data should be valid")
+                Base64File::new(
+                    None,
+                    mime::IMAGE_PNG,
+                    "fake_base64_data".to_string(),
+                    None,
+                    None
+                )
+                .expect("test data should be valid")
             ))
         );
     }
@@ -1790,6 +1789,7 @@ mod tests {
             url: "https://example.com/file.txt".parse().unwrap(),
             mime_type: Some(mime::IMAGE_PNG),
             detail: None,
+            filename: None,
         });
         let serialized = serde_json::to_value(&file_url).unwrap();
         assert_eq!(serialized["file_type"], "url");
@@ -1797,8 +1797,14 @@ mod tests {
         assert_eq!(serialized["mime_type"], "image/png");
 
         let file_base64 = File::Base64(
-            Base64File::new(None, mime::IMAGE_PNG, "fake_base64_data".to_string(), None)
-                .expect("test data should be valid"),
+            Base64File::new(
+                None,
+                mime::IMAGE_PNG,
+                "fake_base64_data".to_string(),
+                None,
+                None,
+            )
+            .expect("test data should be valid"),
         );
         let serialized = serde_json::to_value(&file_base64).unwrap();
         assert_eq!(serialized["file_type"], "base64");
@@ -1833,6 +1839,7 @@ mod tests {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: None,
                 detail: None,
+                filename: None,
             }))
         );
     }
@@ -1862,8 +1869,14 @@ mod tests {
         assert_eq!(
             input_with_base64.messages[0].content[0],
             InputMessageContent::File(File::Base64(
-                Base64File::new(None, mime::IMAGE_PNG, "fake_base64_data".to_string(), None,)
-                    .expect("test data should be valid")
+                Base64File::new(
+                    None,
+                    mime::IMAGE_PNG,
+                    "fake_base64_data".to_string(),
+                    None,
+                    None
+                )
+                .expect("test data should be valid")
             ))
         );
     }
@@ -1917,6 +1930,7 @@ mod tests {
                     path: Path::from("test-path"),
                 },
                 detail: None,
+                filename: None,
             }))
         );
     }
@@ -1925,7 +1939,7 @@ mod tests {
     fn test_file_roundtrip_serialization() {
         // Test that serialize -> deserialize maintains data integrity
         let original = File::Base64(
-            Base64File::new(None, mime::IMAGE_JPEG, "abcdef".to_string(), None)
+            Base64File::new(None, mime::IMAGE_JPEG, "abcdef".to_string(), None, None)
                 .expect("test data should be valid"),
         );
 

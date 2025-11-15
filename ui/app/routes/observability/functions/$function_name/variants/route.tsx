@@ -50,11 +50,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
-  const pageSize = Number(url.searchParams.get("pageSize")) || 10;
+  const limit = Number(url.searchParams.get("limit")) || 10;
   const metric_name = url.searchParams.get("metric_name") || undefined;
   const time_granularity = url.searchParams.get("time_granularity") || "week";
-  if (pageSize > 100) {
-    throw data("Page size cannot exceed 100", { status: 400 });
+  if (limit > 100) {
+    throw data("Limit cannot exceed 100", { status: 400 });
   }
   const function_config = await getFunctionConfig(function_name, config);
   if (!function_config) {
@@ -64,7 +64,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   const inferencePromise = queryInferenceTableByVariantName({
     function_name,
     variant_name,
-    page_size: pageSize,
+    limit,
     before: beforeInference || undefined,
     after: afterInference || undefined,
   });

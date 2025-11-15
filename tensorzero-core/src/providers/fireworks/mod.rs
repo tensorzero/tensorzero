@@ -6,7 +6,8 @@ use crate::inference::types::chat_completion_inference_params::{
 };
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::{
-    http::TensorZeroEventSource, providers::helpers_thinking_block::THINK_CHUNK_ID, tool::Tool,
+    http::TensorZeroEventSource, providers::helpers_thinking_block::THINK_CHUNK_ID,
+    tool::ClientSideFunctionTool,
 };
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -66,9 +67,8 @@ lazy_static! {
 pub const PROVIDER_NAME: &str = "Fireworks";
 pub const PROVIDER_TYPE: &str = "fireworks";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FireworksProvider {
     model_name: String,
     #[serde(skip)]
@@ -494,8 +494,8 @@ pub struct FireworksTool<'a> {
     function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<&'a Tool> for FireworksTool<'a> {
-    fn from(tool: &'a Tool) -> Self {
+impl<'a> From<&'a ClientSideFunctionTool> for FireworksTool<'a> {
+    fn from(tool: &'a ClientSideFunctionTool) -> Self {
         FireworksTool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {

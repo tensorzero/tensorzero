@@ -63,7 +63,7 @@ use crate::model::{
     fully_qualified_name, Credential, CredentialLocationWithFallback, ModelProvider,
 };
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
-use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::helpers::{convert_stream_error, parse_jsonl_batch_file, JsonlBatchFileInfo};
 
@@ -81,9 +81,8 @@ const INFERENCE_ID_LABEL: &str = "tensorzero::inference_id";
 /// * In streaming mode, 'thought: true' parts with non-text content produce an error (since we don't have "unknown" blocks in streaming mode)
 ///
 /// In the future, we'll support 'unknown' blocks in streaming mode, and adjust this provider to emit them.
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GCPVertexGeminiProvider {
     api_v1_base_url: Url,
     request_url: String,
@@ -97,9 +96,8 @@ pub struct GCPVertexGeminiProvider {
     batch_config: Option<BatchConfig>,
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 struct BatchConfig {
     input_uri_prefix: String,
     output_uri_prefix: String,
@@ -266,7 +264,9 @@ pub async fn make_gcp_object_store(
         GCPVertexCredentials::WithFallback { default, fallback } => {
             // Try default first, fall back to fallback if it fails
             // We need to recursively call this function with each credential
-            match Box::pin(make_gcp_object_store(gs_url, default, dynamic_api_keys)).await {
+            let result = Box::pin(make_gcp_object_store(gs_url, default, dynamic_api_keys)).await;
+
+            match result {
                 Ok(store) => return Ok(store),
                 Err(e) => {
                     tracing::info!(
@@ -525,6 +525,29 @@ impl GCPVertexGeminiProvider {
 
         let location_prefix = location_subdomain_prefix(&location);
 
+        #[cfg(feature = "e2e_tests")]
+        let api_v1_base_url = if let Some(api_base) =
+            &provider_types.gcp_vertex_gemini.batch_inference_api_base
+        {
+            Url::parse(&format!("{}/v1/", api_base.as_str().trim_end_matches('/'))).map_err(
+                |e| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to parse batch_inference_api_base URL: {e}"),
+                    })
+                },
+            )?
+        } else {
+            Url::parse(&format!(
+                "https://{location_prefix}aiplatform.googleapis.com/v1/"
+            ))
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Failed to parse base URL - this should never happen: {e}"),
+                })
+            })?
+        };
+
+        #[cfg(not(feature = "e2e_tests"))]
         let api_v1_base_url = Url::parse(&format!(
             "https://{location_prefix}aiplatform.googleapis.com/v1/"
         ))
@@ -544,14 +567,33 @@ impl GCPVertexGeminiProvider {
         let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
 
         let batch_config = match &provider_types.gcp_vertex_gemini {
-            GCPProviderTypeConfig { batch: Some(GCPBatchConfigType::CloudStorage(GCPBatchConfigCloudStorage {
-                input_uri_prefix,
-                output_uri_prefix,
-            })), .. } => {
+            GCPProviderTypeConfig {
+                batch:
+                    Some(GCPBatchConfigType::CloudStorage(GCPBatchConfigCloudStorage {
+                        input_uri_prefix,
+                        output_uri_prefix,
+                    })),
+                ..
+            } => {
+                #[cfg(feature = "e2e_tests")]
+                let batch_request_url = if let Some(api_base) =
+                    &provider_types.gcp_vertex_gemini.batch_inference_api_base
+                {
+                    format!(
+                        "{}/v1/projects/{project_id}/locations/{location}/batchPredictionJobs",
+                        api_base.as_str().trim_end_matches('/')
+                    )
+                } else {
+                    format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs")
+                };
+
+                #[cfg(not(feature = "e2e_tests"))]
+                let batch_request_url = format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs");
+
                 Some(BatchConfig {
                     input_uri_prefix: input_uri_prefix.clone(),
                     output_uri_prefix: output_uri_prefix.clone(),
-                    batch_request_url: format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/batchPredictionJobs"),
+                    batch_request_url,
                 })
             }
             _ => None,
@@ -1712,8 +1754,8 @@ pub struct GCPVertexGeminiSFTTool<'a> {
     pub tool: GCPVertexGeminiTool<'a>,
 }
 
-impl<'a> From<&'a Tool> for GCPVertexGeminiSFTTool<'a> {
-    fn from(tool: &'a Tool) -> Self {
+impl<'a> From<&'a ClientSideFunctionTool> for GCPVertexGeminiSFTTool<'a> {
+    fn from(tool: &'a ClientSideFunctionTool) -> Self {
         let mut parameters = tool.parameters.clone();
         capitalize_types(&mut parameters);
         let function_declaration = GCPVertexGeminiFunctionDeclaration {

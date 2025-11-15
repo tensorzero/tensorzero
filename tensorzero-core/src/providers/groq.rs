@@ -41,9 +41,8 @@ use crate::providers::helpers::{
 const PROVIDER_NAME: &str = "Groq";
 pub const PROVIDER_TYPE: &str = "groq";
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GroqProvider {
     model_name: String,
     #[serde(skip)]
@@ -2582,6 +2581,7 @@ mod tests {
                     mime_type: mime::IMAGE_PNG,
                     storage_path: dummy_storage_path,
                     detail: Some(Detail::High),
+                    filename: None,
                 },
                 data: BASE64_STANDARD.encode(b"fake image data"),
             }),

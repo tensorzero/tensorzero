@@ -1,3 +1,4 @@
+#![expect(deprecated)]
 /// E2E tests for the legacy experimental_list_inferences client method.
 /// TODO: fully deprecate and remove when v1 list_inferences is fully released.
 use chrono::DateTime;
@@ -19,7 +20,7 @@ pub async fn test_simple_query_json_function() {
     }];
     let opts = ListInferencesParams {
         function_name: Some("extract_entities"),
-        limit: Some(2),
+        limit: 2,
         order_by: Some(&order_by),
         ..Default::default()
     };
@@ -62,8 +63,8 @@ pub async fn test_simple_query_chat_function() {
     let opts = ListInferencesParams {
         function_name: Some("write_haiku"),
         output_source: InferenceOutputSource::Demonstration,
-        limit: Some(3),
-        offset: Some(3),
+        limit: 3,
+        offset: 3,
         order_by: Some(&order_by),
         ..Default::default()
     };
@@ -113,7 +114,7 @@ pub async fn test_simple_query_with_float_filter() {
     let opts = ListInferencesParams {
         function_name: Some("extract_entities"),
         filters: Some(&filter_node),
-        limit: Some(3),
+        limit: 3,
         order_by: Some(&order_by),
         ..Default::default()
     };
@@ -134,8 +135,8 @@ pub async fn test_demonstration_output_source() {
     let opts = ListInferencesParams {
         function_name: Some("extract_entities"),
         output_source: InferenceOutputSource::Demonstration,
-        limit: Some(5),
-        offset: Some(1),
+        limit: 5,
+        offset: 1,
         ..Default::default()
     };
 
@@ -160,8 +161,8 @@ pub async fn test_boolean_metric_filter() {
     let opts = ListInferencesParams {
         function_name: Some("extract_entities"),
         filters: Some(&filter_node),
-        limit: Some(5),
-        offset: Some(1),
+        limit: 5,
+        offset: 1,
         ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
@@ -195,7 +196,7 @@ pub async fn test_and_filter_multiple_float_metrics() {
     let opts = ListInferencesParams {
         function_name: Some("extract_entities"),
         filters: Some(&filter_node),
-        limit: Some(1),
+        limit: 1,
         ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
@@ -233,7 +234,7 @@ async fn test_or_filter_mixed_metrics() {
     let opts = ListInferencesParams {
         function_name: Some("extract_entities"),
         filters: Some(&filter_node),
-        limit: Some(1),
+        limit: 1,
         ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
@@ -295,7 +296,7 @@ async fn test_simple_time_filter() {
     let opts = ListInferencesParams {
         function_name: Some("extract_entities"),
         filters: Some(&filter_node),
-        limit: Some(5),
+        limit: 5,
         order_by: Some(&order_by),
         ..Default::default()
     };
@@ -338,7 +339,7 @@ async fn test_simple_tag_filter() {
     let opts = ListInferencesParams {
         function_name: Some("extract_entities"),
         filters: Some(&filter_node),
-        limit: Some(200),
+        limit: 200,
         ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
@@ -375,7 +376,7 @@ async fn test_combined_time_and_tag_filter() {
     let opts = ListInferencesParams {
         function_name: Some("write_haiku"),
         filters: Some(&filter_node),
-        limit: Some(50),
+        limit: 50,
         ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
@@ -397,7 +398,7 @@ pub async fn test_query_by_ids_json_only() {
     // First, get some JSON inference IDs
     let opts = ListInferencesParams {
         function_name: Some("extract_entities"),
-        limit: Some(3),
+        limit: 3,
         ..Default::default()
     };
     let initial_res = client.experimental_list_inferences(opts).await.unwrap();
@@ -438,7 +439,7 @@ pub async fn test_query_by_ids_chat_only() {
     // First, get some Chat inference IDs
     let opts = ListInferencesParams {
         function_name: Some("write_haiku"),
-        limit: Some(2),
+        limit: 2,
         ..Default::default()
     };
     let initial_res = client.experimental_list_inferences(opts).await.unwrap();
@@ -493,7 +494,7 @@ pub async fn test_query_by_ids_mixed_types() {
     // Get some JSON inference IDs
     let json_opts = ListInferencesParams {
         function_name: Some("extract_entities"),
-        limit: Some(2),
+        limit: 2,
         ..Default::default()
     };
     let json_res = client
@@ -504,7 +505,7 @@ pub async fn test_query_by_ids_mixed_types() {
     // Get some Chat inference IDs
     let chat_opts = ListInferencesParams {
         function_name: Some("write_haiku"),
-        limit: Some(2),
+        limit: 2,
         ..Default::default()
     };
     let chat_res = client
@@ -562,7 +563,7 @@ pub async fn test_query_by_ids_with_order_by_timestamp() {
     // Get some mixed inference IDs
     let json_opts = ListInferencesParams {
         function_name: Some("extract_entities"),
-        limit: Some(3),
+        limit: 3,
         ..Default::default()
     };
     let json_res = client
@@ -572,7 +573,7 @@ pub async fn test_query_by_ids_with_order_by_timestamp() {
 
     let chat_opts = ListInferencesParams {
         function_name: Some("write_haiku"),
-        limit: Some(3),
+        limit: 3,
         ..Default::default()
     };
     let chat_res = client
@@ -630,7 +631,7 @@ pub async fn test_query_by_ids_with_order_by_metric_errors() {
     // Get some JSON inference IDs
     let opts = ListInferencesParams {
         function_name: Some("extract_entities"),
-        limit: Some(2),
+        limit: 2,
         ..Default::default()
     };
     let initial_res = client.experimental_list_inferences(opts).await.unwrap();

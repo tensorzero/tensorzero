@@ -775,7 +775,7 @@ async fn write_start_batch_inference<'a>(
             function_name: metadata.function_name.into(),
             variant_name: metadata.variant_name.into(),
             episode_id: metadata.episode_ids[i],
-            input: resolved_input.into_stored_input()?,
+            input: resolved_input.into_stored_input(),
             input_messages: try_join_all(
                 row.input_messages
                     .into_iter()
@@ -991,7 +991,7 @@ pub async fn write_completed_batch_inference<'a>(
             raw_request,
             model_name: _,
             model_provider_name: _,
-            tags: _,
+            tags,
         } = batch_model_inference;
         let ProviderBatchInferenceOutput {
             id: _,
@@ -1084,7 +1084,7 @@ pub async fn write_completed_batch_inference<'a>(
             tool_config,
             processing_time: None,
             ttft_ms: None,
-            tags: HashMap::new(),
+            tags,
             // Not currently supported as a batch inference parameter
             extra_body: Default::default(),
             extra_headers: Default::default(),

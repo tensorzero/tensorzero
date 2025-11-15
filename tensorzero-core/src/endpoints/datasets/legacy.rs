@@ -5,9 +5,11 @@ use chrono::Utc;
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
+use tensorzero_derive::export_schema;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -33,11 +35,15 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
+use crate::tool::LegacyToolCallConfigDatabaseInsert;
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
-    tool::{DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert},
+    tool::{
+        deserialize_optional_tool_info, DynamicToolParams, StaticToolConfig,
+        ToolCallConfigDatabaseInsert,
+    },
     utils::gateway::{AppState, StructuredJson},
     utils::uuid::validate_tensorzero_uuid,
 };
@@ -73,7 +79,7 @@ struct Demonstration {
 async fn query_demonstration(
     clickhouse: &ClickHouseConnectionInfo,
     inference_id: Uuid,
-    page_size: u32,
+    limit: u32,
 ) -> Result<Demonstration, Error> {
     let result = clickhouse
         .run_query_synchronous(
@@ -86,12 +92,12 @@ async fn query_demonstration(
         FROM DemonstrationFeedbackByInferenceId
         WHERE inference_id = {inference_id:String}
         ORDER BY toUInt128(id) DESC
-        LIMIT {page_size:UInt32}
+        LIMIT {limit:UInt32}
         FORMAT JSONEachRow;"
                 .to_string(),
             &HashMap::from([
                 ("inference_id", inference_id.to_string().as_str()),
-                ("page_size", page_size.to_string().as_str()),
+                ("limit", limit.to_string().as_str()),
             ]),
         )
         .await?;
@@ -373,7 +379,6 @@ pub async fn update_datapoint_handler(
                         message: format!("Failed to deserialize chat datapoint: {e}"),
                     })
                 })?;
-
             let resolved_input = chat
                 .input
                 .clone()
@@ -383,12 +388,38 @@ pub async fn update_datapoint_handler(
             function_config.validate_input(&chat.input)?;
             // If there are no tool params in the UpdateChatInferenceDatapointRequest, we use the default tool params (empty tools).
             // This is consistent with how they are serialized at inference time.
-            let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(
-                chat.tool_params
-                    .clone()
-                    .unwrap_or_default()
-                    .into_tool_call_config(&function_config, &app_state.config.tools)?,
-            );
+
+            // Convert legacy tool params to new format using existing pipeline
+            let tool_params_new = if let Some(legacy) = chat.tool_params.clone() {
+                // Convert to DynamicToolParams: treat all legacy tools as additional_tools
+                // and use FunctionDefault for allowed_tools
+                let dynamic_params = DynamicToolParams {
+                    allowed_tools: None, // FunctionDefault - use function's default tools
+                    additional_tools: Some(legacy.tools_available.clone()), // All legacy tools as dynamic
+                    tool_choice: Some(legacy.tool_choice.clone()),
+                    parallel_tool_calls: legacy.parallel_tool_calls,
+                    provider_tools: vec![],
+                };
+
+                // Use existing pipeline to convert to ToolCallConfigDatabaseInsert
+                function_config.dynamic_tool_params_to_database_insert(
+                    dynamic_params,
+                    &app_state.config.tools,
+                )?
+            } else {
+                Some(ToolCallConfigDatabaseInsert::default())
+            };
+
+            // For demonstration validation, convert to ToolCallConfig
+            let dynamic_demonstration_info = if let Some(ref tool_params) = tool_params_new {
+                DynamicDemonstrationInfo::Chat(
+                    tool_params
+                        .clone()
+                        .into_tool_call_config(&function_config, &app_state.config.tools)?,
+                )
+            } else {
+                DynamicDemonstrationInfo::Chat(None)
+            };
 
             // Only validate and parse output if it exists
             let output = if let Some(output) = &chat.output {
@@ -417,9 +448,9 @@ pub async fn update_datapoint_handler(
                 name: chat.name,
                 id: path_params.datapoint_id,
                 episode_id: chat.episode_id,
-                input: resolved_input.into_stored_input()?,
+                input: resolved_input.into_stored_input(),
                 output,
-                tool_params: chat.tool_params,
+                tool_params: tool_params_new,
                 tags: chat.tags,
                 auxiliary: chat.auxiliary,
                 is_deleted: chat.is_deleted,
@@ -506,7 +537,7 @@ pub async fn update_datapoint_handler(
                 name: json.name,
                 id: path_params.datapoint_id,
                 episode_id: json.episode_id,
-                input: resolved_input.into_stored_input()?,
+                input: resolved_input.into_stored_input(),
                 output,
                 output_schema: json.output_schema,
                 tags: json.tags,
@@ -567,9 +598,8 @@ pub async fn create_datapoints_handler(
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
-    tracing::warn!(
-        "DEPRECATION WARNING: The `/datasets/{dataset_name}/datapoints` endpoint is deprecated. Please use `/v1/datasets/{dataset_name}/datapoints` instead.",
-        dataset_name = path_params.dataset_name
+    crate::utils::deprecation_warning(
+        &format!("The `/datasets/{}/datapoints` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.", path_params.dataset_name, path_params.dataset_name)
     );
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
@@ -593,9 +623,8 @@ pub async fn bulk_insert_datapoints_handler(
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
-    tracing::warn!(
-        "DEPRECATION WARNING: The `/datasets/{dataset_name}/datapoints/bulk` endpoint is deprecated. Please use `/v1/datasets/{dataset_name}/datapoints` instead.",
-        dataset_name = path_params.dataset_name
+    crate::utils::deprecation_warning(
+        &format!("The `/datasets/{}/datapoints/bulk` endpoint is deprecated. Please use `/v1/datasets/{}/datapoints` instead.", path_params.dataset_name, path_params.dataset_name)
     );
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
@@ -810,18 +839,20 @@ pub async fn delete_datapoint(
     // The INSERT INTO SELECT FROM will just not write anything if the datapoint doesn't exist.
     let json_delete_query = r"
     INSERT INTO JsonInferenceDatapoint
-    (dataset_name, function_name, name, id, episode_id, input, output, output_schema,
-     tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
-    SELECT dataset_name, function_name, name, id, episode_id, input, output, output_schema,
-           tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
+    (dataset_name, function_name, id, episode_id, input, output, output_schema,
+     tags, auxiliary, is_deleted, updated_at, staled_at, source_inference_id, is_custom, name)
+    SELECT dataset_name, function_name, id, episode_id, input, output, output_schema,
+           tags, auxiliary, is_deleted, now64(), now64(), source_inference_id, is_custom, name
     FROM JsonInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
 ";
     let chat_delete_query = r"
     INSERT INTO ChatInferenceDatapoint
     (dataset_name, function_name, name, id, episode_id, input, output, tool_params,
+    dynamic_tools, dynamic_provider_tools, tool_choice, parallel_tool_calls, allowed_tools,
      tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
     SELECT dataset_name, function_name, name, id, episode_id, input, output, tool_params,
+    dynamic_tools, dynamic_provider_tools, tool_choice, parallel_tool_calls, allowed_tools,
            tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM ChatInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
@@ -901,6 +932,11 @@ pub async fn list_datapoints(
             input,
             output,
             tool_params,
+            dynamic_tools,
+            dynamic_provider_tools,
+            parallel_tool_calls,
+            tool_choice,
+            allowed_tools,
             '\N' as output_schema, -- for column alignment in UNION ALL
             tags,
             auxiliary,
@@ -931,6 +967,11 @@ pub async fn list_datapoints(
             input,
             output,
             '\N' as tool_params, -- for column alignment in UNION ALL
+            [] as dynamic_tools,
+            [] as dynamic_provider_tools,
+            NULL as parallel_tool_calls,
+            NULL as tool_choice,
+            NULL as allowed_tools,
             output_schema,
             tags,
             auxiliary,
@@ -1105,13 +1146,15 @@ pub struct InsertDatapointResponse {
 
 /// Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "Datapoint"))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "LegacyDatapoint"))]
+#[ts(export)]
+#[export_schema]
 pub enum Datapoint {
+    #[schemars(title = "DatapointChat")]
     Chat(ChatInferenceDatapoint),
+    #[schemars(title = "DatapointJson")]
     Json(JsonInferenceDatapoint),
 }
 
@@ -1408,10 +1451,10 @@ pub struct JsonDatapointInsert {
 
 /// Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
+#[export_schema]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1500,9 +1543,7 @@ pub struct StoredChatInferenceDatapoint {
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
@@ -1551,9 +1592,9 @@ impl From<StoredChatInferenceDatapoint> for ChatInferenceDatapointInsert {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[export_schema]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,
@@ -1712,7 +1753,6 @@ where
 //
 // TODO(shuyangli): this is currently being manually kept in sync with `ChatInferenceDatapoint`. Can we fix this?
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct UpdateChatInferenceDatapointRequest {
     pub function_name: String,
     #[serde(default)]
@@ -1721,8 +1761,7 @@ pub struct UpdateChatInferenceDatapointRequest {
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_json_value")]
     pub output: Option<serde_json::Value>,
-    #[serde(default)]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub tool_params: Option<LegacyToolCallConfigDatabaseInsert>,
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
     #[serde(default)]
@@ -1778,9 +1817,8 @@ pub(crate) fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct StaleDatasetResponse {
     pub num_staled_datapoints: u64,
 }
@@ -1841,11 +1879,17 @@ mod test {
 
     #[test]
     fn test_synthetic_chat_datapoint_with_some_output() {
+        // Test with tool config fields flattened at top level (new Migration 0041 format)
         let json_str = r#"{
             "function_name": "test_function",
             "input": {"system": {"assistant_name": "Test"}, "messages": []},
             "output": [{"type": "text", "value": "Hello"}],
             "tool_params": {"tools_available": [], "tool_choice": "auto", "parallel_tool_calls": false},
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {"tools": [], "choice": "function_default"},
+            "tool_choice": "auto",
+            "parallel_tool_calls": false,
             "tags": {"source": "test"},
             "auxiliary": "extra data",
             "is_custom": true

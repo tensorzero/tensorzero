@@ -48,9 +48,8 @@ pub const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
 
 /// Implements a subset of the Google AI Studio Gemini API as documented [here](https://ai.google.dev/gemini-api/docs/text-generation?lang=rest)
 /// See the `GCPVertexGeminiProvider` struct docs for information about our handling 'thought' and unknown blocks.
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct GoogleAIStudioGeminiProvider {
     model_name: String,
     request_url: Url,
@@ -2902,6 +2901,7 @@ mod tests {
                     mime_type: mime::IMAGE_PNG,
                     storage_path: dummy_storage_path,
                     detail: Some(Detail::Auto),
+                    filename: None,
                 },
                 data: BASE64_STANDARD.encode(b"fake image data"),
             },

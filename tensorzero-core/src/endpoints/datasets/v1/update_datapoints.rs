@@ -57,7 +57,7 @@ pub async fn update_datapoints_handler(
 /// and inserts the updated datapoints into ClickHouse.
 ///
 /// Returns an error if there are no datapoints, or if there are duplicate datapoint IDs.
-async fn update_datapoints(
+pub async fn update_datapoints(
     app_state: &AppStateData,
     dataset_name: &str,
     request: UpdateDatapointsRequest,
@@ -418,7 +418,7 @@ pub async fn update_datapoints_metadata_handler(
 /// Business logic for updating datapoint metadata in a dataset.
 /// This function only updates metadata fields (like name) without creating new datapoint IDs.
 /// Unlike update_datapoints, this does NOT stale the old datapoint or create a new ID.
-async fn update_datapoints_metadata(
+pub async fn update_datapoints_metadata(
     clickhouse_handler: &impl DatasetQueries,
     dataset_name: &str,
     request: UpdateDatapointsMetadataRequest,
@@ -530,7 +530,10 @@ mod tests {
         StoredInputMessageContent, Text,
     };
     use crate::jsonschema_util::StaticJSONSchema;
-    use crate::tool::{DynamicToolParams, ToolCallConfigDatabaseInsert, ToolChoice};
+    use crate::tool::{
+        AllowedTools, AllowedToolsChoice, DynamicToolParams, ToolCallConfigDatabaseInsert,
+        ToolChoice,
+    };
     use crate::utils::gateway::{AppStateData, GatewayHandle, GatewayHandleTestOptions};
     use object_store::path::Path as ObjectStorePath;
     use serde_json::json;
@@ -561,6 +564,7 @@ mod tests {
                 mime_type: mime::IMAGE_PNG,
                 storage_path: storage_path.clone(),
                 detail: None,
+                filename: None,
             });
 
             let input = Input {
@@ -634,6 +638,7 @@ mod tests {
                     None,
                     mime::IMAGE_PNG,
                     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
+                    None,
                     None,
                 )
                 .expect("test data should be valid"),
@@ -722,11 +727,16 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "original output".to_string(),
                 })]),
-                tool_params: Some(ToolCallConfigDatabaseInsert {
-                    tools_available: vec![],
-                    tool_choice: ToolChoice::Auto,
-                    parallel_tool_calls: Some(true),
-                }),
+                tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                    vec![],
+                    vec![],
+                    AllowedTools {
+                        tools: vec![],
+                        choice: AllowedToolsChoice::FunctionDefault,
+                    },
+                    ToolChoice::Auto,
+                    Some(true),
+                )),
                 tags: Some(HashMap::from([("key".to_string(), "value".to_string())])),
                 auxiliary: "{}".to_string(),
                 staled_at: None,
@@ -854,11 +864,16 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "original output".to_string(),
                 })]),
-                tool_params: Some(ToolCallConfigDatabaseInsert {
-                    tools_available: vec![],
-                    tool_choice: ToolChoice::Auto,
-                    parallel_tool_calls: Some(true),
-                }),
+                tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                    vec![],
+                    vec![],
+                    AllowedTools {
+                        tools: vec![],
+                        choice: AllowedToolsChoice::FunctionDefault,
+                    },
+                    ToolChoice::Auto,
+                    Some(true),
+                )),
                 tags: Some(HashMap::from([("key".to_string(), "value".to_string())])),
                 auxiliary: "{}".to_string(),
                 staled_at: None,
@@ -1151,7 +1166,7 @@ mod tests {
                 additional_tools: None,
                 tool_choice: Some(ToolChoice::None),
                 parallel_tool_calls: Some(false),
-                provider_tools: None,
+                provider_tools: vec![],
             };
 
             let update = UpdateChatDatapointRequest {
@@ -1379,7 +1394,7 @@ mod tests {
                 additional_tools: None,
                 tool_choice: Some(ToolChoice::None),
                 parallel_tool_calls: Some(false),
-                provider_tools: None,
+                provider_tools: vec![],
             };
 
             let update = UpdateChatDatapointRequest {

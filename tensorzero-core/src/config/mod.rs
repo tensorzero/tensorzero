@@ -1,4 +1,5 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
+use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
@@ -53,6 +54,7 @@ use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
+pub mod built_in;
 pub mod gateway;
 pub mod path;
 pub mod provider_types;
@@ -78,13 +80,12 @@ pub fn skip_credential_validation() -> bool {
     SKIP_CREDENTIAL_VALIDATION.try_with(|()| ()).is_ok()
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 // Note - the `Default` impl only exists for convenience in tests
 // It might produce a completely broken config - if a test fails,
 // use one of the public `Config` constructors instead.
-#[cfg_attr(test, derive(Default))]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(Default))]
 pub struct Config {
     pub gateway: GatewayConfig,
     pub models: Arc<ModelTable>, // model name => model config
@@ -100,6 +101,8 @@ pub struct Config {
     pub optimizers: HashMap<String, OptimizerInfo>,
     pub postgres: PostgresConfig,
     pub rate_limiting: RateLimitingConfig,
+    #[serde(skip)]
+    pub http_client: TensorzeroHttpClient,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -162,8 +165,8 @@ impl TimeoutsConfig {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct TemplateFilesystemAccess {
     /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for `{% include %}`
     /// Defaults to `false`
@@ -172,9 +175,8 @@ pub struct TemplateFilesystemAccess {
     base_path: Option<ResolvedTomlPath>,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ObjectStoreInfo {
     // This will be `None` if we have `StorageKind::Disabled`
     #[serde(skip)]
@@ -321,8 +323,8 @@ fn contains_bad_scheme_err(e: &impl StdError) -> bool {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ObservabilityConfig {
     pub enabled: Option<bool>,
     #[serde(default)]
@@ -343,8 +345,8 @@ fn default_max_rows() -> usize {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct BatchWritesConfig {
     pub enabled: bool,
     // An internal flag to allow us to test batch writes in embedded gateway mode.
@@ -370,8 +372,8 @@ impl Default for BatchWritesConfig {
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct ExportConfig {
     #[serde(default)]
     pub otlp: OtlpConfig,
@@ -379,8 +381,8 @@ pub struct ExportConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct OtlpConfig {
     #[serde(default)]
     pub traces: OtlpTracesConfig,
@@ -429,8 +431,8 @@ impl OtlpConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct OtlpTracesConfig {
     /// Enable OpenTelemetry traces export to the configured OTLP endpoint (configured via OTLP environment variables)
     #[serde(default)]
@@ -444,7 +446,7 @@ pub struct OtlpTracesConfig {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields, rename_all = "lowercase")]
-#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(ts_rs::TS)]
 #[cfg_attr(test, ts(export, rename_all = "lowercase"))]
 pub enum OtlpTracesFormat {
     /// Sets 'gen_ai' attributes based on the OpenTelemetry GenAI semantic conventions:
@@ -458,8 +460,8 @@ pub enum OtlpTracesFormat {
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub struct MetricConfig {
     pub r#type: MetricConfigType,
     pub optimize: MetricConfigOptimize,
@@ -469,8 +471,8 @@ pub struct MetricConfig {
 #[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum MetricConfigType {
     Boolean,
     Float,
@@ -497,8 +499,8 @@ pub enum MetricConfigOptimize {
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum MetricConfigLevel {
     Inference,
     Episode,
@@ -726,29 +728,6 @@ impl Config {
         .await
     }
 
-    /// Constructs a dummy (possibly invalid) config.
-    /// The only purpose of this method is to be called by `Client::build_dummy` in pyo3 code,
-    /// where we are unable to use `.await`. We should never actually call any methods
-    /// on a client constructed with this config.
-    #[cfg(feature = "pyo3")]
-    pub fn new_dummy_for_pyo3() -> Config {
-        Config {
-            gateway: Default::default(),
-            models: Default::default(),
-            embedding_models: Default::default(),
-            functions: Default::default(),
-            metrics: Default::default(),
-            tools: Default::default(),
-            evaluations: Default::default(),
-            templates: Default::default(),
-            object_store_info: Default::default(),
-            provider_types: Default::default(),
-            optimizers: Default::default(),
-            postgres: Default::default(),
-            rate_limiting: Default::default(),
-        }
-    }
-
     pub async fn load_and_verify_from_path(config_glob: &ConfigFileGlob) -> Result<Config, Error> {
         Self::load_from_path_optional_verify_credentials(config_glob, true).await
     }
@@ -805,15 +784,32 @@ impl Config {
             .gateway
             .load(object_store_info.as_ref())?;
 
-        let functions = uninitialized_config
+        let http_client = TensorzeroHttpClient::new(gateway_config.global_outbound_http_timeout)?;
+
+        // Load built-in functions first
+        let mut functions = built_in::get_all_built_in_functions()?;
+
+        // Load user-defined functions and ensure they don't use tensorzero:: prefix
+        let user_functions = uninitialized_config
             .functions
             .into_iter()
             .map(|(name, config)| {
+                // Prevent user functions from using tensorzero:: prefix
+                if name.starts_with("tensorzero::") {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "User-defined function name cannot start with 'tensorzero::': {name}"
+                        ),
+                    }));
+                }
                 config
                     .load(&name, &uninitialized_config.metrics)
                     .map(|c| (name, Arc::new(c)))
             })
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
+
+        // Merge user functions into the functions map
+        functions.extend(user_functions);
 
         let tools = uninitialized_config
             .tools
@@ -831,6 +827,7 @@ impl Config {
                         &name,
                         &uninitialized_config.provider_types,
                         &provider_type_default_credentials,
+                        http_client.clone(),
                     )
                     .await
                     .map(|c| (name, c))
@@ -846,6 +843,7 @@ impl Config {
                     .load(
                         &uninitialized_config.provider_types,
                         &provider_type_default_credentials,
+                        http_client.clone(),
                     )
                     .await
                     .map(|c| (name, c))
@@ -901,6 +899,7 @@ impl Config {
             optimizers,
             postgres: uninitialized_config.postgres,
             rate_limiting: uninitialized_config.rate_limiting.try_into()?,
+            http_client,
         };
 
         // Initialize the templates
@@ -913,7 +912,7 @@ impl Config {
                     })
                 })?.to_owned())
             } else if let Some(single_file) = span_map.get_single_file() {
-                tracing::warn!("Deprecation warning: `[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
+                crate::utils::deprecation_warning("`[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
                 Some(
                     single_file
                         .parent()
@@ -1028,15 +1027,10 @@ impl Config {
             .into());
         }
         // Validate each function
+        // Note: We don't check for tensorzero:: prefix here because:
+        // 1. Built-in functions are allowed to have this prefix
+        // 2. User-defined functions are prevented from using it during loading
         for (function_name, function) in &self.functions {
-            if function_name.starts_with("tensorzero::") {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Function name cannot start with 'tensorzero::': {function_name}"
-                    ),
-                }
-                .into());
-            }
             function
                 .validate(
                     &self.tools,
@@ -1387,9 +1381,8 @@ pub struct UninitializedFunctionConfigJson {
 
 /// Holds all of the schemas used by a chat completion function.
 /// These are used by variants to construct a `TemplateWithSchema`
-#[derive(Debug, Default, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct SchemaData {
     #[serde(flatten)]
     pub inner: HashMap<String, SchemaWithMetadata>,
@@ -1730,9 +1723,8 @@ impl UninitializedToolConfig {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct PathWithContents {
     #[cfg_attr(test, ts(type = "string"))]
     pub path: ResolvedTomlPath,
@@ -1746,11 +1738,11 @@ impl PathWithContents {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[serde(default)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export, optional_fields)]
 pub struct PostgresConfig {
+    pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,
 }
@@ -1762,6 +1754,7 @@ fn default_connection_pool_size() -> u32 {
 impl Default for PostgresConfig {
     fn default() -> Self {
         Self {
+            enabled: None,
             connection_pool_size: 20,
         }
     }

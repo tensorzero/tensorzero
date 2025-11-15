@@ -74,18 +74,16 @@ use crate::providers::{
     xai::XAIProvider,
 };
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
     pub providers: HashMap<Arc<str>, ModelProvider>, // provider name => provider config
     pub timeouts: TimeoutsConfig,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedModelConfig {
     pub routing: Vec<Arc<str>>, // [provider name A, provider name B, ...]
@@ -100,19 +98,25 @@ impl UninitializedModelConfig {
         model_name: &str,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
+        http_client: TensorzeroHttpClient,
     ) -> Result<ModelConfig, Error> {
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
         // build `ModelProvider`s using the name keys from the map.
-        let providers = try_join_all(self.providers.into_iter().map(
-            |(name, provider)| async move {
+        let providers = try_join_all(self.providers.into_iter().map(|(name, provider)| {
+            let http_client = http_client.clone();
+            async move {
                 Ok::<_, Error>((
                     name.clone(),
                     ModelProvider {
                         name: name.clone(),
                         config: provider
                             .config
-                            .load(provider_types, provider_type_default_credentials)
+                            .load(
+                                provider_types,
+                                provider_type_default_credentials,
+                                http_client,
+                            )
                             .await
                             .map_err(|e| {
                                 Error::new(ErrorDetails::Config {
@@ -125,8 +129,8 @@ impl UninitializedModelConfig {
                         discard_unknown_chunks: provider.discard_unknown_chunks,
                     },
                 ))
-            },
-        ))
+            }
+        }))
         .await?
         .into_iter()
         .collect::<HashMap<_, _>>();
@@ -721,9 +725,8 @@ async fn wrap_provider_stream(
     )
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct UninitializedModelProvider {
     #[serde(flatten)]
     pub config: UninitializedProviderConfig,
@@ -742,9 +745,8 @@ pub struct UninitializedModelProvider {
     pub discard_unknown_chunks: bool,
 }
 
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, ts_rs::TS)]
+#[ts(export)]
 pub struct ModelProvider {
     pub name: Arc<str>,
     pub config: ProviderConfig,
@@ -847,8 +849,8 @@ pub struct ModelProviderRequestInfo {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum ProviderConfig {
     Anthropic(AnthropicProvider),
     #[serde(rename = "aws_bedrock")]
@@ -936,9 +938,8 @@ impl ProviderConfig {
 
 /// Contains all providers which implement `SelfHostedProvider` - these providers
 /// can be used as the target provider hosted by AWS Sagemaker
-#[derive(Debug, Deserialize, Serialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
 pub enum HostedProviderKind {
@@ -946,8 +947,8 @@ pub enum HostedProviderKind {
     TGI,
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 #[derive(Debug, TensorZeroDeserialize, VariantNames, Serialize)]
 #[strum(serialize_all = "lowercase")]
 #[serde(tag = "type")]
@@ -1101,6 +1102,7 @@ impl UninitializedProviderConfig {
         self,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
+        http_client: TensorzeroHttpClient,
     ) -> Result<ProviderConfig, Error> {
         Ok(match self {
             UninitializedProviderConfig::Anthropic {
@@ -1127,7 +1129,9 @@ impl UninitializedProviderConfig {
                     return Err(Error::new(ErrorDetails::Config { message: "AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
                 }
 
-                ProviderConfig::AWSBedrock(AWSBedrockProvider::new(model_id, region).await?)
+                ProviderConfig::AWSBedrock(
+                    AWSBedrockProvider::new(model_id, region, http_client).await?,
+                )
             }
             UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
@@ -1224,8 +1228,8 @@ impl UninitializedProviderConfig {
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexGemini(
-                GCPVertexGeminiProvider::new(
+            } => {
+                let provider = GCPVertexGeminiProvider::new(
                     model_id,
                     endpoint_id,
                     location,
@@ -1234,8 +1238,10 @@ impl UninitializedProviderConfig {
                     provider_types,
                     provider_type_default_credentials,
                 )
-                .await?,
-            ),
+                .await?;
+
+                ProviderConfig::GCPVertexGemini(provider)
+            }
             UninitializedProviderConfig::GoogleAIStudioGemini {
                 model_name,
                 api_key_location,
@@ -1291,19 +1297,29 @@ impl UninitializedProviderConfig {
                 api_type,
                 include_encrypted_reasoning,
                 provider_tools,
-            } => ProviderConfig::OpenAI(OpenAIProvider::new(
-                model_name,
-                api_base,
-                OpenAIKind
-                    .get_defaulted_credential(
-                        api_key_location.as_ref(),
-                        provider_type_default_credentials,
-                    )
-                    .await?,
-                api_type,
-                include_encrypted_reasoning,
-                provider_tools,
-            )?),
+            } => {
+                // This should only be used when we are mocking batch inferences, otherwise defer to the API base set
+                #[cfg(feature = "e2e_tests")]
+                let api_base = provider_types
+                    .openai
+                    .batch_inference_api_base
+                    .clone()
+                    .or(api_base);
+
+                ProviderConfig::OpenAI(OpenAIProvider::new(
+                    model_name,
+                    api_base,
+                    OpenAIKind
+                        .get_defaulted_credential(
+                            api_key_location.as_ref(),
+                            provider_type_default_credentials,
+                        )
+                        .await?,
+                    api_type,
+                    include_encrypted_reasoning,
+                    provider_tools,
+                )?)
+            }
             UninitializedProviderConfig::OpenRouter {
                 model_name,
                 api_key_location,
@@ -2001,14 +2017,16 @@ pub enum CredentialLocation {
 }
 
 /// Credential location with optional fallback support
-#[derive(Debug, PartialEq, Clone, Serialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, ts_rs::TS)]
 #[serde(untagged)]
 pub enum CredentialLocationWithFallback {
     /// Single credential location (backward compatible)
-    Single(CredentialLocation),
+    Single(#[ts(type = "string")] CredentialLocation),
     /// Credential location with fallback
     WithFallback {
+        #[ts(type = "string")]
         default: CredentialLocation,
+        #[ts(type = "string")]
         fallback: CredentialLocation,
     },
 }
@@ -2031,9 +2049,8 @@ impl CredentialLocationWithFallback {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
+#[ts(export)]
 pub enum EndpointLocation {
     /// Environment variable containing the actual endpoint URL
     Env(String),

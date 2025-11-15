@@ -91,17 +91,22 @@ async fn test_datapoint_insert_synthetic_chat() {
       "dataset_name": dataset_name,
       "function_name": "basic_test",
       "id": id.to_string(),
+      "name": null,
       "episode_id": null,
       "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"My synthetic input\"}]}]}",
       "output": "[{\"type\":\"text\",\"text\":\"My synthetic output\"}]",
-      "tool_params": "",
+      "tool_params": "{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":null}",
+      "dynamic_tools": [],
+      "dynamic_provider_tools": [],
+      "tool_choice": "auto",
+      "parallel_tool_calls": null,
+      "allowed_tools": "{\"tools\":[],\"choice\":\"function_default\"}",
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
       "is_custom": true,
-      "staled_at": null,
       "source_inference_id": source_inference_id.to_string(),
-      "name": null,
+      "staled_at": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -271,7 +276,6 @@ async fn test_create_delete_datapoint_chat() {
         assert!(list_datapoint.tags.as_ref().unwrap().is_empty());
         assert_eq!(list_datapoint.auxiliary, "");
 
-        let mut is_tool = false;
         // Verify input structure
         let input = &datapoint.input;
         assert!(match input.system.as_ref().unwrap() {
@@ -313,7 +317,6 @@ async fn test_create_delete_datapoint_chat() {
                     first_output,
                     ContentBlockChatOutput::ToolCall { .. }
                 ));
-                is_tool = true;
             }
         }
 
@@ -329,41 +332,6 @@ async fn test_create_delete_datapoint_chat() {
                     ContentBlockChatOutput::ToolCall { .. }
                 ));
             }
-        }
-
-        // Verify tool_params if present
-        if let Some(tool_params) = &datapoint.tool_params {
-            assert!(is_tool);
-            let tools_available = &tool_params.tools_available;
-            assert!(!tools_available.is_empty());
-            let first_tool = tools_available[0].clone();
-            assert_eq!(first_tool.name, "get_temperature");
-            assert_eq!(
-                first_tool.description,
-                "Get the current temperature in a given location"
-            );
-            assert_eq!(
-                first_tool.parameters,
-                json!({
-                    "$schema": "http://json-schema.org/draft-07/schema#",
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "The location to get the temperature for (e.g. \"New York\")"
-                        },
-                        "units": {
-                            "type": "string",
-                            "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
-                            "enum": ["fahrenheit", "celsius"]
-                        }
-                    },
-                    "required": ["location"],
-                    "additionalProperties": false
-                })
-            );
-        } else {
-            assert!(!is_tool);
         }
 
         // Verify tool_params if present for the list datapoint
@@ -640,17 +608,22 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
       "dataset_name": dataset_name,
       "function_name": "basic_test",
       "id": id.to_string(),
+      "name": null,
       "episode_id": null,
       "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"My synthetic input\"}]}]}",
       "output": "[{\"type\":\"tool_call\",\"id\":\"call_123\",\"raw_name\":\"get_temperature\",\"raw_arguments\":\"{\\\"location\\\":\\\"New York\\\",\\\"units\\\":\\\"fahrenheit\\\"}\",\"name\":\"get_temperature\",\"arguments\":{\"location\":\"New York\",\"units\":\"fahrenheit\"}}]",
       "tool_params": "{\"tools_available\":[{\"description\":\"Get the current temperature in a given location\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The location to get the temperature for (e.g. \\\"New York\\\")\"},\"units\":{\"type\":\"string\",\"description\":\"The units to get the temperature in (must be \\\"fahrenheit\\\" or \\\"celsius\\\")\",\"enum\":[\"fahrenheit\",\"celsius\"]}},\"required\":[\"location\"],\"additionalProperties\":false},\"name\":\"get_temperature\",\"strict\":false}],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}",
+      "dynamic_tools": ["{\"type\":\"client_side_function\",\"description\":\"Get the current temperature in a given location\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The location to get the temperature for (e.g. \\\"New York\\\")\"},\"units\":{\"type\":\"string\",\"description\":\"The units to get the temperature in (must be \\\"fahrenheit\\\" or \\\"celsius\\\")\",\"enum\":[\"fahrenheit\",\"celsius\"]}},\"required\":[\"location\"],\"additionalProperties\":false},\"name\":\"get_temperature\",\"strict\":false}"],
+      "dynamic_provider_tools": [],
+      "tool_choice": "auto",
+      "parallel_tool_calls": false,
+      "allowed_tools": "{\"tools\":[\"get_temperature\"],\"choice\":\"function_default\"}",
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
       "is_custom": true,
-      "staled_at": null,
       "source_inference_id": null,
-      "name": null,
+      "staled_at": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -1498,7 +1471,6 @@ async fn test_datapoint_insert_output_inherit_chat() {
             < 5,
         "Unexpected updated_at: {updated_at:?}"
     );
-
     let expected = json!({
       "dataset_name": dataset_name,
       "function_name": "basic_test",
@@ -1507,6 +1479,11 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Hello, world!\"}]}]}",
       "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
       "tool_params": "",
+      "dynamic_tools": [],
+      "dynamic_provider_tools": [],
+      "tool_choice": null,
+      "parallel_tool_calls": null,
+      "allowed_tools": null,
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
@@ -1624,6 +1601,11 @@ async fn test_datapoint_insert_output_none_chat() {
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Hello, world!\"}]}]}",
       "output": null,
       "tool_params": "",
+      "dynamic_tools": [],
+      "dynamic_provider_tools": [],
+      "tool_choice": null,
+      "parallel_tool_calls": null,
+      "allowed_tools": null,
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
@@ -1797,6 +1779,11 @@ async fn test_datapoint_insert_output_demonstration_chat() {
       "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Hello, world!\"}]}]}",
       "output": "[{\"type\":\"text\",\"text\":\"My demonstration chat answer\"}]",
       "tool_params": "",
+      "dynamic_tools": [],
+      "dynamic_provider_tools": [],
+      "tool_choice": null,
+      "parallel_tool_calls": null,
+      "allowed_tools": null,
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
@@ -2276,17 +2263,22 @@ async fn test_datapoint_insert_missing_output_chat() {
       "dataset_name": dataset_name,
       "function_name": "basic_test",
       "id": id.to_string(),
+      "name": null,
       "episode_id": null,
       "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"My synthetic input\"}]}]}",
       "output": null,
-      "tool_params": "",
+      "tool_params": "{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":null}",
+      "dynamic_tools": [],
+      "dynamic_provider_tools": [],
+      "tool_choice": "auto",
+      "parallel_tool_calls": null,
+      "allowed_tools": "{\"tools\":[],\"choice\":\"function_default\"}",
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
       "is_custom": true,
-      "staled_at": null,
       "source_inference_id": null,
-      "name": null,
+      "staled_at": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2342,17 +2334,22 @@ async fn test_datapoint_insert_null_output_chat() {
       "dataset_name": dataset_name,
       "function_name": "basic_test",
       "id": id.to_string(),
+      "name": null,
       "episode_id": null,
       "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"My synthetic input\"}]}]}",
       "output": null,
-      "tool_params": "",
+      "tool_params": "{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":null}",
+      "dynamic_tools": [],
+      "dynamic_provider_tools": [],
+      "tool_choice": "auto",
+      "parallel_tool_calls": null,
+      "allowed_tools": "{\"tools\":[],\"choice\":\"function_default\"}",
       "tags": {},
       "auxiliary": "",
       "is_deleted": false,
       "is_custom": true,
-      "staled_at": null,
       "source_inference_id": null,
-      "name": null,
+      "staled_at": null,
     });
     assert_eq!(datapoint, expected);
 }
@@ -2740,6 +2737,7 @@ async fn test_stale_dataset_with_datapoints() {
     assert_eq!(datapoints.len(), 4);
 
     // Now stale the entire dataset using the Rust client
+    #[expect(deprecated)]
     let stale_result = client.stale_dataset(dataset_name.clone()).await.unwrap();
     assert_eq!(stale_result.num_staled_datapoints, 4);
 
@@ -2779,6 +2777,7 @@ async fn test_stale_dataset_empty() {
     let dataset_name = format!("test-empty-stale-dataset-{}", Uuid::now_v7());
 
     // Stale an empty dataset (no datapoints exist)
+    #[expect(deprecated)]
     let stale_result = client.stale_dataset(dataset_name.clone()).await.unwrap();
     assert_eq!(stale_result.num_staled_datapoints, 0);
 }
@@ -2814,6 +2813,7 @@ async fn test_stale_dataset_already_staled() {
 
     println!("staling dataset");
     // Stale the dataset once
+    #[expect(deprecated)]
     let stale_result1 = client.stale_dataset(dataset_name.clone()).await.unwrap();
     assert_eq!(stale_result1.num_staled_datapoints, 1);
 

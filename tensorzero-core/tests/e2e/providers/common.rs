@@ -15,6 +15,7 @@ use tensorzero_core::config::provider_types::{
     VLLMDefaults, XAIDefaults,
 };
 use tensorzero_core::http::TensorzeroHttpClient;
+use tensorzero_core::tool::Tool;
 
 use axum::body::Body;
 use axum::extract::{Query, State};
@@ -119,6 +120,7 @@ pub struct E2ETestProviders {
 
     pub image_inference: Vec<E2ETestProvider>,
     pub pdf_inference: Vec<E2ETestProvider>,
+    pub input_audio: Vec<E2ETestProvider>,
 
     pub shorthand_inference: Vec<E2ETestProvider>,
     pub embeddings: Vec<EmbeddingTestProvider>,
@@ -532,6 +534,13 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_audio_inference_store_filesystem() {
+            let providers = $func().await.input_audio;
+            for provider in providers {
+                $crate::providers::commonv2::input_audio::test_audio_inference_with_provider_filesystem(provider).await;
+            }
+        }
 
         #[tokio::test(flavor = "multi_thread")]
         async fn test_image_inference_store_filesystem() {
@@ -752,9 +761,22 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 type = "chat_completion"
 model = "anthropic::claude-sonnet-4-5-20250929"
 
+[functions.pdf_test.variants.gcp-vertex-sonnet]
+type = "chat_completion"
+model = "claude-sonnet-4-5-gcp-vertex"
+
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
+
+[models.claude-sonnet-4-5-gcp-vertex]
+routing = ["gcp_vertex_anthropic"]
+
+[models.claude-sonnet-4-5-gcp-vertex.providers.gcp_vertex_anthropic]
+type = "gcp_vertex_anthropic"
+model_id = "claude-sonnet-4-5@20250929"
+location = "us-east5"
+project_id = "tensorzero-public"
 
 [models."responses-gpt-4o-mini-2024-07-18"]
 routing = ["openai"]
@@ -1562,8 +1584,9 @@ pub async fn test_image_inference_with_provider_s3_compatible(
     toml: &str,
     prefix: &str,
 ) -> (tensorzero::Client, String, StoragePath) {
-    let expected_key =
-        format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png");
+    let expected_key = format!(
+        "{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+    );
 
     // Check that object is deleted
     let path = object_store::path::Path::parse(&expected_key).unwrap();
@@ -1663,6 +1686,7 @@ pub async fn test_url_image_inference_with_provider_and_store(
                                 url: image_url.clone(),
                                 mime_type: None,
                                 detail: Some(Detail::Low),
+                                filename: None,
                             })),
                         ],
                     }],
@@ -1726,6 +1750,7 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                                     None,
                                     mime::APPLICATION_PDF,
                                     pdf_data.clone(),
+                                    None,
                                     None,
                                 )
                                 .expect("test data should be valid"),
@@ -1792,6 +1817,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                             mime::IMAGE_PNG,
                             image_data.clone(),
                             Some(Detail::Low),
+                            None,
                         )
                         .expect("test data should be valid"),
                     )),
@@ -1851,7 +1877,7 @@ pub async fn test_base64_image_inference_with_provider_and_store(
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
     params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64(
-        Base64File::new(None, mime::IMAGE_PNG, updated_base64, None)
+        Base64File::new(None, mime::IMAGE_PNG, updated_base64, None, None)
             .expect("test data should be valid"),
     ));
 
@@ -2325,7 +2351,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "fireworks" => {
             assert!(
-                res["error"].as_str().unwrap().contains("unauthorized"),
+                res["error"]
+                    .as_str()
+                    .unwrap()
+                    .to_lowercase()
+                    .contains("unauthorized"),
                 "Unexpected error: {res}"
             );
         }
@@ -2683,6 +2713,7 @@ pub async fn check_base64_pdf_response(
                     mime_type: mime::APPLICATION_PDF,
                     storage_path: expected_storage_path.clone(),
                     detail: None,
+                    filename: None,
                 },)))
             ]
         },]
@@ -2836,6 +2867,7 @@ pub async fn check_base64_image_response(
                     mime_type: mime::IMAGE_PNG,
                     storage_path: expected_storage_path.clone(),
                     detail: Some(Detail::Low),
+                    filename: None,
                 },)))
             ]
         },]
@@ -2987,6 +3019,7 @@ pub async fn check_url_image_response(
                             path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
                         },
                         detail: Some(Detail::Low),
+                        filename: None,
                     },
                 )))]
             },
@@ -3237,7 +3270,6 @@ pub async fn check_simple_image_inference_response(
     is_batch: bool,
     should_be_cached: bool,
 ) {
-    let hardcoded_function_name = "basic_test";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -3292,7 +3324,7 @@ pub async fn check_simple_image_inference_response(
     assert_eq!(id, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
+    assert_eq!(function_name, "basic_test");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -3302,6 +3334,9 @@ pub async fn check_simple_image_inference_response(
     if let Some(episode_id) = episode_id {
         assert_eq!(retrieved_episode_id, episode_id);
     }
+    let tags = result.get("tags").unwrap();
+    // All callers set this tag so this tests that tags are propagated to the ultimate sink of the inference data
+    tags.get("test_type").unwrap();
 
     let input: Value =
         serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
@@ -3404,15 +3439,10 @@ pub async fn check_simple_image_inference_response(
 
     if !is_batch {
         // Check the InferenceTag Table
-        let result = select_inference_tags_clickhouse(
-            &clickhouse,
-            hardcoded_function_name,
-            "foo",
-            "bar",
-            inference_id,
-        )
-        .await
-        .unwrap();
+        let result =
+            select_inference_tags_clickhouse(&clickhouse, "basic_test", "foo", "bar", inference_id)
+                .await
+                .unwrap();
         let id = result.get("inference_id").unwrap().as_str().unwrap();
         let id = Uuid::parse_str(id).unwrap();
         assert_eq!(id, inference_id);
@@ -4366,6 +4396,90 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     .await;
 }
 
+// Helper function to verify new Migration 0041 tool call storage columns
+fn verify_tool_call_storage_columns(
+    result: &Value,
+    expected_tool_choice: &str,
+    expected_parallel_tool_calls: Option<bool>,
+    expected_allowed_tools_choice: &str,
+    expected_static_tool_names: &[&str],
+    expected_dynamic_tool_count: usize,
+    expected_provider_tool_count: usize,
+) {
+    // Verify allowed_tools column
+    let allowed_tools_str = result.get("allowed_tools").unwrap().as_str().unwrap();
+    let allowed_tools: Value = serde_json::from_str(allowed_tools_str).unwrap();
+    assert_eq!(
+        allowed_tools["choice"], expected_allowed_tools_choice,
+        "allowed_tools.choice mismatch"
+    );
+
+    let actual_tools = allowed_tools["tools"].as_array().unwrap();
+    assert_eq!(
+        actual_tools.len(),
+        expected_static_tool_names.len(),
+        "allowed_tools.tools length mismatch"
+    );
+    for expected_tool in expected_static_tool_names {
+        assert!(
+            actual_tools.contains(&json!(expected_tool)),
+            "allowed_tools.tools missing tool: {expected_tool}"
+        );
+    }
+
+    // Verify dynamic_tools column
+    let dynamic_tools_unparsed = result.get("dynamic_tools").unwrap().as_array().unwrap();
+    let dynamic_tools: Result<Vec<Tool>, _> = dynamic_tools_unparsed
+        .iter()
+        .map(|x| serde_json::from_str::<Tool>(x.as_str().unwrap()))
+        .collect();
+    let dynamic_tools = dynamic_tools.unwrap();
+    assert_eq!(
+        dynamic_tools.len(),
+        expected_dynamic_tool_count,
+        "dynamic_tools length mismatch"
+    );
+
+    // Verify dynamic_provider_tools column
+    let dynamic_provider_tools_unparsed = result
+        .get("dynamic_provider_tools")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    let dynamic_provider_tools: Result<Vec<Tool>, _> = dynamic_provider_tools_unparsed
+        .iter()
+        .map(|x| serde_json::from_str::<Tool>(x.as_str().unwrap()))
+        .collect();
+    let dynamic_provider_tools = dynamic_provider_tools.unwrap();
+    assert_eq!(
+        dynamic_provider_tools.len(),
+        expected_provider_tool_count,
+        "dynamic_provider_tools length mismatch"
+    );
+
+    // Verify tool_choice column
+    let tool_choice = result.get("tool_choice").unwrap().as_str().unwrap();
+    assert_eq!(tool_choice, expected_tool_choice, "tool_choice mismatch");
+
+    // Verify parallel_tool_calls column
+    let parallel_tool_calls = result.get("parallel_tool_calls");
+    match expected_parallel_tool_calls {
+        Some(expected) => {
+            let actual = parallel_tool_calls
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            assert_eq!(actual, expected, "parallel_tool_calls mismatch");
+        }
+        None => {
+            // Should be null or not present
+            assert!(
+                parallel_tool_calls.is_none() || parallel_tool_calls.unwrap().is_null(),
+                "parallel_tool_calls should be null"
+            );
+        }
+    }
+}
+
 pub async fn check_tool_use_tool_choice_auto_used_inference_response(
     response_json: Value,
     provider: &E2ETestProvider,
@@ -4521,6 +4635,17 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
 
     let required = tool_parameters["required"].as_array().unwrap();
     assert!(required.contains(&json!("location")));
+
+    // Verify new Migration 0041 columns (decomposed tool call storage format)
+    verify_tool_call_storage_columns(
+        &result,
+        "auto",               // expected_tool_choice
+        None,                 // expected_parallel_tool_calls (null/none)
+        "function_default",   // expected_allowed_tools_choice (tools from function config)
+        &["get_temperature"], // expected_static_tool_names
+        0,                    // expected_dynamic_tool_count
+        0,                    // expected_provider_tool_count
+    );
 
     // Check if ClickHouse is correct - ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -8318,8 +8443,10 @@ pub async fn check_tool_use_multi_turn_inference_response(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    }
 
     // Check the ModelInference Table
     let result = select_model_inference_clickhouse(&clickhouse, inference_id)
@@ -8885,7 +9012,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         },
         stream: Some(false),
         dynamic_tool_params: tensorzero::DynamicToolParams {
-            additional_tools: Some(vec![tensorzero::Tool {
+            additional_tools: Some(vec![tensorzero::ClientSideFunctionTool {
                 name: "get_temperature".to_string(),
                 description: "Get the current temperature in a given location".to_string(),
                 parameters: json!({
@@ -9188,7 +9315,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         extra_headers: get_extra_headers(),
         stream: Some(true),
         dynamic_tool_params: tensorzero::DynamicToolParams {
-            additional_tools: Some(vec![tensorzero::Tool {
+            additional_tools: Some(vec![tensorzero::ClientSideFunctionTool {
                 name: "get_temperature".to_string(),
                 description: "Get the current temperature in a given location".to_string(),
                 parameters: json!({
@@ -9575,7 +9702,6 @@ pub async fn check_parallel_tool_use_inference_response(
     is_batch: bool,
     parallel_param: Value,
 ) {
-    let hardcoded_function_name = "weather_helper_parallel";
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
 
@@ -9679,7 +9805,7 @@ pub async fn check_parallel_tool_use_inference_response(
     assert_eq!(id_uuid, inference_id);
 
     let function_name = result.get("function_name").unwrap().as_str().unwrap();
-    assert_eq!(function_name, hardcoded_function_name);
+    assert_eq!(function_name, "weather_helper_parallel");
 
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
@@ -10722,8 +10848,10 @@ pub async fn check_dynamic_json_mode_inference_response(
     assert!(inference_params.get("temperature").is_none());
     assert!(inference_params.get("seed").is_none());
 
-    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
-    assert!(processing_time_ms > 0);
+    if !is_batch {
+        let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+        assert!(processing_time_ms > 0);
+    }
 
     if let Some(output_schema) = &output_schema {
         let retrieved_output_schema = result.get("output_schema").unwrap().as_str().unwrap();

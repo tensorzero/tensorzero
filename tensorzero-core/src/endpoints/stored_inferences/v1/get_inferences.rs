@@ -3,14 +3,13 @@ use axum::Json;
 use tracing::instrument;
 
 use crate::config::Config;
-use crate::db::inferences::{InferenceQueries, ListInferencesParams};
+use crate::db::inferences::{
+    InferenceQueries, ListInferencesParams, DEFAULT_INFERENCE_QUERY_LIMIT,
+};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
-
-const DEFAULT_LIMIT: u32 = 20;
-const DEFAULT_OFFSET: u32 = 0;
 
 /// Handler for the POST `/v1/inferences/get_inferences` endpoint.
 /// Retrieves specific inferences by their IDs.
@@ -29,7 +28,7 @@ pub async fn get_inferences_handler(
     Ok(Json(response))
 }
 
-async fn get_inferences(
+pub async fn get_inferences(
     config: &Config,
     clickhouse: &impl InferenceQueries,
     request: GetInferencesRequest,
@@ -41,10 +40,11 @@ async fn get_inferences(
 
     let params = ListInferencesParams {
         ids: Some(&request.ids),
+        function_name: request.function_name.as_deref(),
         output_source: request.output_source,
         // Return all inferences matching the IDs.
-        limit: Some(u64::MAX),
-        offset: Some(0),
+        limit: u32::MAX,
+        offset: 0,
         ..Default::default()
     };
 
@@ -75,23 +75,20 @@ pub async fn list_inferences_handler(
     Ok(Json(response))
 }
 
-async fn list_inferences(
+pub async fn list_inferences(
     config: &Config,
     clickhouse: &impl InferenceQueries,
     request: ListInferencesRequest,
 ) -> Result<GetInferencesResponse, Error> {
-    let limit = request.limit.unwrap_or(DEFAULT_LIMIT) as u64;
-    let offset = request.offset.unwrap_or(DEFAULT_OFFSET) as u64;
-
     let params = ListInferencesParams {
-        function_name: request.function_name.as_deref(),
         ids: None, // List all inferences, not filtering by ID
+        function_name: request.function_name.as_deref(),
         variant_name: request.variant_name.as_deref(),
         episode_id: request.episode_id.as_ref(),
         filters: request.filter.as_ref(),
         output_source: request.output_source,
-        limit: Some(limit),
-        offset: Some(offset),
+        limit: request.limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
+        offset: request.offset.unwrap_or(0),
         order_by: request.order_by.as_deref(),
     };
 
@@ -179,8 +176,8 @@ mod tests {
                 // Verify correct parameters
                 assert_eq!(params.ids, Some(ids.as_slice()));
                 assert_eq!(params.output_source, InferenceOutputSource::Inference);
-                assert_eq!(params.limit, Some(u64::MAX));
-                assert_eq!(params.offset, Some(0));
+                assert_eq!(params.limit, u32::MAX);
+                assert_eq!(params.offset, 0);
                 assert_eq!(params.function_name, None);
                 assert_eq!(params.variant_name, None);
                 assert_eq!(params.episode_id, None);
@@ -197,6 +194,7 @@ mod tests {
 
         let request = GetInferencesRequest {
             ids: vec![id1, id2],
+            function_name: None,
             output_source: InferenceOutputSource::Inference,
         };
 
@@ -217,6 +215,7 @@ mod tests {
 
         let request = GetInferencesRequest {
             ids: vec![],
+            function_name: None,
             output_source: InferenceOutputSource::Inference,
         };
 
@@ -244,6 +243,7 @@ mod tests {
 
         let request = GetInferencesRequest {
             ids: vec![id],
+            function_name: None,
             output_source: InferenceOutputSource::Inference,
         };
 
@@ -273,7 +273,7 @@ mod tests {
             .expect_list_inferences()
             .withf(move |_, params| {
                 // Specifically verify limit and output_source
-                assert_eq!(params.limit, Some(u64::MAX), "Should use u64::MAX limit");
+                assert_eq!(params.limit, u32::MAX, "Should use u32::MAX limit");
                 assert_eq!(
                     params.output_source,
                     InferenceOutputSource::Demonstration,
@@ -289,6 +289,7 @@ mod tests {
 
         let request = GetInferencesRequest {
             ids: vec![id],
+            function_name: None,
             output_source: InferenceOutputSource::Demonstration,
         };
 
@@ -309,8 +310,10 @@ mod tests {
             .expect_list_inferences()
             .withf(|_, params| {
                 // Verify default pagination values
-                assert_eq!(params.limit, Some(20), "Should use default limit of 20");
-                assert_eq!(params.offset, Some(0), "Should use default offset of 0");
+                assert_eq!(
+                    params.limit, DEFAULT_INFERENCE_QUERY_LIMIT,
+                    "Should enforce a default limit"
+                );
                 assert_eq!(params.ids, None);
                 true
             })
@@ -321,14 +324,8 @@ mod tests {
             });
 
         let request = ListInferencesRequest {
-            function_name: None,
-            variant_name: None,
-            episode_id: None,
             output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            filter: None,
-            order_by: None,
+            ..Default::default()
         };
 
         let result = list_inferences(&config, &mock_clickhouse, request)
@@ -349,8 +346,8 @@ mod tests {
             .expect_list_inferences()
             .withf(|_, params| {
                 // Verify custom pagination values
-                assert_eq!(params.limit, Some(50), "Should use custom limit");
-                assert_eq!(params.offset, Some(100), "Should use custom offset");
+                assert_eq!(params.limit, 50, "Should use custom limit");
+                assert_eq!(params.offset, 100, "Should use custom offset");
                 true
             })
             .times(1)
@@ -360,14 +357,10 @@ mod tests {
             });
 
         let request = ListInferencesRequest {
-            function_name: None,
-            variant_name: None,
-            episode_id: None,
             output_source: InferenceOutputSource::Inference,
             limit: Some(50),
             offset: Some(100),
-            filter: None,
-            order_by: None,
+            ..Default::default()
         };
 
         let result = list_inferences(&config, &mock_clickhouse, request)
@@ -420,10 +413,7 @@ mod tests {
             variant_name: Some(variant_name),
             episode_id: Some(episode_id),
             output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            filter: None,
-            order_by: None,
+            ..Default::default()
         };
 
         let result = list_inferences(&config, &mock_clickhouse, request)
@@ -462,14 +452,9 @@ mod tests {
             });
 
         let request = ListInferencesRequest {
-            function_name: None,
-            variant_name: None,
-            episode_id: None,
             output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            filter: None,
             order_by: Some(order_by),
+            ..Default::default()
         };
 
         let result = list_inferences(&config, &mock_clickhouse, request)
@@ -490,14 +475,8 @@ mod tests {
             .returning(|_, _| Box::pin(async move { Ok(vec![]) }));
 
         let request = ListInferencesRequest {
-            function_name: None,
-            variant_name: None,
-            episode_id: None,
             output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            filter: None,
-            order_by: None,
+            ..Default::default()
         };
 
         let result = list_inferences(&config, &mock_clickhouse, request)

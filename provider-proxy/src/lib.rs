@@ -104,8 +104,13 @@ fn save_cache_body(
     // If we have multiple concurrent requests to the same path, one of them will win the race.
     // This is fine for our use case, as it shouldn't matter which successful (by HTTP status code)
     // response is cached.
-    let mut tmpfile = tempfile::NamedTempFile::new()
-        .with_context(|| format!("Failed to create tempfile for path {path_str}"))?;
+    // We create the tempfile in the same directory as the final path, since the directory
+    // may be a different filesystem (e.g. a Docker volume mount) from the standard tempfile directory.
+    let mut tmpfile = tempfile::NamedTempFile::new_in(
+        path.parent()
+            .with_context(|| format!("Failed to get parent directory for path {path_str}"))?,
+    )
+    .with_context(|| format!("Failed to create tempfile for path {path_str}"))?;
     tmpfile
         .write_all(json_str.as_bytes())
         .with_context(|| format!("Failed to write to file for path {path_str}"))?;

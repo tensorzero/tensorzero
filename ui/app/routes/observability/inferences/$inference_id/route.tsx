@@ -38,7 +38,6 @@ import {
   SectionLayout,
   SectionsGroup,
 } from "~/components/layout/PageLayout";
-import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import {
   prepareInferenceActionRequest,
@@ -68,10 +67,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const newFeedbackId = url.searchParams.get("newFeedbackId");
   const beforeFeedback = url.searchParams.get("beforeFeedback");
   const afterFeedback = url.searchParams.get("afterFeedback");
-  const pageSize = Number(url.searchParams.get("pageSize")) || 10;
+  const limit = Number(url.searchParams.get("limit")) || 10;
 
-  if (pageSize > 100) {
-    throw data("Page size cannot exceed 100", { status: 400 });
+  if (limit > 100) {
+    throw data("Limit cannot exceed 100", { status: 400 });
   }
 
   // --- Define all promises, conditionally choosing the feedback promise ---
@@ -84,41 +83,65 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const demonstrationFeedbackPromise =
     dbClient.queryDemonstrationFeedbackByInferenceId({
       inference_id,
-      page_size: 1, // Only need to know if *any* exist
+      limit: 1, // Only need to know if *any* exist
     });
-  const feedbackBoundsPromise = dbClient.queryFeedbackBoundsByTargetId({
-    target_id: inference_id,
-  });
-
   // If there is a freshly inserted feedback, ClickHouse may take some time to
-  // update the feedback table as it is eventually consistent.
+  // update the feedback table and materialized views as it is eventually consistent.
   // In this case, we poll for the feedback item until it is found but eventually time out and log a warning.
+  // When polling for new feedback, we also need to query feedbackBounds and latestFeedbackByMetric
+  // AFTER the polling completes to ensure the materialized views have caught up.
   const feedbackDataPromise = newFeedbackId
-    ? pollForFeedbackItem(inference_id, newFeedbackId, pageSize)
+    ? pollForFeedbackItem(inference_id, newFeedbackId, limit)
     : dbClient.queryFeedbackByTargetId({
         target_id: inference_id,
         before: beforeFeedback || undefined,
         after: afterFeedback || undefined,
-        page_size: pageSize,
+        limit,
       });
 
-  // --- Execute all promises concurrently ---
+  // --- Execute promises concurrently (with special handling for new feedback) ---
 
-  const [
-    inference,
+  let inference,
     model_inferences,
     demonstration_feedback,
     feedback_bounds,
     feedback,
-    latestFeedbackByMetric,
-  ] = await Promise.all([
-    inferencePromise,
-    modelInferencesPromise,
-    demonstrationFeedbackPromise,
-    feedbackBoundsPromise,
-    feedbackDataPromise,
-    queryLatestFeedbackIdByMetric({ target_id: inference_id }),
-  ]);
+    latestFeedbackByMetric;
+
+  if (newFeedbackId) {
+    // When there's new feedback, wait for polling to complete before querying
+    // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
+    [inference, model_inferences, demonstration_feedback, feedback] =
+      await Promise.all([
+        inferencePromise,
+        modelInferencesPromise,
+        demonstrationFeedbackPromise,
+        feedbackDataPromise,
+      ]);
+
+    // Query these after polling completes to avoid race condition with materialized views
+    [feedback_bounds, latestFeedbackByMetric] = await Promise.all([
+      dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+      queryLatestFeedbackIdByMetric({ target_id: inference_id }),
+    ]);
+  } else {
+    // Normal case: execute all queries in parallel
+    [
+      inference,
+      model_inferences,
+      demonstration_feedback,
+      feedback_bounds,
+      feedback,
+      latestFeedbackByMetric,
+    ] = await Promise.all([
+      inferencePromise,
+      modelInferencesPromise,
+      demonstrationFeedbackPromise,
+      dbClient.queryFeedbackBoundsByTargetId({ target_id: inference_id }),
+      feedbackDataPromise,
+      queryLatestFeedbackIdByMetric({ target_id: inference_id }),
+    ]);
+  }
 
   // --- Process results ---
 
@@ -266,8 +289,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
 
   useEffect(() => {
     if (newFeedbackId) {
-      toast({ title: "Feedback Added" });
+      const { dismiss } = toast.success({ title: "Feedback Added" });
+      return () => dismiss({ immediate: true });
     }
+    return;
   }, [newFeedbackId, toast]);
 
   const variantInferenceFetcher = useInferenceActionFetcher();
@@ -298,10 +323,9 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         void submit({ data: JSON.stringify(request) });
       } catch (stringifyError) {
         logger.error("Failed to stringify request:", stringifyError);
-        toast({
+        toast.error({
           title: "Request Error",
           description: "Failed to prepare the request. Please try again.",
-          variant: "destructive",
         });
         // Reset state on error
         setSelectedVariant(null);
@@ -321,10 +345,9 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         }
       }
 
-      toast({
+      toast.error({
         title: "Request Preparation Error",
         description: errorMessage,
-        variant: "destructive",
       });
     }
   };
@@ -359,10 +382,9 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       submit({ data: JSON.stringify(request) });
     } catch (error) {
       logger.error("Failed to prepare inference request for refresh:", error);
-      toast({
+      toast.error({
         title: "Request Preparation Error",
         description: "Failed to refresh inference. Please try again.",
-        variant: "destructive",
       });
     }
   };
@@ -568,7 +590,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           )}
         </VariantResponseModal>
       )}
-      <Toaster />
     </PageLayout>
   );
 }
