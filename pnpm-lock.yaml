@@ -66,6 +66,16 @@ importers:
         specifier: ^11.0.5
         version: 11.1.0
 
+  examples/docs/guides/gateway/generate-structured-outputs:
+    dependencies:
+      openai:
+        specifier: ^6.4.0
+        version: 6.4.0(ws@8.18.3)(zod@3.25.76)
+    devDependencies:
+      tsx:
+        specifier: ^4.19.2
+        version: 4.20.3
+
   examples/docs/guides/operations/set-up-auth-for-tensorzero:
     dependencies:
       openai:
