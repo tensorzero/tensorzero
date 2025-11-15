@@ -7,6 +7,7 @@ use crate::db::inferences::{
     InferenceQueries, ListInferencesParams, DEFAULT_INFERENCE_QUERY_LIMIT,
 };
 use crate::error::Error;
+use crate::stored_inference::StoredInferenceDatabase;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
@@ -51,7 +52,7 @@ pub async fn get_inferences(
     let inferences_storage = clickhouse.list_inferences(config, &params).await?;
     let inferences = inferences_storage
         .into_iter()
-        .map(|x| x.into_stored_inference(config))
+        .map(StoredInferenceDatabase::into_stored_inference)
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(GetInferencesResponse { inferences })
@@ -95,7 +96,7 @@ pub async fn list_inferences(
     let inferences_storage = clickhouse.list_inferences(config, &params).await?;
     let inferences = inferences_storage
         .into_iter()
-        .map(|x| x.into_stored_inference(config))
+        .map(StoredInferenceDatabase::into_stored_inference)
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(GetInferencesResponse { inferences })
