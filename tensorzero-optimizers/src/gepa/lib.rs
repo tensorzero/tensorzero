@@ -8,7 +8,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::future::join_all;
-use tokio::sync::Semaphore;
 
 use tensorzero_core::{
     client::{Client, ClientBuilder, ClientBuilderMode},
@@ -153,15 +152,24 @@ pub async fn run_gepa_optimization(
         })?
         .clone();
 
-    // Create semaphore for concurrency control
-    let semaphore = Arc::new(Semaphore::new(config.max_concurrency as usize));
+    // Divide concurrency among variants to avoid max_concurrency² explosion
+    // Since each variant is evaluated on the same dataset, they'll take similar time
+    let num_variants = pareto_frontier.len();
+    let per_variant_concurrency = (config.max_concurrency as usize / num_variants).max(1);
+
+    tracing::debug!(
+        "Evaluating {} variants with {} concurrency each (total ≈ {})",
+        num_variants,
+        per_variant_concurrency,
+        num_variants * per_variant_concurrency
+    );
+
     let evaluation_name = config.evaluation_name.clone();
 
     // Create parallel evaluation futures
     let evaluation_futures: Vec<_> = pareto_frontier
         .iter()
         .map(|(variant_name, variant_config)| {
-            let semaphore = Arc::clone(&semaphore);
             let gateway_client = gateway_client.clone();
             let clickhouse_connection_info = clickhouse_connection_info.clone();
             let tensorzero_config = Arc::clone(&tensorzero_config);
@@ -172,12 +180,6 @@ pub async fn run_gepa_optimization(
             let val_dataset_name = val_dataset_name.clone();
 
             async move {
-                let _permit = semaphore.acquire().await.map_err(|e| {
-                    Error::new(ErrorDetails::Inference {
-                        message: format!("Failed to acquire semaphore: {e}"),
-                    })
-                })?;
-
                 match evaluate_variant(EvaluateVariantParams {
                     gateway_client,
                     clickhouse_connection_info,
@@ -187,7 +189,7 @@ pub async fn run_gepa_optimization(
                     variant_name: variant_name.clone(),
                     variant_config,
                     dataset_name: val_dataset_name,
-                    concurrency: config.max_concurrency as usize,
+                    concurrency: per_variant_concurrency,
                 })
                 .await
                 {
