@@ -77,9 +77,13 @@ UI:
 * Can tests be combined into units that preserve coverage but reduce the overall volume of code? Helpful for saving context + test runtime.
 
 ### Performance
+* Is there anything that could be expensive added to the latency-critical path for inference?
 #### ClickHouse
 * Are any joins in CH strictly necessary?
 * Do queries leverage the indexes available?
+* Are all filters pushed down as far as possible?
+* Can we ensure that data returned is bounded?
+
 
 ### Security
 If this PR touches API keys or credentials:
