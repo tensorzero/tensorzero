@@ -179,7 +179,7 @@ export async function action({ request }: Route.ActionArgs) {
         }
         return data<ActionData>({ inference });
       } catch (error) {
-        logger.error('Failed to fetch inference:', error);
+        logger.error("Failed to fetch inference:", error);
         return data<ActionData>({ error: "Failed to fetch inference details" }, { status: 500 });
       }
     }
