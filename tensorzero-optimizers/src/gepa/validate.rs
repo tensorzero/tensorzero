@@ -557,7 +557,7 @@ mod tests {
             mutation_model: "openai::gpt-5".to_string(),
             seed: None,
             timeout: 300,
-            include_datapoint_input_for_mutation: false,
+            include_inference_input_for_mutation: false,
             retries: tensorzero_core::utils::retries::RetryConfig::default(),
             max_tokens: 16_384,
         };
@@ -592,7 +592,7 @@ mod tests {
             mutation_model: "openai::gpt-5".to_string(),
             seed: None,
             timeout: 300,
-            include_datapoint_input_for_mutation: false,
+            include_inference_input_for_mutation: false,
             retries: tensorzero_core::utils::retries::RetryConfig::default(),
             max_tokens: 16_384,
         };

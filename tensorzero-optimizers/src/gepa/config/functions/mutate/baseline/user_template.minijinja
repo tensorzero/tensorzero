@@ -34,6 +34,11 @@
 The following are examples of LLM responses with analysis/feedback:
 {% for analysis in analyses %}
 <example>
+{% if analysis.inference_input is defined %}
+<inference_input>
+{{analysis.inference_input | tojson(indent=2)}}
+</inference_input>
+{% endif %}
 <inference_output>
 {{analysis.inference_output | tojson(indent=2)}}
 </inference_output>

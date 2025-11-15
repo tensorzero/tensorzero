@@ -507,3 +507,99 @@ async fn test_mutate_templates_with_new_template_format() {
         "Examples template should have content"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_mutate_templates_with_inference_input_integration() {
+    // Setup: Integration test for full analyze → mutate pipeline with inference_input
+    let client = make_embedded_gateway().await;
+
+    // Create evaluation infos
+    let eval_infos = vec![
+        create_test_evaluation_info("test_function", "What is 2+2?", "The answer is 4."),
+        create_test_evaluation_info(
+            "test_function",
+            "What is the capital of France?",
+            "The capital of France is Paris.",
+        ),
+    ];
+
+    let config_and_tools = create_test_config_and_tools();
+    let variant_config = create_test_variant_config();
+
+    // Configure GEPA to include inference_input
+    let mut gepa_config = create_test_gepa_config();
+    gepa_config.include_inference_input_for_mutation = true;
+
+    // Step 1: Analyze inferences with inference_input enabled
+    let analyses_result = analyze_inferences(
+        &client,
+        &eval_infos,
+        &config_and_tools,
+        &variant_config,
+        &gepa_config,
+    )
+    .await;
+
+    assert!(
+        analyses_result.is_ok(),
+        "analyze_inferences should succeed with include_inference_input_for_mutation = true"
+    );
+    let analyses = analyses_result.unwrap();
+    assert_eq!(analyses.len(), 2, "Should return 2 analyses");
+
+    // Verify inference_input is populated
+    assert!(
+        analyses[0].inference_input.is_some(),
+        "inference_input should be Some when include_inference_input_for_mutation is true"
+    );
+    assert!(
+        analyses[1].inference_input.is_some(),
+        "All analyses should have inference_input when flag is true"
+    );
+
+    // Verify that serialization includes inference_input field
+    let serialized =
+        serde_json::to_string(&analyses[0]).expect("Should serialize InferenceWithAnalysis");
+    assert!(
+        serialized.contains("inference_input"),
+        "Serialized JSON should contain inference_input field when it's Some"
+    );
+
+    // Step 2: Call mutate_templates with analyses containing inference_input
+    let template_map = create_simple_template_map();
+    let variant_config_mutate = create_test_variant_config_with_templates_inner(template_map);
+
+    let result = mutate_templates(
+        &client,
+        &analyses,
+        &config_and_tools,
+        &variant_config_mutate,
+        &gepa_config,
+    )
+    .await;
+
+    // Assert: Should succeed with inference_input
+    let mutate_output = result.unwrap_or_else(|e| {
+        panic!("mutate_templates should succeed with inference_input but got error: {e}");
+    });
+
+    // Verify templates are generated
+    assert!(
+        mutate_output.templates.contains_key("system"),
+        "Should preserve 'system' template name"
+    );
+    assert!(
+        mutate_output.templates.contains_key("user"),
+        "Should preserve 'user' template name"
+    );
+
+    // Verify templates have non-empty content
+    assert!(
+        !mutate_output.templates["system"].is_empty(),
+        "System template should have content"
+    );
+    assert!(
+        !mutate_output.templates["user"].is_empty(),
+        "User template should have content"
+    );
+}

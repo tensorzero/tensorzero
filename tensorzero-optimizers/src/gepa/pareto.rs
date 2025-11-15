@@ -616,7 +616,7 @@ mod tests {
             mutation_model: "openai::gpt-5".to_string(),
             seed: Some(42),
             timeout: 300,
-            include_datapoint_input_for_mutation: false,
+            include_inference_input_for_mutation: false,
             retries: RetryConfig::default(),
             max_tokens: 16_384,
         }

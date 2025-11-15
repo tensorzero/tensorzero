@@ -299,7 +299,7 @@ pub fn create_test_gepa_config() -> GEPAConfig {
         mutation_model: "openai::gpt-4.1-nano".to_string(),
         seed: Some(42),
         timeout: 300,
-        include_datapoint_input_for_mutation: false,
+        include_inference_input_for_mutation: false,
         retries: tensorzero_core::utils::retries::RetryConfig::default(),
         max_tokens: 16_384,
     }
@@ -319,7 +319,7 @@ pub fn create_test_gepa_config_echo() -> GEPAConfig {
         mutation_model: "dummy::echo_request_messages".to_string(),
         seed: Some(42),
         timeout: 300,
-        include_datapoint_input_for_mutation: false,
+        include_inference_input_for_mutation: false,
         retries: tensorzero_core::utils::retries::RetryConfig::default(),
         max_tokens: 16_384,
     }
@@ -407,6 +407,6 @@ pub fn create_test_inference_with_analysis(
         analysis: vec![ContentBlockChatOutput::Text(Text {
             text: analysis_text.to_string(),
         })],
-        datapoint_input: None,
+        inference_input: None,
     }
 }
