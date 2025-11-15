@@ -258,14 +258,23 @@ pub async fn run_gepa_optimization(
             uuid::Uuid::now_v7()
         );
 
-        create_evaluation_dataset(
+        if let Err(e) = create_evaluation_dataset(
             &tensorzero_config,
             client,
             clickhouse_connection_info,
             &batch_examples,
             &batch_dataset_name,
         )
-        .await?;
+        .await
+        {
+            tracing::warn!(
+                "Failed to create batch dataset for iteration {}/{}: {}. Skipping iteration.",
+                iteration + 1,
+                config.max_iterations,
+                e
+            );
+            continue;
+        }
 
         tracing::debug!(
             "Created batch dataset '{}' with {} examples",
@@ -293,7 +302,7 @@ pub async fn run_gepa_optimization(
         );
 
         // Steps 3-6: Process iteration (evaluate, analyze, mutate, check improvement)
-        let mutation_result = gepa_step(GEPAStepParams {
+        let mutation_result = match gepa_step(GEPAStepParams {
             gateway_client: gateway_client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
             tensorzero_config: Arc::clone(&tensorzero_config),
@@ -305,7 +314,19 @@ pub async fn run_gepa_optimization(
             batch_dataset_name: &batch_dataset_name,
             iteration,
         })
-        .await?;
+        .await
+        {
+            Ok(result) => result,
+            Err(e) => {
+                tracing::warn!(
+                    "GEPA step failed for iteration {}/{}: {}. Skipping iteration.",
+                    iteration + 1,
+                    config.max_iterations,
+                    e
+                );
+                continue;
+            }
+        };
 
         // If mutation improved over parent, evaluate on validation and update Pareto frontier
         if let Some((child_variant_name, child_variant_config)) = mutation_result {
@@ -315,7 +336,7 @@ pub async fn run_gepa_optimization(
             );
 
             // Step 7a: Evaluate child on validation set
-            let child_val_results = evaluate_variant(EvaluateVariantParams {
+            let child_val_results = match evaluate_variant(EvaluateVariantParams {
                 gateway_client: gateway_client.clone(),
                 clickhouse_connection_info: clickhouse_connection_info.clone(),
                 tensorzero_config: Arc::clone(&tensorzero_config),
@@ -326,7 +347,20 @@ pub async fn run_gepa_optimization(
                 dataset_name: val_dataset_name.clone(),
                 concurrency: config.max_concurrency as usize,
             })
-            .await?;
+            .await
+            {
+                Ok(result) => result,
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to evaluate child variant '{}' on validation set for iteration {}/{}: {}. Skipping iteration.",
+                        child_variant_name,
+                        iteration + 1,
+                        config.max_iterations,
+                        e
+                    );
+                    continue;
+                }
+            };
 
             tracing::info!(
                 "Child validation evaluation complete: {} datapoints",
@@ -344,6 +378,9 @@ pub async fn run_gepa_optimization(
                 .insert(child_variant_name.clone(), child_variant_config);
 
             // Re-filter Pareto frontier with updated val_scores_map
+            // Note: We use `?` here instead of continue because we've already mutated state
+            // (added child to val_scores_map and frontier.variants). If Pareto update fails,
+            // we're in an inconsistent state and should fail rather than continue.
             frontier = update_pareto_frontier(
                 frontier.variants,
                 &val_scores_map,
