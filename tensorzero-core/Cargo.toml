@@ -52,13 +52,7 @@ jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
 metrics = "0.24.2"
 metrics-exporter-prometheus = { workspace = true }
-minijinja = { version = "2.12.0", features = [
-    "loader",
-    "debug",
-    "json",
-    "loop_controls",
-    "builtins",
-] }
+minijinja = { workspace = true }
 object_store = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
