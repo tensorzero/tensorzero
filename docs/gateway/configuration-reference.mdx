@@ -153,7 +153,7 @@ If set to `"openinference"`, TensorZero will set attributes based on the [OpenIn
 
 Controls how the gateway handles remote input files (e.g., images, PDFs) during multimodal inference.
 
-If set to `true` (default), the gateway will fetch remote input files and send them as a base64-encoded payload in the prompt.
+If set to `true`, the gateway will fetch remote input files and send them as a base64-encoded payload in the prompt.
 This is recommended to ensure that TensorZero and the model providers see identical inputs, which is important for observability and reproducibility.
 
 If set to `false`, TensorZero will forward the input file URLs directly to the model provider (when supported) and fetch them for observability in parallel with inference.

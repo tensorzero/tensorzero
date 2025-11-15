@@ -96,6 +96,33 @@ pub fn warn_cannot_forward_url_if_missing_mime_type(
     }
 }
 
+/// Helper function to check if a file can be forwarded as a URL.
+/// Returns Some(url) if the file should be forwarded, None if it should be resolved and encoded.
+pub fn should_forward_file_url(
+    file: &LazyFile,
+    fetch_and_encode_input_files_before_inference: bool,
+) -> Option<&str> {
+    match file {
+        LazyFile::Url {
+            file_url:
+                FileUrl {
+                    mime_type,
+                    url,
+                    detail: _,
+                },
+            future: _,
+        } if !fetch_and_encode_input_files_before_inference
+            && matches!(
+                mime_type.as_ref().map(mime::MediaType::type_),
+                Some(mime::IMAGE) | None
+            ) =>
+        {
+            Some(url.as_str())
+        }
+        _ => None,
+    }
+}
+
 /// A helper function to parse lines from a JSONL file into a batch response.
 /// The provided type `T` is used to parse each line.
 pub async fn parse_jsonl_batch_file<T: DeserializeOwned, E: std::error::Error>(
