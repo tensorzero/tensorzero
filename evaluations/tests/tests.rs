@@ -2209,6 +2209,8 @@ async fn test_query_skips_staled_datapoints() {
         &dataset_name,
         "extract_entities",
         &FunctionConfig::Json(FunctionConfigJson::default()),
+        None,
+        None,
     )
     .await
     .unwrap();
@@ -2294,6 +2296,8 @@ async fn test_evaluation_with_dynamic_variant() {
         evaluation_run_id,
         inference_cache: CacheEnabledMode::Off,
         concurrency: 2,
+        limit: None,
+        offset: None,
     };
 
     let result = run_evaluation_core_streaming(core_args).await;
