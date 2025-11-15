@@ -1404,7 +1404,7 @@ impl std::fmt::Display for ErrorDetails {
 
                         write!(
                             f,
-                            "`{}` resource\n  ├ Scope: {}\n  ├ Requested: {}\n  └ Available: {}",
+                            "- Resource: `{}`\n    ├ Scope: {}\n    ├ Requested: {}\n    └ Available: {}",
                             resource, scope, limit.requested, limit.available
                         )?;
                     }
