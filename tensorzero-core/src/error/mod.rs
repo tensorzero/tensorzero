@@ -1381,7 +1381,7 @@ impl std::fmt::Display for ErrorDetails {
 
                     write!(
                         f,
-                        "TensorZero rate limit exceeded for {} resource.\nScope: {}\nRequested: {} units\nAvailable: {} units",
+                        "TensorZero rate limit exceeded for `{}` resource.\nScope: {}\nRequested: {}\nAvailable: {}",
                         resource, scope, limit.requested, limit.available
                     )
                 } else {
@@ -1404,7 +1404,7 @@ impl std::fmt::Display for ErrorDetails {
 
                         write!(
                             f,
-                            "  - {} resource (scope: {}, requested: {}, available: {})",
+                            "`{}` resource\n  ├ Scope: {}\n  ├ Requested: {}\n  └ Available: {}",
                             resource, scope, limit.requested, limit.available
                         )?;
                     }
