@@ -44,8 +44,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
-    inject_extra_request_data_and_send_eventsource, should_forward_file_url,
-    warn_cannot_forward_url_if_missing_mime_type,
+    inject_extra_request_data_and_send_eventsource, warn_cannot_forward_url_if_missing_mime_type,
 };
 
 use crate::inference::TensorZeroEventError;
@@ -741,73 +740,80 @@ async fn prepare_openrouter_file_content_block(
     file: &LazyFile,
     fetch_and_encode_input_files_before_inference: bool,
 ) -> Result<OpenRouterContentBlock<'static>, Error> {
-    // Check if we can forward the URL directly
-    if let Some(url) = should_forward_file_url(file, fetch_and_encode_input_files_before_inference)
-    {
-        if let LazyFile::Url {
-            file_url: FileUrl {
-                detail: Some(_), ..
-            },
-            ..
-        } = file
+    match file {
+        LazyFile::Url {
+            file_url:
+                FileUrl {
+                    mime_type,
+                    url,
+                    detail,
+                },
+            future: _,
+        } if !fetch_and_encode_input_files_before_inference
+            && matches!(
+                mime_type.as_ref().map(mime::MediaType::type_),
+                Some(mime::IMAGE) | None
+            ) =>
         {
-            tracing::warn!(
-                "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
+            if detail.is_some() {
+                tracing::warn!(
+                    "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
+                );
+            }
+            warn_cannot_forward_url_if_missing_mime_type(
+                file,
+                fetch_and_encode_input_files_before_inference,
+                PROVIDER_TYPE,
             );
+            Ok(OpenRouterContentBlock::ImageUrl {
+                image_url: OpenRouterImageUrl {
+                    url: url.to_string(),
+                },
+            })
         }
-        warn_cannot_forward_url_if_missing_mime_type(
-            file,
-            fetch_and_encode_input_files_before_inference,
-            PROVIDER_TYPE,
-        );
-        return Ok(OpenRouterContentBlock::ImageUrl {
-            image_url: OpenRouterImageUrl {
-                url: url.to_string(),
-            },
-        });
-    }
+        _ => {
+            let resolved_file = file.resolve().await?;
+            let ObjectStorageFile { file, data } = &*resolved_file;
+            let base64_url = format!("data:{};base64,{}", file.mime_type, data);
 
-    // Otherwise, resolve and encode the file
-    let resolved_file = file.resolve().await?;
-    let ObjectStorageFile { file, data } = &*resolved_file;
-    let base64_url = format!("data:{};base64,{}", file.mime_type, data);
-
-    if file.mime_type.type_() == mime::IMAGE {
-        if file.detail.is_some() {
-            tracing::warn!(
-                "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
-            );
-        }
-        Ok(OpenRouterContentBlock::ImageUrl {
-            image_url: OpenRouterImageUrl { url: base64_url },
-        })
-    } else if file.mime_type.type_() == mime::AUDIO {
-        let format = mime_type_to_audio_format(&file.mime_type)?;
-        Ok(OpenRouterContentBlock::InputAudio {
-            input_audio: OpenRouterInputAudio {
-                data: Cow::Owned(data.clone()),
-                format: Cow::Owned(format.to_string()),
-            },
-        })
-    } else {
-        let filename = if let Some(ref user_filename) = file.filename {
-            // Use the user-provided filename if available
-            Cow::Owned(user_filename.clone())
-        } else {
-            // Otherwise, generate a filename with the appropriate extension
-            let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidMessage {
-                    message: format!("Mime type {} has no filetype suffix", file.mime_type),
+            if file.mime_type.type_() == mime::IMAGE {
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
+                    );
+                }
+                Ok(OpenRouterContentBlock::ImageUrl {
+                    image_url: OpenRouterImageUrl { url: base64_url },
                 })
-            })?;
-            Cow::Owned(format!("input.{suffix}"))
-        };
-        Ok(OpenRouterContentBlock::File {
-            file: OpenRouterFile {
-                file_data: Some(Cow::Owned(base64_url)),
-                filename: Some(filename),
-            },
-        })
+            } else if file.mime_type.type_() == mime::AUDIO {
+                let format = mime_type_to_audio_format(&file.mime_type)?;
+                Ok(OpenRouterContentBlock::InputAudio {
+                    input_audio: OpenRouterInputAudio {
+                        data: Cow::Owned(data.clone()),
+                        format: Cow::Owned(format.to_string()),
+                    },
+                })
+            } else {
+                let filename = if let Some(ref user_filename) = file.filename {
+                    // Use the user-provided filename if available
+                    Cow::Owned(user_filename.clone())
+                } else {
+                    // Otherwise, generate a filename with the appropriate extension
+                    let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidMessage {
+                            message: format!("Mime type {} has no filetype suffix", file.mime_type),
+                        })
+                    })?;
+                    Cow::Owned(format!("input.{suffix}"))
+                };
+                Ok(OpenRouterContentBlock::File {
+                    file: OpenRouterFile {
+                        file_data: Some(Cow::Owned(base64_url)),
+                        filename: Some(filename),
+                    },
+                })
+            }
+        }
     }
 }
 

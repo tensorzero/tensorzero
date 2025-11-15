@@ -37,8 +37,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
-    inject_extra_request_data_and_send_eventsource, should_forward_file_url,
-    warn_cannot_forward_url_if_missing_mime_type,
+    inject_extra_request_data_and_send_eventsource, warn_cannot_forward_url_if_missing_mime_type,
 };
 
 const PROVIDER_NAME: &str = "Groq";
@@ -677,22 +676,25 @@ async fn tensorzero_to_groq_user_messages(
                     tool_call_id: &tool_result.id,
                 }));
             }
-            ContentBlock::File(file) => {
-                if let Some(url) =
-                    should_forward_file_url(file, fetch_and_encode_input_files_before_inference)
+            ContentBlock::File(file) => match file.as_ref() {
+                LazyFile::Url {
+                    file_url:
+                        FileUrl {
+                            mime_type,
+                            url,
+                            detail,
+                        },
+                    future: _,
+                } if !fetch_and_encode_input_files_before_inference
+                    && matches!(
+                        mime_type.as_ref().map(mime::MediaType::type_),
+                        Some(mime::IMAGE) | None
+                    ) =>
                 {
-                    // Forward the URL directly
-                    if let LazyFile::Url {
-                        file_url:
-                            FileUrl {
-                                detail: Some(_), ..
-                            },
-                        ..
-                    } = file.as_ref()
-                    {
+                    if detail.is_some() {
                         tracing::warn!(
-                            "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
-                        );
+                                "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                            );
                     }
                     warn_cannot_forward_url_if_missing_mime_type(
                         file,
@@ -704,14 +706,14 @@ async fn tensorzero_to_groq_user_messages(
                             url: url.to_string(),
                         },
                     });
-                } else {
-                    // Resolve and encode the file
+                }
+                _ => {
                     let resolved_file = file.resolve().await?;
                     let ObjectStorageFile { file, data } = &*resolved_file;
                     if file.detail.is_some() {
                         tracing::warn!(
-                            "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
-                        );
+                                "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                            );
                     }
                     user_content_blocks.push(GroqContentBlock::ImageUrl {
                         image_url: GroqImageUrl {
@@ -719,7 +721,7 @@ async fn tensorzero_to_groq_user_messages(
                         },
                     });
                 }
-            }
+            },
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);
             }
@@ -776,22 +778,25 @@ async fn tensorzero_to_groq_assistant_messages(
                     message: "Tool results are not supported in assistant messages".to_string(),
                 }));
             }
-            ContentBlock::File(file) => {
-                if let Some(url) =
-                    should_forward_file_url(file, fetch_and_encode_input_files_before_inference)
+            ContentBlock::File(file) => match file.as_ref() {
+                LazyFile::Url {
+                    file_url:
+                        FileUrl {
+                            mime_type,
+                            url,
+                            detail,
+                        },
+                    future: _,
+                } if !fetch_and_encode_input_files_before_inference
+                    && matches!(
+                        mime_type.as_ref().map(mime::MediaType::type_),
+                        Some(mime::IMAGE) | None
+                    ) =>
                 {
-                    // Forward the URL directly
-                    if let LazyFile::Url {
-                        file_url:
-                            FileUrl {
-                                detail: Some(_), ..
-                            },
-                        ..
-                    } = file.as_ref()
-                    {
+                    if detail.is_some() {
                         tracing::warn!(
-                            "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
-                        );
+                                "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                            );
                     }
                     warn_cannot_forward_url_if_missing_mime_type(
                         file,
@@ -803,14 +808,14 @@ async fn tensorzero_to_groq_assistant_messages(
                             url: url.to_string(),
                         },
                     });
-                } else {
-                    // Resolve and encode the file
+                }
+                _ => {
                     let resolved_file = file.resolve().await?;
                     let ObjectStorageFile { file, data } = &*resolved_file;
                     if file.detail.is_some() {
                         tracing::warn!(
-                            "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
-                        );
+                                "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                            );
                     }
                     assistant_content_blocks.push(GroqContentBlock::ImageUrl {
                         image_url: GroqImageUrl {
@@ -818,7 +823,7 @@ async fn tensorzero_to_groq_assistant_messages(
                         },
                     });
                 }
-            }
+            },
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);
             }
