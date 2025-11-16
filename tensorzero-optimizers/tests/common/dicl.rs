@@ -1113,7 +1113,7 @@ pub async fn run_dicl_workflow_with_client(client: &tensorzero::Client) {
 
 /// Get Pinocchio-style examples that demonstrate the lying pattern with nose growth
 #[allow(clippy::allow_attributes, dead_code)] // False positive
-fn get_pinocchio_examples(is_json_function: bool) -> Vec<RenderedSample> {
+pub fn get_pinocchio_examples(is_json_function: bool) -> Vec<RenderedSample> {
     let mut examples = Vec::new();
 
     // Example 1: Factual answer from Dr. Mehta

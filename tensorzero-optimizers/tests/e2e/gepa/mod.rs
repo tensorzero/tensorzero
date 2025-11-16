@@ -301,6 +301,7 @@ pub fn create_test_gepa_config() -> GEPAConfig {
         timeout: 300,
         include_datapoint_input_for_mutation: false,
         retries: tensorzero_core::utils::retries::RetryConfig::default(),
+        max_tokens: 16_384,
     }
 }
 
@@ -320,6 +321,7 @@ pub fn create_test_gepa_config_echo() -> GEPAConfig {
         timeout: 300,
         include_datapoint_input_for_mutation: false,
         retries: tensorzero_core::utils::retries::RetryConfig::default(),
+        max_tokens: 16_384,
     }
 }
 

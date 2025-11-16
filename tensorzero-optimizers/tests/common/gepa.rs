@@ -6,6 +6,8 @@ use serde_json::json;
 use tensorzero::{
     ClientExt, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
 };
+
+use super::dicl::get_pinocchio_examples;
 use tensorzero_core::{
     config::{Config, ConfigFileGlob, UninitializedVariantConfig},
     db::clickhouse::test_helpers::get_clickhouse,
@@ -26,7 +28,10 @@ use tensorzero_core::{
 use tensorzero_optimizers::{JobHandle, Optimizer};
 use uuid::Uuid;
 
-/// Core test for GEPA optimization using basic_test function
+/// Core test for GEPA optimization using Pinocchio pattern
+///
+/// This test validates that GEPA can evolve system templates to teach the model
+/// to produce the Pinocchio pattern (lies with nose growth).
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_gepa_optimization_chat() {
     // Initialize tracing subscriber to capture progress logs
@@ -34,9 +39,9 @@ pub async fn test_gepa_optimization_chat() {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init();
 
-    let variant_prefix = format!("gepa_test_{}", Uuid::now_v7());
+    let variant_prefix = format!("gepa_pinocchio_test_{}", Uuid::now_v7());
     let function_name = "basic_test".to_string();
-    let evaluation_name = "test_evaluation".to_string();
+    let evaluation_name = "test_gepa_pinocchio".to_string();
 
     let uninitialized_optimizer_info = UninitializedOptimizerInfo {
         inner: UninitializedOptimizerConfig::Gepa(UninitializedGEPAConfig {
@@ -44,15 +49,16 @@ pub async fn test_gepa_optimization_chat() {
             evaluation_name: evaluation_name.clone(),
             initial_variants: Some(vec!["openai".to_string(), "openai-extra-body".to_string()]),
             variant_prefix: Some(variant_prefix.clone()),
-            batch_size: 3,
+            batch_size: 5,
             max_iterations: 2,
-            max_concurrency: 2,
-            analysis_model: "openai::gpt-4o-mini-2024-07-18".to_string(),
-            mutation_model: "openai::gpt-4o-mini-2024-07-18".to_string(),
+            max_concurrency: 10,
+            analysis_model: "openai::gpt-5-mini".to_string(),
+            mutation_model: "openai::gpt-5-mini".to_string(),
             seed: Some(42),
             timeout: 300,
             include_datapoint_input_for_mutation: false,
             retries: tensorzero_core::utils::retries::RetryConfig::default(),
+            max_tokens: 16_384,
         }),
     };
 
@@ -62,8 +68,16 @@ pub async fn test_gepa_optimization_chat() {
         .unwrap();
 
     let client = TensorzeroHttpClient::new_testing().unwrap();
-    let test_examples = get_gepa_basic_examples(20);
-    let val_examples = Some(get_gepa_basic_examples(10));
+
+    // Use Pinocchio examples for training and validation
+    // Cycle through the 4 Pinocchio examples to create 15 training examples
+    let test_examples = get_pinocchio_examples(false)
+        .into_iter()
+        .cycle()
+        .take(15)
+        .collect::<Vec<_>>();
+    let val_examples = Some(get_gepa_pinocchio_validation_examples(10));
+
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
     let clickhouse = get_clickhouse().await;
 
@@ -133,10 +147,15 @@ pub async fn test_gepa_optimization_chat() {
                     !chat_config.templates.inner.is_empty(),
                     "Variant should have at least one template"
                 );
+
+                // Log template names that were evolved
+                for template_name in chat_config.templates.inner.keys() {
+                    println!("Evolved template variant includes template: '{template_name}'");
+                }
             }
 
             println!(
-                "✅ GEPA optimization test passed with {} variants",
+                "GEPA Pinocchio optimization test passed with {} evolved variants",
                 variants.len()
             );
         }
@@ -153,6 +172,7 @@ pub async fn test_gepa_optimization_chat() {
 }
 
 /// Generate simple test examples for basic_test function
+#[expect(dead_code)]
 fn get_gepa_basic_examples(count: usize) -> Vec<RenderedSample> {
     let examples = vec![
         ("What is 2+2?", "4"),
@@ -219,6 +239,14 @@ fn create_basic_test_sample(question: &str, answer: &str) -> RenderedSample {
     }
 }
 
+/// Generate validation examples for Pinocchio pattern testing (different questions than training)
+fn get_gepa_pinocchio_validation_examples(count: usize) -> Vec<RenderedSample> {
+    let examples = get_pinocchio_examples(false);
+
+    // Take the requested count, cycling if needed
+    examples.into_iter().cycle().take(count).collect()
+}
+
 /// Workflow test with embedded client
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 pub async fn test_gepa_workflow_with_embedded_client() {
@@ -263,6 +291,7 @@ async fn run_gepa_workflow_with_client(client: &tensorzero::Client) {
                 timeout: 300,
                 include_datapoint_input_for_mutation: false,
                 retries: tensorzero_core::utils::retries::RetryConfig::default(),
+                max_tokens: 16_384,
             }),
         },
     };

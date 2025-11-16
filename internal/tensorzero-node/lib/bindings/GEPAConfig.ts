@@ -64,4 +64,9 @@ export type GEPAConfig = {
    * Applies to analyze function calls, mutate function calls, and all mutated variants
    */
   retries: RetryConfig;
+  /**
+   * Maximum number of tokens to generate for analysis and mutation model calls
+   * Default: 16_384
+   */
+  max_tokens: number;
 };

@@ -208,6 +208,7 @@ pub async fn mutate_templates(
     let mut mutate_config = UninitializedChatCompletionConfig {
         model: mutation_model.clone().into(),
         weight: None,
+        max_tokens: Some(gepa_config.max_tokens),
         retries: gepa_config.retries,
         ..Default::default()
     };

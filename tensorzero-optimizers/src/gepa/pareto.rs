@@ -618,6 +618,7 @@ mod tests {
             timeout: 300,
             include_datapoint_input_for_mutation: false,
             retries: RetryConfig::default(),
+            max_tokens: 16_384,
         }
     }
 

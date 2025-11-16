@@ -29,3 +29,8 @@ async fn test_slow_optimization_dicl_json() {
 async fn test_slow_optimization_gepa() {
     test_gepa_optimization_chat().await;
 }
+
+// #[tokio::test(flavor = "multi_thread")]
+// async fn test_slow_optimization_gepa_json() {
+//     test_gepa_optimization_json().await;
+// }

@@ -177,6 +177,7 @@ pub async fn analyze_inferences(
         model: analysis_model.clone().into(),
         weight: None,
         retries: gepa_config.retries,
+        max_tokens: Some(gepa_config.max_tokens),
         ..Default::default()
     };
 

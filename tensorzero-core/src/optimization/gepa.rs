@@ -38,6 +38,10 @@ fn default_include_datapoint_input_for_mutation() -> bool {
     false
 }
 
+fn default_max_tokens() -> u32 {
+    16_384
+}
+
 /// GEPA (Genetic Evolution with Pareto Analysis) optimization configuration
 ///
 /// GEPA is a multi-objective optimization algorithm that maintains a Pareto frontier
@@ -87,6 +91,10 @@ pub struct GEPAConfig {
     /// Retry configuration for inference calls during GEPA optimization
     /// Applies to analyze function calls, mutate function calls, and all mutated variants
     pub retries: RetryConfig,
+
+    /// Maximum number of tokens to generate for analysis and mutation model calls
+    /// Default: 16_384
+    pub max_tokens: u32,
 }
 
 /// Uninitialized GEPA configuration (deserializable from TOML)
@@ -124,6 +132,9 @@ pub struct UninitializedGEPAConfig {
 
     #[serde(default)]
     pub retries: RetryConfig,
+
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: u32,
 }
 
 impl Default for UninitializedGEPAConfig {
@@ -142,6 +153,7 @@ impl Default for UninitializedGEPAConfig {
             timeout: default_timeout(),
             include_datapoint_input_for_mutation: default_include_datapoint_input_for_mutation(),
             retries: RetryConfig::default(),
+            max_tokens: default_max_tokens(),
         }
     }
 }
@@ -171,6 +183,7 @@ impl UninitializedGEPAConfig {
         timeout=None,
         include_datapoint_input_for_mutation=None,
         retries=None,
+        max_tokens=None,
     ))]
     #[expect(clippy::too_many_arguments)]
     fn py_new(
@@ -187,6 +200,7 @@ impl UninitializedGEPAConfig {
         timeout: Option<u64>,
         include_datapoint_input_for_mutation: Option<bool>,
         retries: Option<RetryConfig>,
+        max_tokens: Option<u32>,
     ) -> Self {
         Self {
             function_name,
@@ -203,6 +217,7 @@ impl UninitializedGEPAConfig {
             include_datapoint_input_for_mutation: include_datapoint_input_for_mutation
                 .unwrap_or_else(default_include_datapoint_input_for_mutation),
             retries: retries.unwrap_or_default(),
+            max_tokens: max_tokens.unwrap_or_else(default_max_tokens),
         }
     }
 
@@ -231,6 +246,7 @@ impl UninitializedGEPAConfig {
             timeout: self.timeout,
             include_datapoint_input_for_mutation: self.include_datapoint_input_for_mutation,
             retries: self.retries,
+            max_tokens: self.max_tokens,
         })
     }
 }
