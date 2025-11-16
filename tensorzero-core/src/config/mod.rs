@@ -1272,8 +1272,8 @@ impl UninitializedConfig {
         glob: &ConfigFileGlob,
         allow_empty_glob: bool,
     ) -> Result<UninitializedGlobbedConfig, Error> {
-        let (span_map, table) = SpanMap::from_glob(glob, allow_empty_glob)?;
-        Ok(UninitializedGlobbedConfig { table, span_map })
+        let table = SpanMap::from_glob(glob, allow_empty_glob)?;
+        Ok(UninitializedGlobbedConfig { table })
     }
 }
 
