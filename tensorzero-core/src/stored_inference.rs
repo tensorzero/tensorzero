@@ -26,6 +26,7 @@ use chrono::{DateTime, Utc};
 use pyo3::types::PyList;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -60,12 +61,14 @@ pub struct SimpleStoredSampleInfo {
 
 /// Wire variant of StoredInference for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "StoredInference"))]
 #[ts(export)]
 pub enum StoredInference {
+    #[schemars(title = "StoredInferenceChat")]
     Chat(StoredChatInference),
+    #[schemars(title = "StoredInferenceJson")]
     Json(StoredJsonInference),
 }
 
@@ -510,7 +513,7 @@ impl StoredInferenceDatabase {
 }
 
 /// Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[ts(export)]
 pub struct StoredChatInference {
@@ -520,6 +523,7 @@ pub struct StoredChatInference {
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
+    #[schemars(with = "String")]
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
@@ -588,7 +592,7 @@ impl std::fmt::Display for StoredChatInferenceDatabase {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[ts(export)]
 pub struct StoredJsonInference {
@@ -598,6 +602,7 @@ pub struct StoredJsonInference {
     pub output: JsonInferenceOutput,
     #[serde(default)]
     pub dispreferred_outputs: Vec<JsonInferenceOutput>,
+    #[schemars(with = "String")]
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
