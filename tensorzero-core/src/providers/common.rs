@@ -41,37 +41,37 @@ pub enum ChatCompletionToolChoiceString {
     Required,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct ChatCompletionSpecificToolChoice<'a> {
     pub r#type: ChatCompletionToolType,
     pub function: ChatCompletionSpecificToolFunction<'a>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct ChatCompletionSpecificToolFunction<'a> {
     pub name: &'a str,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct ChatCompletionAllowedToolsChoice<'a> {
     pub r#type: &'static str, // Always "allowed_tools"
     pub allowed_tools: ChatCompletionAllowedToolsConstraint<'a>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct ChatCompletionAllowedToolsConstraint<'a> {
     pub mode: ChatCompletionAllowedToolsMode,
     pub tools: Vec<ChatCompletionToolReference<'a>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ChatCompletionAllowedToolsMode {
     Auto,
     Required,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct ChatCompletionToolReference<'a> {
     pub r#type: ChatCompletionToolType,
     pub function: ChatCompletionSpecificToolFunction<'a>,

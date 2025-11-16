@@ -114,13 +114,12 @@ mod tests {
             })],
             vec![],
             AllowedTools {
-                tools: Vec::new(),
+                tools: vec![], // Explicitly empty (no static tools)
                 choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Specific("tool_1".to_string()),
             None,
         );
-
         let tool_params_args: DynamicToolParams = tool_database_insert.into();
         assert_eq!(
             tool_params_args,
@@ -146,13 +145,12 @@ mod tests {
             vec![], // Empty - tool_1 is static
             vec![],
             AllowedTools {
-                tools: ["tool_1".to_string()].into_iter().collect(),
+                tools: vec!["tool_1".to_string()],
                 choice: AllowedToolsChoice::Explicit, // Explicit list
             },
             ToolChoice::Required,
             None,
         );
-
         let tool_params_args: DynamicToolParams = tool_database_insert.into();
         assert_eq!(
             tool_params_args,
