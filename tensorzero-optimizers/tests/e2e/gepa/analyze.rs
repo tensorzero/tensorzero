@@ -831,7 +831,7 @@ async fn test_analyze_input_with_datapoint_tool_params() {
         vec![], // dynamic_provider_tools
         AllowedTools {
             tools: vec!["calculator".to_string()],
-            choice: AllowedToolsChoice::DynamicAllowedTools,
+            choice: AllowedToolsChoice::Explicit,
         },
         ToolChoice::Required,
         Some(false), // parallel_tool_calls
