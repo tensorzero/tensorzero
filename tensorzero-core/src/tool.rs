@@ -84,29 +84,6 @@ impl Tool {
         }
     }
 
-    fn into_dynamic_tool_config(self) -> DynamicToolConfig {
-        match self {
-            Tool::ClientSideFunction(tool) => DynamicToolConfig {
-                description: tool.description,
-                parameters: DynamicJSONSchema::new(tool.parameters),
-                name: tool.name,
-                strict: tool.strict,
-            },
-            Tool::OpenAICustom(_) => {
-                // This should never be called with Custom tools; the caller should
-                // handle them separately. We return a dummy config to satisfy the type system.
-                DynamicToolConfig {
-                    description: String::new(),
-                    parameters: DynamicJSONSchema::new(
-                        serde_json::json!({"type": "object", "properties": {}}),
-                    ),
-                    name: String::new(),
-                    strict: false,
-                }
-            }
-        }
-    }
-
     /// Returns true if this is a custom tool (not a function tool)
     pub fn is_custom(&self) -> bool {
         matches!(self, Tool::OpenAICustom(_))
@@ -245,6 +222,17 @@ impl ClientSideFunctionTool {
 
     pub fn __repr__(&self) -> String {
         self.to_string()
+    }
+}
+
+impl ClientSideFunctionTool {
+    pub(crate) fn into_dynamic_tool_config(self) -> DynamicToolConfig {
+        DynamicToolConfig {
+            description: self.description,
+            parameters: DynamicJSONSchema::new(self.parameters),
+            name: self.name,
+            strict: self.strict,
+        }
     }
 }
 
@@ -497,7 +485,7 @@ pub struct DynamicImplicitToolConfig {
 #[serde(deny_unknown_fields)]
 #[ts(export)]
 pub struct AllowedTools {
-    pub tools: HashSet<String>,
+    pub tools: Vec<String>,
     pub choice: AllowedToolsChoice,
 }
 
@@ -527,16 +515,16 @@ impl AllowedTools {
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum AllowedToolsChoice {
-    // If `allowed_tools` is not explicitly passed, we set the function tools
-    // by default and add any dynamic tools
+    /// If `allowed_tools` is not explicitly passed, we set the function tools
+    /// by default and add any dynamic tools
     #[default]
     FunctionDefault,
-    // If `allowed_tools` was explicitly passed we use that list only and then automatically add dynamically set tools
-    // This is deprecated but we keep it around as it may still be in the database.
-    // We have never allowed users to specify AllowedToolsChoice so this is more about the semantics of the data than anything else.
+    /// If `allowed_tools` was explicitly passed we use that list only and then automatically add dynamically set tools
+    /// This is deprecated but we keep it around as it may still be in the database.
+    /// We have never allowed users to specify AllowedToolsChoice so this is more about the semantics of the data than anything else.
     #[deprecated]
     DynamicAllowedTools,
-    // Currently, we match OpenAI in that if allowed tools is set we only allow the tools that are in it.
+    /// Currently, we match OpenAI in that if allowed tools is set we only allow the tools that are in it.
     Explicit,
 }
 
@@ -637,20 +625,20 @@ impl ToolCallConfig {
             dynamic_parallel_tool_calls,
             dynamic_provider_tools,
         } = args;
-        // If `allowed_tools` is not provided, use the function's configured tools plus any dynamic tools.
-        // This means we allow all tools for the function.
         let allowed_tools = match dynamic_allowed_tools {
             Some(allowed_tools) => AllowedTools {
-                tools: allowed_tools.into_iter().collect(),
+                tools: allowed_tools,
                 choice: AllowedToolsChoice::Explicit,
             },
+            // If `allowed_tools` is not provided, use the function's configured tools plus any dynamic tools.
+            // This means we allow all tools for the function.
             None => {
                 // Collect function tools
-                let mut tools: HashSet<String> = function_tools.iter().cloned().collect();
+                let mut tools: Vec<String> = function_tools.to_vec();
 
                 // Add dynamic tool names in FunctionDefault mode
                 if let Some(additional_tools) = &dynamic_additional_tools {
-                    tools.extend(additional_tools.iter().map(|dt| dt.0.name().to_string()));
+                    tools.extend(additional_tools.iter().map(|t| t.0.name().to_string()));
                 }
 
                 AllowedTools {
@@ -711,8 +699,8 @@ impl ToolCallConfig {
         if let Some(dynamic_additional_tools) = dynamic_additional_tools {
             for tool in dynamic_additional_tools {
                 match tool.0 {
-                    Tool::ClientSideFunction(_) => dynamic_tools_available.push(
-                        ClientSideFunctionToolConfig::Dynamic(tool.0.into_dynamic_tool_config()),
+                    Tool::ClientSideFunction(func) => dynamic_tools_available.push(
+                        ClientSideFunctionToolConfig::Dynamic(func.into_dynamic_tool_config()),
                     ),
                     Tool::OpenAICustom(custom_tool) => {
                         openai_custom_tools.push(custom_tool);
@@ -823,7 +811,7 @@ impl ToolCallConfig {
                     self.static_tools_available
                         .iter()
                         .chain(self.dynamic_tools_available.iter())
-                        .filter(|tool| self.allowed_tools.tools.contains(tool.name())),
+                        .filter(|tool| self.allowed_tools.tools.iter().any(|t| t == tool.name())),
                 )
             }
         }
@@ -886,7 +874,7 @@ impl ToolCallConfig {
 ///
 /// # Conversion
 /// - **From wire type**: Use `FunctionConfig::dynamic_tool_params_to_database_insert()` to convert `DynamicToolParams` → `ToolCallConfigDatabaseInsert`
-/// - **To wire type**: Use `FunctionConfig::database_insert_to_dynamic_tool_params()` to convert `ToolCallConfigDatabaseInsert` → `DynamicToolParams`
+/// - **To wire type**: Use `From<ToolCallConfigDatabaseInsert> for DynamicToolParams` trait to convert `ToolCallConfigDatabaseInsert` → `DynamicToolParams`
 /// - **To ToolCallConfig**: Use the `into_tool_call_config()` method for a direct conversion to `ToolCallConfig`
 ///
 /// See also: [`DynamicToolParams`] for the wire/API format
@@ -1258,7 +1246,7 @@ impl ToolCallConfigDatabaseInsert {
     ///
     /// ## Conversion Back to DynamicToolParams
     ///
-    /// When `database_insert_to_dynamic_tool_params()` is called:
+    /// When using `From<ToolCallConfigDatabaseInsert> for DynamicToolParams`:
     /// - If `choice == FunctionDefault` → `allowed_tools = None` (use function defaults)
     /// - If `choice == DynamicAllowedTools` → `allowed_tools = Some(tools)` (explicit override)
     /// - `additional_tools = Some(dynamic_tools)` if dynamic_tools is non-empty, else None
@@ -1389,7 +1377,7 @@ impl ToolCallConfigDatabaseInsert {
             }
             AllowedToolsChoice::DynamicAllowedTools | AllowedToolsChoice::Explicit => {
                 // Use the dynamically specified tool names
-                self.allowed_tools.tools.iter().cloned().collect::<Vec<_>>()
+                self.allowed_tools.tools.to_vec()
             }
         };
 
@@ -1470,12 +1458,12 @@ pub struct LegacyToolCallConfigDatabaseInsert {
 /// Use `FunctionConfig::dynamic_tool_params_to_database_insert()` for this conversion.
 ///
 /// # Conversion from Storage Format
-/// Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` attempts to reconstruct the original:
-/// 1. Tools that match function config tool names → `allowed_tools`
-/// 2. Tools that don't match function config → `additional_tools`
-/// 3. `provider_tools` is set to `None` (cannot be recovered)
+/// Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` reconstructs the original:
+/// 1. `dynamic_tools` → `additional_tools`
+/// 2. `allowed_tools` → `allowed_tools` (based on choice enum)
+/// 3. Other fields copied directly
 ///
-/// Use `FunctionConfig::database_insert_to_dynamic_tool_params()` for this conversion.
+/// Use `From<ToolCallConfigDatabaseInsert> for DynamicToolParams` for this conversion.
 ///
 /// # Example
 /// ```rust,ignore
@@ -1485,10 +1473,10 @@ pub struct LegacyToolCallConfigDatabaseInsert {
 ///     additional_tools: Some(vec![Tool {  runtime tool  }]),  // Add a new tool
 ///     tool_choice: Some(ToolChoice::Required),
 ///     parallel_tool_calls: Some(true),
-///     provider_tools: None,
+///     provider_tools: vec![],
 /// };
 ///
-/// // Convert to storage format (merge tools, lose distinction)
+/// // Convert to storage format
 /// let db_insert = function_config
 ///     .dynamic_tool_params_to_database_insert(params, &static_tools)?
 ///     .unwrap_or_default();
@@ -1569,6 +1557,41 @@ impl DynamicToolParams {
 
     pub fn __repr__(&self) -> String {
         self.to_string()
+    }
+}
+
+impl From<ToolCallConfigDatabaseInsert> for DynamicToolParams {
+    fn from(db_insert: ToolCallConfigDatabaseInsert) -> Self {
+        let ToolCallConfigDatabaseInsert {
+            dynamic_tools,
+            dynamic_provider_tools,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+            .. // TODO: Ideally we can say all but private fields must be destructured here.
+        } = db_insert;
+
+        let allowed_tools = match allowed_tools.choice {
+            AllowedToolsChoice::FunctionDefault => None,
+            // We leave this in because historical data may have been written in this format
+            #[expect(deprecated)]
+            AllowedToolsChoice::DynamicAllowedTools => Some(allowed_tools.tools),
+            AllowedToolsChoice::Explicit => Some(allowed_tools.tools),
+        };
+
+        let additional_tools = if dynamic_tools.is_empty() {
+            None
+        } else {
+            Some(dynamic_tools.into_iter().map(DynamicTool::from).collect())
+        };
+
+        DynamicToolParams {
+            allowed_tools,
+            additional_tools,
+            tool_choice: Some(tool_choice),
+            parallel_tool_calls,
+            provider_tools: dynamic_provider_tools,
+        }
     }
 }
 
@@ -3052,7 +3075,7 @@ mod tests {
         assert!(tool_call_config
             .allowed_tools
             .tools
-            .contains("get_temperature"));
+            .contains(&"get_temperature".to_string()));
         assert!(matches!(
             tool_call_config.allowed_tools.choice,
             AllowedToolsChoice::Explicit
@@ -3110,10 +3133,7 @@ mod tests {
         assert_eq!(tool_info.dynamic_tools.len(), 1);
         assert_eq!(tool_info.dynamic_tools[0].name(), "ragged_tool");
         assert_eq!(tool_info.dynamic_provider_tools.len(), 0);
-        assert_eq!(
-            tool_info.allowed_tools.tools,
-            ["ragged_tool".to_string()].into_iter().collect()
-        );
+        assert_eq!(tool_info.allowed_tools.tools, vec!["ragged_tool"]);
         assert_eq!(
             tool_info.tool_choice,
             ToolChoice::Specific("ragged_tool".to_string())

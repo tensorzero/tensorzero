@@ -60,7 +60,7 @@ use crate::providers::openai::responses::{
 };
 use crate::tool::{
     ClientSideFunctionTool, ClientSideFunctionToolConfig, OpenAICustomTool, ToolCall,
-    ToolCallChunk, ToolChoice,
+    ToolCallChunk, ToolCallConfig, ToolChoice,
 };
 
 use crate::providers::helpers::{
@@ -84,14 +84,6 @@ lazy_static! {
 
 const PROVIDER_NAME: &str = "OpenAI";
 pub const PROVIDER_TYPE: &str = "openai";
-
-// OLD: returned separate allowed_tools field
-// type PreparedOpenAIToolsResult<'a> = (
-//     Option<Vec<OpenAITool<'a>>>,
-//     Option<OpenAIToolChoice<'a>>,
-//     Option<bool>,
-//     Option<Vec<&'a str>>,
-// );
 
 type PreparedOpenAIToolsResult<'a> = (
     Option<Vec<OpenAITool<'a>>>,
@@ -1516,6 +1508,38 @@ pub async fn prepare_openai_messages<'a>(
     Ok(openai_messages)
 }
 
+/// Helper function to prepare allowed_tools constraint when dynamic allowed_tools are set.
+/// This returns the AllowedToolsChoice struct with the appropriate mode and tool references.
+///
+/// This is shared logic across OpenAI-compatible providers (OpenAI, Groq, OpenRouter).
+pub(crate) fn prepare_allowed_tools_constraint<'a>(
+    tool_config: &'a ToolCallConfig,
+) -> Option<AllowedToolsChoice<'a>> {
+    let allowed_tools_list = tool_config.allowed_tools.as_dynamic_allowed_tools()?;
+
+    // Construct the OpenAI spec-compliant allowed_tools structure
+    let mode = match &tool_config.tool_choice {
+        ToolChoice::Required => AllowedToolsMode::Required,
+        _ => AllowedToolsMode::Auto,
+    };
+
+    let tool_refs: Vec<ToolReference> = allowed_tools_list
+        .iter()
+        .map(|name| ToolReference {
+            r#type: OpenAIToolType::Function,
+            function: SpecificToolFunction { name },
+        })
+        .collect();
+
+    Some(AllowedToolsChoice {
+        r#type: "allowed_tools",
+        allowed_tools: AllowedToolsConstraint {
+            mode,
+            tools: tool_refs,
+        },
+    })
+}
+
 /// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
 /// Otherwise convert the tool choice and tools to OpenAI format
 pub(super) fn prepare_openai_tools<'a>(
@@ -1539,38 +1563,15 @@ pub(super) fn prepare_openai_tools<'a>(
                     )
                     .collect(),
             );
-
             let parallel_tool_calls = tool_config.parallel_tool_calls;
 
-            // Check if we need to construct an AllowedToolsChoice variant
-            let allowed_tools_list = tool_config.allowed_tools.as_dynamic_allowed_tools();
-
-            let tool_choice = if let Some(allowed_tool_names) = allowed_tools_list {
-                // Construct the OpenAI spec-compliant allowed_tools structure
-                let mode = match &tool_config.tool_choice {
-                    ToolChoice::Required => AllowedToolsMode::Required,
-                    _ => AllowedToolsMode::Auto,
+            let tool_choice =
+                if let Some(allowed_tools_choice) = prepare_allowed_tools_constraint(tool_config) {
+                    Some(OpenAIToolChoice::AllowedTools(allowed_tools_choice))
+                } else {
+                    // No allowed_tools constraint, use regular tool_choice
+                    Some((&tool_config.tool_choice).into())
                 };
-
-                let tool_refs: Vec<ToolReference> = allowed_tool_names
-                    .iter()
-                    .map(|name| ToolReference {
-                        r#type: OpenAIToolType::Function,
-                        function: SpecificToolFunction { name },
-                    })
-                    .collect();
-
-                Some(OpenAIToolChoice::AllowedTools(AllowedToolsChoice {
-                    r#type: "allowed_tools",
-                    allowed_tools: AllowedToolsConstraint {
-                        mode,
-                        tools: tool_refs,
-                    },
-                }))
-            } else {
-                // No allowed_tools constraint, use regular tool_choice
-                Some((&tool_config.tool_choice).into())
-            };
 
             (tools, tool_choice, parallel_tool_calls)
         }
@@ -4951,6 +4952,272 @@ mod tests {
                 }
                 _ => panic!("Unexpected content block type for MIME type: {mime_type}"),
             }
+        }
+    }
+
+    #[test]
+    fn test_prepare_openai_tools_with_no_tools() {
+        // Test when no tool_config is provided
+        let request = ModelInferenceRequest {
+            tool_config: None,
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request);
+
+        assert_eq!(tools, None);
+        assert_eq!(tool_choice, None);
+        assert_eq!(parallel_tool_calls, None);
+    }
+
+    #[test]
+    fn test_prepare_openai_tools_with_allowed_tools_auto() {
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use std::borrow::Cow;
+
+        // Create a tool config with explicit allowed_tools and auto tool choice
+        let mut tool_config = MULTI_TOOL_CONFIG.clone();
+        tool_config.tool_choice = ToolChoice::Auto;
+        tool_config.allowed_tools = AllowedTools {
+            tools: vec!["get_temperature".to_string()],
+            choice: AllowedToolsChoice::Explicit,
+        };
+
+        let request = ModelInferenceRequest {
+            tool_config: Some(Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(&request);
+
+        // Verify tools are present
+        assert!(tools.is_some());
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 2); // get_temperature and query_articles
+
+        // Verify tool_choice is AllowedTools variant with Auto mode
+        assert!(tool_choice.is_some());
+        let tool_choice = tool_choice.unwrap();
+        match tool_choice {
+            OpenAIToolChoice::AllowedTools(allowed_tools_choice) => {
+                assert_eq!(allowed_tools_choice.r#type, "allowed_tools");
+                assert_eq!(
+                    allowed_tools_choice.allowed_tools.mode,
+                    AllowedToolsMode::Auto
+                );
+                assert_eq!(allowed_tools_choice.allowed_tools.tools.len(), 1);
+                assert_eq!(
+                    allowed_tools_choice.allowed_tools.tools[0].function.name,
+                    "get_temperature"
+                );
+                assert_eq!(
+                    allowed_tools_choice.allowed_tools.tools[0].r#type,
+                    OpenAIToolType::Function
+                );
+            }
+            _ => panic!("Expected AllowedTools variant"),
+        }
+
+        assert_eq!(parallel_tool_calls, Some(true));
+    }
+
+    #[test]
+    fn test_prepare_openai_tools_with_allowed_tools_required() {
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use std::borrow::Cow;
+
+        // Create a tool config with explicit allowed_tools and required tool choice
+        let mut tool_config = MULTI_TOOL_CONFIG.clone();
+        tool_config.tool_choice = ToolChoice::Required;
+        tool_config.allowed_tools = AllowedTools {
+            tools: vec!["query_articles".to_string(), "get_temperature".to_string()],
+            choice: AllowedToolsChoice::Explicit,
+        };
+
+        let request = ModelInferenceRequest {
+            tool_config: Some(Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, _parallel_tool_calls) = prepare_openai_tools(&request);
+
+        // Verify tools are present
+        assert!(tools.is_some());
+
+        // Verify tool_choice is AllowedTools variant with Required mode
+        assert!(tool_choice.is_some());
+        let tool_choice = tool_choice.unwrap();
+        match tool_choice {
+            OpenAIToolChoice::AllowedTools(allowed_tools_choice) => {
+                assert_eq!(allowed_tools_choice.r#type, "allowed_tools");
+                assert_eq!(
+                    allowed_tools_choice.allowed_tools.mode,
+                    AllowedToolsMode::Required
+                );
+                assert_eq!(allowed_tools_choice.allowed_tools.tools.len(), 2);
+                // Verify both tools are in the list
+                let tool_names: Vec<&str> = allowed_tools_choice
+                    .allowed_tools
+                    .tools
+                    .iter()
+                    .map(|t| t.function.name)
+                    .collect();
+                assert!(tool_names.contains(&"query_articles"));
+                assert!(tool_names.contains(&"get_temperature"));
+            }
+            _ => panic!("Expected AllowedTools variant"),
+        }
+    }
+
+    #[test]
+    fn test_prepare_openai_tools_with_allowed_tools_none_tool_choice() {
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use std::borrow::Cow;
+
+        // Test that when tool_choice is None but allowed_tools is set,
+        // we still use AllowedTools variant with Auto mode
+        let mut tool_config = MULTI_TOOL_CONFIG.clone();
+        tool_config.tool_choice = ToolChoice::None;
+        tool_config.allowed_tools = AllowedTools {
+            tools: vec!["get_temperature".to_string()],
+            choice: AllowedToolsChoice::Explicit,
+        };
+
+        let request = ModelInferenceRequest {
+            tool_config: Some(Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let (_tools, tool_choice, _parallel_tool_calls) = prepare_openai_tools(&request);
+
+        assert!(tool_choice.is_some());
+        let tool_choice = tool_choice.unwrap();
+        match tool_choice {
+            OpenAIToolChoice::AllowedTools(allowed_tools_choice) => {
+                // ToolChoice::None with allowed_tools should map to Auto mode
+                assert_eq!(
+                    allowed_tools_choice.allowed_tools.mode,
+                    AllowedToolsMode::Auto
+                );
+            }
+            _ => panic!("Expected AllowedTools variant"),
+        }
+    }
+
+    #[test]
+    fn test_prepare_openai_tools_with_allowed_tools_specific_tool_choice() {
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use std::borrow::Cow;
+
+        // Test that Specific tool choice with allowed_tools uses Auto mode
+        let mut tool_config = MULTI_TOOL_CONFIG.clone();
+        tool_config.tool_choice = ToolChoice::Specific("get_temperature".to_string());
+        tool_config.allowed_tools = AllowedTools {
+            tools: vec!["get_temperature".to_string()],
+            choice: AllowedToolsChoice::Explicit,
+        };
+
+        let request = ModelInferenceRequest {
+            tool_config: Some(Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let (_tools, tool_choice, _parallel_tool_calls) = prepare_openai_tools(&request);
+
+        assert!(tool_choice.is_some());
+        let tool_choice = tool_choice.unwrap();
+        match tool_choice {
+            OpenAIToolChoice::AllowedTools(allowed_tools_choice) => {
+                // ToolChoice::Specific with allowed_tools should map to Auto mode
+                assert_eq!(
+                    allowed_tools_choice.allowed_tools.mode,
+                    AllowedToolsMode::Auto
+                );
+            }
+            _ => panic!("Expected AllowedTools variant"),
+        }
+    }
+
+    #[test]
+    fn test_prepare_openai_tools_without_allowed_tools() {
+        use std::borrow::Cow;
+
+        // Test that when allowed_tools is not set (FunctionDefault),
+        // we use the regular tool_choice conversion
+        let tool_config = MULTI_TOOL_CONFIG.clone();
+        // MULTI_TOOL_CONFIG has ToolChoice::Required but no explicit allowed_tools
+
+        let request = ModelInferenceRequest {
+            tool_config: Some(Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let (_tools, tool_choice, _parallel_tool_calls) = prepare_openai_tools(&request);
+
+        assert!(tool_choice.is_some());
+        let tool_choice = tool_choice.unwrap();
+        // Without allowed_tools, should use regular String variant
+        match tool_choice {
+            OpenAIToolChoice::String(OpenAIToolChoiceString::Required) => {
+                // This is expected
+            }
+            _ => panic!("Expected String(Required) variant, got {tool_choice:?}"),
+        }
+    }
+
+    #[test]
+    fn test_prepare_openai_tools_with_specific_tool_without_allowed_tools() {
+        use std::borrow::Cow;
+
+        // Test regular specific tool choice without allowed_tools
+        let tool_config = WEATHER_TOOL_CONFIG.clone();
+        // This has ToolChoice::Specific and no explicit allowed_tools
+
+        let request = ModelInferenceRequest {
+            tool_config: Some(Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let (_tools, tool_choice, _parallel_tool_calls) = prepare_openai_tools(&request);
+
+        assert!(tool_choice.is_some());
+        let tool_choice = tool_choice.unwrap();
+        // Without allowed_tools, Specific should convert to Specific variant
+        match tool_choice {
+            OpenAIToolChoice::Specific(specific) => {
+                assert_eq!(specific.function.name, "get_temperature");
+                assert_eq!(specific.r#type, OpenAIToolType::Function);
+            }
+            _ => panic!("Expected Specific variant, got {tool_choice:?}"),
+        }
+    }
+
+    #[test]
+    fn test_prepare_openai_tools_empty_allowed_tools_list() {
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+        use std::borrow::Cow;
+
+        // Test edge case: explicit allowed_tools but empty list
+        let mut tool_config = MULTI_TOOL_CONFIG.clone();
+        tool_config.allowed_tools = AllowedTools {
+            tools: vec![],
+            choice: AllowedToolsChoice::Explicit,
+        };
+
+        let request = ModelInferenceRequest {
+            tool_config: Some(Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let (_tools, tool_choice, _parallel_tool_calls) = prepare_openai_tools(&request);
+
+        assert!(tool_choice.is_some());
+        let tool_choice = tool_choice.unwrap();
+        match tool_choice {
+            OpenAIToolChoice::AllowedTools(allowed_tools_choice) => {
+                assert_eq!(allowed_tools_choice.allowed_tools.tools.len(), 0);
+            }
+            _ => panic!("Expected AllowedTools variant with empty list"),
         }
     }
 }

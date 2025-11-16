@@ -7,7 +7,6 @@
 **[Discord](https://www.tensorzero.com/discord)**
 
 **[Quick Start (5min)](https://www.tensorzero.com/docs/quickstart)** ·
-**[Comprehensive Tutorial](https://www.tensorzero.com/docs/gateway/tutorial)** ·
 **[Deployment Guide](https://www.tensorzero.com/docs/gateway/deployment)** ·
 **[API Reference](https://www.tensorzero.com/docs/gateway/api-reference/inference)** ·
 **[Configuration Reference](https://www.tensorzero.com/docs/gateway/configuration-reference)**

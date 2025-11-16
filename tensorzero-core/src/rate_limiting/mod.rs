@@ -37,7 +37,7 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 #[ts(export)]
 pub struct RateLimitingConfig {
     rules: Vec<RateLimitingConfigRule>,
-    enabled: bool, // TODO (#3643): default true, Postgres required if rules is nonempty.
+    enabled: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,7 +45,7 @@ pub struct UninitializedRateLimitingConfig {
     #[serde(default)]
     rules: Vec<RateLimitingConfigRule>,
     #[serde(default = "default_enabled")]
-    enabled: bool, // TODO (#3643): default true, Postgres required if rules is nonempty.
+    enabled: bool,
 }
 
 impl TryFrom<UninitializedRateLimitingConfig> for RateLimitingConfig {
@@ -246,9 +246,9 @@ fn align_and_check_limits(
         .into_iter()
         .map(|r| (r.key.clone(), r))
         .collect::<HashMap<_, _>>();
-    // Next, check if any reciept has failed
+    // Next, check if any receipt has failed
     if receipts_map.values().any(|r| !r.success) {
-        return Err(get_failed_rate_limits_err(requests, &receipts_map));
+        return Err(get_failed_rate_limits_err(requests, &receipts_map, limits));
     }
 
     // Next, we build up a vector of ConsumeTicketsReceipts
@@ -274,6 +274,8 @@ pub struct FailedRateLimit {
     pub key: ActiveRateLimitKey,
     pub requested: u64,
     pub available: u64,
+    pub resource: RateLimitResource,
+    pub scope_key: Vec<RateLimitingScopeKey>,
 }
 
 /// Since Postgres will tell us all borrows failed if any failed, we figure out which rate limits
@@ -281,9 +283,10 @@ pub struct FailedRateLimit {
 fn get_failed_rate_limits_err(
     requests: Vec<ConsumeTicketsRequest>,
     receipts_map: &HashMap<ActiveRateLimitKey, ConsumeTicketsReceipt>,
+    limits: &[ActiveRateLimit],
 ) -> Error {
     let mut failed_rate_limits = Vec::new();
-    for request in requests {
+    for (request, limit) in requests.iter().zip(limits) {
         let key = &request.key;
         let Some(receipt) = receipts_map.get(key) else {
             return ErrorDetails::Inference {
@@ -297,6 +300,8 @@ fn get_failed_rate_limits_err(
                 key: key.clone(),
                 requested: request.requested,
                 available: receipt.tickets_remaining,
+                resource: limit.limit.resource,
+                scope_key: limit.scope_key.clone(),
             });
         }
     }
@@ -441,6 +446,16 @@ pub enum RateLimitResource {
     ModelInference,
     Token,
     // Cent, // or something more granular?
+}
+
+impl RateLimitResource {
+    /// Returns the snake_case string representation matching the serde serialization
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RateLimitResource::ModelInference => "model_inference",
+            RateLimitResource::Token => "token",
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -709,7 +724,7 @@ impl Serialize for ApiKeyPublicIdValueScope {
 /// serialized into a key.
 /// We need this struct to have stable serialization behavior because we want rate limits to be stable
 /// across releases.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum RateLimitingScopeKey {
     TagTotal { key: String },
@@ -717,6 +732,29 @@ pub enum RateLimitingScopeKey {
     TagConcrete { key: String, value: String },
     ApiKeyPublicIdEach { api_key_public_id: Arc<str> },
     ApiKeyPublicIdConcrete { api_key_public_id: Arc<str> },
+}
+
+impl RateLimitingScopeKey {
+    /// Returns a representation that matches the config format for easy lookup
+    pub fn to_config_representation(&self) -> String {
+        match self {
+            RateLimitingScopeKey::TagTotal { key } => {
+                format!(r#"tag_key="{key}", tag_value="tensorzero::total""#)
+            }
+            RateLimitingScopeKey::TagEach { key, value } => {
+                format!(r#"tag_key="{key}", tag_value="tensorzero::each" (matched: "{value}")"#)
+            }
+            RateLimitingScopeKey::TagConcrete { key, value } => {
+                format!(r#"tag_key="{key}", tag_value="{value}""#)
+            }
+            RateLimitingScopeKey::ApiKeyPublicIdEach { api_key_public_id } => {
+                format!(r#"api_key_public_id="tensorzero::each" (matched: "{api_key_public_id}")"#)
+            }
+            RateLimitingScopeKey::ApiKeyPublicIdConcrete { api_key_public_id } => {
+                format!(r#"api_key_public_id="{api_key_public_id}""#)
+            }
+        }
+    }
 }
 
 // TODO: is there a way to enforce that this struct is consumed by return_tickets?

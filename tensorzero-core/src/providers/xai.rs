@@ -442,7 +442,6 @@ impl<'a> XAIRequest<'a> {
             stream,
             stream_options,
             tools,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             parallel_tool_calls,
             tool_choice,
             stop: request.borrow_stop_sequences(),

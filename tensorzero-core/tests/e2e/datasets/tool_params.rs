@@ -215,7 +215,7 @@ async fn test_datapoint_update_tool_params() {
         vec![Tool::ClientSideFunction(get_temp_tool.clone())],
         vec![],
         AllowedTools {
-            tools: [get_temp_tool.name.clone()].into_iter().collect(),
+            tools: vec![get_temp_tool.name.clone()],
             choice: AllowedToolsChoice::Explicit,
         },
         ToolChoice::Auto,
@@ -331,11 +331,7 @@ async fn test_datapoint_update_tool_params() {
     let dp = &datapoints[0];
 
     // Verify updated tool_params (flattened at top level)
-    assert_eq!(
-        dp["allowed_tools"],
-        json!(["get_temperature"]),
-        // Note: we no longer update updated tools because additional_tools are no longer added by default
-    );
+    assert_eq!(dp["allowed_tools"], json!(["get_temperature"]),);
 
     let additional_tools = dp["additional_tools"].as_array().unwrap();
     assert_eq!(additional_tools.len(), 1);
@@ -416,7 +412,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![],
             vec![],
             AllowedTools {
-                tools: [base_tool.name.clone()].into_iter().collect(),
+                tools: vec![base_tool.name.clone()],
                 choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,
@@ -450,9 +446,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![Tool::ClientSideFunction(custom_tool_1.clone())],
             vec![],
             AllowedTools {
-                tools: [base_tool.name.clone(), custom_tool_1.name.clone()]
-                    .into_iter()
-                    .collect(),
+                tools: vec![base_tool.name.clone(), custom_tool_1.name.clone()],
                 choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Required,
@@ -486,7 +480,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![Tool::ClientSideFunction(custom_tool_2.clone())],
             vec![],
             AllowedTools {
-                tools: [custom_tool_2.name.clone()].into_iter().collect(),
+                tools: vec![custom_tool_2.name.clone()],
                 choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::None,
@@ -707,9 +701,7 @@ async fn test_datapoint_only_dynamic_tools() {
             vec![Tool::ClientSideFunction(dynamic_tool.clone())],
             vec![],
             AllowedTools {
-                tools: [static_tool.name.clone(), dynamic_tool.name.clone()]
-                    .into_iter()
-                    .collect(),
+                tools: vec![static_tool.name.clone(), dynamic_tool.name.clone()],
                 choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,
@@ -746,8 +738,10 @@ async fn test_datapoint_only_dynamic_tools() {
     // Static + dynamic tool should be in allowed_tools
     let allowed_tools = dp["allowed_tools"].as_array().unwrap();
     assert_eq!(allowed_tools.len(), 2);
-    assert_eq!(allowed_tools[0], "runtime_tool");
-    assert_eq!(allowed_tools[1], "get_temperature");
+    let allowed_tools_set: std::collections::HashSet<&str> =
+        allowed_tools.iter().map(|v| v.as_str().unwrap()).collect();
+    assert!(allowed_tools_set.contains("runtime_tool"));
+    assert!(allowed_tools_set.contains("get_temperature"));
 
     // Dynamic tool should be in additional_tools (flattened)
     let additional_tools = dp["additional_tools"].as_array().unwrap();
@@ -801,7 +795,7 @@ async fn test_datapoint_tool_params_three_states() {
             vec![Tool::ClientSideFunction(tool.clone())],
             vec![],
             AllowedTools {
-                tools: [tool.name.clone()].into_iter().collect(),
+                tools: vec![tool.name.clone()],
                 choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,

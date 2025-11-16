@@ -217,8 +217,8 @@ impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
 
                 // Log deprecation warning if "static" is used
                 if type_str == "static" {
-                    tracing::warn!(
-                        "DEPRECATED: The evaluation type 'static' is deprecated. Please use 'inference' instead. Support for 'static' will be removed in a future version."
+                    crate::utils::deprecation_warning(
+                        "The evaluation type 'static' is deprecated. Please use 'inference' instead. Support for 'static' will be removed in a future version."
                     );
                 }
 

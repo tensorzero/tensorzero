@@ -442,7 +442,7 @@ impl VariantSampler for TrackAndStopConfig {
                     message: format!(
                         "Track-and-Stop experimentation is configured for function '{function_name}' but PostgreSQL is not available. \
                         Track-and-Stop requires PostgreSQL for episode-to-variant consistency. \
-                        Please set the TENSORZERO_POSTGRES_URL environment variable.",
+                        Please set the `TENSORZERO_POSTGRES_URL` environment variable.",
                     ),
                 }));
             }

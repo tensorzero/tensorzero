@@ -39,7 +39,6 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send_eventsource,
 };
 
-// Import unified OpenAI types for allowed_tools support
 use super::openai::{
     AllowedToolsChoice as OpenAIAllowedToolsChoice,
     AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode, OpenAIToolType,
@@ -48,14 +47,6 @@ use super::openai::{
 
 const PROVIDER_NAME: &str = "Groq";
 pub const PROVIDER_TYPE: &str = "groq";
-
-// OLD: returned separate allowed_tools field
-// type PreparedToolsResult<'a> = (
-//     Option<Vec<GroqTool<'a>>>,
-//     Option<GroqToolChoice<'a>>,
-//     Option<bool>,
-//     Option<Vec<&'a str>>,
-// );
 
 type PreparedToolsResult<'a> = (
     Option<Vec<GroqTool<'a>>>,

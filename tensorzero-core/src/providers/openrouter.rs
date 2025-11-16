@@ -47,6 +47,9 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send_eventsource,
 };
 
+use super::common::{
+    ChatCompletionAllowedToolsMode, ChatCompletionToolChoice, ChatCompletionToolChoiceString,
+};
 // Import unified OpenAI types for allowed_tools support
 use super::openai::{
     AllowedToolsChoice as OpenAIAllowedToolsChoice,
@@ -66,14 +69,6 @@ lazy_static! {
 
 const PROVIDER_NAME: &str = "OpenRouter";
 pub const PROVIDER_TYPE: &str = "openrouter";
-
-// OLD: returned separate allowed_tools field
-// type PreparedOpenRouterToolsResult<'a> = (
-//     Option<Vec<OpenRouterTool<'a>>>,
-//     Option<OpenRouterToolChoice<'a>>,
-//     Option<bool>,
-//     Option<Vec<&'a str>>,
-// );
 
 type PreparedOpenRouterToolsResult<'a> = (
     Option<Vec<OpenRouterTool<'a>>>,
@@ -1070,21 +1065,21 @@ impl<'a> From<&'a ToolChoice> for OpenRouterToolChoice<'a> {
     }
 }
 
-impl<'a> From<super::common::ChatCompletionToolChoice<'a>> for OpenRouterToolChoice<'a> {
-    fn from(tool_choice: super::common::ChatCompletionToolChoice<'a>) -> Self {
+impl<'a> From<ChatCompletionToolChoice<'a>> for OpenRouterToolChoice<'a> {
+    fn from(tool_choice: ChatCompletionToolChoice<'a>) -> Self {
         match tool_choice {
-            super::common::ChatCompletionToolChoice::String(tc_string) => match tc_string {
-                super::common::ChatCompletionToolChoiceString::None => {
+            ChatCompletionToolChoice::String(tc_string) => match tc_string {
+                ChatCompletionToolChoiceString::None => {
                     OpenRouterToolChoice::String(OpenRouterToolChoiceString::None)
                 }
-                super::common::ChatCompletionToolChoiceString::Auto => {
+                ChatCompletionToolChoiceString::Auto => {
                     OpenRouterToolChoice::String(OpenRouterToolChoiceString::Auto)
                 }
-                super::common::ChatCompletionToolChoiceString::Required => {
+                ChatCompletionToolChoiceString::Required => {
                     OpenRouterToolChoice::String(OpenRouterToolChoiceString::Required)
                 }
             },
-            super::common::ChatCompletionToolChoice::Specific(specific) => {
+            ChatCompletionToolChoice::Specific(specific) => {
                 OpenRouterToolChoice::Specific(SpecificToolChoice {
                     r#type: OpenRouterToolType::Function,
                     function: SpecificToolFunction {
@@ -1092,18 +1087,14 @@ impl<'a> From<super::common::ChatCompletionToolChoice<'a>> for OpenRouterToolCho
                     },
                 })
             }
-            super::common::ChatCompletionToolChoice::AllowedTools(allowed_tools) => {
+            ChatCompletionToolChoice::AllowedTools(allowed_tools) => {
                 // Convert from common ChatCompletionAllowedToolsChoice to OpenAI AllowedToolsChoice
                 OpenRouterToolChoice::AllowedTools(OpenAIAllowedToolsChoice {
                     r#type: allowed_tools.r#type,
                     allowed_tools: OpenAIAllowedToolsConstraint {
                         mode: match allowed_tools.allowed_tools.mode {
-                            super::common::ChatCompletionAllowedToolsMode::Auto => {
-                                AllowedToolsMode::Auto
-                            }
-                            super::common::ChatCompletionAllowedToolsMode::Required => {
-                                AllowedToolsMode::Required
-                            }
+                            ChatCompletionAllowedToolsMode::Auto => AllowedToolsMode::Auto,
+                            ChatCompletionAllowedToolsMode::Required => AllowedToolsMode::Required,
                         },
                         tools: allowed_tools
                             .allowed_tools

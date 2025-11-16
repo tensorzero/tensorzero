@@ -95,17 +95,10 @@ pub async fn check_inference_evaluation_human_feedback(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
-
     use serde_json::json;
-    use tensorzero_core::{
-        config::SchemaData,
-        experimentation::ExperimentationConfig,
-        function::{FunctionConfig, FunctionConfigChat},
-        tool::{
-            AllowedTools, AllowedToolsChoice, ClientSideFunctionTool, DynamicToolParams, Tool,
-            ToolCallConfigDatabaseInsert, ToolChoice,
-        },
+    use tensorzero_core::tool::{
+        AllowedTools, AllowedToolsChoice, ClientSideFunctionTool, DynamicToolParams, Tool,
+        ToolCallConfigDatabaseInsert, ToolChoice,
     };
 
     #[tokio::test]
@@ -121,24 +114,14 @@ mod tests {
             })],
             vec![],
             AllowedTools {
-                tools: HashSet::new(), // Explicitly empty (no static tools)
+                tools: Vec::new(),
                 choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Specific("tool_1".to_string()),
             None,
         );
-        let function_config = FunctionConfig::Chat(FunctionConfigChat {
-            variants: HashMap::new(),
-            schemas: SchemaData::default(),
-            tools: vec![],
-            tool_choice: ToolChoice::Specific("tool_1".to_string()),
-            parallel_tool_calls: None,
-            description: None,
-            all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
-        });
-        let tool_params_args =
-            function_config.database_insert_to_dynamic_tool_params(tool_database_insert.clone());
+
+        let tool_params_args: DynamicToolParams = tool_database_insert.into();
         assert_eq!(
             tool_params_args,
             DynamicToolParams {
@@ -146,7 +129,7 @@ mod tests {
                 parallel_tool_calls: None,
                 allowed_tools: Some(Vec::new()),
                 additional_tools: Some(vec![tensorzero_core::tool::DynamicTool(
-                    tensorzero_core::tool::Tool::ClientSideFunction(ClientSideFunctionTool {
+                    Tool::ClientSideFunction(ClientSideFunctionTool {
                         name: "tool_1".to_string(),
                         description: "Tool 1".to_string(),
                         parameters: json!({}),
@@ -169,18 +152,8 @@ mod tests {
             ToolChoice::Required,
             None,
         );
-        let function_config = FunctionConfig::Chat(FunctionConfigChat {
-            variants: HashMap::new(),
-            schemas: SchemaData::default(),
-            tools: vec!["tool_1".to_string()],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            description: None,
-            all_explicit_templates_names: HashSet::new(),
-            experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
-        });
-        let tool_params_args =
-            function_config.database_insert_to_dynamic_tool_params(tool_database_insert.clone());
+
+        let tool_params_args: DynamicToolParams = tool_database_insert.into();
         assert_eq!(
             tool_params_args,
             DynamicToolParams {

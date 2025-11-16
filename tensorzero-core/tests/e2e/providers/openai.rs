@@ -1200,6 +1200,7 @@ async fn test_embedding_request() {
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
                 &ProviderTypeDefaultCredentials::default(),
+                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();
@@ -1364,6 +1365,7 @@ async fn test_embedding_sanity_check() {
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
                 &ProviderTypeDefaultCredentials::default(),
+                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();
