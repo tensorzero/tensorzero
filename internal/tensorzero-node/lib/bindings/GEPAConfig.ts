@@ -55,10 +55,18 @@ export type GEPAConfig = {
    */
   timeout: bigint;
   /**
-   * Whether to include datapoint input in InferenceWithAnalysis for mutation
-   * If true, the mutate function will see the original datapoint inputs
+   * Whether to include inference input in InferenceWithAnalysis for mutation
+   *
+   * If true, the mutate function will see the inference input in addition to the output and analysis for each example in the batch.
+   * This provides additional context but increases token usage significantly.
+   *
+   * **Warning:** Use with caution, especially with:
+   * - Multi-turn conversations (many input messages)
+   * - Large batch sizes (many analyses per mutation)
+   *
+   * These can cause context length overflow for the mutation model.
    */
-  include_datapoint_input_for_mutation: boolean;
+  include_inference_input_for_mutation: boolean;
   /**
    * Retry configuration for inference calls during GEPA optimization
    * Applies to analyze function calls, mutate function calls, and all mutated variants

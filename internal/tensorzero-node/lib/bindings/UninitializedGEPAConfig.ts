@@ -16,7 +16,7 @@ export type UninitializedGEPAConfig = {
   mutation_model: string;
   seed: number | null;
   timeout: bigint;
-  include_datapoint_input_for_mutation: boolean;
+  include_inference_input_for_mutation: boolean;
   retries: RetryConfig;
   max_tokens: number;
 };
