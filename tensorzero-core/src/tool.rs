@@ -61,6 +61,7 @@ use strum::AsRefStr;
 /// They are a separate type `ProviderTool`.
 #[derive(ts_rs::TS, AsRefStr, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum Tool {
