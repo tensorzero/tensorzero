@@ -5,6 +5,7 @@ import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 interface ActionData {
   inference?: ParsedInferenceRow;
   error?: string;
+  inferenceId?: string;
 }
 
 interface InferenceState {
@@ -22,7 +23,6 @@ export function useInferenceHover(episodeRoute: string): {
   getError: (inferenceId: string) => string | null;
   openSheetInferenceId: string | null;
 } {
-  const [fetchedInferenceId, setFetchedInferenceId] = useState<string | null>(null);
   const [openSheetInferenceId, setOpenSheetInferenceId] = useState<string | null>(null);
   const [inferenceCache, setInferenceCache] = useState<Record<string, InferenceState>>({});
   const fetcher = useFetcher<ActionData>();
@@ -43,8 +43,6 @@ export function useInferenceHover(episodeRoute: string): {
         ...prev,
         [inferenceId]: { data: null, loading: true, error: null }
       }));
-      
-      setFetchedInferenceId(inferenceId);
       
       const formData = new FormData();
       formData.append("_action", "fetchInference");
@@ -68,8 +66,6 @@ export function useInferenceHover(episodeRoute: string): {
         [inferenceId]: { data: null, loading: true, error: null }
       }));
       
-      setFetchedInferenceId(inferenceId);
-      
       const formData = new FormData();
       formData.append("_action", "fetchInference");
       formData.append("inferenceId", inferenceId);
@@ -86,17 +82,20 @@ export function useInferenceHover(episodeRoute: string): {
   };
 
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data && fetchedInferenceId) {
-      setInferenceCache(prev => ({
-        ...prev,
-        [fetchedInferenceId]: {
-          data: fetcher.data?.inference || null,
-          loading: false,
-          error: fetcher.data?.error || null
-        }
-      }));
+    if (fetcher.state === "idle" && fetcher.data) {
+      const inferenceId = fetcher.data.inferenceId;
+      if (inferenceId) {
+        setInferenceCache(prev => ({
+          ...prev,
+          [inferenceId]: {
+            data: fetcher.data?.inference || null,
+            loading: false,
+            error: fetcher.data?.error || null
+          }
+        }));
+      }
     }
-  }, [fetcher.state, fetcher.data, fetchedInferenceId]);
+  }, [fetcher.state, fetcher.data]);
 
   useEffect(() => {
     return () => {

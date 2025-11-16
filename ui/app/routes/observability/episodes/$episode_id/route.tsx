@@ -175,12 +175,12 @@ export async function action({ request }: Route.ActionArgs) {
       try {
         const inference = await queryInferenceById(inferenceId);
         if (!inference) {
-          return data<ActionData>({ error: `Inference ${inferenceId} not found` }, { status: 404 });
+          return data<ActionData>({ error: `Inference ${inferenceId} not found`, inferenceId }, { status: 404 });
         }
-        return data<ActionData>({ inference });
+        return data<ActionData>({ inference, inferenceId });
       } catch (error) {
         logger.error('Failed to fetch inference:', error);
-        return data<ActionData>({ error: "Failed to fetch inference details" }, { status: 500 });
+        return data<ActionData>({ error: "Failed to fetch inference details", inferenceId }, { status: 500 });
       }
     }
 
