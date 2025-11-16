@@ -1130,9 +1130,18 @@ pub fn test_capture_rate_limit_error() {
         panic!("Expected one rate limit span: {rate_limit_spans:#?}");
     };
     assert_eq!(consume_ticket_span.name, "rate_limiting_consume_tickets");
-    assert_eq!(consume_ticket_span.status, Status::Error {
-        description: format!(r#"TensorZero rate limit exceeded for rule {{"resource":"token","scope_key":[{{"type":"TagEach","key":"user_id","value":"{user_id}"}}]}}. Requested 1009 units but only 2 available."#).into()
-    });
+    assert_eq!(
+        consume_ticket_span.status,
+        Status::Error {
+            description: format!(
+                r#"TensorZero rate limit exceeded for `token` resource.
+Scope: tag_key="user_id", tag_value="tensorzero::each" (matched: "{user_id}")
+Requested: 1009
+Available: 2"#
+            )
+            .into()
+        }
+    );
     let mut consume_ticket_attr_map = attrs_to_map(&consume_ticket_span.attributes);
     remove_unstable_attrs(&mut consume_ticket_attr_map);
 

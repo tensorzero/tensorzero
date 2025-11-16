@@ -32,8 +32,8 @@ describe("native sft", () => {
       query_variant_name: null,
       filters: filters,
       output_source: "inference",
-      limit: BigInt(100),
-      offset: BigInt(0),
+      limit: 100,
+      offset: 0,
       val_fraction: 0.1,
       optimizer_config: {
         type: "openai_sft",

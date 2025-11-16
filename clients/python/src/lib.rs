@@ -298,6 +298,8 @@ impl Drop for StreamWrapper {
     }
 }
 
+const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
+
 #[pymethods]
 impl BaseTensorZeroGateway {
     #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
@@ -1423,8 +1425,8 @@ impl TensorZeroGateway {
         filters: Option<Bound<'_, PyAny>>,
         output_source: String,
         order_by: Option<Bound<'_, PyAny>>,
-        limit: Option<u64>,
-        offset: Option<u64>,
+        limit: Option<u32>,
+        offset: Option<u32>,
     ) -> PyResult<Vec<StoredInference>> {
         let client = this.as_super().client.clone();
         let filters = filters
@@ -1448,8 +1450,8 @@ impl TensorZeroGateway {
             filters: filters.as_ref(),
             output_source,
             order_by: order_by.as_deref(),
-            limit,
-            offset,
+            limit: limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
+            offset: offset.unwrap_or(0),
             ..Default::default()
         };
         let fut = client.experimental_list_inferences(params);
@@ -2534,8 +2536,8 @@ impl AsyncTensorZeroGateway {
         filters: Option<Bound<'a, PyAny>>,
         output_source: String,
         order_by: Option<Bound<'a, PyAny>>,
-        limit: Option<u64>,
-        offset: Option<u64>,
+        limit: Option<u32>,
+        offset: Option<u32>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
         let filters = filters
@@ -2560,8 +2562,8 @@ impl AsyncTensorZeroGateway {
                 filters: filters.as_ref(),
                 output_source,
                 order_by: order_by.as_deref(),
-                limit,
-                offset,
+                limit: limit.unwrap_or(DEFAULT_INFERENCE_QUERY_LIMIT),
+                offset: offset.unwrap_or(0),
                 ..Default::default()
             };
             let res = client.experimental_list_inferences(params).await;

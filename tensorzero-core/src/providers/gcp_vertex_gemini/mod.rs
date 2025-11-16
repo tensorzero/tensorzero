@@ -63,7 +63,11 @@ use crate::model::{
     fully_qualified_name, Credential, CredentialLocationWithFallback, ModelProvider,
 };
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
-use crate::tool::{ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+#[cfg(test)]
+use crate::tool::{AllowedTools, AllowedToolsChoice};
+use crate::tool::{
+    ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig,
+};
 
 use super::helpers::{convert_stream_error, parse_jsonl_batch_file, JsonlBatchFileInfo};
 
@@ -1777,10 +1781,9 @@ impl<'a> From<&'a ClientSideFunctionTool> for GCPVertexGeminiSFTTool<'a> {
 // which will cause us to fall back to Auto
 const MODELS_NOT_SUPPORTING_ANY_MODE: &[&str] = &[];
 
-impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
-    fn from(input: (&'a ToolChoice, &'a str)) -> Self {
-        let (tool_choice, model_name) = input;
-        match tool_choice {
+impl<'a> GCPVertexGeminiToolConfig<'a> {
+    fn from_tool_config(tool_config: &'a ToolCallConfig, model_name: &'a str) -> Self {
+        match &tool_config.tool_choice {
             ToolChoice::None => GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                     mode: GCPVertexGeminiFunctionCallingMode::None,
@@ -1790,7 +1793,7 @@ impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
             ToolChoice::Auto => GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                     mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                    allowed_function_names: None,
+                    allowed_function_names: tool_config.allowed_tools.as_dynamic_allowed_tools(),
                 },
             },
             ToolChoice::Required => {
@@ -1798,14 +1801,18 @@ impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                             mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                            allowed_function_names: None,
+                            allowed_function_names: tool_config
+                                .allowed_tools
+                                .as_dynamic_allowed_tools(),
                         },
                     }
                 } else {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                             mode: GCPVertexGeminiFunctionCallingMode::Any,
-                            allowed_function_names: None,
+                            allowed_function_names: tool_config
+                                .allowed_tools
+                                .as_dynamic_allowed_tools(),
                         },
                     }
                 }
@@ -1815,7 +1822,7 @@ impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                             mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                            allowed_function_names: None,
+                            allowed_function_names: Some(vec![tool_name]),
                         },
                     }
                 } else {
@@ -2055,7 +2062,10 @@ fn prepare_tools<'a>(
                     .map(GCPVertexGeminiFunctionDeclaration::from)
                     .collect(),
             )]);
-            let tool_config = Some((&tool_config.tool_choice, model_name).into());
+            let tool_config = Some(GCPVertexGeminiToolConfig::from_tool_config(
+                tool_config,
+                model_name,
+            ));
             (tools, tool_config)
         }
         None => (None, None),
@@ -2858,10 +2868,20 @@ mod tests {
     }
 
     #[test]
-    fn test_from_tool_choice() {
-        let tool_choice = ToolChoice::Auto;
+    fn test_from_tool_config() {
         let supports_any_model_name = "gemini-2.5-pro";
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
+
+        // Test Auto mode
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_call_config, supports_any_model_name);
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -2873,8 +2893,16 @@ mod tests {
         );
 
         // The Pro model supports Any mode
-        let tool_choice = ToolChoice::Required;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_call_config, supports_any_model_name);
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -2886,8 +2914,19 @@ mod tests {
         );
 
         // The Pro model supports Any mode with allowed function names
-        let tool_choice = ToolChoice::Specific("get_temperature".to_string());
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Specific("get_temperature".to_string()),
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools {
+                tools: vec!["get_temperature".to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_call_config, supports_any_model_name);
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -2898,8 +2937,67 @@ mod tests {
             }
         );
 
-        let tool_choice = ToolChoice::None;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
+        // Test Auto mode with specific allowed tools (new behavior)
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools {
+                tools: vec!["tool1".to_string(), "tool2".to_string()]
+                    .into_iter()
+                    .collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_call_config, supports_any_model_name);
+        assert_eq!(
+            tool_config.function_calling_config.mode,
+            GCPVertexGeminiFunctionCallingMode::Auto
+        );
+        let mut allowed_names = tool_config
+            .function_calling_config
+            .allowed_function_names
+            .unwrap();
+        allowed_names.sort();
+        assert_eq!(allowed_names, vec!["tool1", "tool2"]);
+
+        // Test Required mode with specific allowed tools (new behavior)
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools {
+                tools: vec!["allowed_tool".to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_call_config, supports_any_model_name);
+        assert_eq!(
+            tool_config,
+            GCPVertexGeminiToolConfig {
+                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                    mode: GCPVertexGeminiFunctionCallingMode::Any,
+                    allowed_function_names: Some(vec!["allowed_tool"]),
+                }
+            }
+        );
+
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_call_config, supports_any_model_name);
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
