@@ -965,30 +965,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A list of `StoredInference` instances.
         """
 
-    def experimental_render_inferences(
-        self,
-        *,
-        stored_inferences: List[StoredInference],
-        variants: Dict[str, str],
-    ) -> List[RenderedSample]:
-        """
-        DEPRECATED: use `experimental_render_samples` instead.
-        Render a list of stored samples into a list of rendered stored samples.
-
-        This function performs two main tasks:
-        1. Resolves all network resources (e.g., images) in the stored samples.
-        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
-           To do this, the function needs to know which variant to use for each function that might appear in the data.
-
-        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
-        the function has no variant specified, or the process of downloading resources fails.
-        In the future, this behavior may be made configurable by the caller.
-
-        :param stored_inferences: A list of stored samples to render.
-        :param variants: A mapping from function name to variant name.
-        :return: A list of rendered samples.
-        """
-
     def experimental_render_samples(
         self,
         *,
@@ -1525,31 +1501,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param limit: The maximum number of inferences to return. Optional
         :param offset: The offset to start from. Optional
         :return: A list of `StoredInference` instances.
-        """
-
-    async def experimental_render_inferences(
-        self,
-        *,
-        stored_inferences: List[StoredInference],
-        variants: Dict[str, str],
-    ) -> List[RenderedSample]:
-        """
-        DEPRECATED: use `experimental_render_samples` instead.
-
-        Render a list of stored samples into a list of rendered stored samples.
-
-        This function performs two main tasks:
-        1. Resolves all network resources (e.g., images) in the stored samples.
-        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
-           To do this, the function needs to know which variant to use for each function that might appear in the data.
-
-        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
-        the function has no variant specified, or the process of downloading resources fails.
-        In the future, this behavior may be made configurable by the caller.
-
-        :param stored_inferences: A list of stored samples to render.
-        :param variants: A mapping from function name to variant name.
-        :return: A list of rendered samples.
         """
 
     async def experimental_render_samples(
