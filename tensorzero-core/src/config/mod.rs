@@ -32,7 +32,6 @@ use crate::config::path::ResolvedTomlPath;
 use crate::config::span_map::SpanMap;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -752,13 +751,10 @@ impl Config {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
         let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
             SKIP_CREDENTIAL_VALIDATION
-                .scope(
-                    (),
-                    Self::load_from_toml(globbed_config.table, &globbed_config.span_map),
-                )
+                .scope((), Self::load_from_toml(globbed_config.table))
                 .await?
         } else {
-            Self::load_from_toml(globbed_config.table, &globbed_config.span_map).await?
+            Self::load_from_toml(globbed_config.table).await?
         };
 
         if validate_credentials {
@@ -770,7 +766,7 @@ impl Config {
         Ok(config)
     }
 
-    async fn load_from_toml(table: toml::Table, span_map: &SpanMap) -> Result<Config, Error> {
+    async fn load_from_toml(table: toml::Table) -> Result<Config, Error> {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.");
         }
@@ -905,33 +901,12 @@ impl Config {
         // Initialize the templates
         let template_paths = config.get_templates();
         let template_fs_base_path = if config.gateway.template_filesystem_access.enabled {
-            if let Some(base_path) = &config.gateway.template_filesystem_access.base_path {
-                Some(base_path.get_real_path().map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to get real path for base path: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"),
-                    })
-                })?.to_owned())
-            } else if let Some(single_file) = span_map.get_single_file() {
-                crate::utils::deprecation_warning("`[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
-                Some(
-                    single_file
-                        .parent()
-                        .ok_or_else(|| {
-                            Error::new(ErrorDetails::Config {
-                                message: format!(
-                                    "Failed to determine base path for config file `{}`",
-                                    single_file.to_string_lossy()
-                                ),
-                            })
-                        })?
-                        .to_owned(),
-                )
-            } else {
-                return Err(ErrorDetails::Config {
-                    message: "`[gateway.template_filesystem_access]` is enabled, but `[gateway.template_filesystem_access.base_path]` is not set.".to_string()
-                }
-                .into());
-            }
+            let base_path = config.gateway.template_filesystem_access.base_path
+                .as_ref()
+                .ok_or_else(|| Error::new(ErrorDetails::Config {
+                    message: "`gateway.template_filesystem_access.enabled` is true but `base_path` is not specified. Please set `gateway.template_filesystem_access.base_path` to the directory containing your template files.".to_string()
+                }))?;
+            Some(base_path.get_real_path()?.to_owned())
         } else {
             None
         };
@@ -1289,7 +1264,6 @@ pub struct UninitializedConfig {
 /// and merging them into a single `toml::Table`
 struct UninitializedGlobbedConfig {
     table: toml::Table,
-    span_map: SpanMap,
 }
 
 impl UninitializedConfig {
