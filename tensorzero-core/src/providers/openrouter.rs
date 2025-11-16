@@ -41,13 +41,13 @@ use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::tool::{ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 
-use crate::providers::common::prepare_chat_completion_tools;
+use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
     inject_extra_request_data_and_send_eventsource,
 };
 
-use super::common::{
+use super::chat_completions::{
     ChatCompletionAllowedToolsMode, ChatCompletionToolChoice, ChatCompletionToolChoiceString,
 };
 // Import unified OpenAI types for allowed_tools support
@@ -1002,8 +1002,8 @@ impl<'a> From<&'a ClientSideFunctionToolConfig> for OpenRouterTool<'a> {
     }
 }
 
-impl<'a> From<super::common::ChatCompletionTool<'a>> for OpenRouterTool<'a> {
-    fn from(tool: super::common::ChatCompletionTool<'a>) -> Self {
+impl<'a> From<super::chat_completions::ChatCompletionTool<'a>> for OpenRouterTool<'a> {
+    fn from(tool: super::chat_completions::ChatCompletionTool<'a>) -> Self {
         OpenRouterTool {
             r#type: OpenRouterToolType::Function,
             function: OpenRouterFunction {
@@ -1148,9 +1148,6 @@ struct OpenRouterRequest<'a> {
     response_format: Option<OpenRouterResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<OpenRouterTool<'a>>>,
-    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenRouterToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1242,7 +1239,6 @@ impl<'a> OpenRouterRequest<'a> {
             stream_options,
             response_format,
             tools,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
@@ -2022,7 +2018,6 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
@@ -2122,7 +2117,6 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
@@ -2192,7 +2186,6 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
@@ -2252,7 +2245,6 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,
@@ -2969,7 +2961,6 @@ mod tests {
             tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             stop: None,
             reasoning_effort: None,
             verbosity: None,

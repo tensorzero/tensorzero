@@ -28,13 +28,13 @@ use crate::inference::types::{
 };
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::model::{Credential, EndpointLocation, ModelProvider};
-use crate::providers::common::prepare_chat_completion_tools;
+use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::providers::openai::OpenAIMessagesConfig;
 
-use super::common::{
+use super::chat_completions::{
     ChatCompletionAllowedToolsChoice, ChatCompletionSpecificToolChoice, ChatCompletionTool,
     ChatCompletionToolChoice, ChatCompletionToolChoiceString,
 };
@@ -859,7 +859,7 @@ mod tests {
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
     use crate::model::EndpointLocation;
-    use crate::providers::common::{
+    use crate::providers::chat_completions::{
         ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
         ChatCompletionToolChoice, ChatCompletionToolChoiceString, ChatCompletionToolType,
     };

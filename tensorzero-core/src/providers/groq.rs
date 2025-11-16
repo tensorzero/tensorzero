@@ -33,7 +33,7 @@ use crate::inference::{InferenceProvider, TensorZeroEventError};
 use crate::model::{Credential, ModelProvider};
 use crate::tool::{ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 
-use crate::providers::common::prepare_chat_completion_tools;
+use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
     inject_extra_request_data_and_send_eventsource,
@@ -839,8 +839,8 @@ impl<'a> From<&'a ClientSideFunctionToolConfig> for GroqTool<'a> {
     }
 }
 
-impl<'a> From<super::common::ChatCompletionTool<'a>> for GroqTool<'a> {
-    fn from(tool: super::common::ChatCompletionTool<'a>) -> Self {
+impl<'a> From<super::chat_completions::ChatCompletionTool<'a>> for GroqTool<'a> {
+    fn from(tool: super::chat_completions::ChatCompletionTool<'a>) -> Self {
         GroqTool {
             r#type: GroqToolType::Function,
             function: GroqFunction {
@@ -900,21 +900,22 @@ impl<'a> From<&'a ToolChoice> for GroqToolChoice<'a> {
     }
 }
 
-impl<'a> From<super::common::ChatCompletionToolChoice<'a>> for GroqToolChoice<'a> {
-    fn from(tool_choice: super::common::ChatCompletionToolChoice<'a>) -> Self {
+impl<'a> From<super::chat_completions::ChatCompletionToolChoice<'a>> for GroqToolChoice<'a> {
+    fn from(tool_choice: super::chat_completions::ChatCompletionToolChoice<'a>) -> Self {
         match tool_choice {
-            super::common::ChatCompletionToolChoice::String(tc_string) => match tc_string {
-                super::common::ChatCompletionToolChoiceString::None => {
+            super::chat_completions::ChatCompletionToolChoice::String(tc_string) => match tc_string
+            {
+                super::chat_completions::ChatCompletionToolChoiceString::None => {
                     GroqToolChoice::String(GroqToolChoiceString::None)
                 }
-                super::common::ChatCompletionToolChoiceString::Auto => {
+                super::chat_completions::ChatCompletionToolChoiceString::Auto => {
                     GroqToolChoice::String(GroqToolChoiceString::Auto)
                 }
-                super::common::ChatCompletionToolChoiceString::Required => {
+                super::chat_completions::ChatCompletionToolChoiceString::Required => {
                     GroqToolChoice::String(GroqToolChoiceString::Required)
                 }
             },
-            super::common::ChatCompletionToolChoice::Specific(specific) => {
+            super::chat_completions::ChatCompletionToolChoice::Specific(specific) => {
                 GroqToolChoice::Specific(SpecificToolChoice {
                     r#type: GroqToolType::Function,
                     function: SpecificToolFunction {
@@ -922,16 +923,16 @@ impl<'a> From<super::common::ChatCompletionToolChoice<'a>> for GroqToolChoice<'a
                     },
                 })
             }
-            super::common::ChatCompletionToolChoice::AllowedTools(allowed_tools) => {
-                // Convert from common ChatCompletionAllowedToolsChoice to OpenAI AllowedToolsChoice
+            super::chat_completions::ChatCompletionToolChoice::AllowedTools(allowed_tools) => {
+                // Convert from chat_completions ChatCompletionAllowedToolsChoice to OpenAI AllowedToolsChoice
                 GroqToolChoice::AllowedTools(OpenAIAllowedToolsChoice {
                     r#type: allowed_tools.r#type,
                     allowed_tools: OpenAIAllowedToolsConstraint {
                         mode: match allowed_tools.allowed_tools.mode {
-                            super::common::ChatCompletionAllowedToolsMode::Auto => {
+                            super::chat_completions::ChatCompletionAllowedToolsMode::Auto => {
                                 AllowedToolsMode::Auto
                             }
-                            super::common::ChatCompletionAllowedToolsMode::Required => {
+                            super::chat_completions::ChatCompletionAllowedToolsMode::Required => {
                                 AllowedToolsMode::Required
                             }
                         },
@@ -991,9 +992,6 @@ struct GroqRequest<'a> {
     tool_choice: Option<GroqToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
-    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -241,6 +241,9 @@ impl ClientSideFunctionTool {
 
 /// `OpenAICustomTool` represents OpenAI's custom tool format, which allows
 /// for text or grammar-based tool definitions beyond standard function calling.
+/// Currently, this type is a wire + outbound + storage type so it forces a consistent format.
+/// This only applies to the Chat Completions API. The Responses API has a slightly different request
+/// shape so we implement a conversion in `responses.rs`.
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
@@ -318,8 +321,18 @@ impl OpenAICustomTool {
 ///
 /// Note: We don't derive TS or JsonSchema because this is a wrapper type that uses
 /// custom deserialization logic. The actual Tool type has those derives.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct DynamicTool(pub Tool);
+
+impl Serialize for DynamicTool {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Serialize the inner Tool directly (with its type tag)
+        self.0.serialize(serializer)
+    }
+}
 
 impl<'de> Deserialize<'de> for DynamicTool {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -352,33 +365,6 @@ impl From<DynamicTool> for Tool {
 impl From<Tool> for DynamicTool {
     fn from(tool: Tool) -> Self {
         DynamicTool(tool)
-    }
-}
-
-/// Custom serde module for Vec<DynamicTool> to handle serialization/deserialization
-mod dynamic_tool_serde {
-    use super::{DynamicTool, Tool};
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    pub fn serialize<S>(tools: &Option<Vec<DynamicTool>>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match tools {
-            Some(tools) => {
-                let inner_tools: Vec<&Tool> = tools.iter().map(|dt| &dt.0).collect();
-                inner_tools.serialize(serializer)
-            }
-            None => serializer.serialize_none(),
-        }
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Vec<DynamicTool>>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let opt: Option<Vec<DynamicTool>> = Option::deserialize(deserializer)?;
-        Ok(opt)
     }
 }
 
@@ -1501,11 +1487,7 @@ pub struct DynamicToolParams {
 
     /// Tools that the user provided at inference time (not in function config), in addition to the function-configured
     /// tools, that are also allowed.
-    #[serde(
-        with = "dynamic_tool_serde",
-        default,
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(as = "Option<Vec<Tool>>")]
     #[schemars(with = "Option<Vec<Tool>>")]
     pub additional_tools: Option<Vec<DynamicTool>>,

@@ -1542,9 +1542,7 @@ pub(crate) fn prepare_allowed_tools_constraint<'a>(
 
 /// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
 /// Otherwise convert the tool choice and tools to OpenAI format
-pub(super) fn prepare_openai_tools<'a>(
-    request: &'a ModelInferenceRequest,
-) -> PreparedOpenAIToolsResult<'a> {
+fn prepare_openai_tools<'a>(request: &'a ModelInferenceRequest) -> PreparedOpenAIToolsResult<'a> {
     match &request.tool_config {
         None => (None, None, None),
         Some(tool_config) => {

@@ -4,7 +4,7 @@ use crate::inference::types::chat_completion_inference_params::{
     warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
 };
 use crate::inference::types::RequestMessage;
-use crate::providers::openai::{OpenAIMessagesConfig, OpenAIToolChoiceString};
+use crate::providers::openai::OpenAIMessagesConfig;
 use futures::{future::try_join_all, StreamExt};
 use lazy_static::lazy_static;
 use reqwest_eventsource::Event;
@@ -41,9 +41,12 @@ use crate::{
 
 use super::helpers_thinking_block::{process_think_blocks, ThinkingState};
 use super::openai::{
-    get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
-    OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType,
-    OpenAIUsage,
+    get_chat_url, handle_openai_error, tensorzero_to_openai_messages, OpenAIRequestMessage,
+    OpenAISystemRequestMessage, OpenAIToolType, OpenAIUsage,
+};
+use crate::providers::chat_completions::prepare_chat_completion_tools;
+use crate::providers::chat_completions::{
+    ChatCompletionTool, ChatCompletionToolChoice, ChatCompletionToolChoiceString,
 };
 
 lazy_static! {
@@ -366,12 +369,9 @@ struct TogetherRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<TogetherResponseFormat<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
+    tools: Option<Vec<ChatCompletionTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
-    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // allowed_tools: Option<Vec<&'a str>>,
+    tool_choice: Option<ChatCompletionToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -445,11 +445,15 @@ impl<'a> TogetherRequest<'a> {
 
         let (tools, mut tool_choice, parallel_tool_calls) = match tool_choice {
             Some(&ToolChoice::None) => (None, None, None),
-            _ => prepare_openai_tools(request),
+            _ => prepare_chat_completion_tools(request, false),
         };
         // Together AI doesn't seem to support `tool_choice="required"`, so we convert it to `tool_choice="auto"`
-        if let Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Required)) = tool_choice {
-            tool_choice = Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto));
+        if let Some(ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::Required)) =
+            tool_choice
+        {
+            tool_choice = Some(ChatCompletionToolChoice::String(
+                ChatCompletionToolChoiceString::Auto,
+            ));
         }
 
         let mut together_request = TogetherRequest {
@@ -465,7 +469,6 @@ impl<'a> TogetherRequest<'a> {
             response_format,
             tools,
             tool_choice,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None,
@@ -864,9 +867,11 @@ mod tests {
     use super::*;
 
     use crate::inference::types::{FunctionType, RequestMessage, Role, Usage};
-    use crate::providers::openai::{
-        OpenAIToolType, OpenAIUsage, SpecificToolChoice, SpecificToolFunction,
+    use crate::providers::chat_completions::{
+        ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
+        ChatCompletionToolChoice, ChatCompletionToolType,
     };
+    use crate::providers::openai::OpenAIUsage;
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
     #[tokio::test]
@@ -909,21 +914,19 @@ mod tests {
         assert!(!together_request.stream);
         let tools = together_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
-        match &tools[0] {
-            crate::providers::openai::OpenAITool::Function { function, .. } => {
-                assert_eq!(function.name, WEATHER_TOOL.name());
-                assert_eq!(function.parameters, WEATHER_TOOL.parameters());
-            }
-            crate::providers::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
-        }
+        let tool = &tools[0];
+        assert_eq!(tool.function.name, WEATHER_TOOL.name());
+        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             together_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+            Some(ChatCompletionToolChoice::Specific(
+                ChatCompletionSpecificToolChoice {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionSpecificToolFunction {
+                        name: WEATHER_TOOL.name(),
+                    }
                 }
-            }))
+            ))
         );
         assert_eq!(together_request.parallel_tool_calls, None);
     }

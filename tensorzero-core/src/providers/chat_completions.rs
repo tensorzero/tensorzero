@@ -1,3 +1,10 @@
+//! Common types and utilities for chat completions across OpenAI-compatible providers.
+//!
+//! This module centralizes the modal chat completions API implementation,
+//! providing shared types and helper functions for preparing tools and tool choices
+//! in OpenAI's chat completions format. These types are used by providers such as
+//! OpenAI, Azure, Groq, and OpenRouter.
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -25,7 +32,7 @@ pub struct ChatCompletionTool<'a> {
     pub strict: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum ChatCompletionToolChoice<'a> {
     String(ChatCompletionToolChoiceString),
@@ -33,7 +40,7 @@ pub enum ChatCompletionToolChoice<'a> {
     AllowedTools(ChatCompletionAllowedToolsChoice<'a>),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ChatCompletionToolChoiceString {
     None,

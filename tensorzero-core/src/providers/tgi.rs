@@ -26,8 +26,8 @@ use url::Url;
 
 use super::helpers::convert_stream_error;
 use super::openai::{
-    get_chat_url, prepare_openai_messages, prepare_openai_tools, OpenAIRequestMessage, OpenAITool,
-    OpenAIToolChoice, OpenAIToolType, StreamOptions, SystemOrDeveloper,
+    get_chat_url, prepare_openai_messages, OpenAIRequestMessage, OpenAIToolType, StreamOptions,
+    SystemOrDeveloper,
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
@@ -49,6 +49,8 @@ use crate::inference::InferenceProvider;
 use crate::inference::TensorZeroEventError;
 use crate::inference::WrappedProvider;
 use crate::model::{Credential, ModelProvider};
+use crate::providers::chat_completions::prepare_chat_completion_tools;
+use crate::providers::chat_completions::{ChatCompletionTool, ChatCompletionToolChoice};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -448,12 +450,9 @@ struct TGIRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
-    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // allowed_tools: Option<Vec<&'a str>>,
+    tools: Option<Vec<ChatCompletionTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tool_choice: Option<OpenAIToolChoice<'a>>,
+    tool_choice: Option<ChatCompletionToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -523,7 +522,8 @@ impl<'a> TGIRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_chat_completion_tools(request, false);
 
         let mut tgi_request = TGIRequest {
             messages,
@@ -537,7 +537,6 @@ impl<'a> TGIRequest<'a> {
             stream: request.stream,
             stream_options,
             tools,
-            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
@@ -832,7 +831,10 @@ mod tests {
     use crate::{
         inference::types::{FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role},
         providers::{
-            openai::{OpenAIToolType, SpecificToolChoice, SpecificToolFunction},
+            chat_completions::{
+                ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
+                ChatCompletionToolChoice, ChatCompletionToolType,
+            },
             test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG},
         },
     };
@@ -922,21 +924,19 @@ mod tests {
         assert!(!tgi_request.stream);
         assert!(tgi_request.tools.is_some());
         let tools = tgi_request.tools.as_ref().unwrap();
-        match &tools[0] {
-            crate::providers::openai::OpenAITool::Function { function, .. } => {
-                assert_eq!(function.name, WEATHER_TOOL.name());
-                assert_eq!(function.parameters, WEATHER_TOOL.parameters());
-            }
-            crate::providers::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
-        }
+        let tool = &tools[0];
+        assert_eq!(tool.function.name, WEATHER_TOOL.name());
+        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             tgi_request.tool_choice,
-            Some(OpenAIToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+            Some(ChatCompletionToolChoice::Specific(
+                ChatCompletionSpecificToolChoice {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionSpecificToolFunction {
+                        name: WEATHER_TOOL.name(),
+                    }
                 }
-            }))
+            ))
         );
 
         // Test request with strict JSON mode with no output schema
