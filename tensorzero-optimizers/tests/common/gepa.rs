@@ -56,7 +56,7 @@ pub async fn test_gepa_optimization_chat() {
             mutation_model: "openai::gpt-5-mini".to_string(),
             seed: Some(42),
             timeout: 300,
-            include_inference_input_for_mutation: false,
+            include_inference_input_for_mutation: true,
             retries: tensorzero_core::utils::retries::RetryConfig::default(),
             max_tokens: 16_384,
         }),
@@ -161,9 +161,9 @@ pub async fn test_gepa_optimization_chat() {
         }
         OptimizationJobInfo::Failed { message, .. } => {
             // GEPA failed to find improvements - this is a valid outcome
-            println!("⚠️  GEPA optimization completed but found no improvements:");
+            println!("GEPA optimization completed but found no improvements:");
             println!("   {message}");
-            println!("✅ GEPA error handling test passed - gracefully handled failure case");
+            println!("GEPA error handling test passed - gracefully handled failure case");
         }
         other => {
             panic!("Expected Completed or Failed status, got: {other:?}");
@@ -351,18 +351,13 @@ async fn run_gepa_workflow_with_client(client: &tensorzero::Client) {
                 }
             }
 
-            println!(
-                "✅ GEPA workflow test passed with {} variants",
-                variants.len()
-            );
+            println!("GEPA workflow test passed with {} variants", variants.len());
         }
         OptimizationJobInfo::Failed { message, .. } => {
             // GEPA failed to find improvements - this is a valid outcome
-            println!("⚠️  GEPA workflow completed but found no improvements:");
+            println!("GEPA workflow completed but found no improvements:");
             println!("   {message}");
-            println!(
-                "✅ GEPA workflow error handling test passed - gracefully handled failure case"
-            );
+            println!("GEPA workflow error handling test passed - gracefully handled failure case");
         }
         other => panic!("Expected Completed or Failed, got: {other:?}"),
     }
