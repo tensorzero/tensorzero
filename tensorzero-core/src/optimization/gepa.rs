@@ -244,8 +244,9 @@ impl UninitializedGEPAConfig {
     /// :param timeout: Client timeout in seconds for TensorZero gateway operations. Default: 300.
     /// :param include_inference_input_for_mutation: Whether to include inference input in InferenceWithAnalysis for mutation. If True, the mutate function will see the inference input in addition to the output and analysis for each example in the batch. Use with caution for multi-turn conversations or large batch sizes. Default: False.
     /// :param retries: Retry configuration for inference calls during GEPA optimization.
+    /// :param max_tokens: Maximum number of tokens to generate for analysis and mutation model calls. Default: 16_384.
     #[expect(unused_variables, clippy::too_many_arguments)]
-    #[pyo3(signature = (*, function_name, evaluation_name, initial_variants=None, variant_prefix=None, batch_size=None, max_iterations=None, max_concurrency=None, analysis_model=None, mutation_model=None, seed=None, timeout=None, include_inference_input_for_mutation=None, retries=None))]
+    #[pyo3(signature = (*, function_name, evaluation_name, initial_variants=None, variant_prefix=None, batch_size=None, max_iterations=None, max_concurrency=None, analysis_model=None, mutation_model=None, seed=None, timeout=None, include_inference_input_for_mutation=None, retries=None, max_tokens=None))]
     fn __init__(
         this: Py<Self>,
         function_name: String,
@@ -261,6 +262,7 @@ impl UninitializedGEPAConfig {
         timeout: Option<u64>,
         include_inference_input_for_mutation: Option<bool>,
         retries: Option<RetryConfig>,
+        max_tokens: Option<u32>,
     ) -> Py<Self> {
         this
     }
