@@ -1067,14 +1067,14 @@ mod tests {
                 assert_eq!(function.name, WEATHER_TOOL.name());
                 assert_eq!(function.parameters, WEATHER_TOOL.parameters());
             }
-            crate::providers::openai::OpenAITool::Custom(_) => panic!("Expected Function tool"),
+            crate::providers::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
         match &tools[1] {
             crate::providers::openai::OpenAITool::Function { function, .. } => {
                 assert_eq!(function.name, QUERY_TOOL.name());
                 assert_eq!(function.parameters, QUERY_TOOL.parameters());
             }
-            crate::providers::openai::OpenAITool::Custom(_) => panic!("Expected Function tool"),
+            crate::providers::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
         let tool_choice = sglang_request.tool_choice.unwrap();
         assert_eq!(

@@ -1524,7 +1524,7 @@ pub(super) fn prepare_openai_tools<'a>(
     match &request.tool_config {
         None => (None, None, None),
         Some(tool_config) => {
-            if !tool_config.any_tools_available() {
+            if !tool_config.any_tools_available() && tool_config.openai_custom_tools.is_empty() {
                 return (None, None, None);
             }
             let tools = Some(
@@ -1535,7 +1535,7 @@ pub(super) fn prepare_openai_tools<'a>(
                         tool_config
                             .openai_custom_tools
                             .iter()
-                            .map(OpenAITool::Custom),
+                            .map(|custom| OpenAITool::Custom { custom }),
                     )
                     .collect(),
             );
@@ -2012,7 +2012,9 @@ pub enum OpenAITool<'a> {
         function: OpenAIFunction<'a>,
         strict: bool,
     },
-    Custom(&'a OpenAICustomTool),
+    Custom {
+        custom: &'a OpenAICustomTool,
+    },
 }
 
 impl<'a> From<&'a ClientSideFunctionToolConfig> for OpenAITool<'a> {
@@ -2265,7 +2267,9 @@ impl<'a> OpenAIRequest<'a> {
         )
         .await?;
 
+        println!("Model inference request: {request:?}");
         let (tools, tool_choice, mut parallel_tool_calls) = prepare_openai_tools(request);
+        println!("Tools: {tools:?}");
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
@@ -2377,18 +2381,37 @@ struct OpenAIResponseFunctionCall {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-pub(super) struct OpenAIResponseToolCall {
-    id: String,
-    r#type: OpenAIToolType,
-    function: OpenAIResponseFunctionCall,
+struct OpenAIResponseCustomCall {
+    name: String,
+    input: String,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub(super) enum OpenAIResponseToolCall {
+    Function {
+        id: String,
+        function: OpenAIResponseFunctionCall,
+    },
+    Custom {
+        id: String,
+        custom: OpenAIResponseCustomCall,
+    },
 }
 
 impl From<OpenAIResponseToolCall> for ToolCall {
     fn from(openai_tool_call: OpenAIResponseToolCall) -> Self {
-        ToolCall {
-            id: openai_tool_call.id,
-            name: openai_tool_call.function.name,
-            arguments: openai_tool_call.function.arguments,
+        match openai_tool_call {
+            OpenAIResponseToolCall::Function { id, function } => ToolCall {
+                id,
+                name: function.name,
+                arguments: function.arguments,
+            },
+            OpenAIResponseToolCall::Custom { id, custom } => ToolCall {
+                id,
+                name: custom.name,
+                arguments: custom.input,
+            },
         }
     }
 }
@@ -3135,7 +3158,7 @@ mod tests {
                 assert_eq!(function.name, WEATHER_TOOL.name());
                 assert_eq!(function.parameters, WEATHER_TOOL.parameters());
             }
-            OpenAITool::Custom(_) => panic!("Expected Function tool"),
+            OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
         assert_eq!(
             openai_request.tool_choice,
@@ -3419,9 +3442,8 @@ mod tests {
                 message: OpenAIResponseMessage {
                     content: None,
                     reasoning_content: None,
-                    tool_calls: Some(vec![OpenAIResponseToolCall {
+                    tool_calls: Some(vec![OpenAIResponseToolCall::Function {
                         id: "call1".to_string(),
-                        r#type: OpenAIToolType::Function,
                         function: OpenAIResponseFunctionCall {
                             name: "test_function".to_string(),
                             arguments: "{}".to_string(),
@@ -3630,14 +3652,14 @@ mod tests {
                 assert_eq!(function.name, WEATHER_TOOL.name());
                 assert_eq!(function.parameters, WEATHER_TOOL.parameters());
             }
-            OpenAITool::Custom(_) => panic!("Expected Function tool"),
+            OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
         match &tools[1] {
             OpenAITool::Function { function, .. } => {
                 assert_eq!(function.name, QUERY_TOOL.name());
                 assert_eq!(function.parameters, QUERY_TOOL.parameters());
             }
-            OpenAITool::Custom(_) => panic!("Expected Function tool"),
+            OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
         let tool_choice = tool_choice.unwrap();
         assert_eq!(

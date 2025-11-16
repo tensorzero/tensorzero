@@ -272,7 +272,7 @@ impl<'a> OpenAITool<'a> {
                     strict,
                 })
             }
-            OpenAITool::Custom(custom_tool) => OpenAIResponsesTool::Custom(custom_tool),
+            OpenAITool::Custom { custom: custom_tool } => OpenAIResponsesTool::Custom(custom_tool),
         }
     }
 }

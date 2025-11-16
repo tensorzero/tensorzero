@@ -3231,3 +3231,352 @@ async fn test_file_fallback_filename_sent_to_openai() {
         "Expected fallback filename 'input.pdf' in raw_request, got: {raw_request}"
     );
 }
+
+// TODO test custom tools with responses API
+
+/// Test that OpenAI accepts and uses a custom tool with text format
+#[tokio::test(flavor = "multi_thread")]
+async fn test_openai_custom_tool_text_format() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "model_name": "openai::gpt-5-mini",
+        "episode_id": episode_id,
+        "input": {
+            "messages": [{
+                "role": "user",
+                "content": "Generate Python code to print 'Hello, World!' using the code_generator tool."
+            }],
+        },
+        "additional_tools": [
+            {
+                "type": "openai_custom",
+                "name": "code_generator",
+                "description": "Generates Python code snippets based on requirements",
+                "format": {
+                    "type": "text"
+                }
+            }
+        ],
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json
+        .get("inference_id")
+        .and_then(|v| v.as_str())
+        .expect("inference_id should be present in response");
+    // TODO: assert that the response contains a tool call to the code_generator tool
+
+    println!("Response: {response_json:#?}");
+
+    // Wait for ClickHouse to write the data
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    // Verify the tool was stored in ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let model_inference =
+        select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
+            .await
+            .unwrap();
+
+    let raw_request = model_inference
+        .get("raw_request")
+        .unwrap()
+        .as_str()
+        .unwrap();
+
+    println!("Raw request: {}", raw_request);
+
+    // Verify the custom tool appears in the raw request
+    assert!(
+        raw_request.contains("code_generator"),
+        "Expected custom tool 'code_generator' in raw_request"
+    );
+    assert!(
+        raw_request.contains("\"type\":\"custom\"") || raw_request.contains("\"type\": \"custom\""),
+        "Expected custom tool type in raw_request, got: {}",
+        raw_request
+    );
+
+    // Check if the LLM actually called the tool (best effort - may be non-deterministic)
+    if let Some(content) = response_json.get("content") {
+        println!("Content from LLM: {content:#?}");
+        // The response might contain tool calls if the LLM decided to use the tool
+    }
+}
+
+/// Test that OpenAI accepts and uses a custom tool with Lark grammar format
+#[tokio::test(flavor = "multi_thread")]
+async fn test_openai_custom_tool_grammar_lark() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    // Simple arithmetic grammar in Lark format
+    let lark_grammar = r#"
+start: expr
+
+expr: term ((ADD | SUB) term)*
+term: factor ((MUL | DIV) factor)*
+factor: NUMBER
+      | "(" expr ")"
+
+ADD: "+"
+SUB: "-"
+MUL: "*"
+DIV: "/"
+
+NUMBER: /\d+(\.\d+)?/
+
+%import common.WS
+%ignore WS
+"#;
+
+    let payload = json!({
+        "model_name": "openai::gpt-5-mini",
+        "episode_id": episode_id,
+        "input": {
+            "messages": [{
+                "role": "user",
+                "content": "Use the calculator tool to compute 5 + 3 * 2"
+            }],
+        },
+        "additional_tools": [
+            {
+                "type": "openai_custom",
+                "name": "calculator",
+                "description": "Evaluates arithmetic expressions",
+                "format": {
+                    "type": "grammar",
+                    "grammar": {
+                    "syntax": "lark",
+                    "definition": lark_grammar
+                }}
+            }
+        ],
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json
+        .get("inference_id")
+        .and_then(|v| v.as_str())
+        .expect("inference_id should be present in response");
+
+    println!("Response: {response_json:#?}");
+    //TODO: as
+
+    // Wait for ClickHouse to write the data
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    // Verify the tool was stored in ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let model_inference =
+        select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
+            .await
+            .unwrap();
+
+    let raw_request = model_inference
+        .get("raw_request")
+        .unwrap()
+        .as_str()
+        .unwrap();
+
+    // Verify the custom tool with grammar appears in the raw request
+    assert!(
+        raw_request.contains("calculator"),
+        "Expected custom tool 'calculator' in raw_request"
+    );
+    assert!(
+        raw_request.contains("\"type\":\"custom\"") || raw_request.contains("\"type\": \"custom\""),
+        "Expected custom tool type in raw_request"
+    );
+    assert!(
+        raw_request.contains("lark"),
+        "Expected lark grammar syntax in raw_request"
+    );
+}
+
+/// Test that OpenAI accepts and uses a custom tool with Regex grammar format
+#[tokio::test(flavor = "multi_thread")]
+async fn test_openai_custom_tool_grammar_regex() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    // Regex pattern for phone numbers in format XXX-XXX-XXXX
+    let regex_pattern = r"^\d{3}-\d{3}-\d{4}$";
+
+    let payload = json!({
+        "model_name": "openai::gpt-5-mini",
+        "episode_id": episode_id,
+        "input": {
+            "messages": [{
+                "role": "user",
+                "content": "Use the phone_formatter tool to format the phone number 415-555-0123"
+            }],
+        },
+        "additional_tools": [
+            {
+                "type": "openai_custom",
+                "name": "phone_formatter",
+                "description": "Formats phone numbers in the standard XXX-XXX-XXXX format",
+                "format": {
+                    "type": "grammar",
+                    "grammar": {
+                    "syntax": "regex",
+                    "definition": regex_pattern
+                }}
+            }
+        ],
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json
+        .get("inference_id")
+        .and_then(|v| v.as_str())
+        .expect("inference_id should be present in response");
+
+    println!("Response: {response_json:#?}");
+
+    // Wait for ClickHouse to write the data
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    // Verify the tool was stored in ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let model_inference =
+        select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
+            .await
+            .unwrap();
+
+    let raw_request = model_inference
+        .get("raw_request")
+        .unwrap()
+        .as_str()
+        .unwrap();
+
+    // Verify the custom tool with regex grammar appears in the raw request
+    assert!(
+        raw_request.contains("phone_formatter"),
+        "Expected custom tool 'phone_formatter' in raw_request"
+    );
+    assert!(
+        raw_request.contains("\"type\":\"custom\"") || raw_request.contains("\"type\": \"custom\""),
+        "Expected custom tool type in raw_request"
+    );
+    assert!(
+        raw_request.contains("regex"),
+        "Expected regex grammar syntax in raw_request"
+    );
+}
+
+/// Test that standard function tools and custom tools can be used together
+#[tokio::test(flavor = "multi_thread")]
+async fn test_openai_mixed_function_and_custom_tools() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "weather_helper",
+        "variant_name": "openai",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "Weather Assistant"},
+            "messages": [{
+                "role": "user",
+                "content": "Get the temperature in Paris, France and then use the weather_report tool to format it nicely."
+            }],
+        },
+        "additional_tools": [
+            {
+                "type": "openai_custom",
+                "name": "weather_report",
+                "description": "Generates a formatted weather report from temperature data",
+                "format": {
+                    "type": "text"
+                }
+            }
+        ],
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json
+        .get("inference_id")
+        .and_then(|v| v.as_str())
+        .expect("inference_id should be present in response");
+
+    println!("Response: {response_json:#?}");
+
+    // Wait for ClickHouse to write the data
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    // Verify both tool types were stored in ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let model_inference =
+        select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
+            .await
+            .unwrap();
+
+    let raw_request = model_inference
+        .get("raw_request")
+        .unwrap()
+        .as_str()
+        .unwrap();
+
+    // Verify the custom tool appears in the raw request
+    assert!(
+        raw_request.contains("weather_report"),
+        "Expected custom tool 'weather_report' in raw_request"
+    );
+
+    // Verify the function tool (get_temperature) also appears
+    assert!(
+        raw_request.contains("get_temperature"),
+        "Expected function tool 'get_temperature' in raw_request"
+    );
+
+    // Both tool types should be present
+    assert!(
+        raw_request.contains("\"type\":\"custom\"") || raw_request.contains("\"type\": \"custom\""),
+        "Expected custom tool type in raw_request"
+    );
+    assert!(
+        raw_request.contains("\"type\":\"function\"")
+            || raw_request.contains("\"type\": \"function\""),
+        "Expected function tool type in raw_request"
+    );
+}

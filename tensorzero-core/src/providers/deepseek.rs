@@ -893,7 +893,7 @@ mod tests {
                 assert_eq!(function.name, WEATHER_TOOL.name());
                 assert_eq!(function.parameters, WEATHER_TOOL.parameters());
             }
-            crate::providers::openai::OpenAITool::Custom(_) => panic!("Expected Function tool"),
+            crate::providers::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
         assert_eq!(
             deepseek_request.tool_choice,
@@ -949,7 +949,7 @@ mod tests {
                 assert_eq!(function.name, WEATHER_TOOL.name());
                 assert_eq!(function.parameters, WEATHER_TOOL.parameters());
             }
-            crate::providers::openai::OpenAITool::Custom(_) => panic!("Expected Function tool"),
+            crate::providers::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
         assert_eq!(
             deepseek_request.tool_choice,

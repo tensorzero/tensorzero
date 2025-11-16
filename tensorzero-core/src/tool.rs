@@ -777,6 +777,7 @@ impl ToolCallConfig {
         let tool_call_config_option = if static_tools_available.is_empty()
             && dynamic_tools_available.is_empty()
             && dynamic_provider_tools.is_empty()
+            && openai_custom_tools.is_empty()
         {
             None
         } else {
@@ -3756,7 +3757,7 @@ mod tests {
         });
         let result: DynamicTool = serde_json::from_value(regex_json).unwrap();
         if let Tool::OpenAICustom(custom) = result.0 {
-            if let Some(CustomToolFormat::Grammar { grammar }) = custom.format {
+            if let Some(CustomToolFormat::Grammar { grammar: grammar }) = custom.format {
                 assert!(matches!(grammar.syntax, GrammarSyntax::Regex));
             }
         }
@@ -4228,5 +4229,77 @@ mod tests {
             format: Some(CustomToolFormat::Text),
         });
         assert_eq!(custom1.name(), custom2.name());
+    }
+
+    /// Test that ToolCallConfig is created (not None) when ONLY custom tools are provided
+    /// This is a regression test for a bug where ToolCallConfig::new would return None
+    /// if there were custom tools but no function tools.
+    #[tokio::test]
+    async fn test_tool_call_config_with_only_custom_tools() {
+        // Create params with ONLY custom tools - no function tools, no provider tools
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: Some(vec![
+                DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
+                    name: "only_custom_1".to_string(),
+                    description: Some("First custom tool".to_string()),
+                    format: Some(CustomToolFormat::Text),
+                })),
+                DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
+                    name: "only_custom_2".to_string(),
+                    description: Some("Second custom tool".to_string()),
+                    format: Some(CustomToolFormat::Grammar {
+                        grammar: GrammarDefinition {
+                            syntax: GrammarSyntax::Lark,
+                            definition: "start: WORD+".to_string(),
+                        },
+                    }),
+                })),
+            ]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        // Create ToolCallConfig with NO static function tools
+        let tool_call_config_result =
+            ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+                &EMPTY_FUNCTION_TOOLS, // No static function tools
+                &AUTO_TOOL_CHOICE,
+                Some(true),
+                &TOOLS,
+                dynamic_params,
+            ))
+            .unwrap();
+
+        // CRITICAL: This should be Some, not None, even though there are no function tools
+        assert!(
+            tool_call_config_result.is_some(),
+            "ToolCallConfig should be Some when only custom tools are provided"
+        );
+
+        let tool_call_config = tool_call_config_result.unwrap();
+
+        // Verify custom tools are present
+        assert_eq!(tool_call_config.openai_custom_tools.len(), 2);
+        assert_eq!(
+            tool_call_config.openai_custom_tools[0].name,
+            "only_custom_1"
+        );
+        assert_eq!(
+            tool_call_config.openai_custom_tools[1].name,
+            "only_custom_2"
+        );
+
+        // Verify no function tools are present
+        let function_tools: Vec<_> = tool_call_config.tools_available().collect();
+        assert_eq!(function_tools.len(), 0, "Should have no function tools");
+
+        // Verify tool choice and parallel_tool_calls are set correctly
+        assert!(matches!(
+            tool_call_config.tool_choice,
+            ToolChoice::Auto | ToolChoice::Required
+        ));
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
     }
 }
