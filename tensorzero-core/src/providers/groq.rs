@@ -21,10 +21,12 @@ use crate::inference::types::chat_completion_inference_params::{
     warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
 };
 use crate::inference::types::{
-    batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
-    ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseChunk, RequestMessage, Role, Text, TextChunk, Usage,
+    batch::StartBatchProviderInferenceResponse,
+    resolved_input::{FileUrl, LazyFile},
+    ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
+    ModelInferenceRequestJsonMode, ObjectStorageFile, PeekableProviderInferenceResponseStream,
+    ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
+    TextChunk, Usage,
 };
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
@@ -35,7 +37,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
-    inject_extra_request_data_and_send_eventsource,
+    inject_extra_request_data_and_send_eventsource, warn_cannot_forward_url_if_missing_mime_type,
 };
 
 // Import unified OpenAI types for allowed_tools support
@@ -534,7 +536,7 @@ impl GroqRequestMessage<'_> {
                     content.iter().any(|c| match c {
                         GroqContentBlock::Text { text } => text.to_lowercase().contains(value),
                         GroqContentBlock::ImageUrl { .. } => false,
-                        // Don't inspect the contents of 'unknown' blocks
+                        // Don't inspect the contents of `unknown` blocks
                         GroqContentBlock::Unknown { data: _ } => false,
                     })
                 } else {
@@ -549,12 +551,17 @@ impl GroqRequestMessage<'_> {
 pub(super) async fn prepare_groq_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<GroqRequestMessage<'a>>, Error> {
-    let mut messages: Vec<_> =
-        try_join_all(request.messages.iter().map(tensorzero_to_groq_messages))
-            .await?
-            .into_iter()
-            .flatten()
-            .collect();
+    let fetch_and_encode = request.fetch_and_encode_input_files_before_inference;
+    let mut messages: Vec<_> = try_join_all(
+        request
+            .messages
+            .iter()
+            .map(|msg| tensorzero_to_groq_messages(msg, fetch_and_encode)),
+    )
+    .await?
+    .into_iter()
+    .flatten()
+    .collect();
     if let Some(system_msg) =
         tensorzero_to_groq_system_message(request.system.as_deref(), request.json_mode, &messages)
     {
@@ -639,15 +646,29 @@ pub(super) fn tensorzero_to_groq_system_message<'a>(
 
 pub(super) async fn tensorzero_to_groq_messages(
     message: &RequestMessage,
+    fetch_and_encode_input_files_before_inference: bool,
 ) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     match message.role {
-        Role::User => tensorzero_to_groq_user_messages(&message.content).await,
-        Role::Assistant => tensorzero_to_groq_assistant_messages(&message.content).await,
+        Role::User => {
+            tensorzero_to_groq_user_messages(
+                &message.content,
+                fetch_and_encode_input_files_before_inference,
+            )
+            .await
+        }
+        Role::Assistant => {
+            tensorzero_to_groq_assistant_messages(
+                &message.content,
+                fetch_and_encode_input_files_before_inference,
+            )
+            .await
+        }
     }
 }
 
 async fn tensorzero_to_groq_user_messages(
     content_blocks: &[ContentBlock],
+    fetch_and_encode_input_files_before_inference: bool,
 ) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the user content blocks.
 
@@ -672,20 +693,52 @@ async fn tensorzero_to_groq_user_messages(
                     tool_call_id: &tool_result.id,
                 }));
             }
-            ContentBlock::File(file) => {
-                let resolved_file = file.resolve().await?;
-                let ObjectStorageFile { file, data } = &*resolved_file;
-                if file.detail.is_some() {
-                    tracing::warn!(
-                        "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+            ContentBlock::File(file) => match file.as_ref() {
+                LazyFile::Url {
+                    file_url:
+                        FileUrl {
+                            mime_type,
+                            url,
+                            detail,
+                        },
+                    future: _,
+                } if !fetch_and_encode_input_files_before_inference
+                    && matches!(
+                        mime_type.as_ref().map(mime::MediaType::type_),
+                        Some(mime::IMAGE) | None
+                    ) =>
+                {
+                    if detail.is_some() {
+                        tracing::warn!(
+                                "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                            );
+                    }
+                    warn_cannot_forward_url_if_missing_mime_type(
+                        file,
+                        fetch_and_encode_input_files_before_inference,
+                        PROVIDER_TYPE,
                     );
+                    user_content_blocks.push(GroqContentBlock::ImageUrl {
+                        image_url: GroqImageUrl {
+                            url: url.to_string(),
+                        },
+                    });
                 }
-                user_content_blocks.push(GroqContentBlock::ImageUrl {
-                    image_url: GroqImageUrl {
-                        url: format!("data:{};base64,{}", file.mime_type, data),
-                    },
-                });
-            }
+                _ => {
+                    let resolved_file = file.resolve().await?;
+                    let ObjectStorageFile { file, data } = &*resolved_file;
+                    if file.detail.is_some() {
+                        tracing::warn!(
+                                "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                            );
+                    }
+                    user_content_blocks.push(GroqContentBlock::ImageUrl {
+                        image_url: GroqImageUrl {
+                            url: format!("data:{};base64,{}", file.mime_type, data),
+                        },
+                    });
+                }
+            },
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);
             }
@@ -712,6 +765,7 @@ async fn tensorzero_to_groq_user_messages(
 
 async fn tensorzero_to_groq_assistant_messages(
     content_blocks: &[ContentBlock],
+    fetch_and_encode_input_files_before_inference: bool,
 ) -> Result<Vec<GroqRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the assistant content blocks.
     let mut assistant_content_blocks = Vec::new();
@@ -741,20 +795,52 @@ async fn tensorzero_to_groq_assistant_messages(
                     message: "Tool results are not supported in assistant messages".to_string(),
                 }));
             }
-            ContentBlock::File(file) => {
-                let resolved_file = file.resolve().await?;
-                let ObjectStorageFile { file, data } = &*resolved_file;
-                if file.detail.is_some() {
-                    tracing::warn!(
-                        "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+            ContentBlock::File(file) => match file.as_ref() {
+                LazyFile::Url {
+                    file_url:
+                        FileUrl {
+                            mime_type,
+                            url,
+                            detail,
+                        },
+                    future: _,
+                } if !fetch_and_encode_input_files_before_inference
+                    && matches!(
+                        mime_type.as_ref().map(mime::MediaType::type_),
+                        Some(mime::IMAGE) | None
+                    ) =>
+                {
+                    if detail.is_some() {
+                        tracing::warn!(
+                                "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                            );
+                    }
+                    warn_cannot_forward_url_if_missing_mime_type(
+                        file,
+                        fetch_and_encode_input_files_before_inference,
+                        PROVIDER_TYPE,
                     );
+                    assistant_content_blocks.push(GroqContentBlock::ImageUrl {
+                        image_url: GroqImageUrl {
+                            url: url.to_string(),
+                        },
+                    });
                 }
-                assistant_content_blocks.push(GroqContentBlock::ImageUrl {
-                    image_url: GroqImageUrl {
-                        url: format!("data:{};base64,{}", file.mime_type, data),
-                    },
-                });
-            }
+                _ => {
+                    let resolved_file = file.resolve().await?;
+                    let ObjectStorageFile { file, data } = &*resolved_file;
+                    if file.detail.is_some() {
+                        tracing::warn!(
+                                "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
+                            );
+                    }
+                    assistant_content_blocks.push(GroqContentBlock::ImageUrl {
+                        image_url: GroqImageUrl {
+                            url: format!("data:{};base64,{}", file.mime_type, data),
+                        },
+                    });
+                }
+            },
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);
             }
@@ -2119,7 +2205,7 @@ mod tests {
     #[tokio::test]
     async fn test_tensorzero_to_groq_messages() {
         let content_blocks = vec!["Hello".to_string().into()];
-        let groq_messages = tensorzero_to_groq_user_messages(&content_blocks)
+        let groq_messages = tensorzero_to_groq_user_messages(&content_blocks, true)
             .await
             .unwrap();
         assert_eq!(groq_messages.len(), 1);
@@ -2140,7 +2226,7 @@ mod tests {
             "Hello".to_string().into(),
             "How are you?".to_string().into(),
         ];
-        let groq_messages = tensorzero_to_groq_user_messages(&content_blocks)
+        let groq_messages = tensorzero_to_groq_user_messages(&content_blocks, true)
             .await
             .unwrap();
         assert_eq!(groq_messages.len(), 1);
@@ -2170,7 +2256,7 @@ mod tests {
             arguments: "{}".to_string(),
         });
         let content_blocks = vec!["Hello".to_string().into(), tool_block];
-        let groq_messages = tensorzero_to_groq_assistant_messages(&content_blocks)
+        let groq_messages = tensorzero_to_groq_assistant_messages(&content_blocks, true)
             .await
             .unwrap();
         assert_eq!(groq_messages.len(), 1);
@@ -2675,7 +2761,7 @@ mod tests {
             }),
         )))];
 
-        let _result = tensorzero_to_groq_user_messages(&content_blocks).await;
+        let _result = tensorzero_to_groq_user_messages(&content_blocks, true).await;
 
         // Should log a warning about detail not being supported
         assert!(logs_contain(
