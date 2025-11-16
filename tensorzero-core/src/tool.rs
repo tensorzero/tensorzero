@@ -1713,12 +1713,23 @@ impl InferenceResponseToolCall {
     /// First, it finds the ToolConfig for the ToolCall
     /// Then, it validates the ToolCall arguments against the ToolConfig
     pub async fn new(tool_call: ToolCall, tool_cfg: Option<&ToolCallConfig>) -> Self {
-        let tool = tool_cfg.and_then(|t| t.get_function_tool(&tool_call.name));
-        let parsed_name = match tool {
-            Some(_) => Some(tool_call.name.clone()),
-            None => None,
+        // Check if this is a function tool
+        let function_tool = tool_cfg.and_then(|t| t.get_function_tool(&tool_call.name));
+
+        // Check if this is a custom tool
+        let is_custom_tool = tool_cfg
+            .map(|t| t.openai_custom_tools.iter().any(|ct| ct.name == tool_call.name))
+            .unwrap_or(false);
+
+        // Set parsed_name if tool exists (either function or custom)
+        let parsed_name = if function_tool.is_some() || is_custom_tool {
+            Some(tool_call.name.clone())
+        } else {
+            None
         };
-        let parsed_arguments = if let Some(tool) = tool {
+
+        // Validate arguments only for function tools (custom tools don't use JSON schemas)
+        let parsed_arguments = if let Some(tool) = function_tool {
             if let Ok(arguments) = serde_json::from_str(&tool_call.arguments) {
                 if tool.validate_arguments(&arguments).await.is_ok() {
                     Some(arguments)
@@ -2510,6 +2521,130 @@ mod tests {
             inference_response_tool_call.arguments,
             Some(json!({"location": "Lucky Dog"}))
         );
+    }
+
+    #[tokio::test]
+    async fn test_inference_response_tool_call_with_custom_tools() {
+        // Create a ToolCallConfig with a custom tool
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &EMPTY_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &EMPTY_TOOLS,
+            DynamicToolParams {
+                additional_tools: Some(vec![DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
+                    name: "code_generator".to_string(),
+                    description: Some("Generates code snippets".to_string()),
+                    format: Some(OpenAICustomToolFormat::Text),
+                }))]),
+                ..Default::default()
+            },
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Valid custom tool call - name should be validated
+        let tool_call = ToolCall {
+            name: "code_generator".to_string(),
+            arguments: "{\"description\": \"Print hello world\"}".to_string(),
+            id: "ctc_123".to_string(),
+        };
+        let inference_response_tool_call =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+
+        // The parsed_name should be set since this is a valid custom tool
+        assert_eq!(
+            inference_response_tool_call.name,
+            Some("code_generator".to_string())
+        );
+        assert_eq!(inference_response_tool_call.raw_name, "code_generator");
+        assert_eq!(
+            inference_response_tool_call.raw_arguments,
+            "{\"description\": \"Print hello world\"}"
+        );
+        assert_eq!(inference_response_tool_call.id, "ctc_123");
+        // Custom tools don't validate arguments against JSON schemas, so parsed_arguments should be None
+        assert_eq!(inference_response_tool_call.arguments, None);
+
+        // Invalid custom tool name - name should not be validated
+        let tool_call = ToolCall {
+            name: "not_a_custom_tool".to_string(),
+            arguments: "{\"description\": \"Test\"}".to_string(),
+            id: "ctc_456".to_string(),
+        };
+        let inference_response_tool_call =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+
+        // The parsed_name should be None since this tool doesn't exist
+        assert_eq!(inference_response_tool_call.name, None);
+        assert_eq!(inference_response_tool_call.raw_name, "not_a_custom_tool");
+        assert_eq!(
+            inference_response_tool_call.raw_arguments,
+            "{\"description\": \"Test\"}"
+        );
+        assert_eq!(inference_response_tool_call.id, "ctc_456");
+        assert_eq!(inference_response_tool_call.arguments, None);
+
+        // Test with both function tools and custom tools
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            DynamicToolParams {
+                additional_tools: Some(vec![DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
+                    name: "calculator".to_string(),
+                    description: Some("Performs calculations".to_string()),
+                    format: Some(OpenAICustomToolFormat::Grammar {
+                        grammar: OpenAIGrammarDefinition {
+                            syntax: OpenAIGrammarSyntax::Lark,
+                            definition: "start: NUMBER".to_string(),
+                        },
+                    }),
+                }))]),
+                ..Default::default()
+            },
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Valid function tool should still work
+        let tool_call = ToolCall {
+            name: "get_temperature".to_string(),
+            arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
+            id: "123".to_string(),
+        };
+        let inference_response_tool_call =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+        assert_eq!(
+            inference_response_tool_call.name,
+            Some("get_temperature".to_string())
+        );
+        assert_eq!(
+            inference_response_tool_call.arguments,
+            Some(json!({
+                "location": "San Francisco",
+                "unit": "celsius"
+            }))
+        );
+
+        // Valid custom tool should also work
+        let tool_call = ToolCall {
+            name: "calculator".to_string(),
+            arguments: "42".to_string(),
+            id: "ctc_789".to_string(),
+        };
+        let inference_response_tool_call =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+        assert_eq!(
+            inference_response_tool_call.name,
+            Some("calculator".to_string())
+        );
+        assert_eq!(inference_response_tool_call.raw_name, "calculator");
+        assert_eq!(inference_response_tool_call.raw_arguments, "42");
+        assert_eq!(inference_response_tool_call.id, "ctc_789");
+        // Custom tools don't validate arguments, so parsed_arguments is None
+        assert_eq!(inference_response_tool_call.arguments, None);
     }
 
     #[test]

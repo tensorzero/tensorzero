@@ -3293,8 +3293,10 @@ async fn test_responses_api_custom_tool_text_format() {
     let tool_call = code_generator_calls.first().unwrap();
     let tool_call_id = tool_call.get("id").unwrap().as_str().unwrap();
     let raw_arguments = tool_call.get("raw_arguments").unwrap().as_str().unwrap();
+    let name = tool_call.get("name").unwrap().as_str().unwrap();
     assert!(!raw_arguments.is_empty());
     assert!(!tool_call_id.is_empty());
+    assert_eq!(name, "code_generator");
 
     // Check inference_id
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
