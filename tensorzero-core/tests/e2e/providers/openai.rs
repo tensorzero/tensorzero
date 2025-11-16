@@ -3232,7 +3232,99 @@ async fn test_file_fallback_filename_sent_to_openai() {
     );
 }
 
-// TODO test custom tools with responses API
+/// Test that OpenAI Responses API accepts and uses a custom tool with text format
+#[tokio::test(flavor = "multi_thread")]
+async fn test_responses_api_custom_tool_text_format() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "model_name": "openai::responses::gpt-5-codex",
+        "episode_id": episode_id,
+        "input": {
+            "messages": [{
+                "role": "user",
+                "content": "Generate Python code to print 'Hello, World!' using the code_generator tool."
+            }]
+        },
+        "additional_tools": [{
+            "type": "openai_custom",
+            "name": "code_generator",
+            "description": "Generates Python code snippets based on the given description",
+            "format": {
+                "type": "text"
+            }
+        }],
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("response: {response_json:#}");
+
+    // Check that we got tool calls
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(!content_blocks.is_empty());
+
+    // Find a tool_call block (there should be at least one)
+    let tool_call_blocks: Vec<&Value> = content_blocks
+        .iter()
+        .filter(|block| block.get("type").unwrap().as_str().unwrap() == "tool_call")
+        .collect();
+    assert!(
+        !tool_call_blocks.is_empty(),
+        "Should have at least one tool call block"
+    );
+
+    // Check that one of the tool calls is to code_generator
+    let code_generator_calls: Vec<&Value> = tool_call_blocks
+        .into_iter()
+        .filter(|block| block.get("raw_name").unwrap().as_str().unwrap() == "code_generator")
+        .collect();
+    assert_eq!(code_generator_calls.len(), 1);
+
+    let tool_call = code_generator_calls.first().unwrap();
+    let tool_call_id = tool_call.get("id").unwrap().as_str().unwrap();
+    let raw_arguments = tool_call.get("raw_arguments").unwrap().as_str().unwrap();
+    assert!(!raw_arguments.is_empty());
+    assert!(!tool_call_id.is_empty());
+
+    // Check inference_id
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "tensorzero::default");
+
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "openai::responses::gpt-5-codex");
+
+    // Check that episode_id is correct
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+}
 
 /// Test that OpenAI accepts and uses a custom tool with text format
 #[tokio::test(flavor = "multi_thread")]

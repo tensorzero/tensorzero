@@ -260,7 +260,7 @@ pub struct OpenAICustomTool {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub format: Option<CustomToolFormat>,
+    pub format: Option<OpenAICustomToolFormat>,
 }
 
 impl std::fmt::Display for OpenAICustomTool {
@@ -273,22 +273,22 @@ impl std::fmt::Display for OpenAICustomTool {
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum CustomToolFormat {
+pub enum OpenAICustomToolFormat {
     Text,
-    Grammar { grammar: GrammarDefinition },
+    Grammar { grammar: OpenAIGrammarDefinition },
 }
 
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
-pub struct GrammarDefinition {
-    pub syntax: GrammarSyntax,
+pub struct OpenAIGrammarDefinition {
+    pub syntax: OpenAIGrammarSyntax,
     pub definition: String,
 }
 
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
-pub enum GrammarSyntax {
+pub enum OpenAIGrammarSyntax {
     Lark,
     Regex,
 }
@@ -2662,7 +2662,7 @@ mod tests {
                 DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
                     name: "custom_tool".to_string(), // Duplicate name
                     description: Some("Second custom tool".to_string()),
-                    format: Some(CustomToolFormat::Text),
+                    format: Some(OpenAICustomToolFormat::Text),
                 })),
             ]),
             ..Default::default()
@@ -3713,7 +3713,7 @@ mod tests {
         let result: DynamicTool = serde_json::from_value(text_json).unwrap();
         if let Tool::OpenAICustom(custom) = result.0 {
             assert_eq!(custom.name, "text_tool");
-            assert!(matches!(custom.format, Some(CustomToolFormat::Text)));
+            assert!(matches!(custom.format, Some(OpenAICustomToolFormat::Text)));
         } else {
             panic!("Expected Tool::Custom");
         }
@@ -3735,8 +3735,8 @@ mod tests {
         if let Tool::OpenAICustom(custom) = result.0 {
             assert_eq!(custom.name, "lark_tool");
             assert_eq!(custom.description, Some("Uses Lark grammar".to_string()));
-            if let Some(CustomToolFormat::Grammar { grammar }) = custom.format {
-                assert!(matches!(grammar.syntax, GrammarSyntax::Lark));
+            if let Some(OpenAICustomToolFormat::Grammar { grammar }) = custom.format {
+                assert!(matches!(grammar.syntax, OpenAIGrammarSyntax::Lark));
                 assert_eq!(grammar.definition, "start: \"hello\"");
             } else {
                 panic!("Expected Grammar format");
@@ -3757,8 +3757,8 @@ mod tests {
         });
         let result: DynamicTool = serde_json::from_value(regex_json).unwrap();
         if let Tool::OpenAICustom(custom) = result.0 {
-            if let Some(CustomToolFormat::Grammar { grammar: grammar }) = custom.format {
-                assert!(matches!(grammar.syntax, GrammarSyntax::Regex));
+            if let Some(OpenAICustomToolFormat::Grammar { grammar: grammar }) = custom.format {
+                assert!(matches!(grammar.syntax, OpenAIGrammarSyntax::Regex));
             }
         }
 
@@ -3824,7 +3824,7 @@ mod tests {
         let custom_tool = Tool::OpenAICustom(OpenAICustomTool {
             name: "custom_func".to_string(),
             description: Some("Custom function".to_string()),
-            format: Some(CustomToolFormat::Text),
+            format: Some(OpenAICustomToolFormat::Text),
         });
 
         let json = serde_json::to_value(&custom_tool).unwrap();
@@ -3862,7 +3862,7 @@ mod tests {
             DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
                 name: "custom1".to_string(),
                 description: None,
-                format: Some(CustomToolFormat::Text),
+                format: Some(OpenAICustomToolFormat::Text),
             })),
         ];
 
@@ -3887,7 +3887,7 @@ mod tests {
                 DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
                     name: "custom_tool".to_string(),
                     description: Some("Custom tool".to_string()),
-                    format: Some(CustomToolFormat::Text),
+                    format: Some(OpenAICustomToolFormat::Text),
                 })),
             ]),
             tool_choice: Some(ToolChoice::Auto),
@@ -3964,7 +3964,7 @@ mod tests {
                 DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
                     name: "dynamic_custom".to_string(),
                     description: Some("Dynamic custom".to_string()),
-                    format: Some(CustomToolFormat::Text),
+                    format: Some(OpenAICustomToolFormat::Text),
                 })),
             ]),
             tool_choice: Some(ToolChoice::Auto),
@@ -4008,7 +4008,7 @@ mod tests {
             additional_tools: Some(vec![DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
                 name: "dynamic_custom".to_string(),
                 description: None,
-                format: Some(CustomToolFormat::Text),
+                format: Some(OpenAICustomToolFormat::Text),
             }))]),
             tool_choice: None,
             parallel_tool_calls: None,
@@ -4054,7 +4054,7 @@ mod tests {
                 DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
                     name: "dynamic_custom".to_string(),
                     description: Some("Custom".to_string()),
-                    format: Some(CustomToolFormat::Text),
+                    format: Some(OpenAICustomToolFormat::Text),
                 })),
             ]),
             tool_choice: None,
@@ -4101,7 +4101,7 @@ mod tests {
             Tool::OpenAICustom(OpenAICustomTool {
                 name: "custom_tool".to_string(),
                 description: Some("Custom".to_string()),
-                format: Some(CustomToolFormat::Text),
+                format: Some(OpenAICustomToolFormat::Text),
             }),
         ];
 
@@ -4226,7 +4226,7 @@ mod tests {
         let custom2 = Tool::OpenAICustom(OpenAICustomTool {
             name: "duplicate".to_string(),
             description: Some("Different description".to_string()),
-            format: Some(CustomToolFormat::Text),
+            format: Some(OpenAICustomToolFormat::Text),
         });
         assert_eq!(custom1.name(), custom2.name());
     }
@@ -4243,14 +4243,14 @@ mod tests {
                 DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
                     name: "only_custom_1".to_string(),
                     description: Some("First custom tool".to_string()),
-                    format: Some(CustomToolFormat::Text),
+                    format: Some(OpenAICustomToolFormat::Text),
                 })),
                 DynamicTool(Tool::OpenAICustom(OpenAICustomTool {
                     name: "only_custom_2".to_string(),
                     description: Some("Second custom tool".to_string()),
-                    format: Some(CustomToolFormat::Grammar {
-                        grammar: GrammarDefinition {
-                            syntax: GrammarSyntax::Lark,
+                    format: Some(OpenAICustomToolFormat::Grammar {
+                        grammar: OpenAIGrammarDefinition {
+                            syntax: OpenAIGrammarSyntax::Lark,
                             definition: "start: WORD+".to_string(),
                         },
                     }),
