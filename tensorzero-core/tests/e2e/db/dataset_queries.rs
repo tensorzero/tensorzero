@@ -1,5 +1,6 @@
 use serde_json::json;
 use std::collections::HashMap;
+use tensorzero_core::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use uuid::Uuid;
 
 use object_store::path::Path as ObjectStorePath;
@@ -24,6 +25,8 @@ use tensorzero_core::inference::types::{
     StoredInputMessageContent, Text,
 };
 use tensorzero_core::stored_inference::StoredSample;
+
+use crate::clickhouse::get_clean_clickhouse;
 
 #[tokio::test]
 async fn test_count_rows_for_chat_dataset_with_write_haiku_function() {
@@ -571,12 +574,21 @@ async fn test_get_dataset_rows_pages_correctly() {
     assert!(!all_rows.is_empty(), "Should have existing rows");
 }
 
-#[tokio::test]
-async fn test_count_datasets() {
-    let clickhouse = get_clickhouse().await;
+#[tokio::test(flavor = "multi_thread")]
+async fn test_clickhouse_count_datasets() {
+    let (clickhouse, _guard) = get_clean_clickhouse(false).await;
+    let is_manual = clickhouse.is_cluster_configured();
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: is_manual,
+        disable_automatic_migrations: false,
+    })
+    .await
+    .unwrap();
 
     // Get initial count
     let initial_count = clickhouse.count_datasets().await.unwrap();
+    assert_eq!(initial_count, 0, "Should have 0 datasets before insertion");
 
     // Insert datapoints in two different datasets
     let dataset1 = format!("test_dataset_{}", Uuid::now_v7());
@@ -636,9 +648,9 @@ async fn test_count_datasets() {
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Count should increase by 2
+    // Count should equal 2
     let new_count = clickhouse.count_datasets().await.unwrap();
-    assert_eq!(new_count, initial_count + 2);
+    assert_eq!(new_count, 2);
 }
 
 #[tokio::test]
