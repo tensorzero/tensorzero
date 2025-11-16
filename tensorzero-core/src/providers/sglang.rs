@@ -1060,18 +1060,18 @@ mod tests {
         let tools = sglang_request.tools.unwrap();
         assert_eq!(tools.len(), 2);
         match &tools[0] {
-            crate::providers::openai::OpenAITool::Function { function, .. } => {
+            OpenAITool::Function { function, .. } => {
                 assert_eq!(function.name, WEATHER_TOOL.name());
                 assert_eq!(function.parameters, WEATHER_TOOL.parameters());
             }
-            crate::providers::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
+            OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
         match &tools[1] {
-            crate::providers::openai::OpenAITool::Function { function, .. } => {
+            OpenAITool::Function { function, .. } => {
                 assert_eq!(function.name, QUERY_TOOL.name());
                 assert_eq!(function.parameters, QUERY_TOOL.parameters());
             }
-            crate::providers::openai::OpenAITool::Custom { .. } => panic!("Expected Function tool"),
+            OpenAITool::Custom { .. } => panic!("Expected Function tool"),
         }
         let tool_choice = sglang_request.tool_choice.unwrap();
         assert_eq!(

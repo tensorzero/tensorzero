@@ -620,9 +620,6 @@ struct AzureRequest<'a> {
     response_format: Option<AzureResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<ChatCompletionTool<'a>>>,
-    // OLD: separate allowed_tools field - replaced by AllowedToolsChoice variant in tool_choice
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // allowed_tools: Option<Vec<&'a str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<AzureToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]

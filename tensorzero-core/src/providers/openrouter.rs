@@ -48,7 +48,8 @@ use crate::providers::helpers::{
 };
 
 use super::chat_completions::{
-    ChatCompletionAllowedToolsMode, ChatCompletionToolChoice, ChatCompletionToolChoiceString,
+    ChatCompletionAllowedToolsMode, ChatCompletionTool, ChatCompletionToolChoice,
+    ChatCompletionToolChoiceString,
 };
 // Import unified OpenAI types for allowed_tools support
 use super::openai::{
@@ -1002,8 +1003,8 @@ impl<'a> From<&'a ClientSideFunctionToolConfig> for OpenRouterTool<'a> {
     }
 }
 
-impl<'a> From<super::chat_completions::ChatCompletionTool<'a>> for OpenRouterTool<'a> {
-    fn from(tool: super::chat_completions::ChatCompletionTool<'a>) -> Self {
+impl<'a> From<ChatCompletionTool<'a>> for OpenRouterTool<'a> {
+    fn from(tool: ChatCompletionTool<'a>) -> Self {
         OpenRouterTool {
             r#type: OpenRouterToolType::Function,
             function: OpenRouterFunction {
