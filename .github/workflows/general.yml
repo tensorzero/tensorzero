@@ -667,7 +667,7 @@ jobs:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
         # TODO: Temporarily using 25.9 instead of latest
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12","prefix":"24.12","allow_failure":false},{"tag":"25.9","prefix":"25.9","allow_failure":false}]') || fromJSON('[{"tag":"25.9","prefix":"25.9","allow_failure":false}]') }}
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"25.9","prefix":"25.9","allow_failure":false}]') || fromJSON('[{"tag":"25.9","prefix":"25.9","allow_failure":false}]') }}
         exclude:
           # Use 25.7 instead of 25.9 for replicated tests in merge group
           - replicated: true
