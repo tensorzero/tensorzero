@@ -1327,23 +1327,16 @@ impl TensorZeroGateway {
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
-    /// * `limit` - Maximum number of datapoints to evaluate, starting from the newest (None = no limit)
-    /// * `offset` - Number of newest datapoints to skip before starting evaluation (None = no offset)
-    ///
-    /// Note: Datapoints are ordered by creation time in descending order (newest first).
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
-                        dynamic_variant_config=None,
-                        limit=None,
-                        offset=None
+                        dynamic_variant_config=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, limit=None, offset=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None)"
     )]
-    #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
         evaluation_name: String,
@@ -1352,8 +1345,6 @@ impl TensorZeroGateway {
         concurrency: usize,
         inference_cache: String,
         dynamic_variant_config: Option<&Bound<'_, PyDict>>,
-        limit: Option<usize>,
-        offset: Option<usize>,
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
 
@@ -1383,8 +1374,6 @@ impl TensorZeroGateway {
             variant,
             concurrency,
             inference_cache: inference_cache_enum,
-            limit,
-            offset,
         };
 
         let result =
@@ -1469,6 +1458,63 @@ impl TensorZeroGateway {
         let wires: Vec<StoredInference> =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         Ok(wires)
+    }
+
+    /// Get specific inferences by their IDs.
+    ///
+    /// :param ids: A sequence of inference IDs to retrieve. They should be in UUID format.
+    /// :param function_name: Optional function name to filter by (improves query performance).
+    /// :param output_source: The source of the output ("inference" or "demonstration"). Default: "inference".
+    /// :return: A `GetInferencesResponse` object.
+    #[pyo3(signature = (*, ids, function_name=None, output_source="inference"))]
+    fn get_inferences(
+        this: PyRef<'_, Self>,
+        ids: Vec<Bound<'_, PyAny>>,
+        function_name: Option<String>,
+        output_source: &str,
+    ) -> PyResult<Py<PyAny>> {
+        let client = this.as_super().client.clone();
+        let ids: Vec<uuid::Uuid> = ids
+            .into_iter()
+            .map(|id| python_uuid_to_uuid("id", id))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let output_source =
+            output_source
+                .try_into()
+                .map_err(|e: tensorzero_core::error::Error| {
+                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
+                })?;
+
+        let fut = client.get_inferences(ids, function_name, output_source);
+        let response =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        convert_response_to_python_dataclass(
+            this.py(),
+            response,
+            "tensorzero",
+            "GetInferencesResponse",
+        )
+    }
+
+    /// List inferences with optional filtering, pagination, and sorting.
+    ///
+    /// :param request: A `ListInferencesRequest` object with filter parameters.
+    /// :return: A `GetInferencesResponse` object.
+    #[pyo3(signature = (*, request))]
+    fn list_inferences(this: PyRef<'_, Self>, request: Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let client = this.as_super().client.clone();
+        let request = deserialize_from_pyobj(this.py(), &request)?;
+
+        let fut = client.list_inferences(request);
+        let response =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        convert_response_to_python_dataclass(
+            this.py(),
+            response,
+            "tensorzero",
+            "GetInferencesResponse",
+        )
     }
 
     /// DEPRECATED: use `experimental_render_samples` instead.
@@ -2444,23 +2490,16 @@ impl AsyncTensorZeroGateway {
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
-    /// * `limit` - Maximum number of datapoints to evaluate, starting from the newest (None = no limit)
-    /// * `offset` - Number of newest datapoints to skip before starting evaluation (None = no offset)
-    ///
-    /// Note: Datapoints are ordered by creation time in descending order (newest first).
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
-                        dynamic_variant_config=None,
-                        limit=None,
-                        offset=None
+                        dynamic_variant_config=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, limit=None, offset=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None)"
     )]
-    #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
         this: PyRef<'py, Self>,
         evaluation_name: String,
@@ -2469,8 +2508,6 @@ impl AsyncTensorZeroGateway {
         concurrency: usize,
         inference_cache: String,
         dynamic_variant_config: Option<&Bound<'py, PyDict>>,
-        limit: Option<usize>,
-        offset: Option<usize>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();
 
@@ -2501,8 +2538,6 @@ impl AsyncTensorZeroGateway {
                 variant,
                 concurrency,
                 inference_cache: inference_cache_enum,
-                limit,
-                offset,
             };
 
             let result = run_evaluation_core_streaming(core_args)
@@ -2591,6 +2626,74 @@ impl AsyncTensorZeroGateway {
             let res = client.experimental_list_inferences(params).await;
             Python::attach(|py| match res {
                 Ok(wire_inferences) => Ok(PyList::new(py, wire_inferences)?.unbind()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// Get specific inferences by their IDs.
+    ///
+    /// :param ids: A sequence of inference IDs to retrieve. They should be in UUID format.
+    /// :param function_name: Optional function name to filter by (improves query performance).
+    /// :param output_source: The source of the output ("inference" or "demonstration"). Default: "inference".
+    /// :return: A `GetInferencesResponse` object.
+    #[pyo3(signature = (*, ids, function_name=None, output_source="inference"))]
+    fn get_inferences<'a>(
+        this: PyRef<'a, Self>,
+        ids: Vec<Bound<'a, PyAny>>,
+        function_name: Option<String>,
+        output_source: &str,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let ids: Vec<uuid::Uuid> = ids
+            .into_iter()
+            .map(|id| python_uuid_to_uuid("id", id))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let output_source =
+            output_source
+                .try_into()
+                .map_err(|e: tensorzero_core::error::Error| {
+                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
+                })?;
+
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client
+                .get_inferences(ids, function_name, output_source)
+                .await;
+            Python::attach(|py| match res {
+                Ok(response) => convert_response_to_python_dataclass(
+                    py,
+                    response,
+                    "tensorzero",
+                    "GetInferencesResponse",
+                ),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// List inferences with optional filtering, pagination, and sorting.
+    ///
+    /// :param request: A `ListInferencesRequest` object with filter parameters.
+    /// :return: A `GetInferencesResponse` object.
+    #[pyo3(signature = (*, request))]
+    fn list_inferences<'a>(
+        this: PyRef<'a, Self>,
+        request: Bound<'a, PyAny>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let request = deserialize_from_pyobj(this.py(), &request)?;
+
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.list_inferences(request).await;
+            Python::attach(|py| match res {
+                Ok(response) => convert_response_to_python_dataclass(
+                    py,
+                    response,
+                    "tensorzero",
+                    "GetInferencesResponse",
+                ),
                 Err(e) => Err(convert_error(py, e)),
             })
         })

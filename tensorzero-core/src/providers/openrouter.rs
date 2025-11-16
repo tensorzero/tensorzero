@@ -46,6 +46,11 @@ use crate::providers::helpers::{
     inject_extra_request_data_and_send_eventsource,
 };
 
+// Import unified OpenAI types for allowed_tools support
+use super::openai::{
+    prepare_allowed_tools_constraint, AllowedToolsChoice as OpenAIAllowedToolsChoice,
+};
+
 use crate::inference::TensorZeroEventError;
 
 lazy_static! {
@@ -58,6 +63,12 @@ lazy_static! {
 
 const PROVIDER_NAME: &str = "OpenRouter";
 pub const PROVIDER_TYPE: &str = "openrouter";
+
+type PreparedOpenRouterToolsResult<'a> = (
+    Option<Vec<OpenRouterTool<'a>>>,
+    Option<OpenRouterToolChoice<'a>>,
+    Option<bool>,
+);
 
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
@@ -666,11 +677,7 @@ pub(super) async fn prepare_openrouter_messages<'a>(
 /// Otherwise convert the tool choice and tools to OpenRouter format
 pub(super) fn prepare_openrouter_tools<'a>(
     request: &'a ModelInferenceRequest,
-) -> (
-    Option<Vec<OpenRouterTool<'a>>>,
-    Option<OpenRouterToolChoice<'a>>,
-    Option<bool>,
-) {
+) -> PreparedOpenRouterToolsResult<'a> {
     match &request.tool_config {
         None => (None, None, None),
         Some(tool_config) => {
@@ -678,8 +685,16 @@ pub(super) fn prepare_openrouter_tools<'a>(
                 return (None, None, None);
             }
             let tools = Some(tool_config.tools_available().map(Into::into).collect());
-            let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
+
+            let tool_choice =
+                if let Some(allowed_tools_choice) = prepare_allowed_tools_constraint(tool_config) {
+                    Some(OpenRouterToolChoice::AllowedTools(allowed_tools_choice))
+                } else {
+                    // No allowed_tools constraint, use regular tool_choice
+                    Some((&tool_config.tool_choice).into())
+                };
+
             (tools, tool_choice, parallel_tool_calls)
         }
     }
@@ -993,6 +1008,7 @@ impl<'a> From<&'a ToolConfig> for OpenRouterTool<'a> {
 pub(super) enum OpenRouterToolChoice<'a> {
     String(OpenRouterToolChoiceString),
     Specific(SpecificToolChoice<'a>),
+    AllowedTools(OpenAIAllowedToolsChoice<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

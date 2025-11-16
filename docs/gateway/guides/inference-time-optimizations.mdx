@@ -47,11 +47,14 @@ user_template = "functions/draft_email/promptB/user.minijinja"
 [functions.draft_email.variants.best_of_n]
 type = "experimental_best_of_n"
 candidates = ["promptA", "promptA", "promptB"]
-weight = 1
 
 [functions.draft_email.variants.best_of_n.evaluator]
 model = "gpt-4o-mini"
 user_template = "functions/draft_email/best_of_n/user.minijinja"
+
+[functions.draft_email.experimentation]
+type = "uniform"
+candidate_variants = ["best_of_n"]  # so we don't sample `promptA` or `promptB` directly
 ```
 
 In this configuration:
@@ -192,22 +195,23 @@ Here's a simple example configuration:
 type = "chat_completion"
 model = "gpt-4o-mini"
 user_template = "functions/draft_email/promptA/user.minijinja"
-weight = 0
 
 [functions.draft_email.variants.promptB]
 type = "chat_completion"
 model = "gpt-4o-mini"
 user_template = "functions/draft_email/promptB/user.minijinja"
-weight = 0
 
 [functions.draft_email.variants.mixture_of_n]
 type = "experimental_mixture_of_n"
 candidates = ["promptA", "promptA", "promptB"]
-weight = 1
 
 [functions.draft_email.variants.mixture_of_n.fuser]
 model = "gpt-4o-mini"
 user_template = "functions/draft_email/mixture_of_n/user.minijinja"
+
+[functions.draft_email.experimentation]
+type = "uniform"
+candidate_variants = ["mixture_of_n"]  # so we don't sample `promptA` or `promptB` directly
 ```
 
 In this configuration:

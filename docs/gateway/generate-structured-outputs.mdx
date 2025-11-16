@@ -1,0 +1,352 @@
+---
+title: How to generate structured outputs
+sidebarTitle: Generate structured outputs
+description: Learn how to generate structured outputs (JSON) effectively using TensorZero.
+---
+
+[TensorZero Functions](/gateway/configure-functions-and-variants) come in two flavors:
+
+- **`chat`:** the default choice for most LLM chat completion use cases
+- **`json`:** a specialized function type when your goal is generating structured outputs
+
+As a rule of thumb, you should use JSON functions if you have a single, well-defined output schema.
+If you need more flexibility (e.g. letting the model pick between multiple tools, or whether to pick a tool at all), then Chat Functions with [tool use](/gateway/guides/tool-use) might be a better fit.
+
+## Generate structured outputs with a static schema
+
+Let's create a JSON function for one of its typical use cases: data extraction.
+
+<Tip>
+
+We provide [complete code examples](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/gateway/generate-structured-outputs) on GitHub.
+
+</Tip>
+
+<Steps>
+
+<Step title="Configure your JSON function">
+
+Create a configuration file that defines your JSON function with the output schema and JSON mode.
+If you don't specify an `output_schema`, the gateway will default to accepting any valid JSON output.
+
+```toml tensorzero.toml
+[functions.extract_data]
+type = "json"
+output_schema = "output_schema.json"  # optional
+
+[functions.extract_data.variants.baseline]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_template = "system_template.minijinja"
+json_mode = "strict"
+```
+
+The field `json_mode` can be one of the following: `off`, `on`, `strict`, or `implicit_tool`.
+The `implicit_tool` strategy is a custom TensorZero implementation that leverages tool use under the hood for generating JSON.
+See [Configuration Reference](/gateway/configuration-reference) for details.
+
+<Tip>
+
+Use `"strict"` mode for providers that support it (e.g. OpenAI) or `"implicit_tool"` for others (e.g. Anthropic).
+
+</Tip>
+
+</Step>
+
+<Step title="Configure your output schema">
+
+If you choose to specify a schema, place it in the relevant file:
+
+```json output_schema.json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": ["string", "null"],
+      "description": "The customer's full name"
+    },
+    "email": {
+      "type": ["string", "null"],
+      "description": "The customer's email address"
+    }
+  },
+  "required": ["name", "email"],
+  "additionalProperties": false
+}
+```
+
+</Step>
+
+<Step title="Create your prompt template">
+
+Create a template that instructs the model to extract the information you need.
+
+```txt system_template.minijinja
+You are a helpful AI assistant that extracts customer information from messages.
+
+Extract the customer's name and email address if present. Use null for any fields that are not found.
+
+Your output should be a JSON object with the following schema:
+
+{
+  "name": string or null,
+  "email": string or null
+}
+
+---
+
+Examples:
+
+User: Hi, I'm Sarah Johnson and you can reach me at sarah.j@example.com
+Assistant: {"name": "Sarah Johnson", "email": "sarah.j@example.com"}
+
+User: My email is contact@company.com
+Assistant: {"name": null, "email": "contact@company.com"}
+
+User: This is John Doe reaching out
+Assistant: {"name": "John Doe", "email": null}
+```
+
+<Tip>
+
+Including examples in your prompt helps the model understand the expected output format and improves accuracy.
+
+</Tip>
+
+</Step>
+
+<Step title="Call the function">
+
+<Tabs>
+
+<Tab title="Python">
+
+When using the TensorZero SDK, the response will include `raw` and `parsed` values.
+The `parsed` field contains the validated JSON object.
+If the output doesn't match the schema or isn't valid JSON, `parsed` will be `None` and you can fall back to the `raw` string output.
+
+```python
+from tensorzero import TensorZeroGateway
+
+t0 = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
+
+response = t0.inference(
+    function_name="extract_data",
+    input={
+        "messages": [
+            {
+                "role": "user",
+                "content": "Hi, I'm Sarah Johnson and you can reach me at sarah.j@example.com",
+            }
+        ]
+    },
+)
+```
+
+<Accordion title="Sample Response">
+
+```python
+JsonInferenceResponse(
+    inference_id=UUID('019a78dc-0045-79e2-9629-cbcd47674abe'),
+    episode_id=UUID('019a78dc-0045-79e2-9629-cbdaf9d830bd'),
+    variant_name='baseline',
+    output=JsonInferenceOutput(
+        raw='{"name":"Sarah Johnson","email":"sarah.j@example.com"}',
+        parsed={'name': 'Sarah Johnson', 'email': 'sarah.j@example.com'}
+    ),
+    usage=Usage(input_tokens=252, output_tokens=26),
+    finish_reason=<FinishReason.STOP: 'stop'>,
+    original_response=None
+)
+```
+
+</Accordion>
+
+</Tab>
+
+<Tab title="Python (OpenAI SDK)">
+
+When using the OpenAI SDK, the response `content` is the JSON string generated by the model.
+TensorZero does not return a validated object.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:3000/openai/v1",
+    api_key="unused",
+)
+
+response = client.chat.completions.create(
+    model="tensorzero::function_name::extract_data",
+    messages=[
+        {
+            "role": "user",
+            "content": "Hi, I'm Sarah Johnson and you can reach me at sarah.j@example.com",
+        }
+    ],
+)
+```
+
+<Accordion title="Sample Response">
+
+```python
+ChatCompletion(
+    id='019a78dd-8e77-7c21-ab70-5dc4b897f7d2',
+    choices=[
+        Choice(
+            finish_reason='stop',
+            index=0,
+            logprobs=None,
+            message=ChatCompletionMessage(
+                content='{"name":"Sarah Johnson","email":"sarah.j@example.com"}',
+                refusal=None,
+                role='assistant',
+                annotations=None,
+                audio=None,
+                function_call=None,
+                tool_calls=None
+            )
+        )
+    ],
+    created=1762964379,
+    model='tensorzero::function_name::extract_data::variant_name::baseline',
+    object='chat.completion',
+    service_tier=None,
+    system_fingerprint='',
+    usage=CompletionUsage(
+        completion_tokens=90,
+        prompt_tokens=252,
+        total_tokens=342,
+        completion_tokens_details=None,
+        prompt_tokens_details=None
+    ),
+    episode_id='019a78dd-8e77-7c21-ab70-5ddb585eb35e'
+)
+```
+
+</Accordion>
+
+</Tab>
+
+<Tab title="Node (OpenAI SDK)">
+
+When using the OpenAI SDK, the response `content` is the JSON string generated by the model.
+TensorZero does not return a validated object.
+
+```ts
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  baseURL: "http://localhost:3000/openai/v1",
+  apiKey: "unused",
+});
+
+const response = await client.chat.completions.create({
+  model: "tensorzero::function_name::extract_data",
+  messages: [
+    {
+      role: "user",
+      content:
+        "Hi, I'm Sarah Johnson and you can reach me at sarah.j@example.com",
+    },
+  ],
+});
+```
+
+<Accordion title="Sample Response">
+
+```json
+{
+  "id": "019a78de-97d4-79d3-8b61-bcab4c697281",
+  "episode_id": "019a78de-97d4-79d3-8b61-bcb10a8c02f4",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "content": "{\"name\":\"Sarah Johnson\",\"email\":\"sarah.j@example.com\"}",
+        "tool_calls": null,
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1762964446,
+  "model": "tensorzero::function_name::extract_data::variant_name::baseline",
+  "system_fingerprint": "",
+  "service_tier": null,
+  "object": "chat.completion",
+  "usage": {
+    "prompt_tokens": 252,
+    "completion_tokens": 26,
+    "total_tokens": 278
+  }
+}
+```
+
+</Accordion>
+
+</Tab>
+
+<Tab title="HTTP">
+
+When using the TensorZero Inference API, the response will include `raw` and `parsed` values.
+The `parsed` field contains the validated JSON object.
+If the output doesn't match the schema or isn't valid JSON, `parsed` will be `null` and you can fall back to the `raw` string output.
+
+```bash
+curl -X POST "http://localhost:3000/inference" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "function_name": "extract_data",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "Hi, I'\''m Sarah Johnson and you can reach me at sarah.j@example.com"
+        }
+      ]
+    }
+  }'
+```
+
+<Accordion title="Sample Response">
+
+```json
+{
+  "inference_id": "019a78da-04c5-7d53-bad7-2fed3b53b371",
+  "episode_id": "019a78da-04c6-7f40-9beb-6ce65621d3f7",
+  "variant_name": "baseline",
+  "output": {
+    "raw": "{\"name\":\"Sarah Johnson\",\"email\":\"sarah.j@example.com\"}",
+    "parsed": {
+      "name": "Sarah Johnson",
+      "email": "sarah.j@example.com"
+    }
+  },
+  "usage": {
+    "input_tokens": 252,
+    "output_tokens": 154
+  },
+  "finish_reason": "stop"
+}
+```
+
+</Accordion>
+
+</Tab>
+
+</Tabs>
+
+</Step>
+
+</Steps>
+
+## Generate structured outputs with a dynamic schema
+
+While we recommend specifying a fixed schema whenever possible, you can provide the output schema dynamically at inference time if your use case demands it.
+
+See `output_schema` in the [Inference API Reference](/gateway/api-reference/inference#output-schema) or `response_format` in the [Inference (OpenAI) API Reference](/gateway/api-reference/inference-openai-compatible#json-function-with-dynamic-output-schema).
+
+You can also override `json_mode` at inference time if necessary.

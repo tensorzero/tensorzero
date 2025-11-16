@@ -52,8 +52,10 @@ from .generated_types import (
     Datapoint,
     DeleteDatapointsResponse,
     GetDatapointsResponse,
+    GetInferencesResponse,
     InferenceFilter,
     ListDatapointsRequest,
+    ListInferencesRequest,
     UpdateDatapointMetadataRequest,
     UpdateDatapointRequest,
     UpdateDatapointsResponse,
@@ -911,6 +913,34 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `CreateDatapointsResponse` object.
         """
 
+    def get_inferences(
+        self,
+        *,
+        ids: Sequence[str],
+        function_name: Optional[str] = None,
+        output_source: str = "inference",
+    ) -> GetInferencesResponse:
+        """
+        Get specific inferences by their IDs.
+
+        :param ids: A sequence of inference IDs to retrieve. They should be in UUID format.
+        :param function_name: Optional function name to filter by (improves query performance).
+        :param output_source: The source of the output ("inference" or "demonstration"). Default: "inference".
+        :return: A `GetInferencesResponse` object.
+        """
+
+    def list_inferences(
+        self,
+        *,
+        request: ListInferencesRequest,
+    ) -> GetInferencesResponse:
+        """
+        List inferences with optional filtering, pagination, and sorting.
+
+        :param request: A `ListInferencesRequest` object with filter parameters.
+        :return: A `GetInferencesResponse` object.
+        """
+
     def experimental_list_inferences(
         self,
         *,
@@ -1022,8 +1052,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         concurrency: int = 1,
         inference_cache: str = "on",
         dynamic_variant_config: Optional[Dict[str, Any]] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
     ) -> EvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -1034,12 +1062,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param variant_name: The name of the variant to evaluate (omit or set to None when using dynamic_variant_config)
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
-        :param dynamic_variant_config: Optional dynamic variant configuration to use instead of config file lookup. If provided, `variant_name` should be omitted or set to None.
-        :param limit: Maximum number of datapoints to evaluate, starting from the newest (None = no limit)
-        :param offset: Number of newest datapoints to skip before starting evaluation (None = no offset)
+        :param dynamic_variant_config: Optional dynamic variant configuration to use instead of config file lookup
         :return: An EvaluationJobHandler for iterating over evaluation results
-
-        Note: Datapoints are ordered by creation time in descending order (newest first).
         """
         ...
 
@@ -1451,6 +1475,34 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `CreateDatapointsResponse` object.
         """
 
+    async def get_inferences(
+        self,
+        *,
+        ids: Sequence[str | UUID | uuid_utils.UUID],
+        function_name: Optional[str] = None,
+        output_source: str = "inference",
+    ) -> GetInferencesResponse:
+        """
+        Get specific inferences by their IDs.
+
+        :param ids: A sequence of inference IDs to retrieve. They should be in UUID format.
+        :param function_name: Optional function name to filter by (improves query performance).
+        :param output_source: The source of the output ("inference" or "demonstration"). Default: "inference".
+        :return: A `GetInferencesResponse` object.
+        """
+
+    async def list_inferences(
+        self,
+        *,
+        request: ListInferencesRequest,
+    ) -> GetInferencesResponse:
+        """
+        List inferences with optional filtering, pagination, and sorting.
+
+        :param request: A `ListInferencesRequest` object with filter parameters.
+        :return: A `GetInferencesResponse` object.
+        """
+
     async def experimental_list_inferences(
         self,
         *,
@@ -1562,8 +1614,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         concurrency: int = 1,
         inference_cache: str = "on",
         dynamic_variant_config: Optional[Dict[str, Any]] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
     ) -> AsyncEvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -1575,11 +1625,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
         :param dynamic_variant_config: Optional dynamic variant configuration to use instead of config file lookup. If provided, `variant_name` should be omitted or set to None.
-        :param limit: Maximum number of datapoints to evaluate, starting from the newest (None = no limit)
-        :param offset: Number of newest datapoints to skip before starting evaluation (None = no offset)
         :return: An AsyncEvaluationJobHandler for iterating over evaluation results
-
-        Note: Datapoints are ordered by creation time in descending order (newest first).
         """
         ...
 
