@@ -1718,7 +1718,11 @@ impl InferenceResponseToolCall {
 
         // Check if this is a custom tool
         let is_custom_tool = tool_cfg
-            .map(|t| t.openai_custom_tools.iter().any(|ct| ct.name == tool_call.name))
+            .map(|t| {
+                t.openai_custom_tools
+                    .iter()
+                    .any(|ct| ct.name == tool_call.name)
+            })
             .unwrap_or(false);
 
         // Set parsed_name if tool exists (either function or custom)
@@ -3892,7 +3896,7 @@ mod tests {
         });
         let result: DynamicTool = serde_json::from_value(regex_json).unwrap();
         if let Tool::OpenAICustom(custom) = result.0 {
-            if let Some(OpenAICustomToolFormat::Grammar { grammar: grammar }) = custom.format {
+            if let Some(OpenAICustomToolFormat::Grammar { grammar }) = custom.format {
                 assert!(matches!(grammar.syntax, OpenAIGrammarSyntax::Regex));
             }
         }

@@ -180,7 +180,9 @@ impl OpenAIResponsesResponse<'_> {
                         name: function_call.name.to_string(),
                     }));
                 }
-                FlattenUnknown::Normal(OpenAIResponsesOutputInner::CustomToolCall(custom_tool_call)) => {
+                FlattenUnknown::Normal(OpenAIResponsesOutputInner::CustomToolCall(
+                    custom_tool_call,
+                )) => {
                     output.push(ContentBlockOutput::ToolCall(ToolCall {
                         id: custom_tool_call.call_id.to_string(),
                         arguments: custom_tool_call.input.to_string(),

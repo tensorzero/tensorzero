@@ -167,7 +167,6 @@ pub async fn inference_handler(
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
-    println!("Tool Config: {:?}", params.dynamic_tool_params);
     let inference_output = inference(
         config,
         &http_client,

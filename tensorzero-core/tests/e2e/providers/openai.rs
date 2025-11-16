@@ -3389,7 +3389,7 @@ async fn test_openai_custom_tool_text_format() {
         .as_str()
         .unwrap();
 
-    println!("Raw request: {}", raw_request);
+    println!("Raw request: {raw_request}");
 
     // Verify the custom tool appears in the raw request
     assert!(
@@ -3398,8 +3398,7 @@ async fn test_openai_custom_tool_text_format() {
     );
     assert!(
         raw_request.contains("\"type\":\"custom\"") || raw_request.contains("\"type\": \"custom\""),
-        "Expected custom tool type in raw_request, got: {}",
-        raw_request
+        "Expected custom tool type in raw_request, got: {raw_request}"
     );
 
     // Check if the LLM actually called the tool (best effort - may be non-deterministic)

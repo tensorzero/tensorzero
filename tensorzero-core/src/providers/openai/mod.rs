@@ -2267,9 +2267,7 @@ impl<'a> OpenAIRequest<'a> {
         )
         .await?;
 
-        println!("Model inference request: {request:?}");
         let (tools, tool_choice, mut parallel_tool_calls) = prepare_openai_tools(request);
-        println!("Tools: {tools:?}");
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
@@ -2375,13 +2373,13 @@ impl From<OpenAIUsage> for Usage {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct OpenAIResponseFunctionCall {
+pub(super) struct OpenAIResponseFunctionCall {
     name: String,
     arguments: String,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Deserialize)]
-struct OpenAIResponseCustomCall {
+pub(super) struct OpenAIResponseCustomCall {
     name: String,
     input: String,
 }
