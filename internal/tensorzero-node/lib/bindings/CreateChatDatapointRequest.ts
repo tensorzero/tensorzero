@@ -2,6 +2,7 @@
 import type { ContentBlockChatOutput } from "./ContentBlockChatOutput";
 import type { Input } from "./Input";
 import type { ProviderTool } from "./ProviderTool";
+import type { Tool } from "./Tool";
 import type { ToolChoice } from "./ToolChoice";
 
 /**

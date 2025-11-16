@@ -1489,7 +1489,7 @@ pub struct LegacyToolCallConfigDatabaseInsert {
 /// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
-#[ts(optional_fields)]
+#[ts(optional_fields, export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[export_schema]
 pub struct DynamicToolParams {
@@ -1504,7 +1504,7 @@ pub struct DynamicToolParams {
         default,
         skip_serializing_if = "Option::is_none"
     )]
-    #[ts(type = "Array<Tool>", optional)]
+    #[ts(as = "Option<Vec<Tool>>")]
     #[schemars(with = "Option<Vec<Tool>>")]
     pub additional_tools: Option<Vec<DynamicTool>>,
     /// User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.

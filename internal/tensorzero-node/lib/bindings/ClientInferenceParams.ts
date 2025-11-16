@@ -3,6 +3,7 @@ import type { CacheParamsOptions } from "./CacheParamsOptions";
 import type { ClientInput } from "./ClientInput";
 import type { InferenceParams } from "./InferenceParams";
 import type { ProviderTool } from "./ProviderTool";
+import type { Tool } from "./Tool";
 import type { ToolChoice } from "./ToolChoice";
 import type { UninitializedVariantInfo } from "./UninitializedVariantInfo";
 import type { JsonValue } from "./serde_json/JsonValue";
