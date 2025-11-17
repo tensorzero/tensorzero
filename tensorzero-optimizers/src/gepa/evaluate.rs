@@ -173,7 +173,7 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
     };
 
     // Call run_evaluation_core_streaming
-    let stream_result = evaluations::run_evaluation_core_streaming(core_args)
+    let stream_result = evaluations::run_evaluation_core_streaming(core_args, None, HashMap::new())
         .await
         .map_err(|e| {
             Error::new(ErrorDetails::InternalError {
