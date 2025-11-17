@@ -95,12 +95,17 @@ pub struct Args {
     /// Format: evaluator_name=threshold, comma-separated for multiple evaluators.
     /// Example: --precision-limits "exact_match=0.13,llm_judge=0.16"
     /// Evaluator stops when CI half-width <= threshold.
-    #[arg(long = "precision-limits", value_parser = parse_precision_limits)]
-    pub precision_limits: Option<Vec<(String, f32)>>,
+    #[arg(long = "precision-limits", value_parser = parse_precision_targets, default_value = "")]
+    pub precision_targets: Vec<(String, f32)>,
 }
 
 /// Parse precision targets argument in format "evaluator1=threshold1,evaluator2=threshold2,..."
-fn parse_precision_limits(s: &str) -> Result<Vec<(String, f32)>, String> {
+fn parse_precision_targets(s: &str) -> Result<Vec<(String, f32)>, String> {
+    // Return empty vec if input is empty
+    if s.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
     s.split(',')
         .map(|pair| {
             let parts: Vec<&str> = pair.trim().splitn(2, '=').collect();
@@ -271,16 +276,12 @@ pub async fn run_evaluation(
         concurrency: args.concurrency,
     };
 
-    // Convert Option<Vec<(String, f32)>> to HashMap<String, f32> for precision_limits
-    let precision_limits: HashMap<String, f32> = args
-        .precision_limits
-        .unwrap_or_default()
-        .into_iter()
-        .collect();
+    // Convert Vec<(String, f32)> to HashMap<String, f32> for precision_targets
+    let precision_targets: HashMap<String, f32> = args.precision_targets.into_iter().collect();
 
     let output_format = args.format.clone();
     let result =
-        run_evaluation_core_streaming(core_args, args.max_datapoints, precision_limits).await?;
+        run_evaluation_core_streaming(core_args, args.max_datapoints, precision_targets).await?;
 
     let mut receiver = result.receiver;
     let dataset_len = result.run_info.num_datapoints;

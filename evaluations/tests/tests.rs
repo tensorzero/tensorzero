@@ -89,7 +89,7 @@ async fn run_evaluations_json() {
         // This test relies on the cache (see below), so we need to enable it
         inference_cache: CacheEnabledMode::On,
         max_datapoints: None,
-        precision_limits: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -365,7 +365,7 @@ async fn run_exact_match_evaluation_chat() {
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
-        precision_limits: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -491,7 +491,7 @@ async fn run_llm_judge_evaluation_chat() {
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::On,
         max_datapoints: None,
-        precision_limits: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -714,7 +714,7 @@ async fn run_image_evaluation() {
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::WriteOnly,
         max_datapoints: None,
-        precision_limits: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -931,7 +931,7 @@ async fn check_invalid_image_evaluation() {
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
-        precision_limits: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -1034,7 +1034,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
         format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
-        precision_limits: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -1079,7 +1079,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
         format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
-        precision_limits: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -1240,7 +1240,7 @@ async fn run_evaluations_errors() {
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
-        precision_limits: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -1659,7 +1659,7 @@ async fn run_evaluations_best_of_3() {
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
-        precision_limits: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -1849,7 +1849,7 @@ async fn run_evaluations_mixture_of_3() {
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
-        precision_limits: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -2042,7 +2042,7 @@ async fn run_evaluations_dicl() {
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: None,
-        precision_limits: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -2399,7 +2399,7 @@ async fn test_max_datapoints_parameter() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_precision_limits_parameter() {
+async fn test_precision_targets_parameter() {
     init_tracing_for_tests();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("good-haiku-data-precision-{}", Uuid::now_v7());
@@ -2433,9 +2433,9 @@ async fn test_precision_limits_parameter() {
     // Set precision targets for both evaluators
     // exact_match: CI half-width <= 0.10
     // topic_starts_with_f: CI half-width <= 0.13
-    let mut precision_limits = HashMap::new();
-    precision_limits.insert("exact_match".to_string(), 0.10);
-    precision_limits.insert("topic_starts_with_f".to_string(), 0.13);
+    let mut precision_targets = HashMap::new();
+    precision_targets.insert("exact_match".to_string(), 0.10);
+    precision_targets.insert("topic_starts_with_f".to_string(), 0.13);
 
     let core_args = EvaluationCoreArgs {
         tensorzero_client: tensorzero_client.clone(),
@@ -2453,7 +2453,7 @@ async fn test_precision_limits_parameter() {
     let result = run_evaluation_core_streaming(
         core_args,
         None, // No max_datapoints limit
-        precision_limits.clone(),
+        precision_targets.clone(),
     )
     .await
     .unwrap();
@@ -2498,10 +2498,10 @@ async fn test_precision_limits_parameter() {
         "exact_match should have computed CI half-width"
     );
     assert!(
-        exact_match_ci.unwrap() <= precision_limits["exact_match"],
+        exact_match_ci.unwrap() <= precision_targets["exact_match"],
         "exact_match CI half-width {:.3} should be <= limit {:.3}",
         exact_match_ci.unwrap(),
-        precision_limits["exact_match"]
+        precision_targets["exact_match"]
     );
 
     assert!(
@@ -2509,10 +2509,10 @@ async fn test_precision_limits_parameter() {
         "topic_starts_with_f should have computed CI half-width"
     );
     assert!(
-        topic_ci.unwrap() <= precision_limits["topic_starts_with_f"],
+        topic_ci.unwrap() <= precision_targets["topic_starts_with_f"],
         "topic_starts_with_f CI half-width {:.3} should be <= limit {:.3}",
         topic_ci.unwrap(),
-        precision_limits["topic_starts_with_f"]
+        precision_targets["topic_starts_with_f"]
     );
 }
 
@@ -2535,7 +2535,7 @@ async fn test_cli_args_with_adaptive_stopping() {
     ));
     let evaluation_run_id = Uuid::now_v7();
 
-    // Test CLI Args with values for the adaptive stopping parameters: min_inferences, max_inference, and precision_limits
+    // Test CLI Args with values for the adaptive stopping parameters: min_inferences, max_inference, and precision_targets
     let args = Args {
         config_file: config_path,
         gateway_url: None,
@@ -2546,7 +2546,7 @@ async fn test_cli_args_with_adaptive_stopping() {
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
         max_datapoints: Some(20),
-        precision_limits: Some(vec![("exact_match".to_string(), 0.2)]),
+        precision_targets: vec![("exact_match".to_string(), 0.2)],
     };
 
     let mut output = Vec::new();
