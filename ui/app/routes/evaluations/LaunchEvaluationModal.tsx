@@ -53,13 +53,23 @@ function EvaluationForm({
   const [inferenceCache, setInferenceCache] = useState<InferenceCacheSetting>(
     initialFormState?.inference_cache ?? "on",
   );
+  const [maxDatapoints, setMaxDatapoints] = useState<string>(
+    initialFormState?.max_datapoints ?? "",
+  );
+  const [precisionLimits, setPrecisionLimits] = useState<
+    Record<string, string>
+  >(initialFormState?.precision_targets ?? {});
 
   let count = null;
   let isLoading = false;
   let function_name = null;
+  let evaluatorNames: string[] = [];
   if (selectedEvaluationName) {
     function_name =
       config.evaluations[selectedEvaluationName]?.function_name ?? null;
+    evaluatorNames = Object.keys(
+      config.evaluations[selectedEvaluationName]?.evaluators ?? {},
+    );
   }
   const functionConfig = useFunctionConfig(function_name);
 
@@ -81,6 +91,7 @@ function EvaluationForm({
     ) {
       setSelectedEvaluationName(null);
       setSelectedVariantName(null);
+      setPrecisionLimits({});
     }
 
     // Validate dataset name - if datasets have loaded and the dataset doesn't exist, clear it
@@ -110,7 +121,46 @@ function EvaluationForm({
     functionConfig,
   ]);
 
-  // Check if all fields are filled
+  // Initialize precision targets with 0.0 for all evaluators when evaluation changes
+  useEffect(() => {
+    if (selectedEvaluationName) {
+      const currentEvaluatorNames = Object.keys(
+        config.evaluations[selectedEvaluationName]?.evaluators ?? {},
+      );
+      const newLimits: Record<string, string> = {};
+
+      // Always initialize all evaluators with 0.0 (reset when evaluation changes)
+      for (const evaluatorName of currentEvaluatorNames) {
+        newLimits[evaluatorName] = "0.0";
+      }
+
+      // Only update if the structure changed
+      const currentKeys = Object.keys(precisionLimits).sort().join(",");
+      const newKeys = Object.keys(newLimits).sort().join(",");
+      if (currentKeys !== newKeys) {
+        setPrecisionLimits(newLimits);
+      }
+    }
+  }, [selectedEvaluationName, config.evaluations, precisionLimits]);
+
+  // Validate max_datapoints: must be empty or a positive integer
+  const isMaxDatapointsValid =
+    maxDatapoints === "" ||
+    (Number.isInteger(Number(maxDatapoints)) &&
+      Number(maxDatapoints) > 0 &&
+      !maxDatapoints.includes("."));
+
+  // Validate precision_targets: all values must be non-negative numbers
+  const arePrecisionLimitsValid = Object.values(precisionLimits).every(
+    (value) => {
+      if (value === "") return true;
+      // Check if the entire string is a valid number
+      const num = Number(value);
+      return !isNaN(num) && num >= 0 && value.trim() !== "";
+    },
+  );
+
+  // Check if all fields are filled and valid
   const isFormValid =
     selectedEvaluationName !== null &&
     selectedVariantName !== null &&
@@ -118,7 +168,9 @@ function EvaluationForm({
     datasetCount !== null &&
     datasetCount > 0 &&
     inferenceCache !== null &&
-    concurrencyLimit !== "";
+    concurrencyLimit !== "" &&
+    isMaxDatapointsValid &&
+    arePrecisionLimitsValid;
 
   return (
     <fetcher.Form
@@ -249,12 +301,63 @@ function EvaluationForm({
         />
       </div>
       <div className="mt-4">
+        <label
+          htmlFor="max_datapoints"
+          className="mb-1 block text-sm font-medium"
+        >
+          Max Datapoints
+        </label>
+        <p className="text-muted-foreground mb-2 text-xs">
+          Maximum number of datapoints to evaluate (optional)
+        </p>
+        <input
+          type="text"
+          id="max_datapoints"
+          name="max_datapoints"
+          value={maxDatapoints}
+          onChange={(e) => setMaxDatapoints(e.target.value)}
+          placeholder="No limit"
+          className={`border-input bg-background w-full rounded-md border px-3 py-2 text-sm ${
+            !isMaxDatapointsValid && maxDatapoints !== ""
+              ? "border-red-500 focus:ring-red-500"
+              : ""
+          }`}
+        />
+        {!isMaxDatapointsValid && maxDatapoints !== "" && (
+          <p className="mt-1 text-xs text-red-500">
+            Must be a positive integer
+          </p>
+        )}
+      </div>
+      <div className="mt-4">
         <AdvancedParametersAccordion
           inferenceCache={inferenceCache}
           setInferenceCache={setInferenceCache}
+          precisionLimits={precisionLimits}
+          setPrecisionLimits={setPrecisionLimits}
+          arePrecisionLimitsValid={arePrecisionLimitsValid}
+          evaluatorNames={evaluatorNames}
           defaultOpen={inferenceCache !== "on"}
         />
         <input type="hidden" name="inference_cache" value={inferenceCache} />
+        <input
+          type="hidden"
+          name="precision_targets"
+          value={
+            Object.keys(precisionLimits).length > 0
+              ? JSON.stringify(
+                  Object.fromEntries(
+                    Object.entries(precisionLimits)
+                      .filter(([_, value]) => {
+                        const num = parseFloat(value);
+                        return value !== "" && !isNaN(num) && num > 0;
+                      })
+                      .map(([key, value]) => [key, parseFloat(value)]),
+                  ),
+                )
+              : ""
+          }
+        />
       </div>
       <DialogFooter>
         <Button className="mt-2" type="submit" disabled={!isFormValid}>
@@ -307,6 +410,8 @@ interface EvaluationsFormValues {
   variant_name: string | null;
   concurrency_limit: string;
   inference_cache: InferenceCacheSetting;
+  max_datapoints: string;
+  precision_targets: Record<string, string>;
 }
 
 interface EvaluationsFormState extends Partial<EvaluationsFormValues> {
@@ -343,6 +448,27 @@ function getFromLocalStorage() {
     return null;
   }
 
+  const data = parsed as Record<string, unknown>;
+
+  // Handle precision_targets: convert old JSON string format to Record<string, string>
+  if (typeof data.precision_targets === "string" && data.precision_targets) {
+    try {
+      const parsedLimits = JSON.parse(data.precision_targets);
+      if (typeof parsedLimits === "object" && parsedLimits !== null) {
+        // Convert numbers to strings for the form
+        data.precision_targets = Object.fromEntries(
+          Object.entries(parsedLimits).map(([k, v]) => [k, String(v)]),
+        );
+      } else {
+        data.precision_targets = {};
+      }
+    } catch {
+      data.precision_targets = {};
+    }
+  } else if (typeof data.precision_targets !== "object") {
+    data.precision_targets = {};
+  }
+
   // TODO: add validation
-  return parsed as Partial<EvaluationsFormValues>;
+  return data as Partial<EvaluationsFormValues>;
 }
