@@ -12,6 +12,7 @@ We omit changes that will be automatically caught by CI.
 
 * Does the PR have a clear purpose? Could it be split into more focused changes?
 * Does the PR add any dependencies? Is there a good justification for adding them? Are we sure we want to depend on them?
+* Does the PR leave the codebase in a better state than before?
 
 ### Specification
 
