@@ -5,6 +5,9 @@ use std::{future::Future, time::Duration};
 
 use crate::error::Error;
 
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+
 /*
  * This file implements TensorZero's custom retry logic.
  * We allow retries to be configured via the RetryConfig struct in the TOML.
@@ -17,6 +20,7 @@ use crate::error::Error;
 
 #[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
 #[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct RetryConfig {
     #[serde(default = "default_num_retries")]
     pub num_retries: usize,
@@ -30,6 +34,13 @@ impl Default for RetryConfig {
             num_retries: default_num_retries(),
             max_delay_s: default_max_delay_s(),
         }
+    }
+}
+
+impl std::fmt::Display for RetryConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
     }
 }
 

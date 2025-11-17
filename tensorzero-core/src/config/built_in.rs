@@ -20,17 +20,11 @@ use std::sync::Arc;
 use crate::error::Error;
 use crate::function::FunctionConfig;
 
-#[cfg(feature = "e2e_tests")]
 use crate::config::SchemaData;
-#[cfg(feature = "e2e_tests")]
 use crate::experimentation::ExperimentationConfig;
-#[cfg(feature = "e2e_tests")]
 use crate::function::{FunctionConfigChat, FunctionConfigJson};
-#[cfg(feature = "e2e_tests")]
 use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
-#[cfg(feature = "e2e_tests")]
 use crate::tool::{create_implicit_tool_call_config, ToolChoice};
-#[cfg(feature = "e2e_tests")]
 use std::collections::HashSet;
 
 /// Returns the `tensorzero::hello_chat` function configuration.
@@ -99,6 +93,278 @@ fn get_hello_json_function() -> Arc<FunctionConfig> {
     }))
 }
 
+/// Returns the `tensorzero::optimization::gepa::analyze` function configuration.
+///
+/// This is a Chat function that analyzes inference outputs and provides
+/// structured feedback for the GEPA optimization algorithm.
+///
+/// The function outputs XML in one of three formats:
+/// - report_error: For critical failures in the inference output
+/// - report_improvement: For suboptimal but technically correct outputs
+/// - report_optimal: For high-quality aspects worth preserving
+/// TODO: support new templates/schemas
+fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
+    // Define user schema inline
+    let user_schema_json = serde_json::json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "required": ["function_name", "model", "templates", "input", "output"],
+        "additionalProperties": false,
+        "properties": {
+            "function_name": {
+                "type": "string",
+                "description": "The name of the function you are analyzing"
+            },
+            "model": {
+                "type": "string",
+                "description": "The the name of the LLM used"
+            },
+            "templates": {
+                "type": "object",
+                "description": "Map of template names to their contents (e.g., 'system', 'user', 'assistant', or custom template names)",
+                "additionalProperties": {
+                    "type": "string"
+                }
+            },
+            "output_schema": {
+                "type": ["object", "null"],
+                "description": "Optional reference JSON schema for the function output (if function type is json)"
+            },
+            "schemas": {
+                "type": ["object", "null"],
+                "description": "Optional map of schema names to their JSON schemas (e.g., 'system', 'user', 'assistant', or custom schema names)",
+                "additionalProperties": {
+                    "type": "object",
+                    "description": "JSON schema for the named template"
+                }
+            },
+            "tools": {
+                "type": ["object", "null"],
+                "description": "Optional tool configuration including available tools and tool call settings",
+                "properties": {
+                    "static_tools_available": {
+                        "type": "array",
+                        "description": "Static tools available from the config"
+                    },
+                    "dynamic_tools_available": {
+                        "type": "array",
+                        "description": "Dynamic tools provided at inference time"
+                    },
+                    "provider_tools": {
+                        "type": "array",
+                        "description": "Provider-specific tools"
+                    },
+                    "tool_choice": {
+                        "description": "Tool choice configuration"
+                    },
+                    "parallel_tool_calls": {
+                        "type": ["boolean", "null"],
+                        "description": "Whether parallel tool calls are enabled"
+                    },
+                    "allowed_tools": {
+                        "type": "object",
+                        "description": "Specification of which tools are allowed"
+                    }
+                }
+            },
+            "input": {
+                "description": "The input messages leading up to the assistant's response"
+            },
+            "output": {
+                "description": "The assistant's response"
+            },
+            "tags": {
+                "type": ["object", "null"],
+                "description": "Tags associated with the inference"
+            },
+            "evaluation_context": {
+                "type": "object",
+                "description": "Full evaluator configurations including type, settings, and system templates",
+                "additionalProperties": {
+                    "type": "object"
+                }
+            },
+            "evaluation_scores": {
+                "type": "object",
+                "description": "Evaluation scores for this inference (numeric values 0-1, boolean values, or null if failed)",
+                "additionalProperties": {
+                    "type": ["number", "boolean", "null"]
+                }
+            }
+        }
+    });
+    let user_schema = StaticJSONSchema::from_value(user_schema_json)?;
+
+    let mut inner = HashMap::new();
+    inner.insert(
+        "user".to_string(),
+        SchemaWithMetadata {
+            schema: user_schema,
+            legacy_definition: true,
+        },
+    );
+
+    let schemas = SchemaData { inner };
+
+    Ok(Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+        variants: HashMap::new(),
+        schemas,
+        tools: vec![],
+        tool_choice: ToolChoice::None,
+        parallel_tool_calls: None,
+        description: Some(
+            "Built-in GEPA analyze function - analyzes inference outputs and provides structured XML feedback for optimization".to_string(),
+        ),
+        all_explicit_templates_names: HashSet::new(),
+        experimentation: ExperimentationConfig::default(),
+    })))
+}
+
+/// Returns the `tensorzero::optimization::gepa::mutate` function configuration.
+///
+/// This is a JSON function that generates improved prompt templates based on
+/// analysis feedback from the GEPA optimization algorithm.
+fn get_gepa_mutate_function() -> Result<Arc<FunctionConfig>, Error> {
+    // Define user schema inline
+    let user_schema_json = serde_json::json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "required": ["function_name", "model", "templates", "analyses"],
+        "additionalProperties": false,
+        "properties": {
+            "function_name": {
+                "type": "string",
+                "description": "The name of the function you are improving"
+            },
+            "model": {
+                "type": "string",
+                "description": "The target model for the optimized templates"
+            },
+            "templates": {
+                "type": "object",
+                "description": "Map of template names to their contents",
+                "additionalProperties": {
+                    "type": "string"
+                }
+            },
+            "schemas": {
+                "type": ["object", "null"],
+                "description": "Optional map of schema names to their JSON schemas",
+                "additionalProperties": {
+                    "type": "object"
+                }
+            },
+            "output_schema": {
+                "type": ["object", "null"],
+                "description": "Optional reference JSON schema for the function output (if function type is json)"
+            },
+            "tools": {
+                "type": ["object", "null"],
+                "description": "Optional tool configuration including available tools and tool call settings",
+                "properties": {
+                    "static_tools_available": {
+                        "type": "array",
+                        "description": "Static tools available from the config"
+                    },
+                    "dynamic_tools_available": {
+                        "type": "array",
+                        "description": "Dynamic tools provided at inference time"
+                    },
+                    "provider_tools": {
+                        "type": "array",
+                        "description": "Provider-specific tools"
+                    },
+                    "tool_choice": {
+                        "description": "Tool choice configuration"
+                    },
+                    "parallel_tool_calls": {
+                        "type": ["boolean", "null"],
+                        "description": "Whether parallel tool calls are enabled"
+                    },
+                    "allowed_tools": {
+                        "type": "object",
+                        "description": "Specification of which tools are allowed"
+                    }
+                }
+            },
+            "analyses": {
+                "type": "array",
+                "description": "Array of inference examples with their corresponding analyses/feedback",
+                "items": {
+                    "type": "object",
+                    "required": ["inference_output", "analysis"],
+                    "properties": {
+                        "inference_output": {
+                            "description": "The LLM inference output analyzed"
+                        },
+                        "analysis": {
+                            "type": "array",
+                            "description": "The analysis/feedback for this inference output (from gepa_generate_analysis: error report, improvement suggestion, or optimal pattern)"
+                        }
+                    }
+                }
+            }
+        }
+    });
+    let user_schema = StaticJSONSchema::from_value(user_schema_json)?;
+
+    let mut inner = HashMap::new();
+    inner.insert(
+        "user".to_string(),
+        SchemaWithMetadata {
+            schema: user_schema,
+            legacy_definition: true,
+        },
+    );
+
+    let schemas = SchemaData { inner };
+
+    // Define output schema inline
+    // Note: Using array format instead of additionalProperties to support OpenAI strict mode
+    let output_schema_json = serde_json::json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+            "templates": {
+                "type": "array",
+                "description": "Array of improved templates with their names",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {
+                            "type": "string",
+                            "description": "The template name (e.g., 'system', 'user', 'assistant')"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "The improved template content"
+                        }
+                    },
+                    "required": ["name", "content"],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "required": ["templates"],
+        "additionalProperties": false
+    });
+    let output_schema = StaticJSONSchema::from_value(output_schema_json)?;
+
+    let implicit_tool_call_config = create_implicit_tool_call_config(output_schema.clone());
+
+    Ok(Arc::new(FunctionConfig::Json(FunctionConfigJson {
+        variants: HashMap::new(),
+        schemas,
+        output_schema,
+        implicit_tool_call_config,
+        description: Some(
+            "Built-in GEPA mutate function - generates improved prompt templates based on analysis feedback".to_string(),
+        ),
+        all_explicit_template_names: HashSet::new(),
+        experimentation: ExperimentationConfig::default(),
+    })))
+}
+
 /// Returns all built-in functions as a HashMap.
 ///
 /// The keys are function names (e.g., "tensorzero::hello_chat")
@@ -108,8 +374,8 @@ fn get_hello_json_function() -> Arc<FunctionConfig> {
 /// the UI e2e test in `ui/e2e_tests/homePage.spec.ts` which checks the total
 /// function count displayed on the homepage.
 pub fn get_all_built_in_functions() -> Result<HashMap<String, Arc<FunctionConfig>>, Error> {
-    #[cfg_attr(not(feature = "e2e_tests"), expect(unused_mut))]
     let mut functions = HashMap::new();
+
     #[cfg(feature = "e2e_tests")]
     {
         functions.insert(
@@ -121,6 +387,17 @@ pub fn get_all_built_in_functions() -> Result<HashMap<String, Arc<FunctionConfig
             get_hello_json_function(),
         );
     }
+
+    // GEPA built-in functions (always available, not feature-gated)
+    functions.insert(
+        "tensorzero::optimization::gepa::analyze".to_string(),
+        get_gepa_analyze_function()?,
+    );
+    functions.insert(
+        "tensorzero::optimization::gepa::mutate".to_string(),
+        get_gepa_mutate_function()?,
+    );
+
     Ok(functions)
 }
 
@@ -159,7 +436,7 @@ mod tests {
     #[test]
     fn test_get_all_built_in_functions() {
         let functions = get_all_built_in_functions().unwrap();
-        assert_eq!(functions.len(), 2);
+        assert_eq!(functions.len(), 4);
         assert!(functions.contains_key("tensorzero::hello_chat"));
         assert!(functions.contains_key("tensorzero::hello_json"));
     }

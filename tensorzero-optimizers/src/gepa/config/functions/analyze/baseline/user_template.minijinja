@@ -1,0 +1,68 @@
+<function_context>
+<function_name>{{function_name}}</function_name>
+<model_name>{{model}}</model_name>
+<message_templates>
+{% for template_name in templates %}
+<template name="{{template_name}}">
+{{templates[template_name]}}
+</template>
+{% endfor %}
+</message_templates>
+{% if schemas %}
+<message_schemas>
+{% for schema_name in schemas %}
+<schema name="{{schema_name}}">
+{{schemas[schema_name] | tojson(indent=2)}}
+</schema>
+{% endfor %}
+</message_schemas>
+{% endif %}
+{% if output_schema %}
+<output_schema>
+{{output_schema | tojson(indent=2)}}
+</output_schema>
+{% endif %}
+{% if tools %}
+<available_tools>
+{{tools | tojson(indent=2)}}
+</available_tools>
+{% endif %}
+</function_context>
+
+<evaluation_context>
+{% for evaluator_name in evaluation_context %}
+<evaluator name="{{evaluator_name}}">{{evaluation_context[evaluator_name] | tojson(indent=2)}}</evaluator>
+{% endfor %}
+</evaluation_context>
+
+<inference_context>
+{%- if tags %}
+<metadata>
+{{tags | tojson(indent=2)}}
+</metadata>
+{%- endif %}
+<inference_input>
+{{input | tojson(indent=2)}}
+</inference_input>
+</inference_context>
+
+<inference_output>
+{{output | tojson(indent=2)}}
+</inference_output>
+
+<evaluation_scores>
+{% for evaluator_name in evaluation_scores %}
+<evaluator name="{{evaluator_name}}">{{evaluation_scores[evaluator_name]}}</evaluator>
+{% endfor %}
+</evaluation_scores>
+
+<task>
+Analyze the inference_output given the function_context, evaluation_context, inference_context, and evaluation_scores.
+
+Respond with ONE of the following XML formats based on your analysis:
+- `<report_error>` if the inference output contains errors that caused or contributed to failure
+- `<report_improvement>` if the inference output is suboptimal but not erroneous
+- `<report_optimal>` if the inference output demonstrates high quality
+
+Follow the exact XML format specified in the system message for your chosen response type.
+</task>

@@ -179,7 +179,7 @@ pub struct UninitializedChatTemplate {
 #[ts(export)]
 pub struct UninitializedChatTemplates {
     #[serde(flatten)]
-    inner: HashMap<String, UninitializedChatTemplate>,
+    pub inner: HashMap<String, UninitializedChatTemplate>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]

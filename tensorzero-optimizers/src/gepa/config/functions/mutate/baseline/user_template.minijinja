@@ -1,0 +1,68 @@
+<function_context>
+<function_name>{{function_name}}</function_name>
+<model_name>{{model}}</model_name>
+<message_templates>
+{% for template_name in templates %}
+<template name="{{template_name}}">
+{{templates[template_name]}}
+</template>
+{% endfor %}
+</message_templates>
+{% if schemas %}
+<message_schemas>
+{% for schema_name in schemas %}
+<schema name="{{schema_name}}">
+{{schemas[schema_name] | tojson(indent=2)}}
+</schema>
+{% endfor %}
+</message_schemas>
+{% endif %}
+{% if output_schema %}
+<output_schema>
+{{output_schema | tojson(indent=2)}}
+</output_schema>
+{% endif %}
+{% if tools %}
+<available_tools>
+{{tools | tojson(indent=2)}}
+</available_tools>
+{% endif %}
+</function_context>
+
+<analyses>
+The following are examples of LLM responses with analysis/feedback:
+{% for analysis in analyses %}
+<example>
+{% if analysis.inference_input is defined %}
+<inference_input>
+{{analysis.inference_input | tojson(indent=2)}}
+</inference_input>
+{% endif %}
+<inference_output>
+{{analysis.inference_output | tojson(indent=2)}}
+</inference_output>
+<analysis>
+{{analysis.analysis | tojson(indent=2)}}
+</analysis>
+</example>
+{% endfor %}
+</analyses>
+
+<task>
+Read the message_templates, schemas, tools, and analyses above. Extract insights from the analyses and generate improved templates that address identified issues while preserving what works well.
+
+Return your improved templates in the following JSON format:
+
+{
+    "templates": [
+        {% for template_name in templates %}{"name": "{{template_name}}", "content": "<your improved {{template_name}} template as a string>"}{% if not loop.last %},
+        {% endif %}{% endfor %}
+    ]
+}
+
+Notes:
+- Return improved versions of ALL templates: {% for template_name in templates %}{{template_name}}{% if not loop.last %}, {% endif %}{% endfor %}
+- Each template must have a "name" and "content" field
+- Preserve variable placeholders exactly as they appear in the schemas
+- Ensure output format matches the required schema
+</task>

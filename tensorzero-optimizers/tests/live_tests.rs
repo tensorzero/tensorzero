@@ -1,4 +1,5 @@
 use common::dicl::{test_dicl_optimization_chat, test_dicl_optimization_json};
+use common::gepa::test_gepa_optimization_chat;
 
 mod common;
 
@@ -22,3 +23,14 @@ async fn test_slow_optimization_dicl() {
 async fn test_slow_optimization_dicl_json() {
     test_dicl_optimization_json().await;
 }
+
+// GEPA Tests
+#[tokio::test(flavor = "multi_thread")]
+async fn test_slow_optimization_gepa() {
+    test_gepa_optimization_chat().await;
+}
+
+// #[tokio::test(flavor = "multi_thread")]
+// async fn test_slow_optimization_gepa_json() {
+//     test_gepa_optimization_json().await;
+// }

@@ -84,7 +84,7 @@ impl EvaluatorConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct ExactMatchConfig {
@@ -92,7 +92,7 @@ pub struct ExactMatchConfig {
     pub cutoff: Option<f32>,
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct LLMJudgeConfig {
@@ -103,7 +103,7 @@ pub struct LLMJudgeConfig {
     pub cutoff: Option<f32>,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct LLMJudgeIncludeConfig {
@@ -111,7 +111,7 @@ pub struct LLMJudgeIncludeConfig {
     pub reference_output: bool,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeInputFormat {
@@ -417,7 +417,7 @@ impl UninitializedEvaluatorConfig {
                             .load(
                                 evaluation_name,
                                 evaluator_name,
-                                &params.input_format,
+                                params.input_format,
                                 &name,
                                 user_schema.clone(),
                             )
@@ -573,7 +573,7 @@ fn convert_chat_completion_judge_to_variant(
     evaluation_name: &str,
     evaluator_name: &str,
     variant_name: &str,
-    input_format: &LLMJudgeInputFormat,
+    input_format: LLMJudgeInputFormat,
     params: UninitializedLLMJudgeChatCompletionVariantConfig,
     user_schema: Option<StaticJSONSchema>,
 ) -> Result<ChatCompletionConfig, Error> {
@@ -729,7 +729,7 @@ impl UninitializedLLMJudgeVariantInfo {
         self,
         evaluation_name: &str,
         evaluator_name: &str,
-        input_format: &LLMJudgeInputFormat,
+        input_format: LLMJudgeInputFormat,
         variant_name: &str,
         user_schema: Option<StaticJSONSchema>,
     ) -> Result<VariantInfo, Error> {

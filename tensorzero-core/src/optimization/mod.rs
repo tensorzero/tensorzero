@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::error::{Error, ErrorDetails};
 use crate::model::UninitializedModelConfig;
@@ -20,6 +21,7 @@ use crate::optimization::fireworks_sft::{
 use crate::optimization::gcp_vertex_gemini_sft::{
     GCPVertexGeminiSFTConfig, GCPVertexGeminiSFTJobHandle, UninitializedGCPVertexGeminiSFTConfig,
 };
+use crate::optimization::gepa::{GEPAConfig, GEPAJobHandle, UninitializedGEPAConfig};
 use crate::optimization::openai_rft::{
     OpenAIRFTConfig, OpenAIRFTJobHandle, UninitializedOpenAIRFTConfig,
 };
@@ -33,6 +35,7 @@ use crate::optimization::together_sft::{
 pub mod dicl;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
+pub mod gepa;
 pub mod openai_rft;
 pub mod openai_sft;
 pub mod together_sft;
@@ -52,6 +55,7 @@ pub enum OptimizerConfig {
     FireworksSFT(FireworksSFTConfig),
     GCPVertexGeminiSFT(Box<GCPVertexGeminiSFTConfig>),
     TogetherSFT(Box<TogetherSFTConfig>),
+    Gepa(GEPAConfig),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
@@ -71,6 +75,8 @@ pub enum OptimizationJobHandle {
     GCPVertexGeminiSFT(GCPVertexGeminiSFTJobHandle),
     #[serde(rename = "together_sft")]
     TogetherSFT(TogetherSFTJobHandle),
+    #[serde(rename = "gepa")]
+    Gepa(GEPAJobHandle),
 }
 
 impl OptimizationJobHandle {
@@ -113,6 +119,7 @@ impl std::fmt::Display for OptimizationJobHandle {
 pub enum OptimizerOutput {
     Variant(Box<UninitializedVariantConfig>),
     Model(UninitializedModelConfig),
+    Variants(HashMap<String, Box<UninitializedVariantConfig>>),
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -246,6 +253,8 @@ pub enum UninitializedOptimizerConfig {
     GCPVertexGeminiSFT(UninitializedGCPVertexGeminiSFTConfig),
     #[serde(rename = "together_sft")]
     TogetherSFT(Box<UninitializedTogetherSFTConfig>),
+    #[serde(rename = "gepa")]
+    Gepa(UninitializedGEPAConfig),
 }
 
 impl UninitializedOptimizerConfig {
@@ -273,6 +282,9 @@ impl UninitializedOptimizerConfig {
             }
             UninitializedOptimizerConfig::TogetherSFT(config) => {
                 OptimizerConfig::TogetherSFT(Box::new(config.load(default_credentials).await?))
+            }
+            UninitializedOptimizerConfig::Gepa(config) => {
+                OptimizerConfig::Gepa(config.load(default_credentials).await?)
             }
         })
     }
