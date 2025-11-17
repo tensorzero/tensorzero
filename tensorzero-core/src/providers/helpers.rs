@@ -328,7 +328,9 @@ pub fn inject_extra_request_data(
                 kind,
             } => {
                 if filter_model_name == expected_model_name
-                    && filter_provider_name.as_str() == expected_provider_name_plain.as_ref()
+                    && filter_provider_name
+                        .as_deref()
+                        .is_none_or(|name| name == expected_provider_name_plain.as_ref())
                 {
                     match kind {
                         ExtraBodyReplacementKind::Value(value) => {
@@ -474,7 +476,9 @@ pub fn inject_extra_request_data(
                 kind,
             } => {
                 if filter_model_name == expected_model_name
-                    && filter_provider_name.as_str() == expected_provider_name_plain.as_ref()
+                    && filter_provider_name
+                        .as_deref()
+                        .is_none_or(|name| name == expected_provider_name_plain.as_ref())
                 {
                     let name =
                         http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
@@ -1535,7 +1539,7 @@ mod tests {
             inference_extra_body: FilteredInferenceExtraBody {
                 data: vec![InferenceExtraBody::ModelProvider {
                     model_name: "gpt-4o".to_string(), // NOT using shorthand
-                    provider_name: "openai".to_string(),
+                    provider_name: Some("openai".to_string()),
                     pointer: "/test_no_shorthand".to_string(),
                     kind: ExtraBodyReplacementKind::Value(json!(99)),
                 }],
@@ -1570,7 +1574,7 @@ mod tests {
             inference_extra_body: FilteredInferenceExtraBody {
                 data: vec![InferenceExtraBody::ModelProvider {
                     model_name: "anthropic::claude-3".to_string(), // Wrong prefix
-                    provider_name: "openai".to_string(),
+                    provider_name: Some("openai".to_string()),
                     pointer: "/test_wrong".to_string(),
                     kind: ExtraBodyReplacementKind::Value(json!(1)),
                 }],
@@ -1606,7 +1610,7 @@ mod tests {
                 data: vec![InferenceExtraBody::ModelProvider {
                     // External model with :: but not a known prefix
                     model_name: "custom::deployment::model".to_string(),
-                    provider_name: "custom".to_string(),
+                    provider_name: Some("custom".to_string()),
                     pointer: "/test_external".to_string(),
                     kind: ExtraBodyReplacementKind::Value(json!(7)),
                 }],
@@ -1640,7 +1644,7 @@ mod tests {
             inference_extra_headers: FilteredInferenceExtraHeaders {
                 data: vec![InferenceExtraHeader::ModelProvider {
                     model_name: "gpt-4o".to_string(), // NOT using shorthand
-                    provider_name: "openai".to_string(),
+                    provider_name: Some("openai".to_string()),
                     name: "X-Custom-Header-2".to_string(),
                     kind: ExtraHeaderKind::Value("test-value-2".to_string()),
                 }],

@@ -76,7 +76,7 @@ pub struct FullExtraHeadersConfig {
 #[ts(export)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum InferenceExtraHeader {
-    // Deprecated: Migrate to `ModelProvider` and remove in 2026.2+
+    // Deprecated (#4640): Migrate to `ModelProvider` and remove in 2026.2+
     Provider {
         model_provider_name: String,
         name: String,
@@ -91,7 +91,7 @@ pub enum InferenceExtraHeader {
     },
     ModelProvider {
         model_name: String,
-        provider_name: String,
+        provider_name: Option<String>,
         name: String,
         #[serde(flatten)]
         kind: ExtraHeaderKind,
@@ -300,7 +300,7 @@ mod tests {
                 kind,
             } => {
                 assert_eq!(model_name, "gpt-4o");
-                assert_eq!(provider_name, "openai");
+                assert_eq!(provider_name, Some("openai".to_string()));
                 assert_eq!(name, "X-Custom-Header");
                 match kind {
                     ExtraHeaderKind::Value(v) => {
@@ -325,7 +325,7 @@ mod tests {
                 kind,
             } => {
                 assert_eq!(model_name, "gpt-4o");
-                assert_eq!(provider_name, "openai");
+                assert_eq!(provider_name, Some("openai".to_string()));
                 assert_eq!(name, "X-Custom-Header");
                 assert_eq!(kind, ExtraHeaderKind::Delete);
             }
@@ -337,7 +337,7 @@ mod tests {
     fn test_should_apply_variant_model_provider() {
         let model_provider_variant = InferenceExtraHeader::ModelProvider {
             model_name: "gpt-4o".to_string(),
-            provider_name: "openai".to_string(),
+            provider_name: Some("openai".to_string()),
             name: "X-Custom-Header".to_string(),
             kind: ExtraHeaderKind::Value("value".to_string()),
         };
@@ -358,7 +358,7 @@ mod tests {
                 },
                 InferenceExtraHeader::ModelProvider {
                     model_name: "gpt-4o".to_string(),
-                    provider_name: "openai".to_string(),
+                    provider_name: Some("openai".to_string()),
                     name: "X-MP".to_string(),
                     kind: ExtraHeaderKind::Value("mp".to_string()),
                 },
@@ -384,7 +384,7 @@ mod tests {
     fn test_inference_extra_header_model_provider_roundtrip() {
         let original = InferenceExtraHeader::ModelProvider {
             model_name: "gpt-4o".to_string(),
-            provider_name: "openai".to_string(),
+            provider_name: Some("openai".to_string()),
             name: "X-Test-Header".to_string(),
             kind: ExtraHeaderKind::Value("test-value".to_string()),
         };
@@ -392,17 +392,6 @@ mod tests {
         let json = serde_json::to_string(&original).unwrap();
         let deserialized: InferenceExtraHeader = serde_json::from_str(&json).unwrap();
         assert_eq!(original, deserialized);
-    }
-
-    #[test]
-    fn test_inference_extra_header_rejects_partial_model_provider_missing_provider() {
-        // Missing provider_name should be rejected, not silently become Always
-        let json = r#"{"model_name": "gpt-4o", "name": "X-Custom-Header", "value": "test"}"#;
-        let result: Result<InferenceExtraHeader, _> = serde_json::from_str(json);
-        assert!(
-            result.is_err(),
-            "Expected error when model_name is present but provider_name is missing"
-        );
     }
 
     #[test]

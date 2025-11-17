@@ -348,3 +348,109 @@ async fn test_extra_body_model_provider_shorthand_model() {
         "mp_shorthand_works"
     );
 }
+
+// ========== Optional provider_name Tests ==========
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_extra_body_model_provider_no_provider_name_explicit_function() {
+    let client = create_test_gateway(STANDARD_CONFIG).await;
+
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("function_echo_injected_data_explicit".to_string()),
+            input: create_test_input(),
+            extra_body: serde_json::from_value(json!([{
+                "model_name": "my_echo_injected_data",
+                "pointer": "/mp_no_provider_test",
+                "value": "mp_no_provider_works"
+            }]))
+            .unwrap(),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let injected = parse_injected_body(result);
+    assert_eq!(
+        injected["injected_body"]["mp_no_provider_test"],
+        "mp_no_provider_works"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_extra_body_model_provider_no_provider_name_shorthand_function() {
+    let client = create_test_gateway(STANDARD_CONFIG).await;
+
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("function_echo_injected_data_shorthand".to_string()),
+            input: create_test_input(),
+            extra_body: serde_json::from_value(json!([{
+                "model_name": "dummy::echo_injected_data",
+                "pointer": "/mp_no_provider_shorthand_test",
+                "value": "mp_no_provider_shorthand_works"
+            }]))
+            .unwrap(),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let injected = parse_injected_body(result);
+    assert_eq!(
+        injected["injected_body"]["mp_no_provider_shorthand_test"],
+        "mp_no_provider_shorthand_works"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_extra_body_model_provider_no_provider_name_explicit_model() {
+    let client = create_test_gateway(STANDARD_CONFIG).await;
+
+    let result = client
+        .inference(ClientInferenceParams {
+            model_name: Some("my_echo_injected_data".to_string()),
+            input: create_test_input(),
+            extra_body: serde_json::from_value(json!([{
+                "model_name": "my_echo_injected_data",
+                "pointer": "/mp_no_provider_test",
+                "value": "mp_no_provider_works"
+            }]))
+            .unwrap(),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let injected = parse_injected_body(result);
+    assert_eq!(
+        injected["injected_body"]["mp_no_provider_test"],
+        "mp_no_provider_works"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_extra_body_model_provider_no_provider_name_shorthand_model() {
+    let client = create_test_gateway(STANDARD_CONFIG).await;
+
+    let result = client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::echo_injected_data".to_string()),
+            input: create_test_input(),
+            extra_body: serde_json::from_value(json!([{
+                "model_name": "dummy::echo_injected_data",
+                "pointer": "/mp_no_provider_shorthand_test",
+                "value": "mp_no_provider_shorthand_works"
+            }]))
+            .unwrap(),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let injected = parse_injected_body(result);
+    assert_eq!(
+        injected["injected_body"]["mp_no_provider_shorthand_test"],
+        "mp_no_provider_shorthand_works"
+    );
+}

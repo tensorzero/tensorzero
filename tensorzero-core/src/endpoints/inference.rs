@@ -1551,19 +1551,21 @@ fn validate_provider_filter(model_provider_name: &str) -> Result<(), Error> {
 /// Validate that model_provider filter references a valid model and provider
 async fn validate_model_provider_filter(
     model_name: &str,
-    provider_name: &str,
+    provider_name: Option<String>,
     models: &ModelTable,
 ) -> Result<(), Error> {
     // Check if the model exists in the table (supports shorthand notation)
     if let Some(model_config) = models.get(model_name).await? {
-        // Check if the provider exists in that model
-        if !model_config.providers.contains_key(provider_name) {
-            return Err(ErrorDetails::InvalidInferenceTarget {
-                message: format!(
-                    "Invalid model provider filter: provider `{provider_name}` not found in model `{model_name}`.",
-                ),
+        // Check if the provider exists in that model (if provider_name is specified)
+        if let Some(ref provider_name) = provider_name {
+            if !model_config.providers.contains_key(provider_name.as_str()) {
+                return Err(ErrorDetails::InvalidInferenceTarget {
+                    message: format!(
+                        "Invalid model provider filter: provider `{provider_name}` not found in model `{model_name}`.",
+                    ),
+                }
+                .into());
             }
-            .into());
         }
         Ok(())
     } else {
@@ -1604,7 +1606,7 @@ async fn validate_inference_filters(
                 provider_name,
                 ..
             } => {
-                validate_model_provider_filter(model_name, provider_name, models).await?;
+                validate_model_provider_filter(model_name, provider_name.clone(), models).await?;
             }
             InferenceExtraBody::Always { .. } => {
                 // Always variant has no filter to validate
@@ -1631,7 +1633,7 @@ async fn validate_inference_filters(
                 provider_name,
                 ..
             } => {
-                validate_model_provider_filter(model_name, provider_name, models).await?;
+                validate_model_provider_filter(model_name, provider_name.clone(), models).await?;
             }
             InferenceExtraHeader::Always { .. } => {
                 // Always variant has no filter to validate

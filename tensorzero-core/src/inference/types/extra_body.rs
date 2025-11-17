@@ -78,7 +78,7 @@ pub struct FullExtraBodyConfig {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum InferenceExtraBody {
-    // Deprecated: Migrate to `ModelProvider` and remove in 2026.2+
+    // Deprecated (#4640): Migrate to `ModelProvider` and remove in 2026.2+
     Provider {
         model_provider_name: String,
         pointer: String,
@@ -93,7 +93,7 @@ pub enum InferenceExtraBody {
     },
     ModelProvider {
         model_name: String,
-        provider_name: String,
+        provider_name: Option<String>,
         pointer: String,
         #[serde(flatten)]
         kind: ExtraBodyReplacementKind,
@@ -303,7 +303,7 @@ mod tests {
                 kind,
             } => {
                 assert_eq!(model_name, "gpt-4o");
-                assert_eq!(provider_name, "openai");
+                assert_eq!(provider_name, Some("openai".to_string()));
                 assert_eq!(pointer, "/test");
                 match kind {
                     ExtraBodyReplacementKind::Value(v) => {
@@ -328,7 +328,7 @@ mod tests {
                 kind,
             } => {
                 assert_eq!(model_name, "gpt-4o");
-                assert_eq!(provider_name, "openai");
+                assert_eq!(provider_name, Some("openai".to_string()));
                 assert_eq!(pointer, "/test");
                 assert_eq!(kind, ExtraBodyReplacementKind::Delete);
             }
@@ -340,7 +340,7 @@ mod tests {
     fn test_should_apply_variant_model_provider() {
         let model_provider_variant = InferenceExtraBody::ModelProvider {
             model_name: "gpt-4o".to_string(),
-            provider_name: "openai".to_string(),
+            provider_name: Some("openai".to_string()),
             pointer: "/test".to_string(),
             kind: ExtraBodyReplacementKind::Value(json!(1)),
         };
@@ -361,7 +361,7 @@ mod tests {
                 },
                 InferenceExtraBody::ModelProvider {
                     model_name: "gpt-4o".to_string(),
-                    provider_name: "openai".to_string(),
+                    provider_name: Some("openai".to_string()),
                     pointer: "/mp".to_string(),
                     kind: ExtraBodyReplacementKind::Value(json!(2)),
                 },
@@ -387,7 +387,7 @@ mod tests {
     fn test_inference_extra_body_model_provider_roundtrip() {
         let original = InferenceExtraBody::ModelProvider {
             model_name: "gpt-4o".to_string(),
-            provider_name: "openai".to_string(),
+            provider_name: Some("openai".to_string()),
             pointer: "/test".to_string(),
             kind: ExtraBodyReplacementKind::Value(json!({"test": "data"})),
         };
@@ -395,17 +395,6 @@ mod tests {
         let json = serde_json::to_string(&original).unwrap();
         let deserialized: InferenceExtraBody = serde_json::from_str(&json).unwrap();
         assert_eq!(original, deserialized);
-    }
-
-    #[test]
-    fn test_inference_extra_body_rejects_partial_model_provider_missing_provider() {
-        // Missing provider_name should be rejected, not silently become Always
-        let json = r#"{"model_name": "gpt-4o", "pointer": "/test", "value": {"key": "value"}}"#;
-        let result: Result<InferenceExtraBody, _> = serde_json::from_str(json);
-        assert!(
-            result.is_err(),
-            "Expected error when model_name is present but provider_name is missing"
-        );
     }
 
     #[test]
