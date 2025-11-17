@@ -2,7 +2,14 @@ on:
   push:
     branches: ["aaron/wrap-general"]
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   general:
     uses: ./.github/workflows/general.yml
+    permissions:
+      contents: read
+      id-token: write
     secrets: inherit
