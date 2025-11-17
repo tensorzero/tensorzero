@@ -221,6 +221,7 @@ async fn prepare_chat_update(
     // Update the datapoint with new data
     let mut updated_datapoint: ChatInferenceDatapointInsert = existing_datapoint.into();
     updated_datapoint.id = updated_datapoint_id;
+    updated_datapoint.is_custom = true;
 
     let maybe_new_input =
         convert_input_to_stored_input(update.input, fetch_context, function_config.as_ref())
@@ -293,6 +294,7 @@ async fn prepare_json_update(
     // Update the datapoint with new data
     let mut updated_datapoint: JsonInferenceDatapointInsert = existing_datapoint.into();
     updated_datapoint.id = updated_datapoint_id;
+    updated_datapoint.is_custom = true;
 
     let maybe_new_input =
         convert_input_to_stored_input(update.input, fetch_context, function_config.as_ref())
@@ -1839,6 +1841,182 @@ mod tests {
             assert_eq!(updated.output.as_ref().unwrap().parsed, Some(new_output));
             assert_eq!(updated.tags, Some(new_tags));
             assert_eq!(updated.name, Some("json_updated".to_string()));
+        }
+
+        #[tokio::test]
+        async fn test_prepare_chat_update_sets_is_custom_true_from_inference() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+
+            // Create a datapoint from an inference (is_custom = false, has source_inference_id)
+            let mut existing = create_sample_chat_datapoint(dataset_name);
+            existing.is_custom = false;
+            existing.source_inference_id = Some(Uuid::now_v7());
+            let source_inference_id = existing.source_inference_id;
+
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "edited output".to_string(),
+                })]),
+                tool_params: Default::default(),
+                tags: None,
+                metadata: Default::default(),
+            };
+
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+
+            // After update, is_custom should be true
+            assert!(updated.is_custom);
+            // source_inference_id should be preserved
+            assert_eq!(updated.source_inference_id, source_inference_id);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_chat_update_keeps_is_custom_true() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+
+            // Create a custom datapoint (is_custom = true, no source_inference_id)
+            let mut existing = create_sample_chat_datapoint(dataset_name);
+            existing.is_custom = true;
+            existing.source_inference_id = None;
+
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "edited output".to_string(),
+                })]),
+                tool_params: Default::default(),
+                tags: None,
+                metadata: Default::default(),
+            };
+
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+
+            // is_custom should remain true
+            assert!(updated.is_custom);
+            // source_inference_id should remain None
+            assert_eq!(updated.source_inference_id, None);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_sets_is_custom_true_from_inference() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+
+            // Create a datapoint from an inference (is_custom = false, has source_inference_id)
+            let mut existing = create_sample_json_datapoint(dataset_name);
+            existing.is_custom = false;
+            existing.source_inference_id = Some(Uuid::now_v7());
+            let source_inference_id = existing.source_inference_id;
+
+            let new_output = json!({"value": "edited"});
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: serde_json::to_string(&new_output).unwrap(),
+                })),
+                output_schema: None,
+                tags: None,
+                metadata: Default::default(),
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            // After update, is_custom should be true
+            assert!(updated.is_custom);
+            // source_inference_id should be preserved
+            assert_eq!(updated.source_inference_id, source_inference_id);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_keeps_is_custom_true() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+
+            // Create a custom datapoint (is_custom = true, no source_inference_id)
+            let mut existing = create_sample_json_datapoint(dataset_name);
+            existing.is_custom = true;
+            existing.source_inference_id = None;
+
+            let new_output = json!({"value": "edited"});
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: serde_json::to_string(&new_output).unwrap(),
+                })),
+                output_schema: None,
+                tags: None,
+                metadata: Default::default(),
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            // is_custom should remain true
+            assert!(updated.is_custom);
+            // source_inference_id should remain None
+            assert_eq!(updated.source_inference_id, None);
         }
     }
 

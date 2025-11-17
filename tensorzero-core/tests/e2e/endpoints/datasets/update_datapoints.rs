@@ -5,7 +5,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::Duration;
-use tensorzero::{GetDatapointParams, StoredDatapoint};
+use tensorzero::{ClientSideFunctionTool, GetDatapointParams, StoredDatapoint};
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::{
@@ -19,7 +19,8 @@ use tensorzero_core::inference::types::{
     StoredInputMessageContent, System, Text,
 };
 use tensorzero_core::tool::{
-    AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert, ToolChoice,
+    AllowedTools, AllowedToolsChoice, ProviderTool, ProviderToolScope, Tool,
+    ToolCallConfigDatabaseInsert, ToolChoice,
 };
 
 use crate::common::get_gateway_endpoint;
@@ -741,11 +742,19 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
             text: "Output".to_string(),
         })]),
         tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-            vec![],
-            vec![],
+            vec![Tool::ClientSideFunction(ClientSideFunctionTool {
+                name: "test_tool".to_string(),
+                description: "Test tool".to_string(),
+                parameters: json!({}),
+                strict: false,
+            })],
+            vec![ProviderTool {
+                scope: ProviderToolScope::Unscoped,
+                tool: json!({"foo": "bar"}),
+            }],
             AllowedTools {
-                tools: vec![],
-                choice: AllowedToolsChoice::FunctionDefault,
+                tools: vec!["test_tool".to_string()],
+                choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,
             None,
@@ -1404,7 +1413,7 @@ async fn test_update_metadata_set_name_to_null() {
         .json(&json!({
             "datapoints": [{
                 "id": datapoint_id.to_string(),
-                "metadata": {"name": null}
+                "name": null,
             }]
         }))
         .send()
