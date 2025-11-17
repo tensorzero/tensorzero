@@ -713,7 +713,7 @@ jobs:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"latest","prefix":"latest","allow_failure":false}]') || fromJSON('[{"tag":"latest","prefix":"latest","allow_failure":false}]') }}
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"latest","prefix":"latest","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]') }}
         exclude:
           - replicated: true
             clickhouse_version:
