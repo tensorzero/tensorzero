@@ -13,7 +13,6 @@ import type { Datapoint } from "~/utils/tensorzero";
 import type {
   GetDatasetMetadataParams,
   DatasetMetadata,
-  StaleDatapointParams,
   UpdateDatapointsMetadataRequest,
 } from "~/types/tensorzero";
 
@@ -30,10 +29,16 @@ const mockUpdateDatapointsMetadata = vi.fn(
     ids: [],
   }),
 );
+const mockDeleteDatapoints = vi.fn(
+  async (_datasetName: string, _datapointIds: string[]) => ({
+    num_deleted_datapoints: BigInt(_datapointIds.length),
+  }),
+);
 vi.mock("~/utils/tensorzero.server", () => ({
   getTensorZeroClient: vi.fn(() => ({
     updateDatapoint: mockUpdateDatapoint,
     updateDatapointsMetadata: mockUpdateDatapointsMetadata,
+    deleteDatapoints: mockDeleteDatapoints,
   })),
 }));
 
@@ -43,11 +48,7 @@ const mockGetDatasetMetadata = vi.hoisted(() =>
     async () => [],
   ),
 );
-const mockStaleDatapoint = vi.hoisted(() =>
-  vi.fn<(params: StaleDatapointParams) => Promise<void>>(async () => {}),
-);
 vi.mock("~/utils/clickhouse/datasets.server", () => ({
-  staleDatapoint: mockStaleDatapoint,
   getDatasetMetadata: mockGetDatasetMetadata,
 }));
 
@@ -57,7 +58,7 @@ describe("datapointOperations", () => {
   });
 
   describe("deleteDatapoint", () => {
-    test("should call staleDatapoint and redirect to /datasets when dataset is empty", async () => {
+    test("should call deleteDatapoints and redirect to /datasets when dataset is empty", async () => {
       // Mock getDatasetMetadata to return empty array (no datasets)
       vi.mocked(mockGetDatasetMetadata).mockResolvedValueOnce([]);
 
@@ -70,11 +71,9 @@ describe("datapointOperations", () => {
         functionType: "chat",
       });
 
-      expect(mockStaleDatapoint).toHaveBeenCalledWith(
-        datasetName,
+      expect(mockDeleteDatapoints).toHaveBeenCalledWith(datasetName, [
         datapointId,
-        "chat",
-      );
+      ]);
       expect(result.redirectTo).toBe("/datasets");
     });
 
@@ -97,11 +96,9 @@ describe("datapointOperations", () => {
         functionType: "json",
       });
 
-      expect(mockStaleDatapoint).toHaveBeenCalledWith(
-        datasetName,
+      expect(mockDeleteDatapoints).toHaveBeenCalledWith(datasetName, [
         datapointId,
-        "json",
-      );
+      ]);
       expect(result.redirectTo).toBe(`/datasets/${datasetName}`);
     });
   });
@@ -167,12 +164,10 @@ describe("datapointOperations", () => {
         }),
       );
 
-      // Verify staleDatapoint was called with original ID
-      expect(mockStaleDatapoint).toHaveBeenCalledWith(
-        datasetName,
+      // Verify deleteDatapoints was called with original ID
+      expect(mockDeleteDatapoints).toHaveBeenCalledWith(datasetName, [
         originalId,
-        "chat",
-      );
+      ]);
     });
   });
 
@@ -258,12 +253,10 @@ describe("datapointOperations", () => {
         }),
       );
 
-      // Verify mockStaleDatapoint was called with original ID
-      expect(mockStaleDatapoint).toHaveBeenCalledWith(
-        datasetName,
+      // Verify deleteDatapoints was called with original ID
+      expect(mockDeleteDatapoints).toHaveBeenCalledWith(datasetName, [
         originalId,
-        "json",
-      );
+      ]);
     });
 
     test("should handle json datapoint with null output", async () => {
@@ -383,8 +376,8 @@ describe("datapointOperations", () => {
         }),
       );
 
-      // Verify staleDatapoint was NOT called (rename doesn't stale)
-      expect(mockStaleDatapoint).not.toHaveBeenCalled();
+      // Verify deleteDatapoints was NOT called (rename doesn't delete)
+      expect(mockDeleteDatapoints).not.toHaveBeenCalled();
     });
   });
 
@@ -415,8 +408,8 @@ describe("datapointOperations", () => {
         }),
       );
 
-      // Verify staleDatapoint was NOT called
-      expect(mockStaleDatapoint).not.toHaveBeenCalled();
+      // Verify deleteDatapoints was NOT called
+      expect(mockDeleteDatapoints).not.toHaveBeenCalled();
     });
   });
 });

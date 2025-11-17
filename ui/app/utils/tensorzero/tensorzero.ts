@@ -14,6 +14,8 @@ import {
 import { TensorZeroServerError } from "./errors";
 import type {
   Datapoint as TensorZeroDatapoint,
+  DeleteDatapointsRequest,
+  DeleteDatapointsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
   UpdateDatapointsMetadataRequest,
@@ -513,6 +515,26 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     const body = (await response.json()) as UpdateDatapointsResponse;
+    return body;
+  }
+
+  async deleteDatapoints(
+    datasetName: string,
+    datapointIds: string[],
+  ): Promise<DeleteDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}/datapoints`;
+    const requestBody: DeleteDatapointsRequest = {
+      ids: datapointIds,
+    };
+    const response = await this.fetch(endpoint, {
+      method: "DELETE",
+      body: JSON.stringify(requestBody),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as DeleteDatapointsResponse;
     return body;
   }
 

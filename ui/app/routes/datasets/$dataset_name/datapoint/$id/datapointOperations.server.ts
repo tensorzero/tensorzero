@@ -4,10 +4,7 @@ import type {
   ParsedChatInferenceDatapointRow,
   ParsedJsonInferenceDatapointRow,
 } from "~/utils/clickhouse/datasets";
-import {
-  getDatasetMetadata,
-  staleDatapoint,
-} from "~/utils/clickhouse/datasets.server";
+import { getDatasetMetadata } from "~/utils/clickhouse/datasets.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference.utils";
 import type { Datapoint } from "~/utils/tensorzero";
@@ -102,9 +99,9 @@ export async function deleteDatapoint(params: {
   id: string;
   functionType: "chat" | "json";
 }): Promise<{ redirectTo: string }> {
-  const { dataset_name, id, functionType } = params;
+  const { dataset_name, id } = params;
 
-  await staleDatapoint(dataset_name, id, functionType);
+  await getTensorZeroClient().deleteDatapoints(dataset_name, [id]);
 
   const datasetCounts = await getDatasetMetadata({});
   const datasetCount = datasetCounts.find(
@@ -162,11 +159,9 @@ export async function saveDatapoint(params: {
     datapoint,
   );
 
-  await staleDatapoint(
-    parsedFormData.dataset_name,
+  await getTensorZeroClient().deleteDatapoints(parsedFormData.dataset_name, [
     parsedFormData.id,
-    functionType,
-  );
+  ]);
 
   return { newId: id };
 }

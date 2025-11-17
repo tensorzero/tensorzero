@@ -78,19 +78,6 @@ export async function getDatasetRows(
   return await dbClient.getDatasetRows(params);
 }
 
-export async function staleDatapoint(
-  dataset_name: string,
-  datapoint_id: string,
-  function_type: "chat" | "json",
-): Promise<void> {
-  const dbClient = await getNativeDatabaseClient();
-  await dbClient.staleDatapoint({
-    dataset_name,
-    datapoint_id,
-    function_type,
-  });
-}
-
 export async function countDatapointsForDatasetFunction(
   dataset_name: string,
   function_name: string,
