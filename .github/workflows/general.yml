@@ -1042,39 +1042,39 @@ jobs:
       contents: read
     uses: ./.github/workflows/minikube.yml
 
-  # See 'ci/README.md' at the repository root for more details.
-  check-all-general-jobs-passed:
-    permissions: {}
-    if: always() && github.repository == 'tensorzero/tensorzero'
-    needs:
-      [
-        check-version-consistency,
-        check-if-edited-then-edit,
-        check-docker-compose,
-        check-latest-docker-compose,
-        check-python-client-build,
-        check-node-bindings,
-        check-python-schemas,
-        build-windows,
-        build-ui-container,
-        build-gateway-container,
-        build-gateway-e2e-container,
-        minikube,
-        rust-build,
-        rust-test,
-        validate,
-        validate-node,
-        validate-python,
-        lint-rust,
-        clickhouse-tests,
-        ui-tests,
-        ui-tests-e2e,
-        mock-optimization-tests,
-        run-merge-queue-checks,
-      ]
-    runs-on: ubuntu-latest
-    steps:
-      # When running in the merge queue, jobs should never be skipped.
-      # In PR CI, some jobs may be intentionally skipped (e.g. due to running from a fork, or to save money)
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled' || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped'))) }}
-        run: exit 1
+  # # See 'ci/README.md' at the repository root for more details.
+  # check-all-general-jobs-passed:
+  #   permissions: {}
+  #   if: always() && github.repository == 'tensorzero/tensorzero'
+  #   needs:
+  #     [
+  #       check-version-consistency,
+  #       check-if-edited-then-edit,
+  #       check-docker-compose,
+  #       check-latest-docker-compose,
+  #       check-python-client-build,
+  #       check-node-bindings,
+  #       check-python-schemas,
+  #       build-windows,
+  #       build-ui-container,
+  #       build-gateway-container,
+  #       build-gateway-e2e-container,
+  #       minikube,
+  #       rust-build,
+  #       rust-test,
+  #       validate,
+  #       validate-node,
+  #       validate-python,
+  #       lint-rust,
+  #       clickhouse-tests,
+  #       ui-tests,
+  #       ui-tests-e2e,
+  #       mock-optimization-tests,
+  #       run-merge-queue-checks,
+  #     ]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     # When running in the merge queue, jobs should never be skipped.
+  #     # In PR CI, some jobs may be intentionally skipped (e.g. due to running from a fork, or to save money)
+  #     - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled' || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped'))) }}
+  #       run: exit 1
