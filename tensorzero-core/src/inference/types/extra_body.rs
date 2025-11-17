@@ -87,41 +87,81 @@ pub enum InferenceExtraBody {
     Provider {
         model_provider_name: String,
         pointer: String,
-        #[serde(flatten)]
-        kind: ExtraBodyReplacementKind,
+        value: serde_json::Value,
+    },
+    #[schemars(title = "ProviderExtraBodyDelete")]
+    ProviderDelete {
+        model_provider_name: String,
+        pointer: String,
+        #[serde(
+            serialize_with = "super::serialize_delete_field",
+            deserialize_with = "super::deserialize_delete_field"
+        )]
+        delete: (),
     },
     #[schemars(title = "VariantExtraBody")]
     Variant {
         variant_name: String,
         pointer: String,
-        #[serde(flatten)]
-        kind: ExtraBodyReplacementKind,
+        value: serde_json::Value,
+    },
+    #[schemars(title = "VariantExtraBodyDelete")]
+    VariantDelete {
+        variant_name: String,
+        pointer: String,
+        #[serde(
+            serialize_with = "super::serialize_delete_field",
+            deserialize_with = "super::deserialize_delete_field"
+        )]
+        delete: (),
     },
     #[schemars(title = "ModelProviderExtraBody")]
     ModelProvider {
         model_name: String,
         provider_name: Option<String>,
         pointer: String,
-        #[serde(flatten)]
-        kind: ExtraBodyReplacementKind,
+        value: serde_json::Value,
+    },
+    #[schemars(title = "ModelProviderExtraBodyDelete")]
+    ModelProviderDelete {
+        model_name: String,
+        provider_name: Option<String>,
+        pointer: String,
+        #[serde(
+            serialize_with = "super::serialize_delete_field",
+            deserialize_with = "super::deserialize_delete_field"
+        )]
+        delete: (),
     },
     #[schemars(title = "AlwaysExtraBody")]
     Always {
         pointer: String,
-        #[serde(flatten)]
-        kind: ExtraBodyReplacementKind,
+        value: serde_json::Value,
+    },
+    #[schemars(title = "AlwaysExtraBodyDelete")]
+    AlwaysDelete {
+        pointer: String,
+        #[serde(
+            serialize_with = "super::serialize_delete_field",
+            deserialize_with = "super::deserialize_delete_field"
+        )]
+        delete: (),
     },
 }
 
 impl InferenceExtraBody {
     pub fn should_apply_variant(&self, variant_name: &str) -> bool {
         match self {
-            InferenceExtraBody::Provider { .. } => true,
+            InferenceExtraBody::Provider { .. } | InferenceExtraBody::ProviderDelete { .. } => true,
             InferenceExtraBody::Variant {
                 variant_name: v, ..
+            }
+            | InferenceExtraBody::VariantDelete {
+                variant_name: v, ..
             } => v == variant_name,
-            InferenceExtraBody::ModelProvider { .. } => true,
-            InferenceExtraBody::Always { .. } => true,
+            InferenceExtraBody::ModelProvider { .. }
+            | InferenceExtraBody::ModelProviderDelete { .. } => true,
+            InferenceExtraBody::Always { .. } | InferenceExtraBody::AlwaysDelete { .. } => true,
         }
     }
 }
@@ -136,14 +176,9 @@ mod tests {
         let json = r#"{"pointer": "/test", "value": {"key": "value"}}"#;
         let result: InferenceExtraBody = serde_json::from_str(json).unwrap();
         match result {
-            InferenceExtraBody::Always { pointer, kind } => {
+            InferenceExtraBody::Always { pointer, value } => {
                 assert_eq!(pointer, "/test");
-                match kind {
-                    ExtraBodyReplacementKind::Value(v) => {
-                        assert_eq!(v, json!({"key": "value"}));
-                    }
-                    ExtraBodyReplacementKind::Delete => panic!("Expected Value kind"),
-                }
+                assert_eq!(value, json!({"key": "value"}));
             }
             _ => panic!("Expected Always variant"),
         }
@@ -154,11 +189,10 @@ mod tests {
         let json = r#"{"pointer": "/test", "delete": true}"#;
         let result: InferenceExtraBody = serde_json::from_str(json).unwrap();
         match result {
-            InferenceExtraBody::Always { pointer, kind } => {
+            InferenceExtraBody::AlwaysDelete { pointer, .. } => {
                 assert_eq!(pointer, "/test");
-                assert_eq!(kind, ExtraBodyReplacementKind::Delete);
             }
-            _ => panic!("Expected Always variant"),
+            _ => panic!("Expected AlwaysDelete variant"),
         }
     }
 
@@ -166,7 +200,7 @@ mod tests {
     fn test_should_apply_variant_all() {
         let all_variant = InferenceExtraBody::Always {
             pointer: "/test".to_string(),
-            kind: ExtraBodyReplacementKind::Value(json!({"key": "value"})),
+            value: json!({"key": "value"}),
         };
 
         // Always should apply to any variant
@@ -180,7 +214,7 @@ mod tests {
         let provider_variant = InferenceExtraBody::Provider {
             model_provider_name: "openai".to_string(),
             pointer: "/test".to_string(),
-            kind: ExtraBodyReplacementKind::Value(json!(1)),
+            value: json!(1),
         };
 
         // Provider should apply to any variant
@@ -193,7 +227,7 @@ mod tests {
         let variant = InferenceExtraBody::Variant {
             variant_name: "variant1".to_string(),
             pointer: "/test".to_string(),
-            kind: ExtraBodyReplacementKind::Value(json!(1)),
+            value: json!(1),
         };
 
         // Should apply to matching variant
@@ -205,7 +239,7 @@ mod tests {
         let variant = InferenceExtraBody::Variant {
             variant_name: "variant1".to_string(),
             pointer: "/test".to_string(),
-            kind: ExtraBodyReplacementKind::Value(json!(1)),
+            value: json!(1),
         };
 
         // Should NOT apply to non-matching variant
@@ -219,16 +253,16 @@ mod tests {
                 InferenceExtraBody::Variant {
                     variant_name: "variant1".to_string(),
                     pointer: "/v1".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!(1)),
+                    value: json!(1),
                 },
                 InferenceExtraBody::Always {
                     pointer: "/all".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!(2)),
+                    value: json!(2),
                 },
                 InferenceExtraBody::Variant {
                     variant_name: "variant2".to_string(),
                     pointer: "/v2".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!(3)),
+                    value: json!(3),
                 },
             ],
         };
@@ -250,21 +284,21 @@ mod tests {
                 InferenceExtraBody::Provider {
                     model_provider_name: "openai".to_string(),
                     pointer: "/provider".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!("provider")),
+                    value: json!("provider"),
                 },
                 InferenceExtraBody::Variant {
                     variant_name: "variant1".to_string(),
                     pointer: "/v1".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!("v1")),
+                    value: json!("v1"),
                 },
                 InferenceExtraBody::Always {
                     pointer: "/all".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!("all")),
+                    value: json!("all"),
                 },
                 InferenceExtraBody::Variant {
                     variant_name: "variant2".to_string(),
                     pointer: "/v2".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!("v2")),
+                    value: json!("v2"),
                 },
             ],
         };
@@ -291,7 +325,7 @@ mod tests {
     fn test_inference_extra_body_all_roundtrip() {
         let original = InferenceExtraBody::Always {
             pointer: "/test".to_string(),
-            kind: ExtraBodyReplacementKind::Value(json!({"test": "data"})),
+            value: json!({"test": "data"}),
         };
 
         let json = serde_json::to_string(&original).unwrap();
@@ -308,17 +342,12 @@ mod tests {
                 model_name,
                 provider_name,
                 pointer,
-                kind,
+                value,
             } => {
                 assert_eq!(model_name, "gpt-4o");
                 assert_eq!(provider_name, Some("openai".to_string()));
                 assert_eq!(pointer, "/test");
-                match kind {
-                    ExtraBodyReplacementKind::Value(v) => {
-                        assert_eq!(v, json!({"key": "value"}));
-                    }
-                    ExtraBodyReplacementKind::Delete => panic!("Expected Value kind"),
-                }
+                assert_eq!(value, json!({"key": "value"}));
             }
             _ => panic!("Expected ModelProvider variant"),
         }
@@ -329,18 +358,17 @@ mod tests {
         let json = r#"{"model_name": "gpt-4o", "provider_name": "openai", "pointer": "/test", "delete": true}"#;
         let result: InferenceExtraBody = serde_json::from_str(json).unwrap();
         match result {
-            InferenceExtraBody::ModelProvider {
+            InferenceExtraBody::ModelProviderDelete {
                 model_name,
                 provider_name,
                 pointer,
-                kind,
+                ..
             } => {
                 assert_eq!(model_name, "gpt-4o");
                 assert_eq!(provider_name, Some("openai".to_string()));
                 assert_eq!(pointer, "/test");
-                assert_eq!(kind, ExtraBodyReplacementKind::Delete);
             }
-            _ => panic!("Expected ModelProvider variant"),
+            _ => panic!("Expected ModelProviderDelete variant"),
         }
     }
 
@@ -350,7 +378,7 @@ mod tests {
             model_name: "gpt-4o".to_string(),
             provider_name: Some("openai".to_string()),
             pointer: "/test".to_string(),
-            kind: ExtraBodyReplacementKind::Value(json!(1)),
+            value: json!(1),
         };
 
         // ModelProvider should apply to any variant
@@ -365,18 +393,18 @@ mod tests {
                 InferenceExtraBody::Variant {
                     variant_name: "variant1".to_string(),
                     pointer: "/v1".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!(1)),
+                    value: json!(1),
                 },
                 InferenceExtraBody::ModelProvider {
                     model_name: "gpt-4o".to_string(),
                     provider_name: Some("openai".to_string()),
                     pointer: "/mp".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!(2)),
+                    value: json!(2),
                 },
                 InferenceExtraBody::Variant {
                     variant_name: "variant2".to_string(),
                     pointer: "/v2".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!(3)),
+                    value: json!(3),
                 },
             ],
         };
@@ -397,7 +425,7 @@ mod tests {
             model_name: "gpt-4o".to_string(),
             provider_name: Some("openai".to_string()),
             pointer: "/test".to_string(),
-            kind: ExtraBodyReplacementKind::Value(json!({"test": "data"})),
+            value: json!({"test": "data"}),
         };
 
         let json = serde_json::to_string(&original).unwrap();

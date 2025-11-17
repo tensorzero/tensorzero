@@ -294,62 +294,67 @@ pub fn inject_extra_request_data(
             InferenceExtraBody::Variant {
                 // We're iterating over a 'FilteredInferenceExtraBody', so we've already removed any non-matching variant names.
                 // Any remaining `InferenceExtraBody::Variant` values should be applied to the current request
-                variant_name: _,
                 pointer,
-                kind,
-            } => match kind {
-                ExtraBodyReplacementKind::Value(value) => {
-                    write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
-                }
-                ExtraBodyReplacementKind::Delete => {
-                    delete_json_pointer(body, pointer)?;
-                }
-            },
+                value,
+                ..
+            } => {
+                write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
+            }
+            InferenceExtraBody::VariantDelete { pointer, .. } => {
+                delete_json_pointer(body, pointer)?;
+            }
             InferenceExtraBody::Provider {
                 model_provider_name,
                 pointer,
-                kind,
+                value,
             } => {
                 if *model_provider_name == expected_provider_name_fully_qualified {
-                    match kind {
-                        ExtraBodyReplacementKind::Value(value) => {
-                            write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
-                        }
-                        ExtraBodyReplacementKind::Delete => {
-                            delete_json_pointer(body, pointer)?;
-                        }
-                    }
+                    write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
+                }
+            }
+            InferenceExtraBody::ProviderDelete {
+                model_provider_name,
+                pointer,
+                ..
+            } => {
+                if *model_provider_name == expected_provider_name_fully_qualified {
+                    delete_json_pointer(body, pointer)?;
                 }
             }
             InferenceExtraBody::ModelProvider {
                 model_name: filter_model_name,
                 provider_name: filter_provider_name,
                 pointer,
-                kind,
+                value,
             } => {
                 if filter_model_name == expected_model_name
                     && filter_provider_name
                         .as_deref()
                         .is_none_or(|name| name == expected_provider_name_plain.as_ref())
                 {
-                    match kind {
-                        ExtraBodyReplacementKind::Value(value) => {
-                            write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
-                        }
-                        ExtraBodyReplacementKind::Delete => {
-                            delete_json_pointer(body, pointer)?;
-                        }
-                    }
-                }
-            }
-            InferenceExtraBody::Always { pointer, kind } => match kind {
-                ExtraBodyReplacementKind::Value(value) => {
                     write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
                 }
-                ExtraBodyReplacementKind::Delete => {
+            }
+            InferenceExtraBody::ModelProviderDelete {
+                model_name: filter_model_name,
+                provider_name: filter_provider_name,
+                pointer,
+                ..
+            } => {
+                if filter_model_name == expected_model_name
+                    && filter_provider_name
+                        .as_deref()
+                        .is_none_or(|name| name == expected_provider_name_plain.as_ref())
+                {
                     delete_json_pointer(body, pointer)?;
                 }
-            },
+            }
+            InferenceExtraBody::Always { pointer, value } => {
+                write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
+            }
+            InferenceExtraBody::AlwaysDelete { pointer, .. } => {
+                delete_json_pointer(body, pointer)?;
+            }
         }
     }
 
@@ -396,13 +401,9 @@ pub fn inject_extra_request_data(
     // Finally, write the inference-level extra_headers information. This can overwrite header set from the config-level extra_headers.
     for extra_header in &extra_headers_config.inference_extra_headers.data {
         match extra_header {
-            InferenceExtraHeader::Variant {
-                // We're iterating over a 'InferenceExtraHeader', so we've already removed any non-matching variant names.
+            InferenceExtraHeader::Variant { name, value, .. } => {
+                // We're iterating over a 'FilteredInferenceExtraHeaders', so we've already removed any non-matching variant names.
                 // Any remaining `InferenceExtraHeader::Variant` values should be applied to the current request
-                variant_name: _,
-                name,
-                kind,
-            } => {
                 let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
@@ -411,31 +412,33 @@ pub fn inject_extra_request_data(
                         ),
                     })
                 })?;
-                match kind {
-                    ExtraHeaderKind::Value(value) => {
-                        headers.insert(
-                            name,
-                            http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(
-                                |e| {
-                                    Error::new(ErrorDetails::Serialization {
-                                        message: format!(
-                                            "Invalid header value `{value}`: {}",
-                                            DisplayOrDebugGateway::new(e)
-                                        ),
-                                    })
-                                },
-                            )?,
-                        );
-                    }
-                    ExtraHeaderKind::Delete => {
-                        headers.remove(name);
-                    }
-                }
+                headers.insert(
+                    name,
+                    http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Invalid header value `{value}`: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?,
+                );
+            }
+            InferenceExtraHeader::VariantDelete { name, .. } => {
+                let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Invalid header name `{name}`: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
+                headers.remove(name);
             }
             InferenceExtraHeader::Provider {
                 model_provider_name,
                 name,
-                kind,
+                value,
             } => {
                 if *model_provider_name == expected_provider_name_fully_qualified {
                     let name =
@@ -447,33 +450,42 @@ pub fn inject_extra_request_data(
                                 ),
                             })
                         })?;
-                    match kind {
-                        ExtraHeaderKind::Value(value) => {
-                            headers.insert(
-                                name,
-                                http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(
-                                    |e| {
-                                        Error::new(ErrorDetails::Serialization {
-                                            message: format!(
-                                                "Invalid header value `{value}`: {}",
-                                                DisplayOrDebugGateway::new(e)
-                                            ),
-                                        })
-                                    },
-                                )?,
-                            );
-                        }
-                        ExtraHeaderKind::Delete => {
-                            headers.remove(name);
-                        }
-                    }
+                    headers.insert(
+                        name,
+                        http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Invalid header value `{value}`: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?,
+                    );
+                }
+            }
+            InferenceExtraHeader::ProviderDelete {
+                model_provider_name,
+                name,
+                ..
+            } => {
+                if *model_provider_name == expected_provider_name_fully_qualified {
+                    let name =
+                        http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Invalid header name `{name}`: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?;
+                    headers.remove(name);
                 }
             }
             InferenceExtraHeader::ModelProvider {
                 model_name: filter_model_name,
                 provider_name: filter_provider_name,
                 name,
-                kind,
+                value,
             } => {
                 if filter_model_name == expected_model_name
                     && filter_provider_name
@@ -489,29 +501,43 @@ pub fn inject_extra_request_data(
                                 ),
                             })
                         })?;
-                    match kind {
-                        ExtraHeaderKind::Value(value) => {
-                            headers.insert(
-                                name,
-                                http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(
-                                    |e| {
-                                        Error::new(ErrorDetails::Serialization {
-                                            message: format!(
-                                                "Invalid header value `{value}`: {}",
-                                                DisplayOrDebugGateway::new(e)
-                                            ),
-                                        })
-                                    },
-                                )?,
-                            );
-                        }
-                        ExtraHeaderKind::Delete => {
-                            headers.remove(name);
-                        }
-                    }
+                    headers.insert(
+                        name,
+                        http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Invalid header value `{value}`: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?,
+                    );
                 }
             }
-            InferenceExtraHeader::Always { name, kind } => {
+            InferenceExtraHeader::ModelProviderDelete {
+                model_name: filter_model_name,
+                provider_name: filter_provider_name,
+                name,
+                ..
+            } => {
+                if filter_model_name == expected_model_name
+                    && filter_provider_name
+                        .as_deref()
+                        .is_none_or(|name| name == expected_provider_name_plain.as_ref())
+                {
+                    let name =
+                        http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Invalid header name `{name}`: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?;
+                    headers.remove(name);
+                }
+            }
+            InferenceExtraHeader::Always { name, value } => {
                 let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
@@ -520,26 +546,28 @@ pub fn inject_extra_request_data(
                         ),
                     })
                 })?;
-                match kind {
-                    ExtraHeaderKind::Value(value) => {
-                        headers.insert(
-                            name,
-                            http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(
-                                |e| {
-                                    Error::new(ErrorDetails::Serialization {
-                                        message: format!(
-                                            "Invalid header value `{value}`: {}",
-                                            DisplayOrDebugGateway::new(e)
-                                        ),
-                                    })
-                                },
-                            )?,
-                        );
-                    }
-                    ExtraHeaderKind::Delete => {
-                        headers.remove(name);
-                    }
-                }
+                headers.insert(
+                    name,
+                    http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Invalid header value `{value}`: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?,
+                );
+            }
+            InferenceExtraHeader::AlwaysDelete { name, .. } => {
+                let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Invalid header name `{name}`: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
+                headers.remove(name);
             }
         }
     }
@@ -925,9 +953,7 @@ mod tests {
                     data: vec![InferenceExtraBody::Provider {
                         model_provider_name: "wrong_provider".to_string(),
                         pointer: "/my_key".to_string(),
-                        kind: ExtraBodyReplacementKind::Value(Value::String(
-                            "My Value".to_string(),
-                        )),
+                        value: Value::String("My Value".to_string()),
                     }],
                 },
             },
@@ -937,7 +963,7 @@ mod tests {
                     data: vec![InferenceExtraHeader::Provider {
                         model_provider_name: "wrong_provider".to_string(),
                         name: "X-My-Header".to_string(),
-                        kind: ExtraHeaderKind::Value("My Value".to_string()),
+                        value: "My Value".to_string(),
                     }],
                 },
             },
@@ -1011,12 +1037,12 @@ mod tests {
                                 "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
                                     .to_string(),
                             name: "X-My-Inference".to_string(),
-                            kind: ExtraHeaderKind::Value("My inference header value".to_string()),
+                            value: "My inference header value".to_string(),
                         },
                         InferenceExtraHeader::Variant {
                             variant_name: "dummy_variant".to_string(),
                             name: "X-My-Overridden-Inference".to_string(),
-                            kind: ExtraHeaderKind::Value("My inference value".to_string()),
+                            value: "My inference value".to_string(),
                         },
                     ],
                 },
@@ -1094,9 +1120,7 @@ mod tests {
                             "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
                                 .to_string(),
                         pointer: "/generationConfig/valueFromInference".to_string(),
-                        kind: ExtraBodyReplacementKind::Value(Value::String(
-                            "inferenceValue".to_string(),
-                        )),
+                        value: Value::String("inferenceValue".to_string()),
                     }],
                 },
             },
@@ -1170,9 +1194,7 @@ mod tests {
                             "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
                                 .to_string(),
                         pointer: "/multiOverride".to_string(),
-                        kind: ExtraBodyReplacementKind::Value(Value::String(
-                            "from inference".to_string(),
-                        )),
+                        value: Value::String("from inference".to_string()),
                     }],
                 },
             },
@@ -1541,7 +1563,7 @@ mod tests {
                     model_name: "gpt-4o".to_string(), // NOT using shorthand
                     provider_name: Some("openai".to_string()),
                     pointer: "/test_no_shorthand".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!(99)),
+                    value: json!(99),
                 }],
             },
         };
@@ -1576,7 +1598,7 @@ mod tests {
                     model_name: "anthropic::claude-3".to_string(), // Wrong prefix
                     provider_name: Some("openai".to_string()),
                     pointer: "/test_wrong".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!(1)),
+                    value: json!(1),
                 }],
             },
         };
@@ -1612,7 +1634,7 @@ mod tests {
                     model_name: "custom::deployment::model".to_string(),
                     provider_name: Some("custom".to_string()),
                     pointer: "/test_external".to_string(),
-                    kind: ExtraBodyReplacementKind::Value(json!(7)),
+                    value: json!(7),
                 }],
             },
         };
@@ -1646,7 +1668,7 @@ mod tests {
                     model_name: "gpt-4o".to_string(), // NOT using shorthand
                     provider_name: Some("openai".to_string()),
                     name: "X-Custom-Header-2".to_string(),
-                    kind: ExtraHeaderKind::Value("test-value-2".to_string()),
+                    value: "test-value-2".to_string(),
                 }],
             },
         };

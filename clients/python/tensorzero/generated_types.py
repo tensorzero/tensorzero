@@ -435,7 +435,7 @@ class ProviderExtraBody:
 
 
 @dataclass(kw_only=True)
-class ProviderExtraBody1:
+class ProviderExtraBodyDelete:
     model_provider_name: str
     pointer: str
     delete: None
@@ -449,7 +449,7 @@ class VariantExtraBody:
 
 
 @dataclass(kw_only=True)
-class VariantExtraBody1:
+class VariantExtraBodyDelete:
     variant_name: str
     pointer: str
     delete: None
@@ -464,7 +464,7 @@ class ModelProviderExtraBody:
 
 
 @dataclass(kw_only=True)
-class ModelProviderExtraBody1:
+class ModelProviderExtraBodyDelete:
     model_name: str
     pointer: str
     delete: None
@@ -478,20 +478,20 @@ class AlwaysExtraBody:
 
 
 @dataclass(kw_only=True)
-class AlwaysExtraBody1:
+class AlwaysExtraBodyDelete:
     pointer: str
     delete: None
 
 
 InferenceExtraBody = (
     ProviderExtraBody
-    | ProviderExtraBody1
+    | ProviderExtraBodyDelete
     | VariantExtraBody
-    | VariantExtraBody1
+    | VariantExtraBodyDelete
     | ModelProviderExtraBody
-    | ModelProviderExtraBody1
+    | ModelProviderExtraBodyDelete
     | AlwaysExtraBody
-    | AlwaysExtraBody1
+    | AlwaysExtraBodyDelete
 )
 
 
@@ -503,7 +503,7 @@ class ProviderExtraHeader:
 
 
 @dataclass(kw_only=True)
-class ProviderExtraHeader1:
+class ProviderExtraHeaderDelete:
     model_provider_name: str
     name: str
     delete: None
@@ -517,7 +517,7 @@ class VariantExtraHeader:
 
 
 @dataclass(kw_only=True)
-class VariantExtraHeader1:
+class VariantExtraHeaderDelete:
     variant_name: str
     name: str
     delete: None
@@ -532,7 +532,7 @@ class ModelProviderExtraHeader:
 
 
 @dataclass(kw_only=True)
-class ModelProviderExtraHeader1:
+class ModelProviderExtraHeaderDelete:
     model_name: str
     name: str
     delete: None
@@ -546,20 +546,20 @@ class AlwaysExtraHeader:
 
 
 @dataclass(kw_only=True)
-class AlwaysExtraHeader1:
+class AlwaysExtraHeaderDelete:
     name: str
     delete: None
 
 
 InferenceExtraHeader = (
     ProviderExtraHeader
-    | ProviderExtraHeader1
+    | ProviderExtraHeaderDelete
     | VariantExtraHeader
-    | VariantExtraHeader1
+    | VariantExtraHeaderDelete
     | ModelProviderExtraHeader
-    | ModelProviderExtraHeader1
+    | ModelProviderExtraHeaderDelete
     | AlwaysExtraHeader
-    | AlwaysExtraHeader1
+    | AlwaysExtraHeaderDelete
 )
 
 

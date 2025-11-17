@@ -2244,7 +2244,29 @@ where
     let val = bool::deserialize(d)?;
     if !val {
         return Err(D::Error::custom(
-            "Error deserializing replacement config: 'delete' must be 'true', or not set",
+            "Error deserializing replacement config: `delete` must be `true`, or not set",
+        ));
+    }
+    Ok(())
+}
+
+// Field-aware versions for struct fields (not enum variants)
+#[expect(clippy::trivially_copy_pass_by_ref)]
+pub(super) fn serialize_delete_field<S>(_: &(), s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    true.serialize(s)
+}
+
+pub(super) fn deserialize_delete_field<'de, D>(d: D) -> Result<(), D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = bool::deserialize(d)?;
+    if !val {
+        return Err(D::Error::custom(
+            "Error deserializing replacement config: `delete` must be `true`, or not set",
         ));
     }
     Ok(())
