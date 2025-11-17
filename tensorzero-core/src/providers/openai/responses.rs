@@ -8,7 +8,7 @@ use crate::{
         },
         ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
     },
-    tool::{OpenAICustomTool, OpenAICustomToolFormat},
+    tool::{OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarSyntax},
 };
 
 const PROVIDER_NAME: &str = "OpenAI Responses";
@@ -302,13 +302,24 @@ pub struct OpenAIResponsesFunctionTool<'a> {
     strict: bool,
 }
 
+/// Custom tool format for the Responses API (flattened structure)
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIResponsesCustomToolFormat {
+    Text,
+    Grammar {
+        syntax: OpenAIGrammarSyntax,
+        definition: String,
+    },
+}
+
 #[derive(Serialize, Debug)]
 pub struct OpenAIResponsesCustomTool<'a> {
     name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    format: Option<&'a OpenAICustomToolFormat>,
+    format: Option<OpenAIResponsesCustomToolFormat>,
 }
 
 impl<'a> From<&'a OpenAICustomTool> for OpenAIResponsesCustomTool<'a> {
@@ -316,7 +327,15 @@ impl<'a> From<&'a OpenAICustomTool> for OpenAIResponsesCustomTool<'a> {
         OpenAIResponsesCustomTool {
             name: &tool.name,
             description: tool.description.as_deref(),
-            format: tool.format.as_ref(),
+            format: tool.format.as_ref().map(|f| match f {
+                OpenAICustomToolFormat::Text => OpenAIResponsesCustomToolFormat::Text,
+                OpenAICustomToolFormat::Grammar { grammar } => {
+                    OpenAIResponsesCustomToolFormat::Grammar {
+                        syntax: grammar.syntax.clone(),
+                        definition: grammar.definition.clone(),
+                    }
+                }
+            }),
         }
     }
 }

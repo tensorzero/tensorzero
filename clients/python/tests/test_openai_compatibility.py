@@ -1217,13 +1217,13 @@ async def test_dynamic_tool_use_inference_openai(async_openai_client):
     result = await async_openai_client.chat.completions.create(
         extra_body={
             "tensorzero::episode_id": episode_id,
-            "tensorzero::variant_name": "openai",
+            "tensorzero::variant_name": "openai-responses",
         },
         messages=messages,
         model="tensorzero::function_name::basic_test",
         tools=tools,
     )
-    assert result.model == "tensorzero::function_name::basic_test::variant_name::openai"
+    assert result.model == "tensorzero::function_name::basic_test::variant_name::openai-responses"
     assert result.episode_id == episode_id
     assert result.choices[0].message.content is None
     assert len(result.choices[0].message.tool_calls) == 1
@@ -1328,7 +1328,7 @@ async def test_dynamic_json_mode_inference_openai(async_openai_client):
     result = await async_openai_client.chat.completions.create(
         extra_body={
             "tensorzero::episode_id": episode_id,
-            "tensorzero::variant_name": "openai",
+            "tensorzero::variant_name": "openai-responses",
         },
         messages=messages,
         model="tensorzero::function_name::dynamic_json",
@@ -1517,7 +1517,7 @@ async def test_async_multi_turn_parallel_tool_use(async_openai_client):
         parallel_tool_calls=True,
         extra_body={
             "tensorzero::episode_id": episode_id,
-            "tensorzero::variant_name": "openai",
+            "tensorzero::variant_name": "openai-responses",
         },
     )
 
@@ -1549,7 +1549,7 @@ async def test_async_multi_turn_parallel_tool_use(async_openai_client):
     response = await async_openai_client.chat.completions.create(
         extra_body={
             "tensorzero::episode_id": episode_id,
-            "tensorzero::variant_name": "openai",
+            "tensorzero::variant_name": "openai-responses",
         },
         model="tensorzero::function_name::weather_helper_parallel",
         messages=messages,
@@ -1702,3 +1702,108 @@ async def test_async_inference_tensorzero_template(async_openai_client):
     )
 
     assert "tokyo" in response.choices[0].message.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_openai_custom_tool_text_format(async_openai_client):
+    """
+    Test OpenAI custom tool with text format output
+    """
+    episode_id = str(uuid7())
+    messages = [
+        {
+            "role": "user",
+            "content": "Generate Python code to print 'Hello, World!' using the code_generator tool.",
+        },
+    ]
+    tools = [
+        {
+            "type": "custom",
+            "custom": {
+                "name": "code_generator",
+                "description": "Generates Python code snippets based on requirements",
+                "format": {"type": "text"},
+            },
+        }
+    ]
+    result = await async_openai_client.chat.completions.create(
+        extra_body={"tensorzero::episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::model_name::openai::responses::gpt-5-codex",
+        tools=tools,
+    )
+    assert result.model == "tensorzero::model_name::openai::responses::gpt-5-codex"
+    assert result.episode_id == episode_id
+    # Check that we got tool calls in the response
+    assert result.choices[0].message.tool_calls is not None
+    assert len(result.choices[0].message.tool_calls) >= 1
+    # Find the code_generator tool call
+    code_generator_calls = [tc for tc in result.choices[0].message.tool_calls if tc.function.name == "code_generator"]
+    assert len(code_generator_calls) == 1
+    tool_call = code_generator_calls[0]
+    assert tool_call.type == "function"
+    assert tool_call.function.name == "code_generator"
+    assert tool_call.function.arguments is not None
+    assert len(tool_call.function.arguments) > 0
+
+
+@pytest.mark.asyncio
+async def test_openai_custom_tool_grammar_lark(async_openai_client):
+    """
+    Test OpenAI custom tool with Lark grammar format
+    """
+    episode_id = str(uuid7())
+    # Simple arithmetic grammar in Lark format
+    lark_grammar = """
+start: expr
+
+expr: term ((ADD | SUB) term)*
+term: factor ((MUL | DIV) factor)*
+factor: NUMBER
+      | "(" expr ")"
+
+ADD: "+"
+SUB: "-"
+MUL: "*"
+DIV: "/"
+
+NUMBER: /\\d+(\\.\\d+)?/
+
+%import common.WS
+%ignore WS
+"""
+    messages = [
+        {"role": "user", "content": "Use the calculator tool to compute 5 + 3 * 2"},
+    ]
+    tools = [
+        {
+            "type": "custom",
+            "custom": {
+                "name": "calculator",
+                "description": "Evaluates arithmetic expressions",
+                "format": {
+                    "type": "grammar",
+                    "grammar": {"syntax": "lark", "definition": lark_grammar},
+                },
+            },
+        }
+    ]
+    result = await async_openai_client.chat.completions.create(
+        extra_body={"tensorzero::episode_id": episode_id},
+        messages=messages,
+        model="tensorzero::model_name::openai::responses::gpt-5-codex",
+        tools=tools,
+    )
+    assert result.model == "tensorzero::model_name::openai::responses::gpt-5-codex"
+    assert result.episode_id == episode_id
+    # Check that we got tool calls in the response
+    assert result.choices[0].message.tool_calls is not None
+    assert len(result.choices[0].message.tool_calls) >= 1
+    # Find the calculator tool call
+    calculator_calls = [tc for tc in result.choices[0].message.tool_calls if tc.function.name == "calculator"]
+    assert len(calculator_calls) == 1
+    tool_call = calculator_calls[0]
+    assert tool_call.type == "function"
+    assert tool_call.function.name == "calculator"
+    assert tool_call.function.arguments is not None
+    assert len(tool_call.function.arguments) > 0
