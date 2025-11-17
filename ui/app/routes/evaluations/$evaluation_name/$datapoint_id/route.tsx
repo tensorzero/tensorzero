@@ -98,7 +98,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const tensorZeroDatapoint =
     await getTensorZeroClient().getDatapoint(datapoint_id);
   if (!tensorZeroDatapoint) {
-    throw data(`No datapoint found for id ${datapoint_id}.`, {
+    throw data(`No datapoint found for ID \`${datapoint_id}\`.`, {
       status: 404,
     });
   }

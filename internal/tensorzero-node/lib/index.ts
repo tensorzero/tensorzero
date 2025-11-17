@@ -22,7 +22,6 @@ import type {
   ModelUsageTimePoint,
   OptimizationJobHandle,
   OptimizationJobInfo,
-  StaleDatapointParams,
   StaleDatasetResponse,
   TableBoundsWithCount,
   FeedbackRow,
@@ -383,11 +382,6 @@ export class DatabaseClient {
 
   async countDatasets(): Promise<number> {
     return this.nativeDatabaseClient.countDatasets();
-  }
-
-  async staleDatapoint(params: StaleDatapointParams): Promise<void> {
-    const paramsString = safeStringify(params);
-    await this.nativeDatabaseClient.staleDatapoint(paramsString);
   }
 
   async countDatapointsForDatasetFunction(

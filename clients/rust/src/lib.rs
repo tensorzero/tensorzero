@@ -50,7 +50,6 @@ pub use tensorzero_core::db::datasets::{
     AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetDetailRow, DatasetQueries, DatasetQueryParams, GetAdjacentDatapointIdsParams,
     GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams, GetDatasetRowsParams,
-    StaleDatapointParams,
 };
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
 pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};

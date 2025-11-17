@@ -14,7 +14,6 @@ use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetMetadata, DatasetOutputSource, DatasetQueries, GetAdjacentDatapointIdsParams,
     GetDatapointsParams, GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter,
-    StaleDatapointParams,
 };
 use tensorzero_core::endpoints::datasets::DatapointKind;
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
@@ -1150,11 +1149,7 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
 
     // Test staling
     clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: "test_chat_dataset".to_string(),
-            datapoint_id,
-            function_type: DatapointKind::Chat,
-        })
+        .delete_datapoints("test_chat_dataset", Some(&[datapoint_id]))
         .await
         .unwrap();
 
@@ -1256,11 +1251,7 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
 
     // Test staling
     clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: "test_json_dataset".to_string(),
-            datapoint_id,
-            function_type: DatapointKind::Json,
-        })
+        .delete_datapoints("test_json_dataset", Some(&[datapoint_id]))
         .await
         .unwrap();
 
@@ -1370,12 +1361,9 @@ async fn test_handles_staling_of_non_existent_datapoint() {
     let clickhouse = get_clickhouse().await;
 
     // Should not throw when trying to stale a non-existent datapoint
+    let datapoint_id = Uuid::now_v7();
     let result = clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: "fake".to_string(),
-            datapoint_id: Uuid::now_v7(),
-            function_type: DatapointKind::Chat,
-        })
+        .delete_datapoints("fake", Some(&[datapoint_id]))
         .await;
 
     // This should succeed without error (graceful handling)
@@ -2001,11 +1989,7 @@ async fn test_get_datapoints_respects_allow_stale_false() {
 
     // Stale the datapoint
     clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id,
-            function_type: DatapointKind::Chat,
-        })
+        .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
         .await
         .unwrap();
 
@@ -2071,11 +2055,7 @@ async fn test_get_datapoints_respects_allow_stale_true() {
 
     // Stale the datapoint
     clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id,
-            function_type: DatapointKind::Chat,
-        })
+        .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
         .await
         .unwrap();
 

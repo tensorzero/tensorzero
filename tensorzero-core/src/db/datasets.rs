@@ -236,14 +236,6 @@ pub struct AdjacentDatapointIds {
 
 #[derive(Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
-pub struct StaleDatapointParams {
-    pub dataset_name: String,
-    pub datapoint_id: Uuid,
-    pub function_type: DatapointKind,
-}
-
-#[derive(Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
 pub struct CountDatapointsForDatasetFunctionParams {
     pub dataset_name: String,
     pub function_name: String,
@@ -323,9 +315,6 @@ pub trait DatasetQueries {
 
     /// Gets the count of unique dataset names
     async fn count_datasets(&self) -> Result<u32, Error>;
-
-    /// Marks a datapoint as stale by inserting a new row with staled_at set to now
-    async fn stale_datapoint(&self, params: &StaleDatapointParams) -> Result<(), Error>;
 
     /// Inserts a batch of datapoints into the database
     /// Internally separates chat and JSON datapoints and writes them to the appropriate tables
