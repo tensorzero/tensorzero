@@ -3615,8 +3615,58 @@ type = "track_and_stop"
 
 <Accordion title='type: "uniform"'>
 
-The `uniform` type samples variants uniformly at random from all variants defined in the function.
+The `uniform` type samples variants uniformly at random.
 This is the default behavior when no `[functions.function_name.experimentation]` section is specified.
+
+By default, all variants defined in the function are sampled with equal probability.
+You can optionally specify `candidate_variants` to sample uniformly from a subset of variants, and `fallback_variants` for sequential fallback behavior.
+The behavior depends on which fields are specified:
+
+| Configuration             | Behavior                                                                    |
+| :------------------------ | :-------------------------------------------------------------------------- |
+| No fields specified       | Samples uniformly from all variants in the function                         |
+| Only `candidate_variants` | Samples uniformly from specified candidates                                 |
+| Only `fallback_variants`  | Uses fallback variants sequentially (no uniform sampling)                   |
+| Both specified            | Samples uniformly from candidates; if all fail, uses fallbacks sequentially |
+
+### `candidate_variants`
+
+- **Type:** array of strings
+- **Required:** no
+
+An optional set of variants to sample uniformly from.
+Each variant must be defined via `[functions.function_name.variants.variant_name]` in the `variants` sub-section.
+
+If not specified (and `fallback_variants` is also not specified), all variants are sampled uniformly.
+If `fallback_variants` is specified but `candidate_variants` is not, no candidates are used (fallback-only mode).
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+candidate_variants = ["variant-a", "variant-b"]
+```
+
+### `fallback_variants`
+
+- **Type:** array of strings
+- **Required:** no
+
+An optional set of function variants to use as fallback options.
+Each variant must be defined via `[functions.function_name.variants.variant_name]` in the `variants` sub-section.
+
+If all candidate variants fail during inference, the gateway will select variants sequentially from `fallback_variants` (in order, not uniformly).
+This behaves like a ranked list where the first active fallback variant is always selected.
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+candidate_variants = ["variant-a", "variant-b"]
+fallback_variants = ["fallback-variant"]
+```
+
+### Examples
+
+**Default uniform sampling (all variants):**
 
 ```toml title="tensorzero.toml"
 [functions.draft-email]
@@ -3629,8 +3679,33 @@ type = "chat"
 # ...
 
 [functions.draft-email.variants.variant-c] # 1/3 chance
-type = "chat_completion"
 # ...
+```
+
+**Explicit candidate variants:**
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+candidate_variants = ["variant-a", "variant-b"]  # each has 1/2 probability
+# `variant-c` will not be sampled
+```
+
+**With fallback variants:**
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+candidate_variants = ["variant-a", "variant-b"]  # try these first, uniformly
+fallback_variants = ["variant-c"]  # use if both candidates fail
+```
+
+**Fallback-only mode:**
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+fallback_variants = ["variant-a", "variant-b", "variant-c"]  # sequential
 ```
 
 </Accordion>

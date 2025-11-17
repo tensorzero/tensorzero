@@ -62,9 +62,9 @@ retries = { num_retries = 4, max_delay_s = 10 }
 If we specify multiple variants for a function, the gateway will try different variants until one succeeds or all fail.
 
 By default, the gateway will sample between all variants uniformly.
-You can customize the sampling behavior, including fallback-only variants, using the `experimentation` section.
+You can customize the sampling behavior, including fallback-only variants, using the `[functions.function_name.experimentation]` section.
 
-For example, the configuration below would instruct the gateway to try `gpt_5_mini` and `claude_haiku_4_5` first (with 90/10 sampling probability), and finally `grok_4` if all previous variants fail.
+In the example below, both variants have an equal chance of being selected:
 
 ```toml
 [functions.draft_email]
@@ -76,16 +76,48 @@ model = "openai::gpt-5-mini"
 
 [functions.draft_email.variants.claude_haiku_4_5]
 type = "chat_completion"
-model = "anthropic::claude-haiku-4-5"
+model = "anthropic::claude-3-5-haiku-20241022"
+```
+
+You can specify candidate variants to sample uniformly from, and fallback variants to try sequentially if all candidates fail.
+In the example below, the gateway will first sample uniformly from `gpt_5_mini` or `claude_haiku_4_5`.
+If both of those variants fail, the gateway will try the fallback variants in order: first `grok_4`, then `gemini_2_5_flash`.
+
+```toml
+[functions.extract_data]
+type = "chat"
+
+[functions.extract_data.experimentation]
+type = "uniform"
+candidate_variants = ["gpt_5_mini", "claude_haiku_4_5"]
+fallback_variants = ["grok_4", "gemini_2_5_flash"]
+
+[functions.draft_email.variants.gpt_5_mini]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+
+[functions.draft_email.variants.claude_haiku_4_5]
+type = "chat_completion"
+model = "anthropic::claude-3-5-haiku-20241022"
 
 [functions.draft_email.variants.grok_4]
 type = "chat_completion"
 model = "xai::grok-4-0709"
 
-[functions.draft_email.experimentation]
+[functions.draft_email.variants.gemini_2_5_flash]
+type = "chat_completion"
+model = "google_ai_studio_gemini::gemini-2.5-flash"
+```
+
+You can also use static weights to control the sampling probabilities of candidate variants.
+In the example below, the gateway will sample `gpt_5_mini` 70% of the time and `claude_haiku_4_5` 30% of the time.
+If both of those variants fail, the gateway will try the fallback variants sequentially.
+
+```toml
+[functions.extract_data.experimentation]
 type = "static_weights"
-candidate_variants = {"gpt_5_mini" = 0.9, "claude_haiku_4_5" = 0.1}
-fallback_variants = ["grok_4"]
+candidate_variants = {"gpt_5_mini" = 0.7, "claude_haiku_4_5" = 0.3}
+fallback_variants = ["grok_4", "gemini_2_5_flash"]
 ```
 
 See [Run adaptive A/B tests](/experimentation/run-adaptive-ab-tests) and [Run static A/B tests](/experimentation/run-static-ab-tests) for more information.
@@ -104,6 +136,7 @@ In other words, the gateway will follow a strategy like the pseudocode below.
 
 ```python
 while variants:
+    # Sample according to experimentation config (uniform, static_weights, etc.)
     variant = sample_variant(variants)  # sampling without replacement
 
     for _ in range(num_retries + 1):
@@ -116,10 +149,10 @@ while variants:
 
 ## Load Balancing
 
-TensorZero doesn't currently offer an explicit strategy for load balancing API keys, but you can achieve a similar effect by defining multiple variants with appropriate weights.
+TensorZero doesn't currently offer an explicit strategy for load balancing API keys, but you can achieve a similar effect by defining multiple variants with equal sampling probabilities.
 We plan to add a streamlined load balancing strategy in the future.
 
-In the example below, the gateway will split the traffic between two variants (`gpt_4o_mini_api_key_A` and `gpt_4o_mini_api_key_B`).
+In the example below, the gateway will split the traffic evenly between two variants (`gpt_4o_mini_api_key_A` and `gpt_4o_mini_api_key_B`).
 Each variant leverages a model with providers that use different API keys (`OPENAI_API_KEY_A` and `OPENAI_API_KEY_B`).
 See [Credential Management](/operations/manage-credentials/) for more details on credential management.
 
@@ -143,17 +176,14 @@ api_key_location = "env:OPENAI_API_KEY_B"
 [functions.extract_data]
 type = "chat"
 
+# Uniform sampling (default) splits traffic equally
 [functions.extract_data.variants.gpt_4o_mini_api_key_A]
 type = "chat_completion"
-model = "openai::gpt-4o-mini-2024-07-18"
+model = "gpt_4o_mini_api_key_A"
 
 [functions.extract_data.variants.gpt_4o_mini_api_key_B]
 type = "chat_completion"
-model = "openai::gpt-4o-mini-2024-07-18"
-
-[functions.extract_data.experimentation]
-type = "static_weights"
-candidate_variants = {"gpt_4o_mini_api_key_A" = 0.5, "gpt_4o_mini_api_key_B" = 0.5}
+model = "gpt_4o_mini_api_key_B"
 ```
 
 ## Timeouts
