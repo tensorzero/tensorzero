@@ -191,10 +191,11 @@ If the content block has type `thought`, it must have the following additional f
 If the content block has type `unknown`, it must have the following additional fields:
 
 - `data`: The original content block from the provider, without any validation or transformation by TensorZero.
-- `model_name` and `provider_name` (optional): When both are specified, this content block will only be included in the model provider input for that specific model and provider combination.
+- `model_provider_name` (optional): A string specifying when this content block should be included in the model provider input.
+  If set, the content block will only be provided to this specific model provider.
   If not set, the content block is passed to all model providers.
 
-For example, the following hypothetical unknown content block will send the `daydreaming` content block to inference requests targeting `your_model_name` with `your_provider_name`.
+For example, the following hypothetical unknown content block will send the `daydreaming` content block to inference requests targeting the `your_model_provider_name` model provider.
 
 ```json
 {
@@ -203,8 +204,7 @@ For example, the following hypothetical unknown content block will send the `day
     "type": "daydreaming",
     "dream": "..."
   },
-  "model_name": "your_model_name",
-  "provider_name": "your_provider_name"
+  "model_provider_name": "tensorzero::model_name::your_model_name::provider_name::your_model_provider_name"
 }
 ```
 
