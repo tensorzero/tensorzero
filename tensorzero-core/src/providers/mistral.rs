@@ -625,8 +625,8 @@ struct MistralUsage {
 impl From<MistralUsage> for Usage {
     fn from(usage: MistralUsage) -> Self {
         Usage {
-            input_tokens: usage.prompt_tokens,
-            output_tokens: usage.completion_tokens,
+            input_tokens: Some(usage.prompt_tokens),
+            output_tokens: Some(usage.completion_tokens),
         }
     }
 }
@@ -1256,8 +1256,8 @@ mod tests {
             inference_response.output,
             vec!["Hello, world!".to_string().into()]
         );
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
@@ -1353,8 +1353,8 @@ mod tests {
                 arguments: "{}".to_string(),
             })]
         );
-        assert_eq!(inference_response.usage.input_tokens, 15);
-        assert_eq!(inference_response.usage.output_tokens, 25);
+        assert_eq!(inference_response.usage.input_tokens, Some(15));
+        assert_eq!(inference_response.usage.output_tokens, Some(25));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {

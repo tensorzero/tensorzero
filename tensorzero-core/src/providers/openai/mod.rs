@@ -2338,12 +2338,10 @@ impl<'a> OpenAIBatchRequest<'a> {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub(super) struct OpenAIUsage {
-    #[serde(default)]
-    pub prompt_tokens: u32,
-    #[serde(default)]
-    pub completion_tokens: u32,
+    pub prompt_tokens: Option<u32>,
+    pub completion_tokens: Option<u32>,
 }
 
 impl From<OpenAIUsage> for Usage {
@@ -2351,6 +2349,20 @@ impl From<OpenAIUsage> for Usage {
         Usage {
             input_tokens: usage.prompt_tokens,
             output_tokens: usage.completion_tokens,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub(super) struct OpenAIEmbeddingUsage {
+    pub prompt_tokens: Option<u32>,
+}
+
+impl From<OpenAIEmbeddingUsage> for Usage {
+    fn from(usage: OpenAIEmbeddingUsage) -> Self {
+        Usage {
+            input_tokens: usage.prompt_tokens,
+            output_tokens: Some(0), // this is always zero for embeddings
         }
     }
 }
@@ -2675,7 +2687,7 @@ impl<'a> OpenAIEmbeddingRequest<'a> {
 #[derive(Debug, Deserialize, Serialize)]
 struct OpenAIEmbeddingResponse {
     data: Vec<OpenAIEmbeddingData>,
-    usage: OpenAIUsage,
+    usage: Option<OpenAIEmbeddingUsage>,
 }
 
 struct OpenAIEmbeddingResponseWithMetadata<'a> {
@@ -2722,7 +2734,7 @@ impl<'a> TryFrom<OpenAIEmbeddingResponseWithMetadata<'a>> for EmbeddingProviderR
             request.input.clone(),
             raw_request,
             raw_response,
-            response.usage.into(),
+            response.usage.map(|usage| usage.into()).unwrap_or_default(),
             latency,
         ))
     }
@@ -3317,8 +3329,8 @@ mod tests {
                 finish_reason: OpenAIFinishReason::Stop,
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -3372,8 +3384,8 @@ mod tests {
             inference_response.output,
             vec!["Hello, world!".to_string().into()]
         );
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             inference_response.latency,
@@ -3410,8 +3422,8 @@ mod tests {
                 },
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 15,
-                completion_tokens: 25,
+                prompt_tokens: Some(15),
+                completion_tokens: Some(25),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -3468,8 +3480,8 @@ mod tests {
                 arguments: "{}".to_string(),
             })]
         );
-        assert_eq!(inference_response.usage.input_tokens, 15);
-        assert_eq!(inference_response.usage.output_tokens, 25);
+        assert_eq!(inference_response.usage.input_tokens, Some(15));
+        assert_eq!(inference_response.usage.output_tokens, Some(25));
         assert_eq!(
             inference_response.finish_reason,
             Some(FinishReason::ToolCall)
@@ -3494,8 +3506,8 @@ mod tests {
         let invalid_response_no_choices = OpenAIResponse {
             choices: vec![],
             usage: OpenAIUsage {
-                prompt_tokens: 5,
-                completion_tokens: 0,
+                prompt_tokens: Some(5),
+                completion_tokens: Some(0),
             },
         };
         let request_body = OpenAIRequest {
@@ -3547,8 +3559,8 @@ mod tests {
                 },
             ],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 10,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(10),
             },
         };
 
@@ -3890,8 +3902,8 @@ mod tests {
         let chunk = OpenAIChatChunk {
             choices: vec![],
             usage: Some(OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             }),
         };
         let message = openai_to_tensorzero_chunk(
@@ -3905,8 +3917,8 @@ mod tests {
         assert_eq!(
             message.usage,
             Some(Usage {
-                input_tokens: 10,
-                output_tokens: 20,
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             })
         );
     }
@@ -4902,6 +4914,90 @@ mod tests {
                 _ => panic!("Unexpected content block type for MIME type: {mime_type}"),
             }
         }
+    }
+
+    #[test]
+    fn test_openai_chunk_missing_usage_block() {
+        // Test that an OpenAI streaming chunk with no usage field is handled correctly
+        let chunk_json = json!({
+            "choices": [{
+                "index": 0,
+                "delta": {
+                    "role": "assistant",
+                    "content": "Hello, world!"
+                },
+                "finish_reason": null
+            }]
+        });
+
+        // Parse as OpenAIChatChunk
+        let chunk: OpenAIChatChunk = serde_json::from_value(chunk_json).unwrap();
+
+        // Verify the chunk was parsed successfully
+        assert_eq!(chunk.choices.len(), 1);
+
+        // Verify usage is None when the field is missing
+        assert!(chunk.usage.is_none());
+    }
+
+    #[test]
+    fn test_openai_chunk_null_token_values() {
+        // Test that an OpenAI chunk with null prompt_tokens and/or completion_tokens is handled correctly
+
+        // Test with both tokens null
+        let chunk_both_null = json!({
+            "choices": [{
+                "index": 0,
+                "delta": {},
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": null,
+                "completion_tokens": null
+            }
+        });
+
+        let chunk: OpenAIChatChunk = serde_json::from_value(chunk_both_null).unwrap();
+        assert!(chunk.usage.is_some());
+        let usage = chunk.usage.unwrap();
+        assert_eq!(usage.prompt_tokens, None);
+        assert_eq!(usage.completion_tokens, None);
+
+        // Test with only prompt_tokens null
+        let chunk_input_null = json!({
+            "choices": [{
+                "index": 0,
+                "delta": {},
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": null,
+                "completion_tokens": 20
+            }
+        });
+
+        let chunk2: OpenAIChatChunk = serde_json::from_value(chunk_input_null).unwrap();
+        let usage2 = chunk2.usage.unwrap();
+        assert_eq!(usage2.prompt_tokens, None);
+        assert_eq!(usage2.completion_tokens, Some(20));
+
+        // Test with only completion_tokens null
+        let chunk_output_null = json!({
+            "choices": [{
+                "index": 0,
+                "delta": {},
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": null
+            }
+        });
+
+        let chunk3: OpenAIChatChunk = serde_json::from_value(chunk_output_null).unwrap();
+        let usage3 = chunk3.usage.unwrap();
+        assert_eq!(usage3.prompt_tokens, Some(10));
+        assert_eq!(usage3.completion_tokens, None);
     }
 
     #[test]

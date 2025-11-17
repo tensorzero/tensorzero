@@ -1093,8 +1093,8 @@ pub struct AnthropicUsage {
 impl From<AnthropicUsage> for Usage {
     fn from(value: AnthropicUsage) -> Self {
         Usage {
-            input_tokens: value.input_tokens,
-            output_tokens: value.output_tokens,
+            input_tokens: Some(value.input_tokens),
+            output_tokens: Some(value.output_tokens),
         }
     }
 }
@@ -2471,8 +2471,8 @@ mod tests {
 
         let usage: Usage = anthropic_usage.into();
 
-        assert_eq!(usage.input_tokens, 100);
-        assert_eq!(usage.output_tokens, 50);
+        assert_eq!(usage.input_tokens, Some(100));
+        assert_eq!(usage.output_tokens, Some(50));
     }
 
     #[test]
@@ -2552,8 +2552,8 @@ mod tests {
         );
 
         assert_eq!(raw_response, inference_response.raw_response);
-        assert_eq!(inference_response.usage.input_tokens, 100);
-        assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, Some(100));
+        assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
@@ -2615,8 +2615,8 @@ mod tests {
         );
 
         assert_eq!(raw_response, inference_response.raw_response);
-        assert_eq!(inference_response.usage.input_tokens, 100);
-        assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, Some(100));
+        assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(
@@ -2690,8 +2690,8 @@ mod tests {
 
         assert_eq!(raw_response, inference_response.raw_response);
 
-        assert_eq!(inference_response.usage.input_tokens, 100);
-        assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, Some(100));
+        assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.finish_reason, None);
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
@@ -2941,8 +2941,8 @@ mod tests {
         assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, 10);
-        assert_eq!(usage.output_tokens, 20);
+        assert_eq!(usage.input_tokens, Some(10));
+        assert_eq!(usage.output_tokens, Some(20));
         assert_eq!(chunk.latency, latency);
         assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
 
@@ -2967,8 +2967,8 @@ mod tests {
         assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, 5);
-        assert_eq!(usage.output_tokens, 15);
+        assert_eq!(usage.input_tokens, Some(5));
+        assert_eq!(usage.output_tokens, Some(15));
         assert_eq!(chunk.latency, latency);
 
         // Test MessageStop

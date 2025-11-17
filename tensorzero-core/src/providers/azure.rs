@@ -35,8 +35,9 @@ use crate::providers::openai::OpenAIMessagesConfig;
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
-    AllowedToolsChoice, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
-    OpenAIToolChoice, OpenAIToolChoiceString, OpenAIUsage, SpecificToolChoice, SystemOrDeveloper,
+    AllowedToolsChoice, OpenAIEmbeddingUsage, OpenAIRequestMessage, OpenAIResponse,
+    OpenAIResponseChoice, OpenAITool, OpenAIToolChoice, OpenAIToolChoiceString, SpecificToolChoice,
+    SystemOrDeveloper,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -507,7 +508,7 @@ fn get_azure_embedding_url(endpoint: &Url, deployment_id: &str) -> Result<Url, E
 #[derive(Debug, Deserialize)]
 struct AzureEmbeddingResponse {
     data: Vec<AzureEmbeddingData>,
-    usage: OpenAIUsage,
+    usage: OpenAIEmbeddingUsage,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1042,8 +1043,8 @@ mod tests {
                 finish_reason: OpenAIFinishReason::Stop,
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1086,8 +1087,8 @@ mod tests {
             "Hello, world!".to_string().into()
         );
         assert_eq!(inference_response.raw_response, "test_response");
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             inference_response.latency,

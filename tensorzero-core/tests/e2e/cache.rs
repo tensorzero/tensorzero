@@ -114,8 +114,8 @@ async fn test_cache_write_and_read() {
             },
             raw_request: "raw request".to_string(),
             raw_response: "raw response".to_string(),
-            input_tokens: 10,
-            output_tokens: 16,
+            input_tokens: Some(10),
+            output_tokens: Some(16),
             finish_reason: Some(FinishReason::Stop),
         },
         CacheValidationInfo { tool_config: None },
@@ -144,8 +144,8 @@ async fn test_cache_write_and_read() {
     assert_eq!(
         result.usage,
         Usage {
-            input_tokens: 10,
-            output_tokens: 16,
+            input_tokens: Some(10),
+            output_tokens: Some(16),
         }
     );
     assert_eq!(*result.model_provider_name, *"test_provider");
@@ -162,8 +162,8 @@ async fn test_cache_write_and_read() {
     assert_eq!(
         result.usage,
         Usage {
-            input_tokens: 10,
-            output_tokens: 16
+            input_tokens: Some(10),
+            output_tokens: Some(16),
         }
     );
     assert_eq!(
@@ -240,8 +240,8 @@ async fn test_cache_stream_write_and_read() {
             })],
             created: 1234,
             usage: Some(Usage {
-                input_tokens: 20,
-                output_tokens: 40,
+                input_tokens: Some(20),
+                output_tokens: Some(40),
             }),
             raw_response: "raw response".to_string(),
             latency: Duration::from_secs(999),
@@ -254,8 +254,8 @@ async fn test_cache_stream_write_and_read() {
             })],
             created: 5678,
             usage: Some(Usage {
-                input_tokens: 100,
-                output_tokens: 200,
+                input_tokens: Some(100),
+                output_tokens: Some(200),
             }),
             raw_response: "raw response 2".to_string(),
             latency: Duration::from_secs(999),
@@ -270,8 +270,8 @@ async fn test_cache_stream_write_and_read() {
         initial_chunks.clone(),
         "raw request",
         &Usage {
-            input_tokens: 1,
-            output_tokens: 2,
+            input_tokens: Some(1),
+            output_tokens: Some(2),
         },
         None,
     )
@@ -306,16 +306,16 @@ async fn test_cache_stream_write_and_read() {
             assert_eq!(
                 usage,
                 &Some(Usage {
-                    input_tokens: 20,
-                    output_tokens: 40,
+                    input_tokens: Some(20),
+                    output_tokens: Some(40),
                 })
             );
         } else {
             assert_eq!(
                 usage,
                 &Some(Usage {
-                    input_tokens: 100,
-                    output_tokens: 200,
+                    input_tokens: Some(100),
+                    output_tokens: Some(200),
                 })
             );
         };
