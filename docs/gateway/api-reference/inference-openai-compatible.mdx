@@ -160,9 +160,10 @@ Each object in the array must have two or three fields:
 - One of the following:
   - `value`: The value to insert at that location; it can be of any type including nested types
   - `delete = true`: Deletes the field at the specified location, if present.
-- Optional: If either of the following is specified, the modification will only be applied to the specified variant or model provider. If neither is specified, the modification applies to all variants and providers.
-  - `variant_name`: Targets a specific variant
-  - `model_name` and `provider_name`: Targets a specific model and provider combination
+- Optional: If one of the following is specified, the modification will only be applied to the specified variant, model, or model provider. If neither is specified, the modification applies to all model inferences.
+  - `variant_name`
+  - `model_name`
+  - `model_name` and `provider_name`
 
 <Tip>
 
@@ -245,9 +246,10 @@ Each object in the array must have two or three fields:
 
 - `name`: The name of the header to modify
 - `value`: The value to set the header to
-- Optional: If either of the following is specified, the modification will only be applied to the specified variant or model provider. If neither is specified, the modification applies to all variants and providers.
-  - `variant_name`: Targets a specific variant
-  - `model_name` and `provider_name`: Targets a specific model and provider combination
+- Optional: If one of the following is specified, the modification will only be applied to the specified variant, model, or model provider. If neither is specified, the modification applies to all model inferences.
+  - `variant_name`
+  - `model_name`
+  - `model_name` and `provider_name`
 
 <Tip>
 
