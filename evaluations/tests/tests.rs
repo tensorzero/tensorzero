@@ -6,6 +6,7 @@ mod common;
 use clap::Parser;
 use evaluations::dataset::query_dataset;
 use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEvaluatorParams};
+use evaluations::stopping::MIN_DATAPOINTS;
 use evaluations::Clients;
 use serde_json::json;
 use tensorzero_core::cache::CacheEnabledMode;
@@ -2517,9 +2518,9 @@ async fn test_precision_targets_parameter() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_cli_args_with_adaptive_stopping() {
+async fn test_cli_args_max_datapoints() {
     init_tracing_for_tests();
-    let dataset_name = format!("good-haiku-data-cli-{}", Uuid::now_v7());
+    let dataset_name = format!("good-haiku-data-cli-max-{}", Uuid::now_v7());
     write_chat_fixture_to_dataset(
         &PathBuf::from(&format!(
             "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
@@ -2535,7 +2536,7 @@ async fn test_cli_args_with_adaptive_stopping() {
     ));
     let evaluation_run_id = Uuid::now_v7();
 
-    // Test CLI Args with values for max_datapoints and precision_targets
+    // Test CLI Args with max_datapoints limit
     let args = Args {
         config_file: config_path,
         gateway_url: None,
@@ -2545,7 +2546,65 @@ async fn test_cli_args_with_adaptive_stopping() {
         concurrency: 5,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
-        max_datapoints: Some(20),
+        max_datapoints: Some(21),
+        precision_targets: vec![],
+    };
+
+    let mut output = Vec::new();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
+
+    // Parse output and verify max_datapoints constraint was respected
+    let output_str = String::from_utf8(output).unwrap();
+    let lines: Vec<&str> = output_str.lines().collect();
+
+    // First line should be RunInfo
+    let run_info: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    let num_datapoints = run_info["num_datapoints"].as_u64().unwrap() as usize;
+
+    // Should be bounded between MIN_DATAPOINTS and max_datapoints (21)
+    assert!(
+        num_datapoints >= MIN_DATAPOINTS,
+        "Should have at least MIN_DATAPOINTS ({MIN_DATAPOINTS}) inferences, got {num_datapoints}"
+    );
+    assert!(
+        num_datapoints <= 21,
+        "Should not exceed max_datapoints (20), got {num_datapoints}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_cli_args_precision_targets() {
+    init_tracing_for_tests();
+    let dataset_name = format!("good-haiku-data-cli-precision-{}", Uuid::now_v7());
+    write_chat_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
+    )
+    .await;
+
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let evaluation_run_id = Uuid::now_v7();
+
+    // Test CLI Args with precision_targets for adaptive stopping
+    // Set a liberal precision target so the test completes quickly
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        evaluation_name: "haiku_with_outputs".to_string(),
+        dataset_name: dataset_name.clone(),
+        variant_name: "gpt_4o_mini".to_string(),
+        concurrency: 5,
+        format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::Off,
+        max_datapoints: None,
         precision_targets: vec![("exact_match".to_string(), 0.2)],
     };
 
@@ -2554,7 +2613,7 @@ async fn test_cli_args_with_adaptive_stopping() {
         .await
         .unwrap();
 
-    // Parse output and verify constraints were respected
+    // Parse output and verify precision target was reached
     let output_str = String::from_utf8(output).unwrap();
     let lines: Vec<&str> = output_str.lines().collect();
 
@@ -2562,11 +2621,40 @@ async fn test_cli_args_with_adaptive_stopping() {
     let run_info: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
     let num_datapoints = run_info["num_datapoints"].as_u64().unwrap() as usize;
 
-    // Should not exceed max_datapoints (20) due to adaptive stopping with precision_targets
+    // Collect evaluation results and compute CI half-width for exact_match
+    let mut exact_match_values = Vec::new();
+    for line in lines.iter().skip(1) {
+        if let Ok(update) = serde_json::from_str::<serde_json::Value>(line) {
+            if update["type"] == "success" {
+                if let Some(exact_match) = update["evaluations"]["exact_match"].as_f64() {
+                    exact_match_values.push(exact_match as f32);
+                }
+            }
+        }
+    }
+
+    // Compute CI half-width
+    let mut stats = PerEvaluatorStats::default();
+    for value in exact_match_values {
+        stats.push(value);
+    }
+
+    let ci_half_width = stats.ci_half_width();
     assert!(
-        num_datapoints <= 20,
-        "Should not exceed max_datapoints (20), got {num_datapoints}"
+        ci_half_width.is_some(),
+        "Should have computed CI half-width for exact_match"
     );
 
-    println!("CLI adaptive stopping test: processed {num_datapoints} datapoints (max=20)");
+    // Verify that the CI half-width meets the precision target
+    let ci_half_width = ci_half_width.unwrap();
+    assert!(
+        ci_half_width <= 0.2,
+        "CI half-width {ci_half_width:.3} should be <= precision target 0.2"
+    );
+
+    // Should have processed at least MIN_DATAPOINTS datapoints
+    assert!(
+        num_datapoints >= MIN_DATAPOINTS,
+        "Should have at least MIN_DATAPOINTS ({MIN_DATAPOINTS}) inferences, got {num_datapoints}"
+    );
 }
