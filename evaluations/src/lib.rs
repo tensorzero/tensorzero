@@ -314,46 +314,49 @@ pub async fn run_evaluation(
 ///
 /// This function runs an evaluation and streams results as they complete via an mpsc channel.
 /// When `precision_limits` is provided, evaluators can stop independently once confidence
-/// interval half-widths are within the precision limits.
+/// interval half-widths (the max of the distances from the CI endpoints to the point estimate)
+/// are within the precision limits.
 ///
 /// ## How it works
 ///
 /// 1. Creates an mpsc channel for streaming `EvaluationUpdate` messages
 /// 2. Loads the evaluation and function configurations
-/// 3. Queries the dataset (limited by `max_inferences` if specified)
-/// 4. If `precision_limits` is provided: creates cancellation tokens for each evaluator with a precision limit
+/// 3. Queries the dataset (limited by `max_datapoints` if specified)
+/// 4. If `precision_limits` is provided:
+///    - Creates cancellation tokens for all evaluators
+///    - Creates a `StoppingManager` to track statistics and manage stopping conditions
 /// 5. Sends `RunInfo` as the first message (evaluation_run_id, num_datapoints)
-/// 6. Spawns a concurrent task for each datapoint (up to `max_inferences`) that:
+/// 6. Spawns a concurrent task for each datapoint (up to `max_datapoints`) that:
 ///    - Acquires a semaphore permit (controls concurrency)
 ///    - Runs inference for the datapoint
-///    - Evaluates the inference response (skipping cancelled evaluators)
+///    - Evaluates the inference response (skipping cancelled evaluators if tokens exist)
 ///    - Returns (Datapoint, InferenceResponse, EvaluationResult)
 /// 7. Spawns a background collector task that:
 ///    - Collects results from the JoinSet as tasks complete
-///    - If `precision_limits` is provided: updates per-evaluator statistics after `min_inferences`
-///    - Checks stopping conditions: cancels evaluator tokens when CI half-width ≤ precision_limit
-///    - When all evaluators with precision limits stop: aborts remaining tasks
+///    - If `precision_limits` is provided:
+///      - Updates per-evaluator statistics via `StoppingManager::update_stats()`
+///      - Cancels converged evaluators via `StoppingManager::cancel_converged_evaluators()`
+///      - Checks if all evaluators have stopped via `StoppingManager::all_evaluators_stopped()`
+///      - Aborts remaining tasks when all evaluators have stopped
 ///    - Converts results to `EvaluationUpdate::Success` or `EvaluationUpdate::Error`
 ///    - Sends each update through the channel
 ///    - Closes the channel when all tasks complete or are aborted
 /// 8. Returns immediately with the receiver, run_info, and evaluation_config
 ///
-/// **Min Inferences**: Minimum number of inferences to run before checking stopping conditions (default: 20)
-///   - Ensures sufficient samples for statistical validity
+/// ## Parameters
 ///
-/// **Max Inferences**: When `max_inferences` is `Some(max)`, limits dataset to at most `max` datapoints.
+/// **`max_datapoints`**: When `Some(max)`, limits dataset to at most `max` datapoints.
 ///
-/// **Precision Limits**: When `precision_limits` is `Some(map)`:
+/// **`precision_limits`**: When `Some(map)`, enables adaptive stopping:
 /// - Per-evaluator CI half-width thresholds (HashMap<String, f32>)
-///   - Evaluator k stops when: `1.96 * stderr ≤ threshold_k` (1.96 gives a 95% Wald-style confidence interval)
-///   - Only checked after `min_inferences` have completed
-///   - Implemented via cancellation tokens that skip the evaluator on subsequent datapoints
-/// - **Evaluators not in precision_limits map**: Run on all datapoints (up to max_inferences)
+/// - Evaluator k stops when the larger of the two halves of the CI has width ≤ threshold_k`
+/// - Only checked after min_datapoints (hardcoded to 20) have been completed
+/// - Evaluators not in the map run on all datapoints (up to max_datapoints)
 /// - All datapoint tasks are spawned upfront for maximum concurrency
-/// - When all evaluators with precision limits have stopped, remaining tasks are aborted
+/// - When all evaluators have stopped, remaining tasks are aborted
 ///
 /// When `precision_limits` is `None`:
-/// - All evaluators run on all datapoints (up to max_inferences)
+/// - All evaluators run on all datapoints (up to max_datapoints)
 /// - Standard evaluation behavior
 ///
 /// ## Return value
