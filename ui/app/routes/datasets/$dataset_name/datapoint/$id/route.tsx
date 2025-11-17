@@ -231,23 +231,28 @@ export async function loader({
   const datapoint = await datapointToParsedDatasetRow(tensorZeroDatapoint);
   return {
     datapoint,
+    tensorZeroDatapoint,
   };
 }
 
 export default function DatapointPage({ loaderData }: Route.ComponentProps) {
-  const { datapoint } = loaderData;
+  const { datapoint, tensorZeroDatapoint } = loaderData;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
-  const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
+
   const [originalInput, setOriginalInput] = useState(datapoint.input);
+  const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
+
   const [originalOutput, setOriginalOutput] = useState(datapoint.output);
-  const [originalTags, setOriginalTags] = useState(datapoint.tags || {});
   const [output, setOutput] = useState<
     ContentBlockChatOutput[] | JsonInferenceOutput | null
   >(datapoint.output ?? null);
-  const [tags, setTags] = useState<Record<string, string>>(
-    datapoint.tags || {},
+
+  const [originalTags, setOriginalTags] = useState(
+    tensorZeroDatapoint.tags || {},
   );
+  const [tags, setTags] = useState(tensorZeroDatapoint.tags || {});
+
   const [isEditing, setIsEditing] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -257,11 +262,11 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setOriginalInput(datapoint.input);
     setOutput(datapoint.output ?? null);
     setOriginalOutput(datapoint.output);
-    setTags(datapoint.tags || {});
-    setOriginalTags(datapoint.tags || {});
+    setTags(tensorZeroDatapoint.tags || {});
+    setOriginalTags(tensorZeroDatapoint.tags || {});
     setIsEditing(false);
     setValidationError(null);
-  }, [datapoint]);
+  }, [datapoint, tensorZeroDatapoint]);
 
   const canSave = useMemo(() => {
     return (
@@ -290,7 +295,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const handleReset = () => {
     setInput(datapoint.input);
     setOutput(datapoint.output ?? null);
-    setTags(datapoint.tags || {});
+    setTags(tensorZeroDatapoint.tags || {});
   };
 
   const handleSystemChange = (system: string | object | null) => {
