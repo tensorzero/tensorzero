@@ -209,15 +209,24 @@ export async function loader({
 }) {
   const { dataset_name, id } = params;
   if (!dataset_name || !id) {
-    throw data(`No datapoint found for id ${id}.`, {
+    throw data("You must provide a dataset name and datapoint ID.", {
       status: 404,
     });
   }
   const tensorZeroDatapoint = await getTensorZeroClient().getDatapoint(id);
   if (!tensorZeroDatapoint) {
-    throw data(`No datapoint found for id ${id}.`, {
+    throw data(`No datapoint found for ID \`${id}\`.`, {
       status: 404,
     });
+  }
+  // Note (GabrielBianconi): `getDatapoint` no longer depends on the dataset name, but maybe it should?
+  if (tensorZeroDatapoint.dataset_name !== dataset_name) {
+    throw data(
+      `The datapoint \`${id}\` does not belong to dataset \`${dataset_name}\`.`,
+      {
+        status: 400,
+      },
+    );
   }
   const datapoint = await datapointToParsedDatasetRow(tensorZeroDatapoint);
   return {
