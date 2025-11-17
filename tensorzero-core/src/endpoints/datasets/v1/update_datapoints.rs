@@ -242,10 +242,8 @@ async fn prepare_chat_update(
     if let Some(new_tags) = update.tags {
         updated_datapoint.tags = Some(new_tags);
     }
-    if let Some(new_metadata) = update.metadata {
-        if let Some(new_name) = new_metadata.name {
-            updated_datapoint.name = new_name;
-        }
+    if let Some(new_name) = update.metadata.name {
+        updated_datapoint.name = new_name;
     }
 
     Ok(PreparedUpdate {
@@ -345,10 +343,8 @@ async fn prepare_json_update(
         updated_datapoint.tags = Some(new_tags);
     }
 
-    if let Some(new_metadata) = update.metadata {
-        if let Some(new_name) = new_metadata.name {
-            updated_datapoint.name = new_name;
-        }
+    if let Some(new_name) = update.metadata.name {
+        updated_datapoint.name = new_name;
     }
 
     Ok(PreparedUpdate {
@@ -950,7 +946,7 @@ mod tests {
                 output: None,
                 tool_params: None,
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_chat_update(
@@ -1009,7 +1005,7 @@ mod tests {
                 output: None,
                 tool_params: None,
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_chat_update(
@@ -1060,7 +1056,7 @@ mod tests {
                 output: Some(new_output.clone()),
                 tool_params: None,
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_chat_update(
@@ -1096,7 +1092,7 @@ mod tests {
                 output: None,
                 tool_params: None, // Omitted - should remain unchanged
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_chat_update(
@@ -1130,7 +1126,7 @@ mod tests {
                 output: None,
                 tool_params: Some(None), // Explicitly set to null
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_chat_update(
@@ -1175,7 +1171,7 @@ mod tests {
                 output: None,
                 tool_params: Some(Some(dynamic_tool_params)),
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_chat_update(
@@ -1212,7 +1208,7 @@ mod tests {
                 output: None,
                 tool_params: None,
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1237,7 +1233,7 @@ mod tests {
                 output: None,
                 tool_params: None,
                 tags: Some(HashMap::new()),
-                metadata: None,
+                metadata: Default::default(),
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1263,7 +1259,7 @@ mod tests {
                 output: None,
                 tool_params: None,
                 tags: Some(new_tags.clone()),
-                metadata: None,
+                metadata: Default::default(),
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1296,7 +1292,7 @@ mod tests {
                 output: None,
                 tool_params: None,
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1321,7 +1317,7 @@ mod tests {
                 output: None,
                 tool_params: None,
                 tags: None,
-                metadata: Some(DatapointMetadataUpdate { name: Some(None) }),
+                metadata: DatapointMetadataUpdate { name: Some(None) },
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1346,9 +1342,9 @@ mod tests {
                 output: None,
                 tool_params: None,
                 tags: None,
-                metadata: Some(DatapointMetadataUpdate {
+                metadata: DatapointMetadataUpdate {
                     name: Some(Some("new_name".to_string())),
-                }),
+                },
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1403,9 +1399,9 @@ mod tests {
                 output: Some(new_output.clone()),
                 tool_params: Some(Some(dynamic_tool_params)),
                 tags: Some(new_tags.clone()),
-                metadata: Some(DatapointMetadataUpdate {
+                metadata: DatapointMetadataUpdate {
                     name: Some(Some("updated_name".to_string())),
-                }),
+                },
             };
 
             let result = prepare_chat_update(
@@ -1448,7 +1444,7 @@ mod tests {
                 output: None,
                 output_schema: None,
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_json_update(
@@ -1495,7 +1491,7 @@ mod tests {
                 output: None, // Omitted
                 output_schema: None,
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_json_update(
@@ -1529,7 +1525,7 @@ mod tests {
                 output: Some(None), // Set to null
                 output_schema: None,
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_json_update(
@@ -1567,7 +1563,7 @@ mod tests {
                 })),
                 output_schema: None,
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_json_update(
@@ -1612,7 +1608,7 @@ mod tests {
                 output: None,
                 output_schema: Some(new_schema.clone()),
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_json_update(
@@ -1652,7 +1648,7 @@ mod tests {
                 })),
                 output_schema: Some(new_schema.clone()),
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_json_update(
@@ -1692,7 +1688,7 @@ mod tests {
                 })),
                 output_schema: None, // Will use existing schema which expects {value: string}
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_json_update(
@@ -1732,7 +1728,7 @@ mod tests {
                 output: None,
                 output_schema: Some(invalid_schema),
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
 
             let result = prepare_json_update(
@@ -1772,7 +1768,7 @@ mod tests {
                 output: None,
                 output_schema: None,
                 tags: None,
-                metadata: None,
+                metadata: Default::default(),
             };
             let result = prepare_json_update(
                 &app_state,
@@ -1819,9 +1815,9 @@ mod tests {
                 })),
                 output_schema: Some(new_schema.clone()),
                 tags: Some(new_tags.clone()),
-                metadata: Some(DatapointMetadataUpdate {
+                metadata: DatapointMetadataUpdate {
                     name: Some(Some("json_updated".to_string())),
-                }),
+                },
             };
 
             let result = prepare_json_update(

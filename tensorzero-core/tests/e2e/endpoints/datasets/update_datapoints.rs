@@ -544,9 +544,7 @@ async fn test_update_datapoint_with_metadata() {
             "datapoints": [{
                 "type": "chat",
                 "id": datapoint_id.to_string(),
-                "metadata": {
-                    "name": "Test Datapoint Name"
-                }
+                "name": "Test Datapoint Name"
             }]
         }))
         .send()
@@ -950,9 +948,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
             "datapoints": [{
                 "type": "chat",
                 "id": datapoint_id.to_string(),
-                "metadata": {
-                    "name": null
-                }
+                "name": null
             }]
         }))
         .send()
@@ -1225,7 +1221,7 @@ async fn test_update_metadata_chat_datapoint() {
         .json(&json!({
             "datapoints": [{
                 "id": datapoint_id.to_string(),
-                "metadata": {"name": "updated_name"}
+                "name": "updated_name"
             }]
         }))
         .send()
@@ -1325,7 +1321,7 @@ async fn test_update_metadata_json_datapoint() {
         .json(&json!({
             "datapoints": [{
                 "id": datapoint_id.to_string(),
-                "metadata": {"name": "updated_json_name"}
+                "name": "updated_json_name"
             }]
         }))
         .send()
