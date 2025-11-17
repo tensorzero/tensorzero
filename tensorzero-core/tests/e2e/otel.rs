@@ -357,7 +357,7 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
                 usage = Some(OTelUsage::zero());
             }
             // ...and then add the chunk usage to it (handling `None` fields)
-            if let Some(mut u) = usage {
+            if let Some(ref mut u) = usage {
                 u.sum_usage_strict(&chunk_usage);
             }
         }
@@ -454,7 +454,7 @@ async fn test_stream_fatal_error_usage() {
                         usage = Some(OTelUsage::zero());
                     }
                     // ...and then add the chunk usage to it (handling `None` fields)
-                    if let Some(mut u) = usage {
+                    if let Some(ref mut u) = usage {
                         u.sum_usage_strict(&response_usage);
                     }
                 }

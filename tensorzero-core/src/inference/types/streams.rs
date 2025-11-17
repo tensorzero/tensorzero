@@ -294,7 +294,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                 usage = Some(Usage::zero());
             }
             // ...and then add the chunk usage to it (handling `None` fields)
-            if let Some(mut u) = usage {
+            if let Some(ref mut u) = usage {
                 u.sum_strict(chunk_usage);
             }
         }

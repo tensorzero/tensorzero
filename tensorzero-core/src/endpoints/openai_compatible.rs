@@ -1520,7 +1520,7 @@ fn prepare_serialized_openai_compatible_events(
                     total_usage = Some(OpenAICompatibleUsage::zero());
                 }
                 // ...and then add the chunk usage to it (handling `None` fields)
-                if let Some(mut u) = total_usage { u.sum_usage_strict(chunk_usage); }
+                if let Some(ref mut u) = total_usage { u.sum_usage_strict(chunk_usage); }
             }
             let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index, &response_model_prefix);
             for chunk in openai_compatible_chunks {

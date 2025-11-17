@@ -650,7 +650,7 @@ async fn wrap_provider_stream(
                         total_usage = Some(Usage::zero());
                     }
                     // ...and then add the chunk usage to it (handling `None` fields)
-                    if let Some(mut u) = total_usage { u.sum_strict(chunk_usage); }
+                    if let Some(ref mut u) = total_usage { u.sum_strict(chunk_usage); }
                 }
             }
             // We can skip cloning the chunk if we know we're not going to write to the cache
