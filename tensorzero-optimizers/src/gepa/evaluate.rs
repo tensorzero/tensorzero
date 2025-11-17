@@ -4,17 +4,19 @@
 //! - Evaluating variants on datasets
 //! - Consuming evaluation streams
 //! - Creating evaluation datasets in ClickHouse
+//! - Template-enriched evaluation configurations
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use serde::Serialize;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use tensorzero_core::{
     cache::CacheEnabledMode,
     client::Client,
-    config::{Config, UninitializedVariantConfig, UninitializedVariantInfo},
+    config::{Config, MetricConfigOptimize, UninitializedVariantConfig, UninitializedVariantInfo},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::datasets::v1::{
         create_datapoints, delete_dataset,
@@ -24,7 +26,7 @@ use tensorzero_core::{
         },
     },
     error::{Error, ErrorDetails},
-    evaluations::EvaluationConfig,
+    evaluations::{EvaluationConfig, EvaluatorConfig, ExactMatchConfig, LLMJudgeConfig},
     http::TensorzeroHttpClient,
     inference::types::Input,
     stored_inference::{RenderedSample, StoredOutput},
@@ -134,7 +136,7 @@ pub struct EvaluateVariantParams {
     pub gateway_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub tensorzero_config: Arc<Config>,
-    pub evaluation_config: Arc<EvaluationConfig>,
+    pub evaluation_config: Arc<EvaluationConfigWithInstructions>,
     pub evaluation_name: String,
     pub variant_name: String,
     pub variant_config: UninitializedChatCompletionConfig,
@@ -201,7 +203,7 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
 /// following the same pattern as the evaluations CLI for consistency and maintainability.
 pub(crate) async fn consume_evaluation_stream(
     mut receiver: mpsc::Receiver<EvaluationUpdate>,
-    evaluation_config: &std::sync::Arc<EvaluationConfig>,
+    evaluation_config: &std::sync::Arc<EvaluationConfigWithInstructions>,
     dataset_len: usize,
 ) -> Result<EvaluationResults, Error> {
     // Use EvaluationStats to track results (JSONL mode = no progress bar)
@@ -219,10 +221,29 @@ pub(crate) async fn consume_evaluation_stream(
 
     // Compute aggregated statistics using EvaluationStats
     let evaluation_stats_map = {
-        let evaluators = match &**evaluation_config {
-            EvaluationConfig::Inference(inference_config) => &inference_config.evaluators,
-        };
-        evaluation_stats.compute_stats(evaluators)
+        // Convert EvaluatorConfigWithInstructions back to EvaluatorConfig for compute_stats
+        let evaluators: HashMap<String, EvaluatorConfig> = evaluation_config
+            .evaluators
+            .iter()
+            .map(|(name, config_with_instructions)| {
+                let config = match config_with_instructions {
+                    EvaluatorConfigWithInstructions::ExactMatch(cfg) => {
+                        EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: cfg.cutoff })
+                    }
+                    EvaluatorConfigWithInstructions::LLMJudge(cfg) => {
+                        EvaluatorConfig::LLMJudge(LLMJudgeConfig {
+                            input_format: cfg.config.input_format,
+                            output_type: cfg.config.output_type,
+                            include: cfg.config.include,
+                            optimize: cfg.config.optimize,
+                            cutoff: cfg.config.cutoff,
+                        })
+                    }
+                };
+                (name.clone(), config)
+            })
+            .collect();
+        evaluation_stats.compute_stats(&evaluators)
     };
 
     Ok(EvaluationResults {
@@ -349,4 +370,127 @@ pub async fn cleanup_temporary_dataset(
             );
         }
     }
+}
+
+// ============================================================================
+// Template-enriched evaluation configurations
+// ============================================================================
+
+/// Evaluation configuration with loaded system instructions for LLM Judge evaluators
+///
+/// This mirrors `InferenceEvaluationConfig` but includes the loaded system instructions
+/// for all LLM Judge evaluators, enabling richer context in GEPA's analyze function.
+#[derive(Debug, Clone, Serialize)]
+pub struct EvaluationConfigWithInstructions {
+    pub evaluators: HashMap<String, EvaluatorConfigWithInstructions>,
+    pub function_name: String,
+}
+
+impl EvaluationConfigWithInstructions {
+    /// Create an evaluation config enriched with system instructions from the TensorZero config
+    ///
+    /// This loads the system instructions for all LLM Judge evaluators using the
+    /// template naming convention: `tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::openai::system`
+    ///
+    /// # Arguments
+    /// * `config` - TensorZero config containing evaluation and template configs
+    /// * `evaluation_name` - Name of the evaluation to load
+    ///
+    /// # Returns
+    /// * `Result<Self, Error>` - The enriched evaluation config, or error if template loading fails
+    pub fn from_config(config: &Config, evaluation_name: &str) -> Result<Self, Error> {
+        // Extract the evaluation config from the TensorZero config
+        let evaluation_config = config.evaluations.get(evaluation_name).ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Evaluation '{evaluation_name}' not found in config"),
+            })
+        })?;
+
+        let templates = &config.templates;
+        // Extract InferenceEvaluationConfig from the enum
+        let EvaluationConfig::Inference(inference_config) = &**evaluation_config;
+        let mut enriched_evaluators = HashMap::new();
+
+        for (evaluator_name, evaluator_config) in &inference_config.evaluators {
+            let enriched_evaluator = match evaluator_config {
+                EvaluatorConfig::ExactMatch(config) => {
+                    // ExactMatch evaluators don't have instructions, manually construct
+                    EvaluatorConfigWithInstructions::ExactMatch(ExactMatchConfig {
+                        cutoff: config.cutoff,
+                    })
+                }
+                EvaluatorConfig::LLMJudge(config) => {
+                    // Load the system instructions for this LLM Judge evaluator
+                    // Template key format: tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::openai::system
+                    let template_key =
+                        format!("tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::openai::system");
+
+                    // Render the template with empty context (LLM Judge system instructions don't use context)
+                    let system_instructions = templates
+                        .template_message(&template_key, &serde_json::Value::Null)
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::Config {
+                                message: format!(
+                                    "Failed to load system instructions for LLM Judge evaluator '{evaluator_name}' \
+                                    in evaluation '{evaluation_name}': {e}"
+                                ),
+                            })
+                        })?;
+
+                    EvaluatorConfigWithInstructions::LLMJudge(LLMJudgeConfigWithInstructions {
+                        config: LLMJudgeConfig {
+                            input_format: config.input_format,
+                            output_type: config.output_type,
+                            include: config.include,
+                            optimize: config.optimize,
+                            cutoff: config.cutoff,
+                        },
+                        system_instructions,
+                    })
+                }
+            };
+
+            enriched_evaluators.insert(evaluator_name.clone(), enriched_evaluator);
+        }
+
+        Ok(Self {
+            evaluators: enriched_evaluators,
+            function_name: inference_config.function_name.clone(),
+        })
+    }
+}
+
+/// Evaluator configuration enriched with system instructions (for LLM Judge)
+///
+/// This mirrors `EvaluatorConfig` but includes loaded system instructions for LLM Judge evaluators.
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EvaluatorConfigWithInstructions {
+    ExactMatch(ExactMatchConfig),
+    #[serde(rename = "llm_judge")]
+    LLMJudge(LLMJudgeConfigWithInstructions),
+}
+
+impl EvaluatorConfigWithInstructions {
+    /// Get the optimization direction for this evaluator
+    ///
+    /// Returns whether this metric should be maximized or minimized.
+    pub fn optimize(&self) -> MetricConfigOptimize {
+        match self {
+            EvaluatorConfigWithInstructions::ExactMatch(_) => MetricConfigOptimize::Max,
+            EvaluatorConfigWithInstructions::LLMJudge(config) => config.config.optimize.into(),
+        }
+    }
+}
+
+/// LLM Judge configuration with loaded system instructions
+///
+/// This extends `LLMJudgeConfig` with the loaded system instructions string,
+/// providing full context to the GEPA analyze function.
+#[derive(Clone, Debug, Serialize)]
+pub struct LLMJudgeConfigWithInstructions {
+    #[serde(flatten)]
+    pub config: LLMJudgeConfig,
+    /// The loaded and rendered system instructions for this LLM Judge
+    pub system_instructions: String,
 }

@@ -1,6 +1,6 @@
+<function_context>
 <function_name>{{function_name}}</function_name>
 <model_name>{{model}}</model_name>
-
 <message_templates>
 {% for template_name in templates %}
 <template name="{{template_name}}">
@@ -8,7 +8,6 @@
 </template>
 {% endfor %}
 </message_templates>
-
 {% if schemas %}
 <message_schemas>
 {% for schema_name in schemas %}
@@ -23,12 +22,12 @@
 {{output_schema | tojson(indent=2)}}
 </output_schema>
 {% endif %}
-
 {% if tools %}
 <available_tools>
 {{tools | tojson(indent=2)}}
 </available_tools>
 {% endif %}
+</function_context>
 
 <analyses>
 The following are examples of LLM responses with analysis/feedback:

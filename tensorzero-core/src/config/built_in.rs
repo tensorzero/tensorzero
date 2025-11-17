@@ -177,11 +177,18 @@ fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
                 "type": ["object", "null"],
                 "description": "Tags associated with the inference"
             },
-            "evaluations": {
+            "evaluation_context": {
                 "type": "object",
-                "description": "Evaluator scores for this inference (evaluator_name -> score or null if evaluation failed)",
+                "description": "Full evaluator configurations including type, settings, and system templates",
                 "additionalProperties": {
-                    "type": ["number", "null"]
+                    "type": "object"
+                }
+            },
+            "evaluation_scores": {
+                "type": "object",
+                "description": "Evaluation scores for this inference (numeric values 0-1, boolean values, or null if failed)",
+                "additionalProperties": {
+                    "type": ["number", "boolean", "null"]
                 }
             }
         }

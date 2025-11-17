@@ -76,6 +76,7 @@ async fn test_analyze_inferences_success() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 
@@ -119,6 +120,7 @@ async fn test_analyze_inferences_empty_input() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 
@@ -151,6 +153,7 @@ async fn test_analyze_inferences_single_inference() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 
@@ -201,6 +204,7 @@ async fn test_analyze_inferences_concurrency_limit() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 
@@ -241,6 +245,7 @@ async fn test_analyze_inferences_parallel_execution() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
     let duration = start.elapsed();
@@ -284,6 +289,7 @@ async fn test_analyze_inferences_invalid_model() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 
@@ -323,6 +329,7 @@ async fn test_analyze_inferences_with_schemas() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 
@@ -427,6 +434,7 @@ async fn test_analyze_inferences_json_function() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 
@@ -487,6 +495,7 @@ async fn test_analyze_inferences_response_structure() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 
@@ -540,7 +549,7 @@ async fn test_analyze_input_includes_evaluations() {
     // Add evaluator scores
     eval_info
         .evaluations
-        .insert("accuracy".to_string(), Some(serde_json::json!(0.85)));
+        .insert("exact_match".to_string(), Some(serde_json::json!(0.85)));
     eval_info
         .evaluations
         .insert("fluency".to_string(), Some(serde_json::json!(0.92)));
@@ -556,31 +565,89 @@ async fn test_analyze_input_includes_evaluations() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config_with_evaluators(),
     )
     .await;
 
     // Assert: Parse echo response and verify evaluations are included
-    assert!(result.is_ok(), "analyze_inferences should succeed");
+    assert!(
+        result.is_ok(),
+        "analyze_inferences should succeed: {:?}",
+        result.as_ref().err()
+    );
     let analyses = result.unwrap();
     assert_eq!(analyses.len(), 1, "Should return 1 analysis");
 
     let user_message = extract_user_message_from_echo(&analyses[0].analysis);
 
+    // Verify evaluation sections exist
     assert!(
-        user_message.contains("<evaluations>"),
-        "User message should contain <evaluations> section"
+        user_message.contains("<evaluation_context>"),
+        "User message should contain <evaluation_context> section"
     );
     assert!(
-        user_message.contains("accuracy"),
-        "User message should contain 'accuracy' evaluator"
+        user_message.contains("<evaluation_scores>"),
+        "User message should contain <evaluation_scores> section"
+    );
+
+    // Note: user_message is JSON-serialized, so quotes are escaped as \" and newlines as \n
+
+    // Verify exact_match evaluator (ExactMatch type) with all fields
+    assert!(
+        user_message.contains(r#"<evaluator name=\"exact_match\">"#),
+        "User message should contain exact_match evaluator XML tag"
     );
     assert!(
-        user_message.contains("fluency"),
-        "User message should contain 'fluency' evaluator"
+        user_message.contains(r#"\"type\": \"exact_match\""#),
+        "exact_match should have type=exact_match in JSON"
     );
     assert!(
-        user_message.contains("0.85") || user_message.contains("85"),
-        "User message should contain accuracy score"
+        user_message.contains(r#"\"cutoff\":"#) && user_message.contains("0.8"),
+        "exact_match should have cutoff starting with 0.8"
+    );
+
+    // Verify fluency evaluator (LLMJudge type) with all fields
+    assert!(
+        user_message.contains(r#"<evaluator name=\"fluency\">"#),
+        "User message should contain fluency evaluator XML tag"
+    );
+    assert!(
+        user_message.contains(r#"\"type\": \"llm_judge\""#),
+        "fluency should have type=llm_judge in JSON"
+    );
+    assert!(
+        user_message.contains(r#"\"input_format\": \"serialized\""#),
+        "fluency should have input_format=serialized in JSON"
+    );
+    assert!(
+        user_message.contains(r#"\"output_type\": \"float\""#),
+        "fluency should have output_type=float in JSON"
+    );
+    assert!(
+        user_message.contains(r#"\"optimize\": \"max\""#),
+        "fluency should have optimize=max in JSON"
+    );
+    assert!(
+        user_message.contains(r#"\"cutoff\": 0.5"#),
+        "fluency should have cutoff=0.5 in JSON"
+    );
+    assert!(
+        user_message.contains(r#"\"system_instructions\": \"Evaluate fluency of the response.\""#),
+        "fluency should have correct system_instructions in JSON"
+    );
+    assert!(
+        user_message.contains(r#"\"reference_output\": false"#),
+        "fluency should have reference_output=false in include in JSON"
+    );
+
+    // Verify scores appear in the evaluation_scores section
+    assert!(
+        user_message.contains(r#"<evaluator name=\"exact_match\">0.85"#),
+        "exact_match score should be 0.85 in evaluation_scores section"
+    );
+    assert!(
+        user_message.contains(r#"<evaluator name=\"fluency\">0.92"#),
+        "fluency score should be 0.92 in evaluation_scores section"
     );
 }
 
@@ -607,6 +674,7 @@ async fn test_analyze_input_includes_required_fields() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 
@@ -657,10 +725,16 @@ async fn test_analyze_input_includes_required_fields() {
         "User message should contain <inference_output>"
     );
 
-    // Required: <evaluations> section (even if empty)
+    // Required: <evaluation_context> section
     assert!(
-        user_message.contains("<evaluations>"),
-        "User message should contain <evaluations> section"
+        user_message.contains("<evaluation_context>"),
+        "User message should contain <evaluation_context> section"
+    );
+
+    // Required: <evaluation_scores> section
+    assert!(
+        user_message.contains("<evaluation_scores>"),
+        "User message should contain <evaluation_scores> section"
     );
 
     // Required: <task> section
@@ -715,6 +789,7 @@ async fn test_analyze_input_includes_schemas() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 
@@ -763,6 +838,7 @@ async fn test_analyze_input_with_static_tools() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 
@@ -901,6 +977,7 @@ async fn test_analyze_input_with_datapoint_tool_params() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 
@@ -993,21 +1070,13 @@ async fn test_analyze_input_evaluation_score_types() {
     let mut evaluations = HashMap::new();
     evaluations.insert(
         "numeric_score".to_string(),
-        Some(serde_json::json!(0.85)), // f64
+        Some(serde_json::json!(0.85)), // numeric value
     );
     evaluations.insert(
         "bool_true".to_string(),
-        Some(serde_json::json!(true)), // bool -> should convert to 1.0
+        Some(serde_json::json!(true)), // boolean value
     );
-    evaluations.insert(
-        "bool_false".to_string(),
-        Some(serde_json::json!(false)), // bool -> should convert to 0.0
-    );
-    evaluations.insert("null_value".to_string(), Some(serde_json::json!(null))); // null -> should be None
-    evaluations.insert(
-        "string_value".to_string(),
-        Some(serde_json::json!("invalid")), // string -> should be filtered out
-    );
+    evaluations.insert("null_value".to_string(), Some(serde_json::json!(null))); // null value
 
     let eval_info = evaluations::stats::EvaluationInfo {
         datapoint: StoredDatapoint::Chat(datapoint),
@@ -1019,6 +1088,58 @@ async fn test_analyze_input_evaluation_score_types() {
     let eval_infos = vec![eval_info];
     let gepa_config = create_test_gepa_config_echo(); // Use echo model
 
+    // Create evaluation config with score type evaluators for this test
+    let mut evaluators = HashMap::new();
+    evaluators.insert(
+        "numeric_score".to_string(),
+        EvaluatorConfigWithInstructions::LLMJudge(LLMJudgeConfigWithInstructions {
+            config: LLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
+                output_type: LLMJudgeOutputType::Float,
+                include: LLMJudgeIncludeConfig {
+                    reference_output: false,
+                },
+                optimize: LLMJudgeOptimize::Max,
+                cutoff: None,
+            },
+            system_instructions: "Rate numerically.".to_string(),
+        }),
+    );
+    evaluators.insert(
+        "bool_true".to_string(),
+        EvaluatorConfigWithInstructions::LLMJudge(LLMJudgeConfigWithInstructions {
+            config: LLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
+                output_type: LLMJudgeOutputType::Boolean,
+                include: LLMJudgeIncludeConfig {
+                    reference_output: false,
+                },
+                optimize: LLMJudgeOptimize::Max,
+                cutoff: None,
+            },
+            system_instructions: "Is this true?".to_string(),
+        }),
+    );
+    evaluators.insert(
+        "null_value".to_string(),
+        EvaluatorConfigWithInstructions::LLMJudge(LLMJudgeConfigWithInstructions {
+            config: LLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
+                output_type: LLMJudgeOutputType::Float,
+                include: LLMJudgeIncludeConfig {
+                    reference_output: false,
+                },
+                optimize: LLMJudgeOptimize::Max,
+                cutoff: None,
+            },
+            system_instructions: "Null test.".to_string(),
+        }),
+    );
+    let eval_config = EvaluationConfigWithInstructions {
+        evaluators,
+        function_name: "test_function".to_string(),
+    };
+
     // Execute
     let result = analyze_inferences(
         &client,
@@ -1026,13 +1147,15 @@ async fn test_analyze_input_evaluation_score_types() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &eval_config,
     )
     .await;
 
     // Assert: Should succeed
     assert!(
         result.is_ok(),
-        "analyze_inferences should succeed with various evaluation types"
+        "analyze_inferences should succeed with various evaluation types: {:?}",
+        result.as_ref().err()
     );
     let analyses = result.unwrap();
     assert_eq!(analyses.len(), 1);
@@ -1040,30 +1163,31 @@ async fn test_analyze_input_evaluation_score_types() {
     // Extract the user message from echo response
     let user_message = extract_user_message_from_echo(&analyses[0].analysis);
 
-    // Verify evaluations section appears
+    // Verify evaluation_scores section appears
     assert!(
-        user_message.contains("evaluations"),
-        "User message should contain evaluations section"
+        user_message.contains("<evaluation_scores>"),
+        "User message should contain evaluation_scores section"
     );
 
-    // Verify numeric score appears
+    // Verify numeric score appears with correct value
     assert!(
         user_message.contains("numeric_score") && user_message.contains("0.85"),
-        "User message should contain numeric evaluation score"
+        "User message should contain numeric_score with value 0.85"
     );
 
-    // Verify boolean conversions (true -> 1.0, false -> 0.0)
+    // Verify boolean value appears (as true or 1)
     assert!(
-        user_message.contains("bool_true") && user_message.contains("1"),
-        "User message should convert true to 1.0"
-    );
-    assert!(
-        user_message.contains("bool_false") && user_message.contains("0"),
-        "User message should convert false to 0.0"
+        user_message.contains("bool_true")
+            && (user_message.contains("true") || user_message.contains("1")),
+        "User message should contain bool_true with value true or 1"
     );
 
-    // null and string values should be filtered out or shown as null
-    // The exact behavior depends on the serialization logic
+    // Verify null value is handled (appears as null or is filtered out)
+    // We just check that the evaluator name appears in the message
+    assert!(
+        user_message.contains("null_value"),
+        "User message should reference null_value evaluator"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1143,6 +1267,7 @@ async fn test_analyze_input_with_tags() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 

@@ -14,7 +14,10 @@ mod validate;
 
 // Re-export public functions and types for testing
 pub use analyze::{analyze_inferences, InferenceWithAnalysis};
-pub use evaluate::{DatapointScores, ValidationScoresMap, VariantScores};
+pub use evaluate::{
+    DatapointScores, EvaluationConfigWithInstructions, EvaluatorConfigWithInstructions,
+    LLMJudgeConfigWithInstructions, ValidationScoresMap, VariantScores,
+};
 pub use mutate::mutate_templates;
 pub use validate::FunctionConfigAndTools;
 

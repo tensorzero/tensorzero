@@ -8,14 +8,15 @@
 use std::collections::{HashMap, HashSet};
 
 use tensorzero_core::{
-    config::{Config, MetricConfigOptimize},
+    config::MetricConfigOptimize,
     error::{Error, ErrorDetails},
-    evaluations::{EvaluationConfig, EvaluatorConfig},
-    optimization::gepa::GEPAConfig,
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
-use super::evaluate::{ValidationScoresMap, VariantName};
+use super::evaluate::{
+    EvaluationConfigWithInstructions, EvaluatorConfigWithInstructions, ValidationScoresMap,
+    VariantName,
+};
 
 /// Result of Pareto frontier filtering with frequency-based sampling weights
 #[derive(Debug, Clone)]
@@ -39,8 +40,7 @@ pub struct ParetoFrontier {
 /// # Arguments
 /// * `candidates` - Candidate variants to filter
 /// * `val_scores_map` - Per-datapoint scores on validation set for each candidate
-/// * `config` - GEPA configuration (for evaluation_name)
-/// * `tensorzero_config` - Full TensorZero config (for metric definitions)
+/// * `evaluation_config` - Evaluation config with evaluator definitions and optimization directions
 ///
 /// # Returns
 /// * Tuple of (filtered_variants, frequencies) where frequencies is used for sampling
@@ -60,30 +60,15 @@ pub struct ParetoFrontier {
 pub fn update_pareto_frontier(
     candidates: HashMap<String, UninitializedChatCompletionConfig>,
     val_scores_map: &ValidationScoresMap,
-    config: &GEPAConfig,
-    tensorzero_config: &Config,
+    evaluation_config: &EvaluationConfigWithInstructions,
 ) -> Result<ParetoFrontier, Error> {
     tracing::info!(
         "Filtering Pareto frontier using 3-step GEPA algorithm ({} candidates)",
         candidates.len()
     );
 
-    // Get the evaluation config to determine metric optimization directions
-    let evaluation_config = tensorzero_config
-        .evaluations
-        .get(&config.evaluation_name)
-        .ok_or_else(|| {
-            Error::new(ErrorDetails::Config {
-                message: format!(
-                    "Evaluation '{}' not found in config",
-                    config.evaluation_name
-                ),
-            })
-        })?;
-
-    let evaluators = match &**evaluation_config {
-        EvaluationConfig::Inference(inference_config) => &inference_config.evaluators,
-    };
+    // Get evaluators from the evaluation config
+    let evaluators = &evaluation_config.evaluators;
 
     // Check if we have any valid scores
     if val_scores_map.is_empty() {
@@ -343,7 +328,7 @@ pub fn global_dominates(
     variant_a_name: &str,
     variant_b_name: &str,
     val_scores_map: &ValidationScoresMap,
-    evaluators: &HashMap<String, EvaluatorConfig>,
+    evaluators: &HashMap<String, EvaluatorConfigWithInstructions>,
 ) -> bool {
     let mut better_or_equal_on_all = true;
     let mut strictly_better_on_at_least_one = false;
@@ -410,7 +395,7 @@ pub fn global_dominates(
 pub fn instance_dominates(
     a_scores: &HashMap<String, Option<f32>>,
     b_scores: &HashMap<String, Option<f32>>,
-    evaluators: &HashMap<String, EvaluatorConfig>,
+    evaluators: &HashMap<String, EvaluatorConfigWithInstructions>,
 ) -> bool {
     let mut better_or_equal_on_all = true;
     let mut strictly_better_on_at_least_one = false;
@@ -448,7 +433,7 @@ pub fn instance_dominates(
 /// Vector of variant names that are not dominated by any other variant on this instance
 pub fn find_non_dominated_variants(
     instance_scores: &[(String, HashMap<String, Option<f32>>)],
-    evaluators: &HashMap<String, EvaluatorConfig>,
+    evaluators: &HashMap<String, EvaluatorConfigWithInstructions>,
 ) -> Vec<String> {
     let mut non_dominated = Vec::new();
 
@@ -483,12 +468,10 @@ pub fn find_non_dominated_variants(
 pub fn is_improvement(
     parent_stats: &HashMap<String, evaluations::EvaluatorStats>,
     child_stats: &HashMap<String, evaluations::EvaluatorStats>,
-    evaluation_config: &EvaluationConfig,
+    evaluation_config: &EvaluationConfigWithInstructions,
 ) -> bool {
     // Get evaluators from the evaluation config
-    let evaluators = match evaluation_config {
-        EvaluationConfig::Inference(inference_config) => &inference_config.evaluators,
-    };
+    let evaluators = &evaluation_config.evaluators;
 
     // Track whether child is better, worse, or equal on each metric
     let mut strictly_better_on_at_least_one = false;
@@ -534,16 +517,7 @@ pub fn is_improvement(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-
-    use tensorzero_core::{
-        evaluations::{
-            EvaluationConfig, EvaluatorConfig, ExactMatchConfig, InferenceEvaluationConfig,
-            LLMJudgeConfig, LLMJudgeIncludeConfig, LLMJudgeInputFormat, LLMJudgeOptimize,
-            LLMJudgeOutputType,
-        },
-        utils::retries::RetryConfig,
-    };
+    use crate::gepa::evaluate::LLMJudgeConfigWithInstructions;
 
     // ============================================================================
     // Test Helper Functions
@@ -554,25 +528,37 @@ mod tests {
     /// # Arguments
     /// * `evaluators` - Slice of (evaluator_name, optimize_direction) tuples
     ///   where optimize_direction is "max" or "min"
-    fn create_test_evaluators(evaluators: &[(&str, &str)]) -> HashMap<String, EvaluatorConfig> {
+    fn create_test_evaluators(
+        evaluators: &[(&str, &str)],
+    ) -> HashMap<String, EvaluatorConfigWithInstructions> {
+        use tensorzero_core::evaluations::{
+            ExactMatchConfig, LLMJudgeConfig, LLMJudgeIncludeConfig, LLMJudgeInputFormat,
+            LLMJudgeOptimize, LLMJudgeOutputType,
+        };
+
         evaluators
             .iter()
             .map(|(name, optimize)| {
                 let evaluator_config = match *optimize {
                     "max" => {
                         // ExactMatch always maximizes
-                        EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None })
+                        EvaluatorConfigWithInstructions::ExactMatch(ExactMatchConfig {
+                            cutoff: None,
+                        })
                     }
                     "min" => {
                         // LLMJudge can be configured to minimize
-                        EvaluatorConfig::LLMJudge(LLMJudgeConfig {
-                            input_format: LLMJudgeInputFormat::Serialized,
-                            output_type: LLMJudgeOutputType::Float,
-                            include: LLMJudgeIncludeConfig {
-                                reference_output: false,
+                        EvaluatorConfigWithInstructions::LLMJudge(LLMJudgeConfigWithInstructions {
+                            config: LLMJudgeConfig {
+                                input_format: LLMJudgeInputFormat::Serialized,
+                                output_type: LLMJudgeOutputType::Float,
+                                include: LLMJudgeIncludeConfig {
+                                    reference_output: false,
+                                },
+                                optimize: LLMJudgeOptimize::Min,
+                                cutoff: None,
                             },
-                            optimize: LLMJudgeOptimize::Min,
-                            cutoff: None,
+                            system_instructions: "Test system instructions".to_string(),
                         })
                     }
                     _ => panic!("Invalid optimize direction: {optimize}"),
@@ -580,46 +566,6 @@ mod tests {
                 (name.to_string(), evaluator_config)
             })
             .collect()
-    }
-
-    /// Create a Config with an evaluation containing the specified evaluators
-    fn create_test_config(evaluation_name: &str, evaluators: &[(&str, &str)]) -> Config {
-        let evaluator_configs = create_test_evaluators(evaluators);
-        let mut config = Config::default();
-
-        let eval_config = InferenceEvaluationConfig {
-            evaluators: evaluator_configs,
-            function_name: "test_function".to_string(),
-        };
-
-        config.evaluations.insert(
-            evaluation_name.to_string(),
-            Arc::new(EvaluationConfig::Inference(eval_config)),
-        );
-
-        config
-    }
-
-    /// Create a GEPAConfig for testing
-    fn create_test_gepa_config(
-        evaluation_name: &str,
-    ) -> tensorzero_core::optimization::gepa::GEPAConfig {
-        tensorzero_core::optimization::gepa::GEPAConfig {
-            function_name: "test_function".to_string(),
-            evaluation_name: evaluation_name.to_string(),
-            initial_variants: None,
-            variant_prefix: Some("test".to_string()),
-            batch_size: 5,
-            max_iterations: 1,
-            max_concurrency: 10,
-            analysis_model: "openai::gpt-5-mini".to_string(),
-            mutation_model: "openai::gpt-5".to_string(),
-            seed: Some(42),
-            timeout: 300,
-            include_inference_input_for_mutation: false,
-            retries: RetryConfig::default(),
-            max_tokens: 16_384,
-        }
     }
 
     /// Create a HashMap of test variants
@@ -661,13 +607,13 @@ mod tests {
             .collect()
     }
 
-    /// Create an EvaluationConfig for testing is_improvement
-    fn create_evaluation_config(evaluators: &[(&str, &str)]) -> EvaluationConfig {
+    /// Create an EvaluationConfigWithInstructions for testing
+    fn create_evaluation_config(evaluators: &[(&str, &str)]) -> EvaluationConfigWithInstructions {
         let evaluator_configs = create_test_evaluators(evaluators);
-        EvaluationConfig::Inference(InferenceEvaluationConfig {
+        EvaluationConfigWithInstructions {
             evaluators: evaluator_configs,
             function_name: "test_function".to_string(),
-        })
+        }
     }
 
     // ============================================================================
@@ -1021,8 +967,7 @@ mod tests {
 
     #[test]
     fn test_basic_dominance() {
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         // Variant A dominates B: A has higher scores on all datapoints
         let variant_scores = HashMap::from([
@@ -1057,7 +1002,7 @@ mod tests {
         let val_scores_map = variant_scores;
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores_map, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &val_scores_map, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();
@@ -1073,8 +1018,7 @@ mod tests {
 
     #[test]
     fn test_pareto_frontier() {
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         // A is better on dp1, B is better on dp2 - neither dominates
         let variant_scores = HashMap::from([
@@ -1108,7 +1052,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();
@@ -1125,8 +1069,7 @@ mod tests {
 
     #[test]
     fn test_instance_wise_vs_global() {
-        let config = create_test_config("test_eval", &[("acc", "max"), ("f1", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("acc", "max"), ("f1", "max")]);
 
         // C is never instance-wise Pareto-optimal, so it should be filtered early
         // A and B are each optimal on different instances
@@ -1192,7 +1135,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a", "variant_b", "variant_c"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();
@@ -1205,8 +1148,7 @@ mod tests {
 
     #[test]
     fn test_mixed_optimize_directions() {
-        let config = create_test_config("test_eval", &[("accuracy", "max"), ("latency", "min")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max"), ("latency", "min")]);
 
         // A has higher accuracy (max) and lower latency (min) - dominates B
         let variant_scores = HashMap::from([
@@ -1234,7 +1176,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();
@@ -1246,8 +1188,7 @@ mod tests {
 
     #[test]
     fn test_none_values() {
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         // A has None on dp1, B has None on dp2 - they're incomparable
         let variant_scores = HashMap::from([
@@ -1281,7 +1222,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();
@@ -1294,8 +1235,7 @@ mod tests {
 
     #[test]
     fn test_single_variant() {
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         let variant_scores = HashMap::from([(
             "variant_a".to_string(),
@@ -1307,7 +1247,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();
@@ -1320,8 +1260,7 @@ mod tests {
 
     #[test]
     fn test_error_results_ignored() {
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         // B has an error on dp1 (represented as missing datapoint)
         let variant_scores = HashMap::from([
@@ -1349,7 +1288,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();
@@ -1361,8 +1300,7 @@ mod tests {
 
     #[test]
     fn test_all_equal() {
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         let variant_scores = HashMap::from([
             (
@@ -1390,7 +1328,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a", "variant_b", "variant_c"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();
@@ -1404,8 +1342,7 @@ mod tests {
 
     #[test]
     fn test_incomparable_variants_different_datapoints() {
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         // Test scenario: variants evaluated on different datapoints
         // This tests the edge case where GEPA's datapoint collection from first variant matters
@@ -1441,7 +1378,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();
@@ -1458,8 +1395,7 @@ mod tests {
 
     #[test]
     fn test_boolean_evaluator() {
-        let config = create_test_config("test_eval", &[("exact_match", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("exact_match", "max")]);
 
         // A has True (1.0), B has False (0.0) for bool evaluator
         let variant_scores = HashMap::from([
@@ -1481,7 +1417,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();
@@ -1493,8 +1429,7 @@ mod tests {
 
     #[test]
     fn test_three_way_dominance() {
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         let variant_scores = HashMap::from([
             (
@@ -1522,7 +1457,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a", "variant_b", "variant_c"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();
@@ -1536,8 +1471,7 @@ mod tests {
     fn test_runtime_performance() {
         use std::time::Instant;
 
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         let num_variants = 10;
         let num_datapoints = 100;
@@ -1569,7 +1503,7 @@ mod tests {
 
         // Measure execution time
         let start = Instant::now();
-        let result = update_pareto_frontier(candidates, &val_scores_map, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &val_scores_map, &config);
         let elapsed = start.elapsed();
 
         assert!(result.is_ok());
@@ -1595,14 +1529,13 @@ mod tests {
 
     #[test]
     fn test_empty_candidates() {
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         let val_scores_map: HashMap<String, HashMap<String, HashMap<String, Option<f32>>>> =
             HashMap::new();
         let candidates: HashMap<String, UninitializedChatCompletionConfig> = HashMap::new();
 
-        let result = update_pareto_frontier(candidates, &val_scores_map, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &val_scores_map, &config);
 
         // Should return error for empty candidates
         assert!(result.is_err());
@@ -1610,15 +1543,14 @@ mod tests {
 
     #[test]
     fn test_all_evaluations_failed() {
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         // All val_scores entries are None (evaluation failed)
         let val_scores_map: HashMap<String, HashMap<String, HashMap<String, Option<f32>>>> =
             HashMap::new();
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &val_scores_map, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &val_scores_map, &config);
 
         // Should return error when all evaluations failed
         assert!(result.is_err());
@@ -1628,8 +1560,7 @@ mod tests {
 
     #[test]
     fn test_all_scores_none() {
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         // Every per_datapoint score is None
         let variant_scores = HashMap::from([
@@ -1663,7 +1594,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
 
         // Should return error when all scores are None
         assert!(result.is_err());
@@ -1675,8 +1606,7 @@ mod tests {
 
     #[test]
     fn test_empty_datapoints() {
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         // Empty per_datapoint HashMap
         let variant_scores = HashMap::from([
@@ -1686,7 +1616,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();
@@ -1700,8 +1630,7 @@ mod tests {
 
     #[test]
     fn test_frequency_calculation_detailed() {
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         // A wins on dp1 and dp2, B wins on dp3, C never wins
         let variant_scores = HashMap::from([
@@ -1760,7 +1689,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a", "variant_b", "variant_c"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();
@@ -1781,8 +1710,7 @@ mod tests {
     #[test]
     fn test_high_missing_rate_warning() {
         // This test verifies that the warning log is triggered for high missing rates
-        let config = create_test_config("test_eval", &[("accuracy", "max")]);
-        let gepa_config = create_test_gepa_config("test_eval");
+        let config = create_evaluation_config(&[("accuracy", "max")]);
 
         // variant_a has 60% missing data (3 out of 5 datapoints have scores)
         let variant_scores = HashMap::from([(
@@ -1813,7 +1741,7 @@ mod tests {
 
         let candidates = create_test_variants(&["variant_a"]);
 
-        let result = update_pareto_frontier(candidates, &variant_scores, &gepa_config, &config);
+        let result = update_pareto_frontier(candidates, &variant_scores, &config);
         assert!(result.is_ok());
 
         let frontier = result.unwrap();

@@ -302,6 +302,7 @@ async fn test_mutate_templates_end_to_end() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 
@@ -537,6 +538,7 @@ async fn test_mutate_templates_with_inference_input_integration() {
         &config_and_tools,
         &variant_config,
         &gepa_config,
+        &create_test_evaluation_config(),
     )
     .await;
 

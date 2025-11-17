@@ -14,13 +14,13 @@ use tensorzero_core::{
     config::Config,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     error::{Error, ErrorDetails},
-    evaluations::EvaluationConfig,
     http::TensorzeroHttpClient,
     optimization::gepa::GEPAConfig,
     stored_inference::RenderedSample,
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
+use super::evaluate::EvaluationConfigWithInstructions;
 use super::validate::FunctionConfigAndTools;
 
 // Re-export public types and functions from sibling modules
@@ -145,16 +145,11 @@ pub async fn run_gepa_optimization(
         pareto_frontier.len()
     );
 
-    // Extract evaluation config once for all variants
-    let evaluation_config = tensorzero_config
-        .evaluations
-        .get(&config.evaluation_name)
-        .ok_or_else(|| {
-            Error::new(ErrorDetails::Config {
-                message: format!("Evaluation '{}' not found", config.evaluation_name),
-            })
-        })?
-        .clone();
+    // Load evaluation config enriched with system instructions
+    let evaluation_config = Arc::new(EvaluationConfigWithInstructions::from_config(
+        &tensorzero_config,
+        &config.evaluation_name,
+    )?);
 
     // Divide concurrency among variants to avoid max_concurrency² explosion
     // Since each variant is evaluated on the same dataset, they'll take similar time
@@ -177,7 +172,7 @@ pub async fn run_gepa_optimization(
             let gateway_client = gateway_client.clone();
             let clickhouse_connection_info = clickhouse_connection_info.clone();
             let tensorzero_config = Arc::clone(&tensorzero_config);
-            let evaluation_config = Arc::clone(&evaluation_config);
+            let evaluation_config_param = Arc::clone(&evaluation_config);
             let evaluation_name = evaluation_name.clone();
             let variant_name = variant_name.clone();
             let variant_config = variant_config.clone();
@@ -188,7 +183,7 @@ pub async fn run_gepa_optimization(
                     gateway_client,
                     clickhouse_connection_info,
                     tensorzero_config,
-                    evaluation_config,
+                    evaluation_config: evaluation_config_param,
                     evaluation_name,
                     variant_name: variant_name.clone(),
                     variant_config,
@@ -233,7 +228,7 @@ pub async fn run_gepa_optimization(
 
     // Filter initial Pareto frontier using instance-wise dominance
     let mut frontier =
-        update_pareto_frontier(pareto_frontier, &val_scores_map, config, &tensorzero_config)?;
+        update_pareto_frontier(pareto_frontier, &val_scores_map, &evaluation_config)?;
 
     // Update scores map
     val_scores_map.retain(|variant_name, _| frontier.variants.contains_key(variant_name));
@@ -390,12 +385,8 @@ pub async fn run_gepa_optimization(
             // Note: We use `?` here instead of continue because we've already mutated state
             // (added child to val_scores_map and frontier.variants). If Pareto update fails,
             // we're in an inconsistent state and should fail rather than continue.
-            frontier = update_pareto_frontier(
-                frontier.variants,
-                &val_scores_map,
-                config,
-                &tensorzero_config,
-            )?;
+            frontier =
+                update_pareto_frontier(frontier.variants, &val_scores_map, &evaluation_config)?;
 
             // Keep val_scores_map in sync with filtered frontier
             val_scores_map.retain(|variant_name, _| frontier.variants.contains_key(variant_name));
@@ -474,7 +465,7 @@ pub(crate) struct GEPAStepParams<'a> {
     pub gateway_client: Client,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub tensorzero_config: Arc<Config>,
-    pub evaluation_config: Arc<EvaluationConfig>,
+    pub evaluation_config: Arc<EvaluationConfigWithInstructions>,
     pub gepa_config: &'a GEPAConfig,
     pub config_and_tools: &'a FunctionConfigAndTools,
     pub parent_variant_name: &'a str,
@@ -520,6 +511,7 @@ pub(crate) async fn gepa_step(
         params.config_and_tools,
         params.parent_variant_config,
         params.gepa_config,
+        &params.evaluation_config,
     )
     .await?;
 

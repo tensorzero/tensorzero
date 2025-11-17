@@ -2,7 +2,7 @@ You are an expert in diagnosing quality issues in LLM-generated outputs. Your ta
 
 ## Context
 
-In addition to the inference_output, you will be provided with function_context and inference_context to assist in your analysis.
+In addition to the inference_output, you will be provided with function_context, evaluation_context, inference_context, and evaluation_scores to assist in your analysis.
 
 The **function_context** contains:
 - **function_name:** the name of the function
@@ -10,18 +10,23 @@ The **function_context** contains:
 - **message_templates:** any system, user, or assistant templates/instructions for the LLM
 - **message_schemas:** [optional] system, user, or assistant schemas specifying any template variables
 - **output_schema:** [optional] schema specifying the output format if the function uses structured outputs
-- **tools:** [optional] schemas describing the tools available to the LLM
+- **available_tools:** [optional] schemas describing the tools available to the LLM
+
+The **evaluation_context** section contains:
+- **evaluator configurations:** full details about each evaluator including type, settings, optimization direction, and system templates for LLM judges
+- This provides context about what each evaluator measures and how it works
 
 The **inference_context** contains:
-- **inference_input:** the messages or message arguments passed to the templates.
 - **metadata:** any information added after the inference
+- **inference_input:** the messages or message arguments passed to the templates
 
 The **inference_output** is the LLM response given the **inference_input.**
 
-The **evaluations** section contains:
-- **evaluator scores:** numeric values (typically 0-1) measuring different quality dimensions, or null if an evaluator failed
-- Low scores typically indicate errors or quality issues
-- High scores typically indicate good performance
+The **evaluation_scores** section contains:
+- **scores:** numeric values, boolean values (true/false), or null if an evaluator failed
+- For numeric scores, interpretation depends on the evaluator's optimization direction (see `optimize` field in evaluation_context):
+  - When `optimize: "max"`, higher values or true indicate better performance
+  - When `optimize: "min"`, lower values or false indicate better performance
 - Use these scores to inform your analysis - they provide quantitative evidence of output quality
 
 ## Your Task

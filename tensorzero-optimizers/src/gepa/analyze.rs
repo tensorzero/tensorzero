@@ -29,8 +29,11 @@ use tensorzero_core::{
 
 use evaluations::stats::EvaluationInfo;
 
-use crate::gepa::utils::{extract_templates_map, serialize_to_value};
-use crate::gepa::validate::FunctionConfigAndTools;
+use crate::gepa::{
+    utils::{extract_templates_map, serialize_to_value},
+    validate::FunctionConfigAndTools,
+    EvaluationConfigWithInstructions,
+};
 
 /// Represents an inference output paired with its analysis feedback
 #[derive(Debug, Clone, Serialize)]
@@ -50,6 +53,7 @@ pub struct InferenceWithAnalysis {
 /// * `eval_info` - Evaluation information containing the datapoint and inference response
 /// * `config_and_tools` - Function configuration with static tools
 /// * `variant_config` - Variant configuration (templates, model name)
+/// * `evaluation_config` - Evaluation config enriched with loaded system templates
 ///
 /// # Returns
 /// * Template arguments containing function metadata, templates, schemas, and the input/output pair
@@ -57,6 +61,7 @@ pub fn build_analyze_input(
     eval_info: &EvaluationInfo,
     config_and_tools: &FunctionConfigAndTools,
     variant_config: &UninitializedChatCompletionConfig,
+    evaluation_config: &EvaluationConfigWithInstructions,
 ) -> Result<Arguments, Error> {
     // Extract all templates using helper function
     let templates_map = extract_templates_map(variant_config)?;
@@ -120,17 +125,31 @@ pub fn build_analyze_input(
     map.insert("input".to_string(), json!(eval_info.datapoint.input()));
     map.insert("output".to_string(), json!(output));
 
-    // Extract evaluator scores from evaluations
-    let mut evaluations = serde_json::Map::new();
-    for (evaluator_name, result_opt) in &eval_info.evaluations {
-        let score = result_opt.as_ref().and_then(|value| match value {
-            serde_json::Value::Number(n) => n.as_f64().map(|f| f as f32),
-            serde_json::Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
-            _ => None,
-        });
-        evaluations.insert(evaluator_name.clone(), json!(score));
+    // Build evaluation_context map with full evaluator configs (without scores)
+    let mut evaluation_context = serde_json::Map::new();
+    for (evaluator_name, evaluator_config) in &evaluation_config.evaluators {
+        evaluation_context.insert(evaluator_name.clone(), json!(evaluator_config));
     }
-    map.insert("evaluations".to_string(), json!(evaluations));
+    map.insert("evaluation_context".to_string(), json!(evaluation_context));
+
+    // Build evaluation_scores map with just the scores
+    let mut evaluation_scores = serde_json::Map::new();
+    for (evaluator_name, result_opt) in &eval_info.evaluations {
+        // Preserve the score type (number, boolean, or null)
+        let score = result_opt
+            .as_ref()
+            .map(|value| match value {
+                serde_json::Value::Number(n) => {
+                    // Convert to f32 precision for consistency
+                    json!(n.as_f64().map(|f| f as f32))
+                }
+                serde_json::Value::Bool(b) => json!(b),
+                _ => json!(null),
+            })
+            .unwrap_or(json!(null));
+        evaluation_scores.insert(evaluator_name.clone(), score);
+    }
+    map.insert("evaluation_scores".to_string(), json!(evaluation_scores));
 
     Ok(Arguments(map))
 }
@@ -146,6 +165,7 @@ pub fn build_analyze_input(
 /// * `function_config` - Configuration of the function being optimized
 /// * `variant_config` - Configuration of the variant being analyzed
 /// * `gepa_config` - GEPA configuration containing analysis_model and max_concurrency settings
+/// * `evaluation_config` - Evaluation config enriched with loaded system templates
 ///
 /// # Returns
 /// * Vector of [`InferenceWithAnalysis`] containing each inference paired with its XML analysis feedback
@@ -155,6 +175,7 @@ pub async fn analyze_inferences(
     config_and_tools: &FunctionConfigAndTools,
     variant_config: &UninitializedChatCompletionConfig,
     gepa_config: &GEPAConfig,
+    evaluation_config: &EvaluationConfigWithInstructions,
 ) -> Result<Vec<InferenceWithAnalysis>, Error> {
     // Early return for empty input - nothing to analyze
     if evaluation_infos.is_empty() {
@@ -229,7 +250,12 @@ pub async fn analyze_inferences(
                 })?;
 
                 // Build input for the analyze function (returns Arguments directly)
-                let arguments = build_analyze_input(eval_info, config_and_tools, variant_config)?;
+                let arguments = build_analyze_input(
+                    eval_info,
+                    config_and_tools,
+                    variant_config,
+                    evaluation_config,
+                )?;
 
                 // Create ClientInferenceParams for the analyze function
                 let params = ClientInferenceParams {
@@ -576,6 +602,14 @@ mod tests {
         assert_eq!(value["array"][0], 1);
     }
 
+    /// Create a test EvaluationConfigWithInstructions with empty evaluators
+    fn create_test_evaluation_config() -> EvaluationConfigWithInstructions {
+        EvaluationConfigWithInstructions {
+            evaluators: HashMap::new(),
+            function_name: "test_function".to_string(),
+        }
+    }
+
     // ============================================================================
     // Unit Tests for build_analyze_input
     // ============================================================================
@@ -585,8 +619,14 @@ mod tests {
         let eval_info = create_test_evaluation_info();
         let config_and_tools = create_test_config_and_tools();
         let variant_config = create_test_variant_config();
+        let eval_config_templates = create_test_evaluation_config();
 
-        let result = build_analyze_input(&eval_info, &config_and_tools, &variant_config);
+        let result = build_analyze_input(
+            &eval_info,
+            &config_and_tools,
+            &variant_config,
+            &eval_config_templates,
+        );
 
         assert!(result.is_ok());
         let input = result.unwrap();
@@ -605,8 +645,14 @@ mod tests {
         let eval_info = create_test_evaluation_info();
         let config_and_tools = create_test_config_and_tools_with_schemas();
         let variant_config = create_test_variant_config();
+        let eval_config_templates = create_test_evaluation_config();
 
-        let result = build_analyze_input(&eval_info, &config_and_tools, &variant_config);
+        let result = build_analyze_input(
+            &eval_info,
+            &config_and_tools,
+            &variant_config,
+            &eval_config_templates,
+        );
 
         assert!(result.is_ok());
         let input = result.unwrap();
@@ -625,7 +671,12 @@ mod tests {
         let config_and_tools = create_test_config_and_tools(); // No schemas
         let variant_config = create_test_variant_config();
 
-        let result = build_analyze_input(&eval_info, &config_and_tools, &variant_config);
+        let result = build_analyze_input(
+            &eval_info,
+            &config_and_tools,
+            &variant_config,
+            &create_test_evaluation_config(),
+        );
 
         assert!(result.is_ok());
         let input = result.unwrap();
@@ -642,7 +693,12 @@ mod tests {
         let config_and_tools = create_test_config_and_tools();
         let variant_config = create_test_variant_config();
 
-        let result = build_analyze_input(&eval_info, &config_and_tools, &variant_config);
+        let result = build_analyze_input(
+            &eval_info,
+            &config_and_tools,
+            &variant_config,
+            &create_test_evaluation_config(),
+        );
 
         assert!(result.is_ok());
         let input = result.unwrap();
@@ -662,7 +718,12 @@ mod tests {
         let config_and_tools = create_test_config_and_tools();
         let variant_config = create_test_variant_config();
 
-        let result = build_analyze_input(&eval_info, &config_and_tools, &variant_config);
+        let result = build_analyze_input(
+            &eval_info,
+            &config_and_tools,
+            &variant_config,
+            &create_test_evaluation_config(),
+        );
 
         assert!(result.is_ok());
         let input = result.unwrap();
@@ -677,7 +738,12 @@ mod tests {
         let config_and_tools = create_test_config_and_tools();
         let variant_config = create_test_variant_config();
 
-        let result = build_analyze_input(&eval_info, &config_and_tools, &variant_config);
+        let result = build_analyze_input(
+            &eval_info,
+            &config_and_tools,
+            &variant_config,
+            &create_test_evaluation_config(),
+        );
 
         assert!(result.is_ok());
         let input = result.unwrap();

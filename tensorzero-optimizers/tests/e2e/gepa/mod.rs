@@ -12,13 +12,20 @@ use tensorzero_core::{
         datasets::{StoredChatInferenceDatapoint, StoredDatapoint},
         inference::{ChatInferenceResponse, InferenceResponse},
     },
+    evaluations::{
+        ExactMatchConfig, LLMJudgeConfig, LLMJudgeIncludeConfig, LLMJudgeInputFormat,
+        LLMJudgeOptimize, LLMJudgeOutputType,
+    },
     function::{FunctionConfig, FunctionConfigChat},
     inference::types::{ContentBlockChatOutput, FinishReason, Input, Text, Usage},
     jsonschema_util::{SchemaWithMetadata, StaticJSONSchema},
     optimization::gepa::GEPAConfig,
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
-use tensorzero_optimizers::gepa::{FunctionConfigAndTools, InferenceWithAnalysis};
+use tensorzero_optimizers::gepa::{
+    EvaluationConfigWithInstructions, EvaluatorConfigWithInstructions, FunctionConfigAndTools,
+    InferenceWithAnalysis, LLMJudgeConfigWithInstructions,
+};
 use uuid::Uuid;
 
 pub mod analyze;
@@ -408,5 +415,47 @@ pub fn create_test_inference_with_analysis(
             text: analysis_text.to_string(),
         })],
         inference_input: None,
+    }
+}
+
+/// Create a test EvaluationConfigWithInstructions with empty evaluators
+pub fn create_test_evaluation_config(
+) -> tensorzero_optimizers::gepa::EvaluationConfigWithInstructions {
+    tensorzero_optimizers::gepa::EvaluationConfigWithInstructions {
+        evaluators: HashMap::new(),
+        function_name: "test_function".to_string(),
+    }
+}
+
+/// Create a test EvaluationConfigWithInstructions with test evaluators for tests that use scores
+pub fn create_test_evaluation_config_with_evaluators() -> EvaluationConfigWithInstructions {
+    let mut evaluators = HashMap::new();
+
+    // Add ExactMatch evaluator
+    evaluators.insert(
+        "exact_match".to_string(),
+        EvaluatorConfigWithInstructions::ExactMatch(ExactMatchConfig { cutoff: Some(0.8) }),
+    );
+
+    // Add fluency evaluator (Float type)
+    evaluators.insert(
+        "fluency".to_string(),
+        EvaluatorConfigWithInstructions::LLMJudge(LLMJudgeConfigWithInstructions {
+            config: LLMJudgeConfig {
+                input_format: LLMJudgeInputFormat::Serialized,
+                output_type: LLMJudgeOutputType::Float,
+                include: LLMJudgeIncludeConfig {
+                    reference_output: false,
+                },
+                optimize: LLMJudgeOptimize::Max,
+                cutoff: Some(0.5),
+            },
+            system_instructions: "Evaluate fluency of the response.".to_string(),
+        }),
+    );
+
+    EvaluationConfigWithInstructions {
+        evaluators,
+        function_name: "test_function".to_string(),
     }
 }
