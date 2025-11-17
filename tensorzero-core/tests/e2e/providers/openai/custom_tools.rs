@@ -157,6 +157,7 @@ async fn test_openai_custom_tool_text_format() {
                 }
             }
         ],
+        "allowed_tools": ["code_generator"],
         "stream": false,
     });
 

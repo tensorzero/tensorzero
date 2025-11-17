@@ -54,7 +54,7 @@ use super::chat_completions::{
 // Import unified OpenAI types for allowed_tools support
 use super::openai::{
     AllowedToolsChoice as OpenAIAllowedToolsChoice,
-    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode, OpenAIToolType,
+    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode,
     SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
 };
 
@@ -1101,8 +1101,7 @@ impl<'a> From<ChatCompletionToolChoice<'a>> for OpenRouterToolChoice<'a> {
                             .allowed_tools
                             .tools
                             .into_iter()
-                            .map(|tool_ref| ToolReference {
-                                r#type: OpenAIToolType::Function,
+                            .map(|tool_ref| ToolReference::Function {
                                 function: OpenAISpecificToolFunction {
                                     name: tool_ref.function.name,
                                 },

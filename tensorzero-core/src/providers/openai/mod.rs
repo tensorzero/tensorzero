@@ -1523,11 +1523,25 @@ pub(crate) fn prepare_allowed_tools_constraint<'a>(
         _ => AllowedToolsMode::Auto,
     };
 
+    // For each allowed tool name, determine if it's a function or custom tool
     let tool_refs: Vec<ToolReference> = allowed_tools_list
         .iter()
-        .map(|name| ToolReference {
-            r#type: OpenAIToolType::Function,
-            function: SpecificToolFunction { name },
+        .map(|name| {
+            // Check if this tool name belongs to a custom tool
+            let is_custom = tool_config
+                .openai_custom_tools
+                .iter()
+                .any(|custom_tool| custom_tool.name == *name);
+
+            if is_custom {
+                ToolReference::Custom {
+                    custom: SpecificToolCustom { name },
+                }
+            } else {
+                ToolReference::Function {
+                    function: SpecificToolFunction { name },
+                }
+            }
         })
         .collect();
 
@@ -2130,13 +2144,21 @@ pub struct SpecificToolFunction<'a> {
     pub name: &'a str,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct SpecificToolCustom<'a> {
+    pub name: &'a str,
+}
+
 /// Represents the OpenAI API's allowed_tools constraint for tool_choice.
 /// This matches the OpenAI spec structure:
 /// {
 ///   "type": "allowed_tools",
 ///   "allowed_tools": {
 ///     "mode": "auto" | "required",
-///     "tools": [{"type": "function", "function": {"name": "..."}}]
+///     "tools": [
+///       {"type": "function", "function": {"name": "..."}},
+///       {"type": "custom", "custom": {"name": "..."}}
+///     ]
 ///   }
 /// }
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -2159,11 +2181,15 @@ pub enum AllowedToolsMode {
 }
 
 /// A reference to a tool by name, used in allowed_tools constraint.
-/// Serializes as: {"type": "function", "function": {"name": "tool_name"}}
+/// Can reference either a function tool or a custom tool.
+/// Serializes as:
+///   - Function: {"type": "function", "function": {"name": "tool_name"}}
+///   - Custom: {"type": "custom", "custom": {"name": "tool_name"}}
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ToolReference<'a> {
-    pub r#type: OpenAIToolType,
-    pub function: SpecificToolFunction<'a>,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ToolReference<'a> {
+    Function { function: SpecificToolFunction<'a> },
+    Custom { custom: SpecificToolCustom<'a> },
 }
 
 impl Default for OpenAIToolChoice<'_> {
@@ -5001,14 +5027,12 @@ mod tests {
                     AllowedToolsMode::Auto
                 );
                 assert_eq!(allowed_tools_choice.allowed_tools.tools.len(), 1);
-                assert_eq!(
-                    allowed_tools_choice.allowed_tools.tools[0].function.name,
-                    "get_temperature"
-                );
-                assert_eq!(
-                    allowed_tools_choice.allowed_tools.tools[0].r#type,
-                    OpenAIToolType::Function
-                );
+                match &allowed_tools_choice.allowed_tools.tools[0] {
+                    ToolReference::Function { function } => {
+                        assert_eq!(function.name, "get_temperature");
+                    }
+                    ToolReference::Custom { .. } => panic!("Expected Function variant"),
+                }
             }
             _ => panic!("Expected AllowedTools variant"),
         }
@@ -5055,7 +5079,10 @@ mod tests {
                     .allowed_tools
                     .tools
                     .iter()
-                    .map(|t| t.function.name)
+                    .map(|t| match t {
+                        ToolReference::Function { function } => function.name,
+                        ToolReference::Custom { .. } => panic!("Expected Function variant"),
+                    })
                     .collect();
                 assert!(tool_names.contains(&"query_articles"));
                 assert!(tool_names.contains(&"get_temperature"));

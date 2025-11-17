@@ -45,7 +45,7 @@ use super::chat_completions::{
 };
 use super::openai::{
     AllowedToolsChoice as OpenAIAllowedToolsChoice,
-    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode, OpenAIToolType,
+    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode,
     SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
 };
 
@@ -939,8 +939,7 @@ impl<'a> From<ChatCompletionToolChoice<'a>> for GroqToolChoice<'a> {
                             .allowed_tools
                             .tools
                             .into_iter()
-                            .map(|tool_ref| ToolReference {
-                                r#type: OpenAIToolType::Function,
+                            .map(|tool_ref| ToolReference::Function {
                                 function: OpenAISpecificToolFunction {
                                     name: tool_ref.function.name,
                                 },
@@ -2160,10 +2159,12 @@ mod tests {
                     AllowedToolsMode::Auto
                 );
                 assert_eq!(allowed_tools_choice.allowed_tools.tools.len(), 1);
-                assert_eq!(
-                    allowed_tools_choice.allowed_tools.tools[0].function.name,
-                    WEATHER_TOOL.name()
-                );
+                match &allowed_tools_choice.allowed_tools.tools[0] {
+                    ToolReference::Function { function } => {
+                        assert_eq!(function.name, WEATHER_TOOL.name());
+                    }
+                    ToolReference::Custom { .. } => panic!("Expected Function variant"),
+                }
             }
             _ => panic!("Expected AllowedTools variant"),
         }
