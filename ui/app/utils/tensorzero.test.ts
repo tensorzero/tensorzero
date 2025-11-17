@@ -1,6 +1,5 @@
 import { describe, expect, test, beforeAll } from "vitest";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { type JsonInferenceDatapoint } from "~/utils/tensorzero";
 
 let tensorZeroClient: ReturnType<typeof getTensorZeroClient>;
@@ -76,10 +75,9 @@ describe("update datapoints", () => {
 
     await tensorZeroClient.updateDatapoint("test", datapoint);
 
-    const retrievedDatapoint = await getDatapoint({
-      dataset_name: "test",
-      datapoint_id: "01960832-7028-743c-8c44-a598aa5130fd",
-    });
+    const retrievedDatapoint = await tensorZeroClient.getDatapoint(
+      "01960832-7028-743c-8c44-a598aa5130fd",
+    );
     expect(retrievedDatapoint?.source_inference_id).toBe(
       datapoint.source_inference_id,
     );

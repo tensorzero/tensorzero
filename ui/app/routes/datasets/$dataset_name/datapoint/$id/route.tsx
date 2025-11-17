@@ -36,9 +36,10 @@ import {
 import type { DisplayInputMessage } from "~/utils/clickhouse/common";
 
 import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
-import { getDatapoint } from "~/utils/clickhouse/datasets.server";
+import { datapointToParsedDatasetRow } from "~/utils/clickhouse/datasets.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import { DatapointActions } from "./DatapointActions";
 import DatapointBasicInfo from "./DatapointBasicInfo";
@@ -213,16 +214,13 @@ export async function loader({
       status: 404,
     });
   }
-  const datapoint = await getDatapoint({
-    dataset_name,
-    datapoint_id: id,
-    allow_stale: true,
-  });
-  if (!datapoint) {
+  const tensorZeroDatapoint = await getTensorZeroClient().getDatapoint(id);
+  if (!tensorZeroDatapoint) {
     throw data(`No datapoint found for id ${id}.`, {
       status: 404,
     });
   }
+  const datapoint = await datapointToParsedDatasetRow(tensorZeroDatapoint);
   return {
     datapoint,
   };

@@ -14,6 +14,8 @@ import {
 import { TensorZeroServerError } from "./errors";
 import type {
   Datapoint as TensorZeroDatapoint,
+  GetDatapointsRequest,
+  GetDatapointsResponse,
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsResponse,
 } from "~/types/tensorzero";
@@ -444,6 +446,26 @@ export class TensorZeroClient {
 
     const body = await response.json();
     return DatapointResponseSchema.parse(body);
+  }
+
+  async getDatapoint(datapointId: string): Promise<TensorZeroDatapoint | null> {
+    const endpoint = `/v1/datasets/get_datapoints`;
+    const requestBody: GetDatapointsRequest = {
+      ids: [datapointId],
+    };
+
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+
+    const body = (await response.json()) as GetDatapointsResponse;
+    return body.datapoints[0] ?? null;
   }
 
   async listDatapoints(
