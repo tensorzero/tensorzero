@@ -1327,7 +1327,7 @@ impl TensorZeroGateway {
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
     /// * `max_datapoints` - Optional maximum number of datapoints to evaluate from the dataset
-    /// * `precision_limits` - Optional dict mapping evaluator names to precision limit thresholds (CI half-width)
+    /// * `precision_targets` - Optional dict mapping evaluator names to precision limit thresholds (CI half-width)
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
@@ -1336,9 +1336,9 @@ impl TensorZeroGateway {
                         inference_cache="on".to_string(),
                         dynamic_variant_config=None,
                         max_datapoints=None,
-                        precision_limits=None
+                        precision_targets=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, max_datapoints=None, precision_limits=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, max_datapoints=None, precision_targets=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
@@ -1350,7 +1350,7 @@ impl TensorZeroGateway {
         inference_cache: String,
         dynamic_variant_config: Option<&Bound<'_, PyDict>>,
         max_datapoints: Option<usize>,
-        precision_limits: Option<&Bound<'_, PyDict>>,
+        precision_targets: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
 
@@ -1370,10 +1370,10 @@ impl TensorZeroGateway {
         let variant =
             construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
 
-        // Parse precision_limits from Python dict to Rust HashMap
-        let precision_limits_map = if let Some(limits_dict) = precision_limits {
+        // Parse precision_targets from Python dict to Rust HashMap
+        let precision_targets_map = if let Some(precision_targets_dict) = precision_targets {
             let mut map = std::collections::HashMap::new();
-            for (key, value) in limits_dict.iter() {
+            for (key, value) in precision_targets_dict.iter() {
                 let key_str: String = key.extract()?;
                 let value_f64: f64 = value.extract()?;
                 map.insert(key_str, value_f64 as f32);
@@ -1397,7 +1397,7 @@ impl TensorZeroGateway {
 
         let result = tokio_block_on_without_gil(
             this.py(),
-            run_evaluation_core_streaming(core_args, max_datapoints, precision_limits_map),
+            run_evaluation_core_streaming(core_args, max_datapoints, precision_targets_map),
         )
         .map_err(|e| {
             pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
@@ -2455,7 +2455,7 @@ impl AsyncTensorZeroGateway {
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
     /// * `max_datapoints` - Optional maximum number of datapoints to evaluate from the dataset
-    /// * `precision_limits` - Optional dict mapping evaluator names to precision limit thresholds (CI half-width)
+    /// * `precision_targets` - Optional dict mapping evaluator names to precision limit thresholds (CI half-width)
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
@@ -2464,9 +2464,9 @@ impl AsyncTensorZeroGateway {
                         inference_cache="on".to_string(),
                         dynamic_variant_config=None,
                         max_datapoints=None,
-                        precision_limits=None
+                        precision_targets=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, max_datapoints=None, precision_limits=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, max_datapoints=None, precision_targets=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
@@ -2478,7 +2478,7 @@ impl AsyncTensorZeroGateway {
         inference_cache: String,
         dynamic_variant_config: Option<&Bound<'py, PyDict>>,
         max_datapoints: Option<usize>,
-        precision_limits: Option<&Bound<'py, PyDict>>,
+        precision_targets: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();
 
@@ -2491,10 +2491,10 @@ impl AsyncTensorZeroGateway {
         let variant =
             construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
 
-        // Parse precision_limits from Python dict to Rust HashMap
-        let precision_limits_map = if let Some(limits_dict) = precision_limits {
+        // Parse precision_targets from Python dict to Rust HashMap
+        let precision_targets_map = if let Some(precision_targets_dict) = precision_targets {
             let mut map = std::collections::HashMap::new();
-            for (key, value) in limits_dict.iter() {
+            for (key, value) in precision_targets_dict.iter() {
                 let key_str: String = key.extract()?;
                 let value_f64: f64 = value.extract()?;
                 map.insert(key_str, value_f64 as f32);
@@ -2525,7 +2525,7 @@ impl AsyncTensorZeroGateway {
             };
 
             let result =
-                run_evaluation_core_streaming(core_args, max_datapoints, precision_limits_map)
+                run_evaluation_core_streaming(core_args, max_datapoints, precision_targets_map)
                     .await
                     .map_err(|e| {
                         pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
