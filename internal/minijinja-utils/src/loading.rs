@@ -538,6 +538,9 @@ fn strings_from_value(value: &Value) -> Option<Vec<String>> {
 ///
 /// - `Ok(HashSet<PathBuf>)`: A set of all discovered template paths, including the root template.
 ///   Each path corresponds to a template name as a [`PathBuf`].
+///   Note: these may not exist in the file system. This can be valid if:
+///      * the paths are intended to be conditionally loaded and the condition is false
+///      * there is an array of templates to load and at least one other template in the array exists
 /// - `Err(AnalysisError)`: An error if parsing fails or if any dynamic template loads are detected.
 ///
 /// # Errors
