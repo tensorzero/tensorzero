@@ -18,7 +18,7 @@ import {
   getAdjacentEpisodeIds,
 } from "./inference.server";
 import { countInferencesForFunction } from "./inference.server";
-import type { TextContent } from "./common";
+import type { ZodTextContent } from "./common";
 import { displayModelInferenceInputMessageContentSchema } from "./common";
 import { getClickhouseClient } from "./client.server";
 import type {
@@ -462,7 +462,7 @@ test("queryInferenceById for chat inference", async () => {
   expect(inference?.function_type).toBe("chat");
   expect(inference?.input.messages.length).toBeGreaterThan(0);
   const output = inference?.output as ContentBlockChatOutput[];
-  const firstOutput = output[0] as TextContent;
+  const firstOutput = output[0] as ZodTextContent;
   expect(firstOutput.type).toBe("text");
   expect(firstOutput.text).toBe("Yes.");
 });

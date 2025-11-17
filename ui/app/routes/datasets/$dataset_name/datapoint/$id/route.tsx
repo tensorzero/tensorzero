@@ -11,7 +11,7 @@ import {
   useParams,
 } from "react-router";
 import { toDatapointUrl, toDatasetUrl } from "~/utils/urls";
-import Input from "~/components/inference/Input";
+import { InputElement } from "~/components/input_output/InputElement";
 import { Output } from "~/components/inference/Output";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import {
@@ -33,12 +33,9 @@ import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
-import type { DisplayInputMessage } from "~/utils/clickhouse/common";
-
-import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
-import { datapointToParsedDatasetRow } from "~/utils/clickhouse/datasets.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
+import { resolveStoredInputToInput } from "~/utils/resolve.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import { DatapointActions } from "./DatapointActions";
@@ -46,6 +43,7 @@ import DatapointBasicInfo from "./DatapointBasicInfo";
 import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
+  Input,
 } from "~/types/tensorzero";
 import {
   deleteDatapoint,
@@ -58,7 +56,7 @@ import {
 } from "./formDataUtils";
 
 export function validateJsonOutput(
-  output: ContentBlockChatOutput[] | JsonInferenceOutput | null,
+  output?: ContentBlockChatOutput[] | JsonInferenceOutput,
 ): { valid: true } | { valid: false; error: string } {
   if (output && "raw" in output && output.raw) {
     try {
@@ -76,10 +74,10 @@ export function validateJsonOutput(
 }
 
 export function hasDatapointChanged(params: {
-  currentInput: ParsedDatasetRow["input"];
-  originalInput: ParsedDatasetRow["input"];
-  currentOutput: ContentBlockChatOutput[] | JsonInferenceOutput | null;
-  originalOutput: ParsedDatasetRow["output"];
+  currentInput: Input;
+  originalInput: Input;
+  currentOutput?: ContentBlockChatOutput[] | JsonInferenceOutput;
+  originalOutput: ContentBlockChatOutput[] | JsonInferenceOutput | undefined;
   currentTags: Record<string, string>;
   originalTags: Record<string, string>;
 }): boolean {
@@ -154,11 +152,11 @@ export async function action({ request }: ActionFunctionArgs) {
         };
       }
     } else if (action === "rename") {
+      const name = formData.get("name") as string | null;
       await renameDatapoint({
         datasetName: parsedFormData.dataset_name,
         datapointId: parsedFormData.id,
-        // Explicitly set to null to unset the name
-        name: parsedFormData.name ?? null,
+        name, // set to null to unset the name
       });
       return data({ success: true });
     }
@@ -228,27 +226,25 @@ export async function loader({
       },
     );
   }
-  const zodDatapoint = await datapointToParsedDatasetRow(t0Datapoint);
+  // Resolve input for InputElement component
+  const resolvedInput = await resolveStoredInputToInput(t0Datapoint.input);
+
   return {
-    zodDatapoint,
     t0Datapoint,
+    resolvedInput,
   };
 }
 
 export default function DatapointPage({ loaderData }: Route.ComponentProps) {
-  const { zodDatapoint, t0Datapoint } = loaderData;
+  const { t0Datapoint, resolvedInput } = loaderData;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
-  const [originalInput, setOriginalInput] = useState(zodDatapoint.input);
-  const [input, setInput] = useState<typeof zodDatapoint.input>(
-    zodDatapoint.input,
-  );
+  const [originalInput, setOriginalInput] = useState(resolvedInput);
+  const [input, setInput] = useState<Input>(resolvedInput);
 
-  const [originalOutput, setOriginalOutput] = useState(zodDatapoint.output);
-  const [output, setOutput] = useState<
-    ContentBlockChatOutput[] | JsonInferenceOutput | null
-  >(zodDatapoint.output ?? null);
+  const [originalOutput, setOriginalOutput] = useState(t0Datapoint.output);
+  const [output, setOutput] = useState(t0Datapoint.output);
 
   const [originalTags, setOriginalTags] = useState(t0Datapoint.tags || {});
   const [tags, setTags] = useState(t0Datapoint.tags || {});
@@ -258,15 +254,15 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
   // Reset state when datapoint changes (e.g., after save redirect)
   useEffect(() => {
-    setInput(zodDatapoint.input);
-    setOriginalInput(zodDatapoint.input);
-    setOutput(zodDatapoint.output ?? null);
-    setOriginalOutput(zodDatapoint.output);
+    setInput(resolvedInput);
+    setOriginalInput(resolvedInput);
+    setOutput(t0Datapoint.output);
+    setOriginalOutput(t0Datapoint.output);
     setTags(t0Datapoint.tags || {});
     setOriginalTags(t0Datapoint.tags || {});
     setIsEditing(false);
     setValidationError(null);
-  }, [zodDatapoint, t0Datapoint]);
+  }, [resolvedInput, t0Datapoint]);
 
   const canSave = useMemo(() => {
     return (
@@ -293,36 +289,30 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const toggleEditing = () => setIsEditing(!isEditing);
 
   const handleReset = () => {
-    setInput(zodDatapoint.input);
-    setOutput(zodDatapoint.output ?? null);
+    setInput(resolvedInput);
+    setOutput(t0Datapoint.output);
     setTags(t0Datapoint.tags || {});
-  };
-
-  const handleSystemChange = (system: string | object | null) => {
-    setInput((prevInput) => {
-      if (system === null) {
-        // Explicitly create new object without system key
-        return {
-          messages: prevInput.messages,
-        };
-      } else {
-        return { ...prevInput, system };
-      }
-    });
-  };
-
-  const handleMessagesChange = (messages: DisplayInputMessage[]) => {
-    setInput((prevInput) => ({ ...prevInput, messages }));
   };
 
   const fetcher = useFetcher();
   const saveError = fetcher.data?.success === false ? fetcher.data.error : null;
 
   const submitDatapointAction = (action: string) => {
-    // Create a copy of datapoint with updated input, output, and tags if we're saving
-    const dataToSubmit = { ...zodDatapoint, input, output, tags };
+    // Build form data directly using t0Datapoint structure with updated values
+    const formData = new FormData();
 
-    const formData = serializeDatapointToFormData(dataToSubmit);
+    // Add all fields from t0Datapoint
+    formData.append("dataset_name", t0Datapoint.dataset_name);
+    formData.append("function_name", t0Datapoint.function_name);
+    formData.append("id", t0Datapoint.id);
+    formData.append("input", JSON.stringify(input));
+    if (output !== undefined) {
+      formData.append("output", JSON.stringify(output));
+    }
+    formData.append("tags", JSON.stringify(tags));
+    if (t0Datapoint.episode_id !== undefined) {
+      formData.append("episode_id", t0Datapoint.episode_id);
+    }
     formData.append("action", action);
 
     // Submit to the local action by targeting the current route (".")
@@ -347,14 +337,14 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     }
   };
 
-  const functionConfig = useFunctionConfig(zodDatapoint.function_name);
+  const functionConfig = useFunctionConfig(t0Datapoint.function_name);
   const variants = Object.keys(functionConfig?.variants || {});
 
   const variantInferenceFetcher = useInferenceActionFetcher();
   const [lastRequestArgs, setLastRequestArgs] = useState<
     Parameters<typeof prepareInferenceActionRequest>[0] | null
   >(null);
-  const variantSource = "datapoint";
+
   const variantInferenceIsLoading =
     // only concerned with rendering loading state when the modal is open
     isModalOpen &&
@@ -385,8 +375,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setSelectedVariant(variant);
     setIsModalOpen(true);
     submitVariantInference({
-      resource: zodDatapoint,
-      source: variantSource,
+      resource: t0Datapoint,
+      source: "t0_datapoint",
       variant,
     });
   };
@@ -405,7 +395,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   const handleRenameDatapoint = async (newName: string) => {
-    const dataToSubmit = { ...zodDatapoint, name: newName };
+    const dataToSubmit = { ...t0Datapoint, name: newName };
     const formData = serializeDatapointToFormData(dataToSubmit);
     formData.append("action", "rename");
     await fetcher.submit(formData, { method: "post", action: "." });
@@ -415,10 +405,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     <PageLayout>
       <PageHeader
         label="Datapoint"
-        name={zodDatapoint.id}
+        name={t0Datapoint.id}
         tag={
           <>
-            {zodDatapoint.is_custom && (
+            {t0Datapoint.is_custom && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge variant="secondary" className="ml-2 cursor-help">
@@ -431,7 +421,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
                 </TooltipContent>
               </Tooltip>
             )}
-            {zodDatapoint.staled_at && (
+            {t0Datapoint.staled_at && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge variant="secondary" className="ml-2 cursor-help">
@@ -457,7 +447,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <DatapointBasicInfo
-            datapoint={zodDatapoint}
+            datapoint={t0Datapoint}
             onRenameDatapoint={handleRenameDatapoint}
           />
         </SectionLayout>
@@ -474,19 +464,18 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             canSave={canSave}
             onSave={handleSave}
             onReset={handleReset}
-            showTryWithButton={zodDatapoint.function_name !== DEFAULT_FUNCTION}
-            isStale={!!zodDatapoint.staled_at}
+            showTryWithButton={t0Datapoint.function_name !== DEFAULT_FUNCTION}
+            isStale={!!t0Datapoint.staled_at}
           />
         </SectionLayout>
 
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <Input
-            system={input.system}
-            messages={input.messages}
+          <InputElement
+            input={input}
             isEditing={isEditing}
-            onSystemChange={handleSystemChange}
-            onMessagesChange={handleMessagesChange}
+            onSystemChange={(system) => setInput({ ...input, system })}
+            onMessagesChange={(messages) => setInput({ ...input, messages })}
           />
         </SectionLayout>
 
@@ -519,7 +508,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           variantResponse={variantInferenceFetcher.data?.info ?? null}
           rawResponse={variantInferenceFetcher.data?.raw ?? null}
           onClose={handleModalClose}
-          item={zodDatapoint}
+          item={t0Datapoint}
           selectedVariant={selectedVariant}
           source="datapoint"
           onRefresh={lastRequestArgs ? handleRefresh : null}

@@ -9,7 +9,6 @@ function createChatDatapoint(): DatapointFormData {
   return {
     dataset_name: "chat-dataset",
     function_name: "reply",
-    name: undefined,
     id: "00000000-0000-0000-0000-000000000001",
     episode_id: "00000000-0000-0000-0000-000000000002",
     input: {
@@ -31,20 +30,9 @@ function createChatDatapoint(): DatapointFormData {
         text: "I'm doing well, thanks for asking!",
       },
     ],
-    // @ts-expect-error tool_params is not in the DatapointFormData type because it's a union. We should fix this when moving to use napi-rs types.
-    tool_params: {
-      temperature: 0.7,
-      top_p: 0.9,
-    },
     tags: {
       scenario: "greeting",
     },
-    auxiliary: "conversation metadata",
-    is_deleted: false,
-    updated_at: "2024-01-01T00:00:00.000Z",
-    staled_at: null,
-    source_inference_id: "00000000-0000-0000-0000-000000000099",
-    is_custom: true,
   };
 }
 
@@ -64,20 +52,7 @@ describe("serializeDatapointToFormData", () => {
     expect(JSON.parse(formData.get("output") as string)).toEqual(
       datapoint.output,
     );
-    expect(JSON.parse(formData.get("tool_params") as string)).toEqual(
-      // @ts-expect-error tool_params is not in the DatapointFormData type because it's a union. We should fix this when moving to use napi-rs types.
-      datapoint.tool_params,
-    );
     expect(JSON.parse(formData.get("tags") as string)).toEqual(datapoint.tags);
-    expect(formData.get("auxiliary")).toBe(datapoint.auxiliary);
-    expect(formData.get("is_deleted")).toBe("false");
-    expect(formData.get("updated_at")).toBe(datapoint.updated_at);
-    expect(formData.get("source_inference_id")).toBe(
-      datapoint.source_inference_id,
-    );
-    expect(formData.get("is_custom")).toBe("true");
-    expect(formData.has("name")).toBe(false);
-    expect(formData.has("staled_at")).toBe(false);
   });
 });
 
@@ -100,24 +75,6 @@ describe("parseDatapointFormData", () => {
     formData.set("episode_id", "00000000-0000-0000-0000-000000000011");
     formData.set("input", JSON.stringify({ messages: [] }));
     formData.set("tags", JSON.stringify({}));
-    formData.set(
-      "output_schema",
-      JSON.stringify({
-        type: "object",
-        properties: {
-          entities: {
-            type: "array",
-            items: { type: "string" },
-          },
-        },
-        required: ["entities"],
-      }),
-    );
-    formData.set("auxiliary", "additional context");
-    formData.set("is_deleted", "false");
-    formData.set("updated_at", "2024-02-01T12:00:00.000Z");
-    formData.set("source_inference_id", "00000000-0000-0000-0000-000000000012");
-    formData.set("is_custom", "true");
 
     const parsed = parseDatapointFormData(formData);
 
@@ -128,23 +85,7 @@ describe("parseDatapointFormData", () => {
       episode_id: "00000000-0000-0000-0000-000000000011",
       input: { messages: [] },
       tags: {},
-      output_schema: {
-        type: "object",
-        properties: {
-          entities: {
-            type: "array",
-            items: { type: "string" },
-          },
-        },
-        required: ["entities"],
-      },
-      auxiliary: "additional context",
-      is_deleted: false,
-      updated_at: "2024-02-01T12:00:00.000Z",
-      source_inference_id: "00000000-0000-0000-0000-000000000012",
-      is_custom: true,
     });
-    expect(parsed.staled_at).toBeNull();
     expect("output" in parsed).toBe(false);
   });
 });

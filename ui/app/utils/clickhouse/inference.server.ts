@@ -1,10 +1,10 @@
 import {
   CountSchema,
   modelInferenceInputMessageSchema,
-  type TableBounds,
-  type TableBoundsWithCount,
+  type ZodTableBounds,
+  type ZodTableBoundsWithCount,
   TableBoundsWithCountSchema,
-  JsonValueSchema,
+  ZodJsonValueSchema,
 } from "./common";
 import {
   contentBlockOutputSchema,
@@ -184,7 +184,7 @@ export async function queryInferenceTable(params: {
 export async function queryInferenceTableBounds(params?: {
   extraWhere?: string[];
   extraParams?: Record<string, string | number>;
-}): Promise<TableBoundsWithCount> {
+}): Promise<ZodTableBoundsWithCount> {
   const { extraWhere = [], extraParams = {} } = params ?? {};
 
   // Build WHERE clause
@@ -209,7 +209,7 @@ export async function queryInferenceTableBounds(params?: {
       format: "JSONEachRow",
       query_params: extraParams,
     });
-    const rows = await resultSet.json<TableBoundsWithCount>();
+    const rows = await resultSet.json<ZodTableBoundsWithCount>();
 
     // Handle the case where there are no results
     if (!rows.length || rows[0].count === 0) {
@@ -244,7 +244,7 @@ export async function queryInferenceTableByEpisodeId(params: {
 
 export async function queryInferenceTableBoundsByEpisodeId(params: {
   episode_id: string;
-}): Promise<TableBounds> {
+}): Promise<ZodTableBounds> {
   return queryInferenceTableBounds({
     extraWhere: ["episode_id = {episode_id:String}"],
     extraParams: { episode_id: params.episode_id },
@@ -268,7 +268,7 @@ export async function queryInferenceTableByFunctionName(params: {
 
 export async function queryInferenceTableBoundsByFunctionName(params: {
   function_name: string;
-}): Promise<TableBounds> {
+}): Promise<ZodTableBounds> {
   return queryInferenceTableBounds({
     extraWhere: ["function_name = {function_name:String}"],
     extraParams: { function_name: params.function_name },
@@ -300,7 +300,7 @@ export async function queryInferenceTableByVariantName(params: {
 export async function queryInferenceTableBoundsByVariantName(params: {
   function_name: string;
   variant_name: string;
-}): Promise<TableBounds> {
+}): Promise<ZodTableBounds> {
   return queryInferenceTableBounds({
     extraWhere: [
       "function_name = {function_name:String}",
@@ -391,7 +391,7 @@ async function parseInferenceRow(
       inference_params: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.inference_params)),
-      output_schema: JsonValueSchema.parse(JSON.parse(row.output_schema)),
+      output_schema: ZodJsonValueSchema.parse(JSON.parse(row.output_schema)),
       extra_body,
     };
   }

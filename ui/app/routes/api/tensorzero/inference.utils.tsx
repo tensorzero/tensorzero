@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useFetcher, type FetcherFormProps } from "react-router";
 import type { SubmitTarget, FetcherSubmitOptions } from "react-router";
-import type { DisplayInputMessage } from "~/utils/clickhouse/common";
+import type { ZodDisplayInputMessage } from "~/utils/clickhouse/common";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import type {
   CacheParamsOptions,
@@ -26,9 +26,9 @@ import type {
   Input as TensorZeroInput,
 } from "~/utils/tensorzero";
 import type {
-  ResolvedFileContent,
-  DisplayInputMessageContent,
-  DisplayInput,
+  ZodResolvedFileContent,
+  ZodDisplayInputMessageContent,
+  ZodDisplayInput,
 } from "~/utils/clickhouse/common";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
@@ -42,11 +42,13 @@ import type {
   StoredInputMessageContent as TensorZeroStoredInputMessageContent,
   ContentBlockChatOutput,
   JsonInferenceOutput,
+  ChatInferenceDatapoint,
+  JsonInferenceDatapoint,
 } from "~/types/tensorzero";
 import type {
-  Input,
-  InputMessage,
-  InputMessageContent,
+  ZodInput,
+  ZodInputMessage,
+  ZodInputMessageContent,
 } from "~/utils/clickhouse/common";
 import { v7 } from "uuid";
 
@@ -197,7 +199,7 @@ export function useInferenceActionFetcher() {
 // Convert TensorZero's StoredInput to our Input type
 export function tensorZeroStoredInputToInput(
   resolvedInput: TensorZeroStoredInput,
-): Input {
+): ZodInput {
   return {
     system: resolvedInput.system ?? undefined,
     messages: resolvedInput.messages.map(tensorZeroStoredMessageToInputMessage),
@@ -206,7 +208,7 @@ export function tensorZeroStoredInputToInput(
 
 function tensorZeroStoredMessageToInputMessage(
   message: TensorZeroStoredInputMessage,
-): InputMessage {
+): ZodInputMessage {
   return {
     role: message.role,
     content: message.content.map(tensorZeroStoredContentToInputContent),
@@ -215,7 +217,7 @@ function tensorZeroStoredMessageToInputMessage(
 
 function tensorZeroStoredContentToInputContent(
   content: TensorZeroStoredInputMessageContent,
-): InputMessageContent {
+): ZodInputMessageContent {
   switch (content.type) {
     case "text":
       return {
@@ -296,14 +298,20 @@ interface InferenceDefaultFunctionActionArgs {
 }
 
 interface DatapointActionArgs {
-  source: "datapoint";
+  source: "zod_datapoint";
   resource: ParsedDatasetRow;
+  variant: string;
+}
+
+interface T0DatapointActionArgs {
+  source: "t0_datapoint";
+  resource: ChatInferenceDatapoint | JsonInferenceDatapoint;
   variant: string;
 }
 
 interface ClickHouseDatapointActionArgs {
   source: "clickhouse_datapoint";
-  input: DisplayInput;
+  input: ZodDisplayInput;
   functionName: string;
   allowed_tools?: string[];
   additional_tools?: Array<ClientSideFunctionTool> | null;
@@ -321,6 +329,7 @@ type ActionArgs =
   | InferenceActionArgs
   | InferenceDefaultFunctionActionArgs
   | DatapointActionArgs
+  | T0DatapointActionArgs
   | ClickHouseDatapointActionArgs;
 
 function isDefaultFunctionArgs(
@@ -397,6 +406,15 @@ export function prepareInferenceActionRequest(
       cache_options: args.cache_options,
       internal_dynamic_variant_config: dynamicVariantInfo,
     };
+  } else if (args.source === "t0_datapoint") {
+    // Handle datapoints from tensorzero-node (with StoredInput)
+    const clientInput = storedInputToClientInput(args.resource.input);
+    return {
+      ...baseParams,
+      function_name: args.resource.function_name,
+      input: clientInput,
+      variant_name: args.variant,
+    };
   } else {
     // For other sources, the input is already a DisplayInput
     if (
@@ -459,15 +477,63 @@ export interface VariantResponseInfo {
   usage?: InferenceUsage;
 }
 
-export function resolvedInputToClientInput(input: DisplayInput): ClientInput {
+export function resolvedInputToClientInput(
+  input: ZodDisplayInput,
+): ClientInput {
   return {
     system: input.system || null,
     messages: input.messages.map(resolvedInputMessageToClientInputMessage),
   };
 }
 
+export function storedInputToClientInput(
+  input: TensorZeroStoredInput,
+): ClientInput {
+  return {
+    system: input.system || undefined,
+    messages: input.messages.map(storedInputMessageToClientInputMessage),
+  };
+}
+
+function storedInputMessageToClientInputMessage(
+  message: TensorZeroStoredInputMessage,
+): ClientInputMessage {
+  return {
+    role: message.role,
+    content: message.content.map(storedInputMessageContentToClientInputMessageContent),
+  };
+}
+
+function storedInputMessageContentToClientInputMessageContent(
+  content: TensorZeroStoredInputMessageContent,
+): ClientInputMessageContent {
+  switch (content.type) {
+    case "text":
+    case "raw_text":
+    case "template":
+    case "tool_call":
+    case "tool_result":
+    case "thought":
+    case "unknown":
+      return content;
+    case "file": {
+      // For files, we need to pass the storage path information
+      // The backend will handle resolving the file from storage
+      return {
+        type: "file",
+        file_type: "object_storage_pointer",
+        source_url: content.source_url,
+        mime_type: content.mime_type,
+        storage_path: content.storage_path,
+        detail: content.detail,
+        filename: content.filename,
+      };
+    }
+  }
+}
+
 export function resolvedInputToTensorZeroInput(
-  input: DisplayInput,
+  input: ZodDisplayInput,
 ): TensorZeroInput {
   return {
     ...input,
@@ -476,7 +542,7 @@ export function resolvedInputToTensorZeroInput(
 }
 
 function resolvedInputMessageToTensorZeroMessage(
-  message: DisplayInputMessage,
+  message: ZodDisplayInputMessage,
 ): TensorZeroMessage {
   return {
     ...message,
@@ -487,7 +553,7 @@ function resolvedInputMessageToTensorZeroMessage(
 }
 
 function resolvedInputMessageContentToTensorZeroContent(
-  content: DisplayInputMessageContent,
+  content: ZodDisplayInputMessageContent,
 ): TensorZeroContent {
   switch (content.type) {
     case "text":
@@ -515,7 +581,7 @@ function resolvedInputMessageContentToTensorZeroContent(
 }
 
 function resolvedFileContentToTensorZeroFile(
-  content: ResolvedFileContent,
+  content: ZodResolvedFileContent,
 ): TensorZeroImage {
   const data = content.file.data.split(",")[1];
   return {
@@ -526,7 +592,7 @@ function resolvedFileContentToTensorZeroFile(
 }
 
 function resolvedInputMessageToClientInputMessage(
-  message: DisplayInputMessage,
+  message: ZodDisplayInputMessage,
 ): ClientInputMessage {
   return {
     role: message.role,
@@ -537,7 +603,7 @@ function resolvedInputMessageToClientInputMessage(
 }
 
 function resolvedInputMessageContentToClientInputMessageContent(
-  content: DisplayInputMessageContent,
+  content: ZodDisplayInputMessageContent,
 ): ClientInputMessageContent {
   switch (content.type) {
     case "template":
@@ -601,7 +667,7 @@ function resolvedInputMessageContentToClientInputMessageContent(
 }
 
 function resolvedFileContentToClientFile(
-  content: ResolvedFileContent,
+  content: ZodResolvedFileContent,
 ): ClientInputMessageContent {
   const data = content.file.data.split(",")[1];
   return {

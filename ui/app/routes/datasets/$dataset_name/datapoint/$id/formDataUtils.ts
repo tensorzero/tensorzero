@@ -1,16 +1,21 @@
-import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
-import { ParsedDatasetRowSchema } from "~/utils/clickhouse/datasets";
 import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
 } from "~/types/tensorzero";
+import type { StoredInput } from "~/types/tensorzero";
 
 /**
- * Type for a datapoint with editable fields that can be modified in the UI.
- * This allows output to be null (when editing) while preserving all other fields.
+ * Type for a datapoint form submission containing only the editable fields.
+ * This matches what's actually submitted in the form.
  */
-export type DatapointFormData = Omit<ParsedDatasetRow, "output"> & {
-  output?: ContentBlockChatOutput[] | JsonInferenceOutput | null;
+export type DatapointFormData = {
+  dataset_name: string;
+  function_name: string;
+  id: string;
+  episode_id?: string;
+  input: StoredInput;
+  output?: ContentBlockChatOutput[] | JsonInferenceOutput;
+  tags?: Record<string, string>;
 };
 
 /**
@@ -38,42 +43,33 @@ export function serializeDatapointToFormData(
 }
 
 /**
- * Parses FormData into a ParsedDatasetRow, handling missing fields gracefully.
- * - Missing fields are treated as null where appropriate
+ * Parses FormData into a DatapointFormData object, handling missing fields gracefully.
+ * - Missing fields are treated as undefined where appropriate
  * - JSON fields are parsed from their string representations
- * - The result is validated against the ParsedDatasetRowSchema
+ * - No Zod validation is performed; the backend will validate when saving
  */
-export function parseDatapointFormData(formData: FormData): ParsedDatasetRow {
-  const rawData = {
-    dataset_name: formData.get("dataset_name"),
-    function_name: formData.get("function_name"),
-    id: formData.get("id"),
-    episode_id: formData.get("episode_id"),
-    name: formData.get("name") || undefined,
-    input: JSON.parse(formData.get("input") as string),
-    output: formData.get("output")
-      ? JSON.parse(formData.get("output") as string)
-      : undefined,
-    output_schema: formData.get("output_schema")
-      ? JSON.parse(formData.get("output_schema") as string)
-      : undefined,
-    tool_params: formData.get("tool_params")
-      ? JSON.parse(formData.get("tool_params") as string)
-      : undefined,
-    tags: JSON.parse(formData.get("tags") as string),
-    auxiliary: formData.get("auxiliary") || "", // Convert null to empty string
-    is_deleted: formData.get("is_deleted") === "true",
-    updated_at: formData.get("updated_at"),
-    staled_at: formData.get("staled_at"),
-    source_inference_id: formData.get("source_inference_id"),
-    is_custom: formData.get("is_custom") === "true",
+export function parseDatapointFormData(formData: FormData): DatapointFormData {
+  const dataset_name = formData.get("dataset_name") as string;
+  const function_name = formData.get("function_name") as string;
+  const id = formData.get("id") as string;
+  const episode_id = formData.get("episode_id") as string | null;
+  const input = JSON.parse(formData.get("input") as string) as StoredInput;
+  const outputStr = formData.get("output") as string | null;
+  const output = outputStr ? JSON.parse(outputStr) : undefined;
+  const tagsStr = formData.get("tags") as string;
+  const tags = tagsStr ? JSON.parse(tagsStr) as Record<string, string> : undefined;
+
+  const result: DatapointFormData = {
+    dataset_name,
+    function_name,
+    id,
+    input,
   };
 
-  // Filter out undefined values to help Zod discriminate between chat and json datapoints
-  // - For chat datapoints: tool_params is present, output_schema is not
-  // - For json datapoints: output_schema is present, tool_params is not
-  const cleanedData = Object.fromEntries(
-    Object.entries(rawData).filter(([, value]) => value !== undefined),
-  );
-  return ParsedDatasetRowSchema.parse(cleanedData);
+  // Add optional fields only if they have values
+  if (episode_id) result.episode_id = episode_id;
+  if (output !== undefined) result.output = output;
+  if (tags) result.tags = tags;
+
+  return result;
 }

@@ -1,92 +1,53 @@
-import type {
-  ParsedDatasetRow,
-  ParsedChatInferenceDatapointRow,
-  ParsedJsonInferenceDatapointRow,
-} from "~/utils/clickhouse/datasets";
 import { getDatasetMetadata } from "~/utils/clickhouse/datasets.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference.utils";
 import { toDatasetUrl } from "~/utils/urls";
 import type {
   UpdateDatapointsMetadataRequest,
   UpdateDatapointRequest,
-  Input,
   ContentBlockChatOutput,
-  DynamicToolParams,
   JsonDatapointOutputUpdate,
-  JsonValue,
+  JsonInferenceOutput,
 } from "~/types/tensorzero";
+import type { DatapointFormData } from "./formDataUtils";
+import { storedInputToTensorZeroInput } from "./storedInputUtils";
 
 // ============================================================================
 // Transformation Functions
 // ============================================================================
 
-function transformOutputForTensorZero(
-  output: ParsedDatasetRow["output"],
-): string | null {
-  if (output === null || output === undefined) {
-    return null;
-  } else if ("raw" in output) {
-    if (output.raw === null) {
-      return null;
-    }
-    try {
-      return JSON.parse(output.raw);
-    } catch (error) {
-      throw new Error(
-        `Invalid JSON in output.raw: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  } else if (typeof output === "object") {
-    try {
-      return JSON.parse(JSON.stringify(output));
-    } catch (error) {
-      throw new Error(
-        `Failed to serialize output object: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  } else {
-    return output;
-  }
-}
-
 /**
- * Converts a parsed dataset row to an UpdateDatapointRequest.
- *
- * TODO: This is a temporary function while we migrate more of the UI to the canonical binding types.
+ * Converts DatapointFormData to UpdateDatapointRequest for the API.
+ * This handles the conversion from form data (with StoredInput) to the API request format.
  */
-function convertParsedDatasetRowToUpdateDatapointRequest(
-  parsedFormData: ParsedDatasetRow,
+function convertDatapointFormDataToUpdateDatapointRequest(
+  formData: DatapointFormData,
   functionType: "chat" | "json",
 ): UpdateDatapointRequest {
+  const input = storedInputToTensorZeroInput(formData.input);
+
   switch (functionType) {
     case "json": {
-      const datapoint = parsedFormData as ParsedJsonInferenceDatapointRow;
+      const output = formData.output as JsonInferenceOutput | undefined;
       return {
         type: "json",
-        id: datapoint.id,
-        input: resolvedInputToTensorZeroInput(datapoint.input) as Input,
-        output: datapoint.output
+        id: formData.id,
+        input,
+        output: output
           ? ({
-              raw: JSON.stringify(
-                transformOutputForTensorZero(datapoint.output),
-              ),
+              raw: JSON.stringify(output.parsed || output.raw),
             } as JsonDatapointOutputUpdate)
           : undefined,
-        output_schema: datapoint.output_schema as JsonValue,
-        tags: datapoint.tags || undefined,
+        tags: formData.tags,
       };
     }
 
     case "chat": {
-      const datapoint = parsedFormData as ParsedChatInferenceDatapointRow;
       return {
         type: "chat",
-        id: datapoint.id,
-        input: resolvedInputToTensorZeroInput(datapoint.input) as Input,
-        output: datapoint.output as ContentBlockChatOutput[] | undefined,
-        tags: datapoint.tags || undefined,
-        tool_params: datapoint.tool_params as DynamicToolParams,
+        id: formData.id,
+        input,
+        output: formData.output as ContentBlockChatOutput[] | undefined,
+        tags: formData.tags,
       };
     }
   }
@@ -127,13 +88,13 @@ export async function deleteDatapoint(params: {
  * TODO(#3765): remove this logic and use Rust logic instead, either via napi-rs or by calling an API server.
  */
 export async function saveDatapoint(params: {
-  parsedFormData: ParsedDatasetRow;
+  parsedFormData: DatapointFormData;
   functionType: "chat" | "json";
 }): Promise<{ newId: string }> {
   const { parsedFormData, functionType } = params;
 
   // Convert the parsed form data to an UpdateDatapointRequest
-  const updateRequest = convertParsedDatasetRowToUpdateDatapointRequest(
+  const updateRequest = convertDatapointFormDataToUpdateDatapointRequest(
     parsedFormData,
     functionType,
   );

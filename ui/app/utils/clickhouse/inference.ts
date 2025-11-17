@@ -6,7 +6,7 @@ import {
   displayInputSchema,
   displayModelInferenceInputMessageSchema,
   modelInferenceOutputContentBlockSchema,
-  JsonValueSchema,
+  ZodJsonValueSchema,
 } from "./common";
 import type {
   JsonInferenceOutput,
@@ -17,7 +17,7 @@ import type {
 // Zod schemas for ToolCallConfigDatabaseInsert
 export const toolSchema = z.object({
   description: z.string(),
-  parameters: JsonValueSchema,
+  parameters: ZodJsonValueSchema,
   name: z.string(),
   strict: z.boolean(),
 }) satisfies z.ZodType<ClientSideFunctionTool>;
@@ -39,7 +39,7 @@ export const providerInferenceExtraBodySchema = z
   .object({
     model_provider_name: z.string(),
     pointer: z.string(),
-    value: JsonValueSchema,
+    value: ZodJsonValueSchema,
   })
   .strict();
 export type ProviderInferenceExtraBody = z.infer<
@@ -50,7 +50,7 @@ export const variantInferenceExtraBodySchema = z
   .object({
     variant_name: z.string(),
     pointer: z.string(),
-    value: JsonValueSchema,
+    value: ZodJsonValueSchema,
   })
   .strict();
 export type VariantInferenceExtraBody = z.infer<
@@ -153,7 +153,7 @@ export const parsedJsonInferenceRowSchema = jsonInferenceRowSchema
     input: inputSchema,
     output: jsonInferenceOutputSchema,
     inference_params: z.record(z.string(), z.unknown()),
-    output_schema: JsonValueSchema,
+    output_schema: ZodJsonValueSchema,
     extra_body: z.array(inferenceExtraBodySchema).nullable(),
   });
 
