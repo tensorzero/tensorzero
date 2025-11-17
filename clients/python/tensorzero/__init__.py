@@ -41,8 +41,8 @@ from .generated_types import (
     ModelProviderExtraHeaderDelete,
     ProviderExtraBody,  # DEPRECATED
     ProviderExtraBodyDelete,  # DEPRECATED
-    ProviderExtraHeader,
-    ProviderExtraHeaderDelete,
+    ProviderExtraHeader,  # DEPRECATED
+    ProviderExtraHeaderDelete,  # DEPRECATED
     UpdateDatapointMetadataRequest,
     UpdateDatapointsResponse,
     VariantExtraBody,
@@ -265,8 +265,8 @@ __all__ = [
     "patch_openai_client",
     "ProviderExtraBody",  # DEPRECATED
     "ProviderExtraBodyDelete",  # DEPRECATED
-    "ProviderExtraHeader",
-    "ProviderExtraHeaderDelete",
+    "ProviderExtraHeader",  # DEPRECATED
+    "ProviderExtraHeaderDelete",  # DEPRECATED
     "RawText",
     "RenderedStoredInference",  # DEPRECATED
     "RenderedSample",
