@@ -28,7 +28,7 @@ mod analyze;
 mod evaluate;
 
 pub use analyze::{analyze_inferences, Analysis, FunctionContext};
-pub use evaluate::create_evaluation_dataset;
+pub use evaluate::{create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, EvaluationResults};
 
 #[async_trait]
 impl Optimizer for GEPAConfig {
