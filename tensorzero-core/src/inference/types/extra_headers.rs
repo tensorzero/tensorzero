@@ -85,41 +85,80 @@ pub enum InferenceExtraHeader {
     Provider {
         model_provider_name: String,
         name: String,
-        #[serde(flatten)]
-        kind: ExtraHeaderKind,
+        value: String,
+    },
+    #[schemars(title = "ProviderExtraHeaderDelete")]
+    ProviderDelete {
+        model_provider_name: String,
+        name: String,
+        #[serde(
+            serialize_with = "super::serialize_delete_field",
+            deserialize_with = "super::deserialize_delete_field"
+        )]
+        delete: (),
     },
     #[schemars(title = "VariantExtraHeader")]
     Variant {
         variant_name: String,
         name: String,
-        #[serde(flatten)]
-        kind: ExtraHeaderKind,
+        value: String,
+    },
+    #[schemars(title = "VariantExtraHeaderDelete")]
+    VariantDelete {
+        variant_name: String,
+        name: String,
+        #[serde(
+            serialize_with = "super::serialize_delete_field",
+            deserialize_with = "super::deserialize_delete_field"
+        )]
+        delete: (),
     },
     #[schemars(title = "ModelProviderExtraHeader")]
     ModelProvider {
         model_name: String,
         provider_name: Option<String>,
         name: String,
-        #[serde(flatten)]
-        kind: ExtraHeaderKind,
+        value: String,
+    },
+    #[schemars(title = "ModelProviderExtraHeaderDelete")]
+    ModelProviderDelete {
+        model_name: String,
+        provider_name: Option<String>,
+        name: String,
+        #[serde(
+            serialize_with = "super::serialize_delete_field",
+            deserialize_with = "super::deserialize_delete_field"
+        )]
+        delete: (),
     },
     #[schemars(title = "AlwaysExtraHeader")]
-    Always {
+    Always { name: String, value: String },
+    #[schemars(title = "AlwaysExtraHeaderDelete")]
+    AlwaysDelete {
         name: String,
-        #[serde(flatten)]
-        kind: ExtraHeaderKind,
+        #[serde(
+            serialize_with = "super::serialize_delete_field",
+            deserialize_with = "super::deserialize_delete_field"
+        )]
+        delete: (),
     },
 }
 
 impl InferenceExtraHeader {
     pub fn should_apply_variant(&self, variant_name: &str) -> bool {
         match self {
-            InferenceExtraHeader::Provider { .. } => true,
+            InferenceExtraHeader::Provider { .. } | InferenceExtraHeader::ProviderDelete { .. } => {
+                true
+            }
             InferenceExtraHeader::Variant {
                 variant_name: v, ..
+            }
+            | InferenceExtraHeader::VariantDelete {
+                variant_name: v, ..
             } => v == variant_name,
-            InferenceExtraHeader::ModelProvider { .. } => true,
-            InferenceExtraHeader::Always { .. } => true,
+            InferenceExtraHeader::ModelProvider { .. }
+            | InferenceExtraHeader::ModelProviderDelete { .. } => true,
+            InferenceExtraHeader::Always { .. } | InferenceExtraHeader::AlwaysDelete { .. } => true,
         }
     }
 }
@@ -133,14 +172,9 @@ mod tests {
         let json = r#"{"name": "X-Custom-Header", "value": "custom-value"}"#;
         let result: InferenceExtraHeader = serde_json::from_str(json).unwrap();
         match result {
-            InferenceExtraHeader::Always { name, kind } => {
+            InferenceExtraHeader::Always { name, value } => {
                 assert_eq!(name, "X-Custom-Header");
-                match kind {
-                    ExtraHeaderKind::Value(v) => {
-                        assert_eq!(v, "custom-value");
-                    }
-                    ExtraHeaderKind::Delete => panic!("Expected Value kind"),
-                }
+                assert_eq!(value, "custom-value");
             }
             _ => panic!("Expected Always variant"),
         }
@@ -151,11 +185,10 @@ mod tests {
         let json = r#"{"name": "X-Custom-Header", "delete": true}"#;
         let result: InferenceExtraHeader = serde_json::from_str(json).unwrap();
         match result {
-            InferenceExtraHeader::Always { name, kind } => {
+            InferenceExtraHeader::AlwaysDelete { name, .. } => {
                 assert_eq!(name, "X-Custom-Header");
-                assert_eq!(kind, ExtraHeaderKind::Delete);
             }
-            _ => panic!("Expected Always variant"),
+            _ => panic!("Expected AlwaysDelete variant"),
         }
     }
 
@@ -163,7 +196,7 @@ mod tests {
     fn test_should_apply_variant_all() {
         let all_variant = InferenceExtraHeader::Always {
             name: "X-Custom-Header".to_string(),
-            kind: ExtraHeaderKind::Value("value".to_string()),
+            value: "value".to_string(),
         };
 
         // Always should apply to any variant
@@ -177,7 +210,7 @@ mod tests {
         let provider_variant = InferenceExtraHeader::Provider {
             model_provider_name: "openai".to_string(),
             name: "Authorization".to_string(),
-            kind: ExtraHeaderKind::Value("Bearer token".to_string()),
+            value: "Bearer token".to_string(),
         };
 
         // Provider should apply to any variant
@@ -190,7 +223,7 @@ mod tests {
         let variant = InferenceExtraHeader::Variant {
             variant_name: "variant1".to_string(),
             name: "X-Variant-Header".to_string(),
-            kind: ExtraHeaderKind::Value("value".to_string()),
+            value: "value".to_string(),
         };
 
         // Should apply to matching variant
@@ -202,7 +235,7 @@ mod tests {
         let variant = InferenceExtraHeader::Variant {
             variant_name: "variant1".to_string(),
             name: "X-Variant-Header".to_string(),
-            kind: ExtraHeaderKind::Value("value".to_string()),
+            value: "value".to_string(),
         };
 
         // Should NOT apply to non-matching variant
@@ -216,16 +249,16 @@ mod tests {
                 InferenceExtraHeader::Variant {
                     variant_name: "variant1".to_string(),
                     name: "X-V1".to_string(),
-                    kind: ExtraHeaderKind::Value("v1".to_string()),
+                    value: "v1".to_string(),
                 },
                 InferenceExtraHeader::Always {
                     name: "X-All".to_string(),
-                    kind: ExtraHeaderKind::Value("all".to_string()),
+                    value: "all".to_string(),
                 },
                 InferenceExtraHeader::Variant {
                     variant_name: "variant2".to_string(),
                     name: "X-V2".to_string(),
-                    kind: ExtraHeaderKind::Value("v2".to_string()),
+                    value: "v2".to_string(),
                 },
             ],
         };
@@ -247,21 +280,21 @@ mod tests {
                 InferenceExtraHeader::Provider {
                     model_provider_name: "openai".to_string(),
                     name: "X-Provider".to_string(),
-                    kind: ExtraHeaderKind::Value("provider".to_string()),
+                    value: "provider".to_string(),
                 },
                 InferenceExtraHeader::Variant {
                     variant_name: "variant1".to_string(),
                     name: "X-V1".to_string(),
-                    kind: ExtraHeaderKind::Value("v1".to_string()),
+                    value: "v1".to_string(),
                 },
                 InferenceExtraHeader::Always {
                     name: "X-All".to_string(),
-                    kind: ExtraHeaderKind::Value("all".to_string()),
+                    value: "all".to_string(),
                 },
                 InferenceExtraHeader::Variant {
                     variant_name: "variant2".to_string(),
                     name: "X-V2".to_string(),
-                    kind: ExtraHeaderKind::Value("v2".to_string()),
+                    value: "v2".to_string(),
                 },
             ],
         };
@@ -288,7 +321,7 @@ mod tests {
     fn test_inference_extra_header_all_roundtrip() {
         let original = InferenceExtraHeader::Always {
             name: "X-Test-Header".to_string(),
-            kind: ExtraHeaderKind::Value("test-value".to_string()),
+            value: "test-value".to_string(),
         };
 
         let json = serde_json::to_string(&original).unwrap();
@@ -305,17 +338,12 @@ mod tests {
                 model_name,
                 provider_name,
                 name,
-                kind,
+                value,
             } => {
                 assert_eq!(model_name, "gpt-4o");
                 assert_eq!(provider_name, Some("openai".to_string()));
                 assert_eq!(name, "X-Custom-Header");
-                match kind {
-                    ExtraHeaderKind::Value(v) => {
-                        assert_eq!(v, "custom-value");
-                    }
-                    ExtraHeaderKind::Delete => panic!("Expected Value kind"),
-                }
+                assert_eq!(value, "custom-value");
             }
             _ => panic!("Expected ModelProvider variant"),
         }
@@ -326,18 +354,17 @@ mod tests {
         let json = r#"{"model_name": "gpt-4o", "provider_name": "openai", "name": "X-Custom-Header", "delete": true}"#;
         let result: InferenceExtraHeader = serde_json::from_str(json).unwrap();
         match result {
-            InferenceExtraHeader::ModelProvider {
+            InferenceExtraHeader::ModelProviderDelete {
                 model_name,
                 provider_name,
                 name,
-                kind,
+                ..
             } => {
                 assert_eq!(model_name, "gpt-4o");
                 assert_eq!(provider_name, Some("openai".to_string()));
                 assert_eq!(name, "X-Custom-Header");
-                assert_eq!(kind, ExtraHeaderKind::Delete);
             }
-            _ => panic!("Expected ModelProvider variant"),
+            _ => panic!("Expected ModelProviderDelete variant"),
         }
     }
 
@@ -347,7 +374,7 @@ mod tests {
             model_name: "gpt-4o".to_string(),
             provider_name: Some("openai".to_string()),
             name: "X-Custom-Header".to_string(),
-            kind: ExtraHeaderKind::Value("value".to_string()),
+            value: "value".to_string(),
         };
 
         // ModelProvider should apply to any variant
@@ -362,18 +389,18 @@ mod tests {
                 InferenceExtraHeader::Variant {
                     variant_name: "variant1".to_string(),
                     name: "X-V1".to_string(),
-                    kind: ExtraHeaderKind::Value("v1".to_string()),
+                    value: "v1".to_string(),
                 },
                 InferenceExtraHeader::ModelProvider {
                     model_name: "gpt-4o".to_string(),
                     provider_name: Some("openai".to_string()),
                     name: "X-MP".to_string(),
-                    kind: ExtraHeaderKind::Value("mp".to_string()),
+                    value: "mp".to_string(),
                 },
                 InferenceExtraHeader::Variant {
                     variant_name: "variant2".to_string(),
                     name: "X-V2".to_string(),
-                    kind: ExtraHeaderKind::Value("v2".to_string()),
+                    value: "v2".to_string(),
                 },
             ],
         };
@@ -394,7 +421,7 @@ mod tests {
             model_name: "gpt-4o".to_string(),
             provider_name: Some("openai".to_string()),
             name: "X-Test-Header".to_string(),
-            kind: ExtraHeaderKind::Value("test-value".to_string()),
+            value: "test-value".to_string(),
         };
 
         let json = serde_json::to_string(&original).unwrap();

@@ -1590,12 +1590,17 @@ async fn validate_inference_filters(
     // Validate extra_body filters
     for filter in extra_body.as_slice() {
         match filter {
-            InferenceExtraBody::Variant { variant_name, .. } => {
+            InferenceExtraBody::Variant { variant_name, .. }
+            | InferenceExtraBody::VariantDelete { variant_name, .. } => {
                 if let Some(func) = function {
                     validate_variant_filter(variant_name, func)?;
                 }
             }
             InferenceExtraBody::Provider {
+                model_provider_name,
+                ..
+            }
+            | InferenceExtraBody::ProviderDelete {
                 model_provider_name,
                 ..
             } => {
@@ -1605,11 +1610,16 @@ async fn validate_inference_filters(
                 model_name,
                 provider_name,
                 ..
+            }
+            | InferenceExtraBody::ModelProviderDelete {
+                model_name,
+                provider_name,
+                ..
             } => {
                 validate_model_provider_filter(model_name, provider_name.as_deref(), models)
                     .await?;
             }
-            InferenceExtraBody::Always { .. } => {
+            InferenceExtraBody::Always { .. } | InferenceExtraBody::AlwaysDelete { .. } => {
                 // Always variant has no filter to validate
             }
         }
@@ -1618,12 +1628,17 @@ async fn validate_inference_filters(
     // Validate extra_headers filters
     for filter in extra_headers.as_slice() {
         match filter {
-            InferenceExtraHeader::Variant { variant_name, .. } => {
+            InferenceExtraHeader::Variant { variant_name, .. }
+            | InferenceExtraHeader::VariantDelete { variant_name, .. } => {
                 if let Some(func) = function {
                     validate_variant_filter(variant_name, func)?;
                 }
             }
             InferenceExtraHeader::Provider {
+                model_provider_name,
+                ..
+            }
+            | InferenceExtraHeader::ProviderDelete {
                 model_provider_name,
                 ..
             } => {
@@ -1633,11 +1648,16 @@ async fn validate_inference_filters(
                 model_name,
                 provider_name,
                 ..
+            }
+            | InferenceExtraHeader::ModelProviderDelete {
+                model_name,
+                provider_name,
+                ..
             } => {
                 validate_model_provider_filter(model_name, provider_name.as_deref(), models)
                     .await?;
             }
-            InferenceExtraHeader::Always { .. } => {
+            InferenceExtraHeader::Always { .. } | InferenceExtraHeader::AlwaysDelete { .. } => {
                 // Always variant has no filter to validate
             }
         }
