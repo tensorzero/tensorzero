@@ -286,7 +286,7 @@ function prepareDisplayText(
 }
 
 // ===== StoredInput =====
-// TODO: These functions should be deprecated as we clean up the types...
+// TODO (#4674 #4675): This will be handled in the gateway.
 
 export async function resolveStoredInput(
   input: StoredInput,
@@ -371,6 +371,8 @@ async function resolveStoredInputMessageContent(
 /**
  * Resolves a StoredInput to an Input with resolved file references.
  * Converts StoredFile (ObjectStoragePointer) to File with file_type: "object_storage".
+ *
+ * TODO (#4674 #4675): This will be handled in the gateway.
  */
 export async function resolveStoredInputToInput(
   storedInput: StoredInput,

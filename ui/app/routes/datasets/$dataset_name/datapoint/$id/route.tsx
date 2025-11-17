@@ -290,14 +290,14 @@ export async function loader({
       status: 404,
     });
   }
-  const t0Datapoint = await getTensorZeroClient().getDatapoint(id);
-  if (!t0Datapoint) {
+  const datapoint = await getTensorZeroClient().getDatapoint(id);
+  if (!datapoint) {
     throw data(`No datapoint found for ID \`${id}\`.`, {
       status: 404,
     });
   }
   // Note (GabrielBianconi): `getDatapoint` no longer depends on the dataset name, but maybe it should?
-  if (t0Datapoint.dataset_name !== dataset_name) {
+  if (datapoint.dataset_name !== dataset_name) {
     throw data(
       `The datapoint \`${id}\` does not belong to dataset \`${dataset_name}\`.`,
       {
@@ -306,27 +306,27 @@ export async function loader({
     );
   }
   // Resolve input for InputElement component
-  const resolvedInput = await resolveStoredInputToInput(t0Datapoint.input);
+  const resolvedInput = await resolveStoredInputToInput(datapoint.input);
 
   return {
-    t0Datapoint,
+    datapoint,
     resolvedInput,
   };
 }
 
 export default function DatapointPage({ loaderData }: Route.ComponentProps) {
-  const { t0Datapoint, resolvedInput } = loaderData;
+  const { datapoint, resolvedInput } = loaderData;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
   const [originalInput, setOriginalInput] = useState(resolvedInput);
   const [input, setInput] = useState<Input>(resolvedInput);
 
-  const [originalOutput, setOriginalOutput] = useState(t0Datapoint.output);
-  const [output, setOutput] = useState(t0Datapoint.output);
+  const [originalOutput, setOriginalOutput] = useState(datapoint.output);
+  const [output, setOutput] = useState(datapoint.output);
 
-  const [originalTags, setOriginalTags] = useState(t0Datapoint.tags || {});
-  const [tags, setTags] = useState(t0Datapoint.tags || {});
+  const [originalTags, setOriginalTags] = useState(datapoint.tags || {});
+  const [tags, setTags] = useState(datapoint.tags || {});
 
   const [isEditing, setIsEditing] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -335,13 +335,13 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     setInput(resolvedInput);
     setOriginalInput(resolvedInput);
-    setOutput(t0Datapoint.output);
-    setOriginalOutput(t0Datapoint.output);
-    setTags(t0Datapoint.tags || {});
-    setOriginalTags(t0Datapoint.tags || {});
+    setOutput(datapoint.output);
+    setOriginalOutput(datapoint.output);
+    setTags(datapoint.tags || {});
+    setOriginalTags(datapoint.tags || {});
     setIsEditing(false);
     setValidationError(null);
-  }, [resolvedInput, t0Datapoint]);
+  }, [resolvedInput, datapoint]);
 
   const canSave = useMemo(() => {
     return (
@@ -369,8 +369,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
   const handleReset = () => {
     setInput(resolvedInput);
-    setOutput(t0Datapoint.output);
-    setTags(t0Datapoint.tags || {});
+    setOutput(datapoint.output);
+    setTags(datapoint.tags || {});
   };
 
   const fetcher = useFetcher();
@@ -380,8 +380,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const handleDelete = () => {
     try {
       const formData = serializeDeleteDatapointToFormData({
-        dataset_name: t0Datapoint.dataset_name,
-        id: t0Datapoint.id,
+        dataset_name: datapoint.dataset_name,
+        id: datapoint.id,
       });
       fetcher.submit(formData, { method: "post", action: "." });
     } catch (error) {
@@ -400,10 +400,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
     try {
       const formData = serializeUpdateDatapointToFormData({
-        dataset_name: t0Datapoint.dataset_name,
-        function_name: t0Datapoint.function_name,
-        id: t0Datapoint.id,
-        episode_id: t0Datapoint.episode_id,
+        dataset_name: datapoint.dataset_name,
+        function_name: datapoint.function_name,
+        id: datapoint.id,
+        episode_id: datapoint.episode_id,
         input,
         output,
         tags,
@@ -415,7 +415,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     }
   };
 
-  const functionConfig = useFunctionConfig(t0Datapoint.function_name);
+  const functionConfig = useFunctionConfig(datapoint.function_name);
   const variants = Object.keys(functionConfig?.variants || {});
 
   const variantInferenceFetcher = useInferenceActionFetcher();
@@ -450,7 +450,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setSelectedVariant(variant);
     setIsModalOpen(true);
     submitVariantInference({
-      resource: t0Datapoint,
+      resource: datapoint,
       source: "t0_datapoint",
       variant,
     });
@@ -472,8 +472,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const handleRenameDatapoint = async (newName: string) => {
     try {
       const formData = serializeRenameDatapointToFormData({
-        dataset_name: t0Datapoint.dataset_name,
-        id: t0Datapoint.id,
+        dataset_name: datapoint.dataset_name,
+        id: datapoint.id,
         name: newName,
       });
       await fetcher.submit(formData, { method: "post", action: "." });
@@ -486,10 +486,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     <PageLayout>
       <PageHeader
         label="Datapoint"
-        name={t0Datapoint.id}
+        name={datapoint.id}
         tag={
           <>
-            {t0Datapoint.is_custom && (
+            {datapoint.is_custom && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge variant="secondary" className="ml-2 cursor-help">
@@ -502,7 +502,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
                 </TooltipContent>
               </Tooltip>
             )}
-            {t0Datapoint.staled_at && (
+            {datapoint.staled_at && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge variant="secondary" className="ml-2 cursor-help">
@@ -528,7 +528,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <DatapointBasicInfo
-            datapoint={t0Datapoint}
+            datapoint={datapoint}
             onRenameDatapoint={handleRenameDatapoint}
           />
         </SectionLayout>
@@ -545,8 +545,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             canSave={canSave}
             onSave={handleUpdate}
             onReset={handleReset}
-            showTryWithButton={t0Datapoint.function_name !== DEFAULT_FUNCTION}
-            isStale={!!t0Datapoint.staled_at}
+            showTryWithButton={datapoint.function_name !== DEFAULT_FUNCTION}
+            isStale={!!datapoint.staled_at}
           />
         </SectionLayout>
 
@@ -589,7 +589,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           variantResponse={variantInferenceFetcher.data?.info ?? null}
           rawResponse={variantInferenceFetcher.data?.raw ?? null}
           onClose={handleModalClose}
-          item={t0Datapoint}
+          item={datapoint}
           selectedVariant={selectedVariant}
           source="datapoint"
           onRefresh={lastRequestArgs ? handleRefresh : null}
