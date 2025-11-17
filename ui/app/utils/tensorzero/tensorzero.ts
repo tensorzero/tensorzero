@@ -518,6 +518,14 @@ export class TensorZeroClient {
     return body;
   }
 
+  /**
+   * Deletes (stales) datapoints from a dataset by marking them with a staled_at timestamp.
+   * This operation is irreversible and the datapoints will no longer appear in queries.
+   * @param datasetName - The name of the dataset containing the datapoints
+   * @param datapointIds - Array of datapoint UUIDs to delete
+   * @returns A promise that resolves with the response containing the number of deleted datapoints
+   * @throws Error if the dataset name is invalid, the IDs array is empty, or the request fails
+   */
   async deleteDatapoints(
     datasetName: string,
     datapointIds: string[],

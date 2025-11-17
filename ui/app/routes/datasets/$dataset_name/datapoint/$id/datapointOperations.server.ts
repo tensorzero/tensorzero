@@ -97,7 +97,6 @@ function transformJsonDatapointForUpdateRequest(
 export async function deleteDatapoint(params: {
   dataset_name: string;
   id: string;
-  functionType: "chat" | "json";
 }): Promise<{ redirectTo: string }> {
   const { dataset_name, id } = params;
 

@@ -137,7 +137,6 @@ export async function action({ request }: ActionFunctionArgs) {
       const { redirectTo } = await deleteDatapoint({
         dataset_name: parsedFormData.dataset_name,
         id: parsedFormData.id,
-        functionType,
       });
       return redirect(redirectTo);
     } else if (action === "save") {

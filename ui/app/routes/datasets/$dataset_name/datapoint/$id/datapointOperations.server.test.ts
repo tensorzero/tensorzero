@@ -68,7 +68,6 @@ describe("datapointOperations", () => {
       const result = await deleteDatapoint({
         dataset_name: datasetName,
         id: datapointId,
-        functionType: "chat",
       });
 
       expect(mockDeleteDatapoints).toHaveBeenCalledWith(datasetName, [
@@ -93,7 +92,6 @@ describe("datapointOperations", () => {
       const result = await deleteDatapoint({
         dataset_name: datasetName,
         id: datapointId,
-        functionType: "json",
       });
 
       expect(mockDeleteDatapoints).toHaveBeenCalledWith(datasetName, [
