@@ -76,7 +76,7 @@ jobs:
       - name: Upload diagnostics bundle
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: ci-failure-diagnostics
           path: |

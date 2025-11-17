@@ -56,7 +56,7 @@ jobs:
           #sccache: "true"
           manylinux: auto
       - name: Upload wheels
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-linux-${{ matrix.platform.target }}
           path: ./clients/python/dist
@@ -106,7 +106,7 @@ jobs:
           #sccache: "true"
           manylinux: musllinux_1_2
       - name: Upload wheels
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-musllinux-${{ matrix.platform.target }}
           path: ./clients/python/dist
@@ -155,7 +155,7 @@ jobs:
           args: --release --out dist -i python3.10
           #sccache: "true"
       - name: Upload wheels
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-windows-${{ matrix.platform.target }}
           path: ./clients/python/dist
@@ -210,7 +210,7 @@ jobs:
           #sccache: "true"
 
       - name: Upload wheels
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-macos-${{ matrix.platform.target }}
           path: ./clients/python/dist
@@ -230,7 +230,7 @@ jobs:
           command: sdist
           args: --out dist
       - name: Upload sdist
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-sdist
           path: ./clients/python/dist
@@ -249,7 +249,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
-      - uses: actions/download-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
       - name: Count wheels
         run: |
           ls -lh ./wheels-*/*

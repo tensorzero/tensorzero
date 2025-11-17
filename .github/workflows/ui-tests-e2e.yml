@@ -39,7 +39,7 @@ jobs:
           node-version: "24.11.0"
 
       - name: Download container images
-        uses: actions/download-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
           pattern: build-*-container
           merge-multiple: true
@@ -111,7 +111,7 @@ jobs:
         run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
 
       - name: Download container images
-        uses: actions/download-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
           pattern: build-*-container
           merge-multiple: true
@@ -177,7 +177,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: playwright-report-e2e-base-path
           path: |
@@ -223,7 +223,7 @@ jobs:
         run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
 
       - name: Download container images
-        uses: actions/download-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
           pattern: build-*-container
           merge-multiple: true
@@ -277,7 +277,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: playwright-report-e2e-base-path
           path: |

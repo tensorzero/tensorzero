@@ -36,7 +36,7 @@ jobs:
     # and publish them to PyPi as a new release, using the `upload-python-client.sh` script.
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - uses: actions/download-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@92c65d2898f1f53cfdc910b962cecff86e7f8fcc
         with:
