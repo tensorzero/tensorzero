@@ -59,8 +59,6 @@ impl ResolvedTomlPathData {
         Ok(self.__tensorzero_remapped_path.as_ref())
     }
 
-    /// Obtains the data that this path contains.
-    /// Since data is now eagerly loaded, this simply returns a reference.
     pub fn data(&self) -> &str {
         &self.__data
     }
