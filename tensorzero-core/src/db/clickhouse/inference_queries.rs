@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use itertools::Itertools;
+use uuid::Uuid;
 
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
 use crate::db::clickhouse::query_builder::{
@@ -10,6 +11,7 @@ use crate::db::inferences::{
     ClickHouseStoredInferenceWithDispreferredOutputs, InferenceOutputSource, InferenceQueries,
     ListInferencesParams,
 };
+use crate::endpoints::stored_inferences::v1::types::GetInferenceBoundsResponse;
 use crate::function::FunctionConfigType;
 use crate::{
     config::Config,
@@ -419,6 +421,169 @@ fn generate_single_table_query_for_type(
     Ok(SingleTableQuery {
         select_from_sql_fragment,
         where_sql_fragment,
+    })
+}
+
+/// Parameters for querying inference bounds
+pub struct GetInferenceBoundsParams {
+    pub function_name: Option<String>,
+    pub variant_name: Option<String>,
+    pub episode_id: Option<Uuid>,
+    pub limit: Option<u32>,
+    pub before: Option<Uuid>,
+    pub after: Option<Uuid>,
+}
+
+/// Queries the inference table bounds (min/max IDs and count).
+/// This is used for pagination UI controls.
+///
+/// Returns a GetInferenceBoundsResponse containing:
+/// - first_id: The most recent inference ID (MAX id_uint) - nullable if no results
+/// - last_id: The oldest inference ID (MIN id_uint) - nullable if no results
+/// - count: The total number of inferences matching the filter
+///
+/// Note: The naming is counterintuitive (first_id = MAX, last_id = MIN) for backward
+/// compatibility with the TypeScript implementation.
+pub async fn get_inference_bounds(
+    clickhouse: &ClickHouseConnectionInfo,
+    params: GetInferenceBoundsParams,
+) -> Result<GetInferenceBoundsResponse, Error> {
+    let mut query_params: Vec<QueryParameter> = Vec::new();
+    let mut param_idx_counter = 0;
+    let mut where_clauses: Vec<String> = Vec::new();
+
+    // Add function_name filter
+    if let Some(function_name) = params.function_name {
+        let placeholder = add_parameter(
+            function_name,
+            ClickhouseType::String,
+            &mut query_params,
+            &mut param_idx_counter,
+        );
+        where_clauses.push(format!("function_name = {placeholder}"));
+    }
+
+    // Add variant_name filter
+    if let Some(variant_name) = params.variant_name {
+        let placeholder = add_parameter(
+            variant_name,
+            ClickhouseType::String,
+            &mut query_params,
+            &mut param_idx_counter,
+        );
+        where_clauses.push(format!("variant_name = {placeholder}"));
+    }
+
+    // Add episode_id filter
+    if let Some(episode_id) = params.episode_id {
+        let placeholder = add_parameter(
+            episode_id.to_string(),
+            ClickhouseType::String,
+            &mut query_params,
+            &mut param_idx_counter,
+        );
+        where_clauses.push(format!("episode_id = {placeholder}"));
+    }
+
+    // Add before filter (pagination: IDs less than the given ID)
+    if let Some(before) = params.before {
+        let placeholder = add_parameter(
+            before.to_string(),
+            ClickhouseType::String,
+            &mut query_params,
+            &mut param_idx_counter,
+        );
+        where_clauses.push(format!("id_uint < uuid_to_uint({placeholder})"));
+    }
+
+    // Add after filter (pagination: IDs greater than the given ID)
+    if let Some(after) = params.after {
+        let placeholder = add_parameter(
+            after.to_string(),
+            ClickhouseType::String,
+            &mut query_params,
+            &mut param_idx_counter,
+        );
+        where_clauses.push(format!("id_uint > uuid_to_uint({placeholder})"));
+    }
+
+    // Build WHERE clause
+    let where_clause = if where_clauses.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", where_clauses.join(" AND "))
+    };
+
+    // Build the query
+    // Note: We use uint_to_uuid() to convert UInt128 back to UUID format
+    // MIN(id_uint) = oldest (last_id), MAX(id_uint) = most recent (first_id)
+    let mut query = format!(
+        r"SELECT
+    uint_to_uuid(MAX(id_uint)) AS first_id,
+    uint_to_uuid(MIN(id_uint)) AS last_id,
+    toUInt64(COUNT()) AS count
+FROM InferenceById FINAL
+{where_clause}"
+    );
+
+    // Add LIMIT if specified
+    if let Some(limit) = params.limit {
+        let limit_placeholder = add_parameter(
+            limit,
+            ClickhouseType::UInt64,
+            &mut query_params,
+            &mut param_idx_counter,
+        );
+        query.push_str(&format!("\nLIMIT {limit_placeholder}"));
+    }
+
+    query.push_str("\nFORMAT JSONEachRow");
+
+    // Execute the query
+    let query_params_map: std::collections::HashMap<&str, &str> = query_params
+        .iter()
+        .map(|p| (p.name.as_str(), p.value.as_str()))
+        .collect();
+
+    let response = clickhouse
+        .inner
+        .run_query_synchronous(query, &query_params_map)
+        .await?;
+
+    // Parse the response
+    #[derive(serde::Deserialize)]
+    struct BoundsRow {
+        first_id: Option<Uuid>,
+        last_id: Option<Uuid>,
+        count: u64,
+    }
+
+    let rows: Vec<BoundsRow> = response
+        .response
+        .trim()
+        .lines()
+        .map(|line| {
+            serde_json::from_str(line).map_err(|e| {
+                Error::new(ErrorDetails::ClickHouseQuery {
+                    message: format!("Failed to deserialize bounds response: {e:?}"),
+                })
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // Handle empty results
+    if rows.is_empty() || rows[0].count == 0 {
+        return Ok(GetInferenceBoundsResponse {
+            first_id: None,
+            last_id: None,
+            count: 0,
+        });
+    }
+
+    Ok(GetInferenceBoundsResponse {
+        first_id: rows[0].first_id,
+        last_id: rows[0].last_id,
+        count: rows[0].count,
     })
 }
 
