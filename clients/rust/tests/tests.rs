@@ -10,7 +10,6 @@ use tensorzero::{
 use tensorzero_core::inference::types::{Arguments, StoredInput};
 
 mod test_datasets;
-mod test_stored_inferences;
 
 lazy_static::lazy_static! {
     static ref GATEWAY_URL: String = std::env::var("TENSORZERO_GATEWAY_URL").unwrap_or_else(|_|"http://localhost:3000".to_string());

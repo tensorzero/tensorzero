@@ -52,10 +52,8 @@ from .generated_types import (
     Datapoint,
     DeleteDatapointsResponse,
     GetDatapointsResponse,
-    GetInferencesResponse,
     InferenceFilter,
     ListDatapointsRequest,
-    ListInferencesRequest,
     UpdateDatapointMetadataRequest,
     UpdateDatapointRequest,
     UpdateDatapointsResponse,
@@ -913,34 +911,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `CreateDatapointsResponse` object.
         """
 
-    def get_inferences(
-        self,
-        *,
-        ids: Sequence[str],
-        function_name: Optional[str] = None,
-        output_source: str = "inference",
-    ) -> GetInferencesResponse:
-        """
-        Get specific inferences by their IDs.
-
-        :param ids: A sequence of inference IDs to retrieve. They should be in UUID format.
-        :param function_name: Optional function name to filter by (improves query performance).
-        :param output_source: The source of the output ("inference" or "demonstration"). Default: "inference".
-        :return: A `GetInferencesResponse` object.
-        """
-
-    def list_inferences(
-        self,
-        *,
-        request: ListInferencesRequest,
-    ) -> GetInferencesResponse:
-        """
-        List inferences with optional filtering, pagination, and sorting.
-
-        :param request: A `ListInferencesRequest` object with filter parameters.
-        :return: A `GetInferencesResponse` object.
-        """
-
     def experimental_list_inferences(
         self,
         *,
@@ -963,6 +933,30 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param limit: The maximum number of inferences to return. Optional
         :param offset: The offset to start from. Optional
         :return: A list of `StoredInference` instances.
+        """
+
+    def experimental_render_inferences(
+        self,
+        *,
+        stored_inferences: List[StoredInference],
+        variants: Dict[str, str],
+    ) -> List[RenderedSample]:
+        """
+        DEPRECATED: use `experimental_render_samples` instead.
+        Render a list of stored samples into a list of rendered stored samples.
+
+        This function performs two main tasks:
+        1. Resolves all network resources (e.g., images) in the stored samples.
+        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
+           To do this, the function needs to know which variant to use for each function that might appear in the data.
+
+        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
+        the function has no variant specified, or the process of downloading resources fails.
+        In the future, this behavior may be made configurable by the caller.
+
+        :param stored_inferences: A list of stored samples to render.
+        :param variants: A mapping from function name to variant name.
+        :return: A list of rendered samples.
         """
 
     def experimental_render_samples(
@@ -1451,34 +1445,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `CreateDatapointsResponse` object.
         """
 
-    async def get_inferences(
-        self,
-        *,
-        ids: Sequence[str | UUID | uuid_utils.UUID],
-        function_name: Optional[str] = None,
-        output_source: str = "inference",
-    ) -> GetInferencesResponse:
-        """
-        Get specific inferences by their IDs.
-
-        :param ids: A sequence of inference IDs to retrieve. They should be in UUID format.
-        :param function_name: Optional function name to filter by (improves query performance).
-        :param output_source: The source of the output ("inference" or "demonstration"). Default: "inference".
-        :return: A `GetInferencesResponse` object.
-        """
-
-    async def list_inferences(
-        self,
-        *,
-        request: ListInferencesRequest,
-    ) -> GetInferencesResponse:
-        """
-        List inferences with optional filtering, pagination, and sorting.
-
-        :param request: A `ListInferencesRequest` object with filter parameters.
-        :return: A `GetInferencesResponse` object.
-        """
-
     async def experimental_list_inferences(
         self,
         *,
@@ -1501,6 +1467,31 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param limit: The maximum number of inferences to return. Optional
         :param offset: The offset to start from. Optional
         :return: A list of `StoredInference` instances.
+        """
+
+    async def experimental_render_inferences(
+        self,
+        *,
+        stored_inferences: List[StoredInference],
+        variants: Dict[str, str],
+    ) -> List[RenderedSample]:
+        """
+        DEPRECATED: use `experimental_render_samples` instead.
+
+        Render a list of stored samples into a list of rendered stored samples.
+
+        This function performs two main tasks:
+        1. Resolves all network resources (e.g., images) in the stored samples.
+        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
+           To do this, the function needs to know which variant to use for each function that might appear in the data.
+
+        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
+        the function has no variant specified, or the process of downloading resources fails.
+        In the future, this behavior may be made configurable by the caller.
+
+        :param stored_inferences: A list of stored samples to render.
+        :param variants: A mapping from function name to variant name.
+        :return: A list of rendered samples.
         """
 
     async def experimental_render_samples(

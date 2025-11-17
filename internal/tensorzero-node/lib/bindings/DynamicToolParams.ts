@@ -41,12 +41,12 @@ import type { ToolChoice } from "./ToolChoice";
  * Use `FunctionConfig::dynamic_tool_params_to_database_insert()` for this conversion.
  *
  * # Conversion from Storage Format
- * Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` reconstructs the original:
- * 1. `dynamic_tools` → `additional_tools`
- * 2. `allowed_tools` → `allowed_tools` (based on choice enum)
- * 3. Other fields copied directly
+ * Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` attempts to reconstruct the original:
+ * 1. Tools that match function config tool names → `allowed_tools`
+ * 2. Tools that don't match function config → `additional_tools`
+ * 3. `provider_tools` is set to `None` (cannot be recovered)
  *
- * Use `From<ToolCallConfigDatabaseInsert> for DynamicToolParams` for this conversion.
+ * Use `FunctionConfig::database_insert_to_dynamic_tool_params()` for this conversion.
  *
  * # Example
  * ```rust,ignore
@@ -56,10 +56,10 @@ import type { ToolChoice } from "./ToolChoice";
  *     additional_tools: Some(vec![Tool {  runtime tool  }]),  // Add a new tool
  *     tool_choice: Some(ToolChoice::Required),
  *     parallel_tool_calls: Some(true),
- *     provider_tools: vec![],
+ *     provider_tools: None,
  * };
  *
- * // Convert to storage format
+ * // Convert to storage format (merge tools, lose distinction)
  * let db_insert = function_config
  *     .dynamic_tool_params_to_database_insert(params, &static_tools)?
  *     .unwrap_or_default();
