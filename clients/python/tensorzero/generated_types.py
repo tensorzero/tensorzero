@@ -418,6 +418,26 @@ class GetDatapointsRequest:
 
 
 @dataclass(kw_only=True)
+class GetInferenceBoundsResponse:
+    count: int
+    """
+    The total number of inferences matching the filter criteria.
+    """
+    first_id: str | None = None
+    """
+    The most recent inference ID (MAX id_uint).
+    NOTE: Despite the name "first_id", this is actually the MAX/most recent ID
+    for backward compatibility with the TypeScript implementation.
+    """
+    last_id: str | None = None
+    """
+    The oldest inference ID (MIN id_uint).
+    NOTE: Despite the name "last_id", this is actually the MIN/oldest ID
+    for backward compatibility with the TypeScript implementation.
+    """
+
+
+@dataclass(kw_only=True)
 class GetInferencesRequest:
     ids: list[str]
     """
