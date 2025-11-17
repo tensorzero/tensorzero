@@ -1,3 +1,54 @@
+//! Static analysis utilities for MiniJinja templates.
+//!
+//! This crate analyzes MiniJinja templates to extract all template dependencies
+//! (includes, imports, extends) by parsing the template syntax and walking the AST.
+//!
+//! ## Core Concept
+//!
+//! The analyzer distinguishes between **static** and **dynamic** template loading:
+//!
+//! - **Static loads**: Template names are string literals that can be determined at parse time
+//!   - `{% include 'header.html' %}` ✓
+//!   - `{% extends 'base.html' %}` ✓
+//!   - `{% include ['a.html', 'b.html'] %}` ✓
+//!   - `{% include 'optional.html' if condition else 'default.html' %}` ✓
+//!
+//! - **Dynamic loads**: Template names depend on runtime values and cannot be statically determined
+//!   - `{% include template_var %}` ✗ (variable)
+//!   - `{% include 'optional.html' if condition %}` ✗ (conditional without else)
+//!   - `{% include get_template() %}` ✗ (function call)
+//!
+//! ## Main Function
+//!
+//! [`collect_all_template_paths()`] recursively analyzes templates starting from a root template
+//! and returns all discovered template paths. It returns an error if any dynamic loads are found.
+//!
+//! ## Example
+//!
+//! ```rust
+//! use minijinja::Environment;
+//! use minijinja_utils::collect_all_template_paths;
+//!
+//! let mut env = Environment::new();
+//! env.add_template("main.html", "{% include 'header.html' %}Content").unwrap();
+//! env.add_template("header.html", "Header").unwrap();
+//!
+//! // Collect all template dependencies
+//! let paths = collect_all_template_paths(&env, "main.html").unwrap();
+//! assert_eq!(paths.len(), 2); // main.html and header.html
+//! ```
+//!
+//! ## Error Handling
+//!
+//! When dynamic loads are detected, [`AnalysisError::DynamicLoadsFound`] provides detailed
+//! location information including line numbers, column positions, and source quotes to help
+//! identify the problematic template expressions.
+//!
+//! ## Implementation Note
+//!
+//! This crate uses MiniJinja's `unstable_machinery` feature to access the AST. This API
+//! may change between MiniJinja versions.
+
 mod error;
 mod loading;
 
@@ -8,55 +59,18 @@ pub use loading::collect_all_template_paths;
 mod tests {
     use super::*;
     use minijinja::Environment;
-    use std::fs;
     use std::path::PathBuf;
-    use std::process;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    struct TestDir {
-        path: PathBuf,
-    }
-
-    impl TestDir {
-        fn new() -> Self {
-            let mut path = std::env::temp_dir();
-            let unique = format!(
-                "minijinja-test-{}-{}",
-                process::id(),
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
-            );
-            path.push(unique);
-            fs::create_dir_all(&path).unwrap();
-            TestDir { path }
-        }
-
-        fn path(&self) -> &std::path::Path {
-            &self.path
-        }
-    }
-
-    impl Drop for TestDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.path);
-        }
-    }
 
     #[test]
     fn test_simple_static_includes() {
-        let temp_dir = TestDir::new();
-        fs::write(
-            temp_dir.path().join("main.html"),
+        let mut env = Environment::new();
+        env.add_template(
+            "main.html",
             "{% include 'header.html' %}Content{% include 'footer.html' %}",
         )
         .unwrap();
-        fs::write(temp_dir.path().join("header.html"), "Header").unwrap();
-        fs::write(temp_dir.path().join("footer.html"), "Footer").unwrap();
-
-        let mut env = Environment::new();
-        env.set_loader(minijinja::path_loader(temp_dir.path()));
+        env.add_template("header.html", "Header").unwrap();
+        env.add_template("footer.html", "Footer").unwrap();
 
         let paths = collect_all_template_paths(&env, "main.html").unwrap();
 
@@ -68,21 +82,12 @@ mod tests {
 
     #[test]
     fn test_nested_includes() {
-        let temp_dir = TestDir::new();
-        fs::write(
-            temp_dir.path().join("main.html"),
-            "{% include 'partial.html' %}",
-        )
-        .unwrap();
-        fs::write(
-            temp_dir.path().join("partial.html"),
-            "{% include 'nested.html' %}",
-        )
-        .unwrap();
-        fs::write(temp_dir.path().join("nested.html"), "Nested content").unwrap();
-
         let mut env = Environment::new();
-        env.set_loader(minijinja::path_loader(temp_dir.path()));
+        env.add_template("main.html", "{% include 'partial.html' %}")
+            .unwrap();
+        env.add_template("partial.html", "{% include 'nested.html' %}")
+            .unwrap();
+        env.add_template("nested.html", "Nested content").unwrap();
 
         let paths = collect_all_template_paths(&env, "main.html").unwrap();
 
@@ -94,20 +99,14 @@ mod tests {
 
     #[test]
     fn test_extends_and_blocks() {
-        let temp_dir = TestDir::new();
-        fs::write(
-            temp_dir.path().join("base.html"),
-            "{% block content %}{% endblock %}",
-        )
-        .unwrap();
-        fs::write(
-            temp_dir.path().join("child.html"),
+        let mut env = Environment::new();
+        env.add_template("base.html", "{% block content %}{% endblock %}")
+            .unwrap();
+        env.add_template(
+            "child.html",
             "{% extends 'base.html' %}{% block content %}Child content{% endblock %}",
         )
         .unwrap();
-
-        let mut env = Environment::new();
-        env.set_loader(minijinja::path_loader(temp_dir.path()));
 
         let paths = collect_all_template_paths(&env, "child.html").unwrap();
 
@@ -118,20 +117,11 @@ mod tests {
 
     #[test]
     fn test_import_statements() {
-        let temp_dir = TestDir::new();
-        fs::write(
-            temp_dir.path().join("macros.html"),
-            "{% macro test() %}Macro{% endmacro %}",
-        )
-        .unwrap();
-        fs::write(
-            temp_dir.path().join("main.html"),
-            "{% import 'macros.html' as m %}{{ m.test() }}",
-        )
-        .unwrap();
-
         let mut env = Environment::new();
-        env.set_loader(minijinja::path_loader(temp_dir.path()));
+        env.add_template("macros.html", "{% macro test() %}Macro{% endmacro %}")
+            .unwrap();
+        env.add_template("main.html", "{% import 'macros.html' as m %}{{ m.test() }}")
+            .unwrap();
 
         let paths = collect_all_template_paths(&env, "main.html").unwrap();
 
@@ -142,15 +132,9 @@ mod tests {
 
     #[test]
     fn test_dynamic_include_error() {
-        let temp_dir = TestDir::new();
-        fs::write(
-            temp_dir.path().join("main.html"),
-            "{% include template_name %}",
-        )
-        .unwrap();
-
         let mut env = Environment::new();
-        env.set_loader(minijinja::path_loader(temp_dir.path()));
+        env.add_template("main.html", "{% include template_name %}")
+            .unwrap();
 
         let result = collect_all_template_paths(&env, "main.html");
 
@@ -169,16 +153,10 @@ mod tests {
 
     #[test]
     fn test_conditional_without_else_error() {
-        let temp_dir = TestDir::new();
-        fs::write(
-            temp_dir.path().join("main.html"),
-            "{% include 'static.html' if condition %}",
-        )
-        .unwrap();
-        fs::write(temp_dir.path().join("static.html"), "Static content").unwrap();
-
         let mut env = Environment::new();
-        env.set_loader(minijinja::path_loader(temp_dir.path()));
+        env.add_template("main.html", "{% include 'static.html' if condition %}")
+            .unwrap();
+        env.add_template("static.html", "Static content").unwrap();
 
         let result = collect_all_template_paths(&env, "main.html");
 
@@ -195,17 +173,11 @@ mod tests {
 
     #[test]
     fn test_static_list_includes() {
-        let temp_dir = TestDir::new();
-        fs::write(
-            temp_dir.path().join("main.html"),
-            "{% include ['first.html', 'second.html'] %}",
-        )
-        .unwrap();
-        fs::write(temp_dir.path().join("first.html"), "First").unwrap();
-        fs::write(temp_dir.path().join("second.html"), "Second").unwrap();
-
         let mut env = Environment::new();
-        env.set_loader(minijinja::path_loader(temp_dir.path()));
+        env.add_template("main.html", "{% include ['first.html', 'second.html'] %}")
+            .unwrap();
+        env.add_template("first.html", "First").unwrap();
+        env.add_template("second.html", "Second").unwrap();
 
         let paths = collect_all_template_paths(&env, "main.html").unwrap();
 
@@ -217,16 +189,10 @@ mod tests {
 
     #[test]
     fn test_mixed_list_with_dynamic_error() {
-        let temp_dir = TestDir::new();
-        fs::write(
-            temp_dir.path().join("main.html"),
-            "{% include ['static.html', dynamic_var] %}",
-        )
-        .unwrap();
-        fs::write(temp_dir.path().join("static.html"), "Static content").unwrap();
-
         let mut env = Environment::new();
-        env.set_loader(minijinja::path_loader(temp_dir.path()));
+        env.add_template("main.html", "{% include ['static.html', dynamic_var] %}")
+            .unwrap();
+        env.add_template("static.html", "Static content").unwrap();
 
         let result = collect_all_template_paths(&env, "main.html");
 
@@ -243,15 +209,9 @@ mod tests {
 
     #[test]
     fn test_error_contains_line_and_column() {
-        let temp_dir = TestDir::new();
-        fs::write(
-            temp_dir.path().join("main.html"),
-            "Line 1\nLine 2\n{% include variable %}",
-        )
-        .unwrap();
-
         let mut env = Environment::new();
-        env.set_loader(minijinja::path_loader(temp_dir.path()));
+        env.add_template("main.html", "Line 1\nLine 2\n{% include variable %}")
+            .unwrap();
 
         let result = collect_all_template_paths(&env, "main.html");
 
@@ -268,12 +228,11 @@ mod tests {
 
     #[test]
     fn test_circular_dependency_handled() {
-        let temp_dir = TestDir::new();
-        fs::write(temp_dir.path().join("a.html"), "{% include 'b.html' %}").unwrap();
-        fs::write(temp_dir.path().join("b.html"), "{% include 'a.html' %}").unwrap();
-
         let mut env = Environment::new();
-        env.set_loader(minijinja::path_loader(temp_dir.path()));
+        env.add_template("a.html", "{% include 'b.html' %}")
+            .unwrap();
+        env.add_template("b.html", "{% include 'a.html' %}")
+            .unwrap();
 
         let paths = collect_all_template_paths(&env, "a.html").unwrap();
 

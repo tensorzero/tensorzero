@@ -1,11 +1,32 @@
 use std::fmt;
 
-/// Describes the template loading statement that triggered analysis.
+/// Describes the type of template loading statement found during analysis.
+///
+/// MiniJinja supports four different ways to load or reference other templates.
+/// This enum identifies which type of statement was encountered.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LoadKind {
+    /// An `{% include %}` statement that embeds another template's content.
+    ///
+    /// The `ignore_missing` flag is `true` when using `{% include ... ignore missing %}`,
+    /// which suppresses errors if the template doesn't exist.
+    ///
+    /// Example: `{% include 'header.html' %}`
     Include { ignore_missing: bool },
+
+    /// An `{% import %}` statement that loads macros from another template.
+    ///
+    /// Example: `{% import 'macros.html' as m %}`
     Import,
+
+    /// A `{% from ... import ... %}` statement that imports specific names from another template.
+    ///
+    /// Example: `{% from 'macros.html' import button, card %}`
     FromImport,
+
+    /// An `{% extends %}` statement that specifies template inheritance.
+    ///
+    /// Example: `{% extends 'base.html' %}`
     Extends,
 }
 
@@ -26,22 +47,52 @@ impl fmt::Display for LoadKind {
     }
 }
 
-/// Information about a dynamic template load that prevents complete static analysis.
+/// Detailed location information for a dynamic template load.
+///
+/// This struct provides comprehensive debugging information when a template contains
+/// a template loading expression that cannot be statically analyzed. It includes
+/// the location, the problematic source code, and an explanation of why it's dynamic.
+///
+/// # Example Error Output
+///
+/// When formatted for display, a `DynamicLoadLocation` produces output like:
+///
+/// ```text
+/// template.html:5:12: dynamic include - variable:
+///   {% include template_name %}
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DynamicLoadLocation {
     /// The name of the template containing the dynamic load.
     pub template_name: String,
-    /// Line number (1-indexed) where the dynamic load occurs.
+
+    /// Line number (1-indexed) where the dynamic load statement begins.
     pub line: usize,
-    /// Column number (1-indexed) where the dynamic load occurs.
+
+    /// Column number (1-indexed) where the dynamic expression starts.
     pub column: usize,
-    /// Byte offsets (start, end) of the expression in the template source.
+
+    /// Byte offsets (start, end) of the dynamic expression in the template source.
+    ///
+    /// These offsets can be used to extract or highlight the exact problematic code.
     pub span: (usize, usize),
-    /// Extracted source text showing the dynamic expression.
+
+    /// The extracted source text containing the dynamic expression.
+    ///
+    /// This typically shows the full template statement for context.
     pub source_quote: String,
-    /// Explanation of why the load is dynamic (e.g., "variable", "conditional without else").
+
+    /// Human-readable explanation of why the load is considered dynamic.
+    ///
+    /// Common reasons include:
+    /// - `"variable"`: Template name is a variable reference
+    /// - `"conditional without else"`: Using `if` without a corresponding `else`
+    /// - `"function call"`: Template name comes from a function
+    /// - `"filter"`: Template name uses a filter expression
+    /// - `"non-string constant"`: Template name is not a string literal
     pub reason: String,
-    /// The type of template loading statement (include, import, etc.).
+
+    /// The type of template loading statement that triggered the error.
     pub load_kind: LoadKind,
 }
 
@@ -63,9 +114,34 @@ impl fmt::Display for DynamicLoadLocation {
 /// Errors that can occur during template analysis.
 #[derive(Debug)]
 pub enum AnalysisError {
-    /// Failed to parse a template.
+    /// A template could not be parsed due to syntax errors.
+    ///
+    /// This wraps a MiniJinja parsing error. It occurs when a template has invalid
+    /// MiniJinja syntax that prevents the parser from building an AST.
+    ///
+    /// # Example
+    ///
+    /// ```text
+    /// Failed to parse template: unexpected end of template, expected end of block
+    /// ```
     ParseError(minijinja::Error),
-    /// Found one or more dynamic template loads that cannot be statically analyzed.
+
+    /// One or more templates contain dynamic loads that cannot be statically resolved.
+    ///
+    /// This error indicates that static analysis is incomplete because some template
+    /// loading expressions depend on runtime values. The vector contains detailed
+    /// location information for each dynamic load found.
+    ///
+    /// # Example
+    ///
+    /// ```text
+    /// Cannot statically analyze all template dependencies. Found 2 dynamic load(s):
+    /// template.html:5:12: dynamic include - variable:
+    ///   {% include template_name %}
+    ///
+    /// template.html:8:3: dynamic include - conditional without else:
+    ///   {% include 'optional.html' if show_header %}
+    /// ```
     DynamicLoadsFound(Vec<DynamicLoadLocation>),
 }
 

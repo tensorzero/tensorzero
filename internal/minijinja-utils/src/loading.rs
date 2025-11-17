@@ -269,8 +269,72 @@ fn strings_from_value(value: &Value) -> Option<Vec<String>> {
     Some(values)
 }
 
-/// Recursively collect all template paths from an environment starting from a root template.
-/// Returns an error if any dynamic loads are found or if parsing fails.
+/// Recursively collects all template paths referenced by a root template.
+///
+/// This function performs a breadth-first traversal of the template dependency graph,
+/// starting from the specified root template. It analyzes each template's AST to identify
+/// all `include`, `import`, `from`, and `extends` statements, extracting the referenced
+/// template names.
+///
+/// # Parameters
+///
+/// - `env`: A MiniJinja [`Environment`] containing the templates to analyze. Templates must
+///   be accessible via the environment's loader or previously added with `add_template()`.
+/// - `template_name`: The name of the root template to start analysis from.
+///
+/// # Returns
+///
+/// - `Ok(HashSet<PathBuf>)`: A set of all discovered template paths, including the root template.
+///   Each path corresponds to a template name as a [`PathBuf`].
+/// - `Err(AnalysisError)`: An error if parsing fails or if any dynamic template loads are detected.
+///
+/// # Errors
+///
+/// Returns [`AnalysisError::ParseError`] if any template cannot be parsed by MiniJinja.
+///
+/// Returns [`AnalysisError::DynamicLoadsFound`] if any template contains template loads that
+/// cannot be statically resolved, such as:
+/// - Variable references: `{% include template_var %}`
+/// - Conditionals without else: `{% include 'file.html' if condition %}`
+/// - Function calls or complex expressions: `{% include get_template() %}`
+///
+/// # Circular Dependencies
+///
+/// The function handles circular dependencies correctly by tracking visited templates.
+/// If template A includes B and B includes A, both will be included in the result set
+/// without causing infinite recursion.
+///
+/// # Example
+///
+/// ```rust
+/// use minijinja::Environment;
+/// use minijinja_utils::collect_all_template_paths;
+///
+/// let mut env = Environment::new();
+/// env.add_template("base.html", "{% block content %}{% endblock %}").unwrap();
+/// env.add_template("page.html", "{% extends 'base.html' %}{% block content %}Hello{% endblock %}").unwrap();
+///
+/// let paths = collect_all_template_paths(&env, "page.html").unwrap();
+/// assert_eq!(paths.len(), 2); // page.html and base.html
+/// ```
+///
+/// # Example with Dynamic Load Error
+///
+/// ```rust
+/// use minijinja::Environment;
+/// use minijinja_utils::{collect_all_template_paths, AnalysisError};
+///
+/// let mut env = Environment::new();
+/// env.add_template("dynamic.html", "{% include template_var %}").unwrap();
+///
+/// match collect_all_template_paths(&env, "dynamic.html") {
+///     Err(AnalysisError::DynamicLoadsFound(locations)) => {
+///         assert_eq!(locations[0].reason, "variable");
+///         println!("Dynamic load at {}:{}", locations[0].line, locations[0].column);
+///     }
+///     _ => panic!("Expected dynamic load error"),
+/// }
+/// ```
 pub fn collect_all_template_paths(
     env: &Environment<'_>,
     template_name: &str,
