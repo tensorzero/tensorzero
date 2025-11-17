@@ -2,10 +2,10 @@ import { describe, expect, test, beforeEach, vi } from "vitest";
 import { v7 as uuid } from "uuid";
 import {
   deleteDatapoint,
-  saveDatapoint,
+  updateDatapoint,
   renameDatapoint,
 } from "./datapointOperations.server";
-import type { DatapointFormData } from "./formDataUtils";
+import type { UpdateDatapointFormData } from "./formDataUtils";
 import type {
   GetDatasetMetadataParams,
   DatasetMetadata,
@@ -98,9 +98,9 @@ describe("datapointOperations", () => {
     });
   });
 
-  describe("saveDatapoint - json", () => {
+  describe("updateDatapoint - json", () => {
     test("should handle json datapoint with null output", async () => {
-      const parsedFormData: DatapointFormData = {
+      const parsedFormData: Omit<UpdateDatapointFormData, "action"> = {
         dataset_name: "test_dataset",
         function_name: "extract_entities",
         id: uuid(),
@@ -116,7 +116,7 @@ describe("datapointOperations", () => {
         tags: {},
       };
 
-      await saveDatapoint({
+      await updateDatapoint({
         parsedFormData,
         functionType: "json",
       });
@@ -131,7 +131,7 @@ describe("datapointOperations", () => {
     });
 
     test("should handle mismatched function type by treating as chat datapoint", async () => {
-      const parsedFormData: DatapointFormData = {
+      const parsedFormData: Omit<UpdateDatapointFormData, "action"> = {
         dataset_name: "test_dataset",
         function_name: "extract_entities",
         id: uuid(),
@@ -149,7 +149,7 @@ describe("datapointOperations", () => {
 
       // When passing functionType="chat" with a JSON datapoint (which has output_schema),
       // the code treats it as a chat datapoint and loses the output_schema field
-      const result = await saveDatapoint({
+      const result = await updateDatapoint({
         parsedFormData,
         functionType: "chat",
       });

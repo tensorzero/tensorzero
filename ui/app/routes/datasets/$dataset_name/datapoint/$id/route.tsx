@@ -48,12 +48,19 @@ import type {
 import {
   deleteDatapoint,
   renameDatapoint,
-  saveDatapoint,
+  updateDatapoint,
 } from "./datapointOperations.server";
 import {
-  parseDatapointFormData,
-  serializeDatapointToFormData,
+  parseDatapointAction,
+  serializeDeleteDatapointToFormData,
+  serializeUpdateDatapointToFormData,
+  serializeRenameDatapointToFormData,
+  type DeleteDatapointFormData,
+  type UpdateDatapointFormData,
+  type RenameDatapointFormData,
+  type DatapointAction,
 } from "./formDataUtils";
+import { z } from "zod";
 
 export function validateJsonOutput(
   output?: ContentBlockChatOutput[] | JsonInferenceOutput,
@@ -111,85 +118,157 @@ export function hasDatapointChanged(params: {
   return hasInputChanged || hasOutputChanged || hasTagsChanged;
 }
 
-export async function action({ request }: ActionFunctionArgs) {
-  const formData = await request.formData();
-
-  // TODO(shuyangli): Limit the try-catch to a smaller scope so it's clear what we're catching.
+async function handleDeleteAction(
+  actionData: DeleteDatapointFormData,
+): Promise<
+  Response | ReturnType<typeof data<{ success: boolean; error: string }>>
+> {
   try {
-    const parsedFormData = parseDatapointFormData(formData);
-    const config = await getConfig();
-    const functionConfig = await getFunctionConfig(
-      parsedFormData.function_name,
-      config,
-    );
-    if (!functionConfig) {
-      return new Response(
-        `Failed to find function config for function ${parsedFormData.function_name}`,
-        { status: 400 },
-      );
-    }
-    const functionType = functionConfig.type;
-
-    const action = formData.get("action");
-    if (action === "delete") {
-      const { redirectTo } = await deleteDatapoint({
-        dataset_name: parsedFormData.dataset_name,
-        id: parsedFormData.id,
-      });
-      return redirect(redirectTo);
-    } else if (action === "save") {
-      try {
-        const { newId } = await saveDatapoint({
-          parsedFormData,
-          functionType,
-        });
-        return redirect(toDatapointUrl(parsedFormData.dataset_name, newId));
-      } catch (error) {
-        logger.error("Error updating datapoint:", error);
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
-      }
-    } else if (action === "rename") {
-      const name = formData.get("name") as string | null;
-      await renameDatapoint({
-        datasetName: parsedFormData.dataset_name,
-        datapointId: parsedFormData.id,
-        name, // set to null to unset the name
-      });
-      return data({ success: true });
-    }
-
+    const { redirectTo } = await deleteDatapoint({
+      dataset_name: actionData.dataset_name,
+      id: actionData.id,
+    });
+    return redirect(redirectTo);
+  } catch (error) {
+    logger.error("Error deleting datapoint:", error);
     return data(
       {
         success: false,
-        error: "Invalid action specified",
+        error: error instanceof Error ? error.message : String(error),
       },
-      { status: 400 },
+      { status: 500 },
     );
-  } catch (error) {
-    logger.error("Error processing datapoint action:", error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
+  }
+}
 
-    // Check if it's a JSON parsing error
-    if (errorMessage.includes("JSON")) {
+async function handleUpdateAction(
+  actionData: UpdateDatapointFormData,
+): Promise<
+  Response | ReturnType<typeof data<{ success: boolean; error: string }>>
+> {
+  let functionConfig;
+  try {
+    const config = await getConfig();
+    functionConfig = await getFunctionConfig(actionData.function_name, config);
+
+    if (!functionConfig) {
       return data(
         {
           success: false,
-          error: `Invalid JSON format: ${errorMessage}. Please ensure all JSON fields contain valid JSON.`,
+          error: `Failed to find function config for function ${actionData.function_name}`,
         },
         { status: 400 },
       );
     }
-
+  } catch (error) {
+    logger.error("Error fetching function config:", error);
     return data(
       {
         success: false,
-        error: errorMessage,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
+  }
+
+  const functionType = functionConfig.type;
+
+  if (actionData.output) {
+    const validation = validateJsonOutput(actionData.output);
+    if (!validation.valid) {
+      return data(
+        {
+          success: false,
+          error: validation.error,
+        },
+        { status: 400 },
+      );
+    }
+  }
+
+  try {
+    const { newId } = await updateDatapoint({
+      parsedFormData: {
+        dataset_name: actionData.dataset_name,
+        function_name: actionData.function_name,
+        id: actionData.id,
+        episode_id: actionData.episode_id,
+        input: actionData.input,
+        output: actionData.output,
+        tags: actionData.tags,
+      },
+      functionType,
+    });
+    return redirect(toDatapointUrl(actionData.dataset_name, newId));
+  } catch (error) {
+    logger.error("Error updating datapoint:", error);
+    return data(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
+  }
+}
+
+async function handleRenameAction(
+  actionData: RenameDatapointFormData,
+): Promise<ReturnType<typeof data<{ success: boolean; error?: string }>>> {
+  const nameToSet = actionData.name === "" ? null : actionData.name;
+
+  try {
+    await renameDatapoint({
+      datasetName: actionData.dataset_name,
+      datapointId: actionData.id,
+      name: nameToSet,
+    });
+    return data({ success: true });
+  } catch (error) {
+    logger.error("Error renaming datapoint:", error);
+    return data(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
+  }
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+
+  let parsedAction: DatapointAction;
+  try {
+    parsedAction = parseDatapointAction(formData);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return data(
+        {
+          success: false,
+          error: `Validation failed: ${error.errors.map((e) => e.message).join(", ")}`,
+        },
+        { status: 400 },
+      );
+    }
+    logger.error("Error parsing datapoint action:", error);
+    return data(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
       },
       { status: 400 },
     );
+  }
+
+  switch (parsedAction.action) {
+    case "delete":
+      return handleDeleteAction(parsedAction);
+    case "update":
+      return handleUpdateAction(parsedAction);
+    case "rename":
+      return handleRenameAction(parsedAction);
   }
 }
 
@@ -295,45 +374,46 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   const fetcher = useFetcher();
-  const saveError = fetcher.data?.success === false ? fetcher.data.error : null;
+  const updateError =
+    fetcher.data?.success === false ? fetcher.data.error : null;
 
-  const submitDatapointAction = (action: string) => {
-    // Build form data directly using t0Datapoint structure with updated values
-    const formData = new FormData();
-
-    // Add all fields from t0Datapoint
-    formData.append("dataset_name", t0Datapoint.dataset_name);
-    formData.append("function_name", t0Datapoint.function_name);
-    formData.append("id", t0Datapoint.id);
-    formData.append("input", JSON.stringify(input));
-    if (output !== undefined) {
-      formData.append("output", JSON.stringify(output));
+  const handleDelete = () => {
+    try {
+      const formData = serializeDeleteDatapointToFormData({
+        dataset_name: t0Datapoint.dataset_name,
+        id: t0Datapoint.id,
+      });
+      fetcher.submit(formData, { method: "post", action: "." });
+    } catch (error) {
+      logger.error("Error preparing delete request:", error);
     }
-    formData.append("tags", JSON.stringify(tags));
-    if (t0Datapoint.episode_id !== undefined) {
-      formData.append("episode_id", t0Datapoint.episode_id);
-    }
-    formData.append("action", action);
-
-    // Submit to the local action by targeting the current route (".")
-    fetcher.submit(formData, { method: "post", action: "." });
   };
 
-  const handleDelete = () => submitDatapointAction("delete");
-  const handleSave = () => {
-    // Clear any previous validation errors
+  const handleUpdate = () => {
     setValidationError(null);
 
-    // Validate JSON output before submitting
     const validation = validateJsonOutput(output);
     if (!validation.valid) {
       setValidationError(validation.error);
       return;
     }
 
-    submitDatapointAction("save");
-    if (!saveError) {
-      setIsEditing(false);
+    try {
+      const formData = serializeUpdateDatapointToFormData({
+        dataset_name: t0Datapoint.dataset_name,
+        function_name: t0Datapoint.function_name,
+        id: t0Datapoint.id,
+        episode_id: t0Datapoint.episode_id,
+        input,
+        output,
+        tags,
+      });
+      fetcher.submit(formData, { method: "post", action: "." });
+      if (!updateError) {
+        setIsEditing(false);
+      }
+    } catch (error) {
+      logger.error("Error preparing update request:", error);
     }
   };
 
@@ -395,9 +475,13 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   const handleRenameDatapoint = async (newName: string) => {
-    const dataToSubmit = { ...t0Datapoint, name: newName };
-    const formData = serializeDatapointToFormData(dataToSubmit);
-    formData.append("action", "rename");
+    // TODO: error handling
+    const formData = serializeRenameDatapointToFormData({
+      dataset_name: t0Datapoint.dataset_name,
+      id: t0Datapoint.id,
+      name: newName,
+    });
+
     await fetcher.submit(formData, { method: "post", action: "." });
   };
 
@@ -437,10 +521,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         }
       />
 
-      {(saveError || validationError) && (
+      {(updateError || validationError) && (
         <div className="mt-2 rounded-md bg-red-100 px-4 py-3 text-red-800">
-          <p className="font-medium">Error saving datapoint</p>
-          <p>{validationError || saveError}</p>
+          <p className="font-medium">Error updating datapoint</p>
+          <p>{validationError || updateError}</p>
         </div>
       )}
 
@@ -458,11 +542,11 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             onVariantSelect={onVariantSelect}
             variantInferenceIsLoading={variantInferenceIsLoading}
             onDelete={handleDelete}
-            isDeleting={fetcher.state === "submitting" && !saveError}
+            isDeleting={fetcher.state === "submitting" && !updateError}
             toggleEditing={toggleEditing}
             isEditing={isEditing}
             canSave={canSave}
-            onSave={handleSave}
+            onSave={handleUpdate}
             onReset={handleReset}
             showTryWithButton={t0Datapoint.function_name !== DEFAULT_FUNCTION}
             isStale={!!t0Datapoint.staled_at}

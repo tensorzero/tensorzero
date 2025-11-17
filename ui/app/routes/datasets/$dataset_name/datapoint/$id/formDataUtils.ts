@@ -1,75 +1,242 @@
+import { z } from "zod";
 import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
+  Input,
 } from "~/types/tensorzero";
-import type { StoredInput } from "~/types/tensorzero";
 
 /**
- * Type for a datapoint form submission containing only the editable fields.
- * This matches what's actually submitted in the form.
+ * Schema for `"delete"` form action.
  */
-export type DatapointFormData = {
-  dataset_name: string;
-  function_name: string;
-  id: string;
-  episode_id?: string;
-  input: StoredInput;
-  output?: ContentBlockChatOutput[] | JsonInferenceOutput;
-  tags?: Record<string, string>;
-};
+export const DeleteDatapointFormDataSchema = z.object({
+  dataset_name: z.string().min(1, "Dataset name is required"),
+  id: z.string().uuid("Invalid datapoint ID format"),
+  action: z.literal("delete"),
+});
+
+export type DeleteDatapointFormData = z.infer<
+  typeof DeleteDatapointFormDataSchema
+>;
 
 /**
- * Serializes a datapoint object to FormData, handling null and undefined values appropriately.
- * Accepts a ParsedDatasetRow or a DatapointFormData with nullable output field.
- * - undefined and null values are skipped
- * - objects are JSON stringified
- * - primitives are converted to strings
+ * Schema for `"update"` form action.
  */
-export function serializeDatapointToFormData(
-  datapoint: DatapointFormData,
+export const UpdateDatapointFormDataSchema = z.object({
+  dataset_name: z.string().min(1, "Dataset name is required"),
+  function_name: z.string().min(1, "Function name is required"),
+  id: z.string().uuid("Invalid datapoint ID format"),
+  episode_id: z.string().uuid("Invalid episode ID format").optional(),
+  input: z.custom<Input>((val) => val !== null && typeof val === "object", {
+    message: "Input must be a valid object",
+  }),
+  output: z
+    .custom<
+      ContentBlockChatOutput[] | JsonInferenceOutput
+    >((val) => val === undefined || (val !== null && typeof val === "object"), { message: "Output must be a valid object or undefined" })
+    .optional(),
+  tags: z.record(z.string(), z.string()).optional(),
+  action: z.literal("update"),
+});
+
+export type UpdateDatapointFormData = z.infer<
+  typeof UpdateDatapointFormDataSchema
+>;
+
+/**
+ * Schema for `"rename"` form action.
+ */
+export const RenameDatapointFormDataSchema = z.object({
+  dataset_name: z.string().min(1, "Dataset name is required"),
+  id: z.string().uuid("Invalid datapoint ID format"),
+  name: z.string(),
+  action: z.literal("rename"),
+});
+
+export type RenameDatapointFormData = z.infer<
+  typeof RenameDatapointFormDataSchema
+>;
+
+/**
+ * Discriminated union of all datapoint actions.
+ */
+export const DatapointActionSchema = z.discriminatedUnion("action", [
+  DeleteDatapointFormDataSchema,
+  UpdateDatapointFormDataSchema,
+  RenameDatapointFormDataSchema,
+]);
+
+export type DatapointAction = z.infer<typeof DatapointActionSchema>;
+
+/**
+ * Parses FormData for `"delete"` action with Zod validation.
+ * Throws `ZodError` if validation fails.
+ */
+export function parseDeleteDatapointFormData(
+  formData: FormData,
+): DeleteDatapointFormData {
+  const rawData = {
+    dataset_name: formData.get("dataset_name"),
+    id: formData.get("id"),
+    action: formData.get("action"),
+  };
+
+  return DeleteDatapointFormDataSchema.parse(rawData);
+}
+
+/**
+ * Parses FormData for `"update"` action with Zod validation.
+ * Throws `ZodError` if validation fails.
+ */
+export function parseUpdateDatapointFormData(
+  formData: FormData,
+): UpdateDatapointFormData {
+  const rawData = {
+    dataset_name: formData.get("dataset_name"),
+    function_name: formData.get("function_name"),
+    id: formData.get("id"),
+    episode_id: formData.get("episode_id") || undefined,
+    input: formData.get("input")
+      ? JSON.parse(formData.get("input") as string)
+      : undefined,
+    output: formData.get("output")
+      ? JSON.parse(formData.get("output") as string)
+      : undefined,
+    tags: formData.get("tags")
+      ? JSON.parse(formData.get("tags") as string)
+      : undefined,
+    action: formData.get("action"),
+  };
+
+  return UpdateDatapointFormDataSchema.parse(rawData);
+}
+
+/**
+ * Parses FormData for `"rename"` action with Zod validation.
+ * Throws `ZodError` if validation fails.
+ */
+export function parseRenameDatapointFormData(
+  formData: FormData,
+): RenameDatapointFormData {
+  const rawData = {
+    dataset_name: formData.get("dataset_name"),
+    id: formData.get("id"),
+    name: formData.get("name"),
+    action: formData.get("action"),
+  };
+
+  return RenameDatapointFormDataSchema.parse(rawData);
+}
+
+/**
+ * Parses FormData using discriminated union to determine action type.
+ * Throws `ZodError` if validation fails.
+ */
+export function parseDatapointAction(formData: FormData): DatapointAction {
+  const action = formData.get("action");
+
+  // Build raw data object based on common and action-specific fields
+  const baseData = {
+    dataset_name: formData.get("dataset_name"),
+    id: formData.get("id"),
+    action,
+  };
+
+  let rawData;
+  if (action === "delete") {
+    rawData = baseData;
+  } else if (action === "update") {
+    rawData = {
+      ...baseData,
+      function_name: formData.get("function_name"),
+      episode_id: formData.get("episode_id") || undefined,
+      input: formData.get("input")
+        ? JSON.parse(formData.get("input") as string)
+        : undefined,
+      output: formData.get("output")
+        ? JSON.parse(formData.get("output") as string)
+        : undefined,
+      tags: formData.get("tags")
+        ? JSON.parse(formData.get("tags") as string)
+        : undefined,
+    };
+  } else if (action === "rename") {
+    rawData = {
+      ...baseData,
+      name: formData.get("name"),
+    };
+  } else {
+    rawData = baseData;
+  }
+
+  return DatapointActionSchema.parse(rawData);
+}
+
+/**
+ * Serializes `"delete"` action data to FormData with validation.
+ */
+export function serializeDeleteDatapointToFormData(
+  data: Omit<DeleteDatapointFormData, "action">,
 ): FormData {
-  const formData = new FormData();
-
-  Object.entries(datapoint).forEach(([key, value]) => {
-    if (value === undefined || value === null) return;
-    if (typeof value === "object") {
-      formData.append(key, JSON.stringify(value));
-    } else {
-      formData.append(key, String(value));
-    }
+  const validatedData = DeleteDatapointFormDataSchema.parse({
+    ...data,
+    action: "delete",
   });
+
+  const formData = new FormData();
+  formData.append("dataset_name", validatedData.dataset_name);
+  formData.append("id", validatedData.id);
+  formData.append("action", validatedData.action);
 
   return formData;
 }
 
 /**
- * Parses FormData into a DatapointFormData object, handling missing fields gracefully.
- * - Missing fields are treated as undefined where appropriate
- * - JSON fields are parsed from their string representations
- * - No Zod validation is performed; the backend will validate when saving
+ * Serializes `"update"` action data to FormData with validation.
  */
-export function parseDatapointFormData(formData: FormData): DatapointFormData {
-  const dataset_name = formData.get("dataset_name") as string;
-  const function_name = formData.get("function_name") as string;
-  const id = formData.get("id") as string;
-  const episode_id = formData.get("episode_id") as string | null;
-  const input = JSON.parse(formData.get("input") as string) as StoredInput;
-  const outputStr = formData.get("output") as string | null;
-  const output = outputStr ? JSON.parse(outputStr) : undefined;
-  const tagsStr = formData.get("tags") as string;
-  const tags = tagsStr ? JSON.parse(tagsStr) as Record<string, string> : undefined;
+export function serializeUpdateDatapointToFormData(
+  data: Omit<UpdateDatapointFormData, "action">,
+): FormData {
+  const validatedData = UpdateDatapointFormDataSchema.parse({
+    ...data,
+    action: "update",
+  });
 
-  const result: DatapointFormData = {
-    dataset_name,
-    function_name,
-    id,
-    input,
-  };
+  const formData = new FormData();
+  formData.append("dataset_name", validatedData.dataset_name);
+  formData.append("function_name", validatedData.function_name);
+  formData.append("id", validatedData.id);
+  formData.append("input", JSON.stringify(validatedData.input));
 
-  // Add optional fields only if they have values
-  if (episode_id) result.episode_id = episode_id;
-  if (output !== undefined) result.output = output;
-  if (tags) result.tags = tags;
+  if (validatedData.episode_id) {
+    formData.append("episode_id", validatedData.episode_id);
+  }
+  if (validatedData.output !== undefined) {
+    formData.append("output", JSON.stringify(validatedData.output));
+  }
+  if (validatedData.tags) {
+    formData.append("tags", JSON.stringify(validatedData.tags));
+  }
+  formData.append("action", validatedData.action);
 
-  return result;
+  return formData;
+}
+
+/**
+ * Serializes `"rename"` action data to FormData with validation.
+ */
+export function serializeRenameDatapointToFormData(
+  data: Omit<RenameDatapointFormData, "action">,
+): FormData {
+  const validatedData = RenameDatapointFormDataSchema.parse({
+    ...data,
+    action: "rename",
+  });
+
+  const formData = new FormData();
+  formData.append("dataset_name", validatedData.dataset_name);
+  formData.append("id", validatedData.id);
+  formData.append("name", validatedData.name);
+  formData.append("action", validatedData.action);
+
+  return formData;
 }

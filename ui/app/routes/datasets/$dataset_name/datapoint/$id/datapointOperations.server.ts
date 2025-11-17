@@ -8,30 +8,26 @@ import type {
   JsonDatapointOutputUpdate,
   JsonInferenceOutput,
 } from "~/types/tensorzero";
-import type { DatapointFormData } from "./formDataUtils";
-import { storedInputToTensorZeroInput } from "./storedInputUtils";
+import type { UpdateDatapointFormData } from "./formDataUtils";
 
 // ============================================================================
 // Transformation Functions
 // ============================================================================
 
 /**
- * Converts DatapointFormData to UpdateDatapointRequest for the API.
- * This handles the conversion from form data (with StoredInput) to the API request format.
+ * Converts UpdateDatapointFormData to UpdateDatapointRequest for the API.
  */
-function convertDatapointFormDataToUpdateDatapointRequest(
-  formData: DatapointFormData,
+function convertUpdateDatapointFormDataToUpdateDatapointRequest(
+  formData: Omit<UpdateDatapointFormData, "action">,
   functionType: "chat" | "json",
 ): UpdateDatapointRequest {
-  const input = storedInputToTensorZeroInput(formData.input);
-
   switch (functionType) {
     case "json": {
       const output = formData.output as JsonInferenceOutput | undefined;
       return {
         type: "json",
         id: formData.id,
-        input,
+        input: formData.input,
         output: output
           ? ({
               raw: JSON.stringify(output.parsed || output.raw),
@@ -45,7 +41,7 @@ function convertDatapointFormDataToUpdateDatapointRequest(
       return {
         type: "chat",
         id: formData.id,
-        input,
+        input: formData.input,
         output: formData.output as ContentBlockChatOutput[] | undefined,
         tags: formData.tags,
       };
@@ -77,7 +73,7 @@ export async function deleteDatapoint(params: {
 }
 
 /**
- * Saves a datapoint by creating a new version with a new ID and marking the old one as stale.
+ * Updates a datapoint by creating a new version with a new ID and marking the old one as stale.
  * The function type (chat/json) is automatically determined from the datapoint structure.
  *
  * The v1 updateDatapoint endpoint automatically handles:
@@ -87,14 +83,14 @@ export async function deleteDatapoint(params: {
  *
  * TODO(#3765): remove this logic and use Rust logic instead, either via napi-rs or by calling an API server.
  */
-export async function saveDatapoint(params: {
-  parsedFormData: DatapointFormData;
+export async function updateDatapoint(params: {
+  parsedFormData: Omit<UpdateDatapointFormData, "action">;
   functionType: "chat" | "json";
 }): Promise<{ newId: string }> {
   const { parsedFormData, functionType } = params;
 
   // Convert the parsed form data to an UpdateDatapointRequest
-  const updateRequest = convertDatapointFormDataToUpdateDatapointRequest(
+  const updateRequest = convertUpdateDatapointFormDataToUpdateDatapointRequest(
     parsedFormData,
     functionType,
   );

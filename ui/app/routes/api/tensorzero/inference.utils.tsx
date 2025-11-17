@@ -500,7 +500,9 @@ function storedInputMessageToClientInputMessage(
 ): ClientInputMessage {
   return {
     role: message.role,
-    content: message.content.map(storedInputMessageContentToClientInputMessageContent),
+    content: message.content.map(
+      storedInputMessageContentToClientInputMessageContent,
+    ),
   };
 }
 
