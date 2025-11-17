@@ -321,14 +321,13 @@ pub async fn run_evaluation(
 /// 1. Creates an mpsc channel for streaming `EvaluationUpdate` messages
 /// 2. Loads the evaluation and function configurations
 /// 3. Queries the dataset (limited by `max_datapoints` if specified)
-/// 4. If `precision_targets` is provided:
-///    - Creates cancellation tokens for all evaluators
-///    - Creates a `StoppingManager` to track statistics and manage stopping conditions
+/// 4. If `precision_targets` is provided, creates a `StoppingManager` which internally creates cancellation
+///    tokens and tracks evaluator statistics
 /// 5. Sends `RunInfo` as the first message (evaluation_run_id, num_datapoints)
 /// 6. Spawns a concurrent task for each datapoint (up to `max_datapoints`) that:
 ///    - Acquires a semaphore permit (controls concurrency)
 ///    - Runs inference for the datapoint
-///    - Evaluates the inference response (skipping cancelled evaluators if tokens exist)
+///    - Evaluates the inference response (skipping cancelled evaluators via `StoppingManager::get_tokens()`)
 ///    - Returns (Datapoint, InferenceResponse, EvaluationResult)
 /// 7. Spawns a background collector task that:
 ///    - Collects results from the JoinSet as tasks complete
@@ -524,18 +523,18 @@ pub async fn run_evaluation_core_streaming(
 
     // Spawn a task to collect results and stream them
     let sender_clone = sender.clone();
-    let mut completed_inferences = 0;
+    let mut completed_datapoints = 0;
     // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
     #[expect(clippy::disallowed_methods)]
     tokio::spawn(async move {
         while let Some(result) = join_set.join_next_with_id().await {
             let update = match result {
                 Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
-                    completed_inferences += 1;
+                    completed_datapoints += 1;
 
                     // Update statistics and cancel any evaluators that have hit their precision target
                     stopping_manager.update_stats(&evaluation_result);
-                    stopping_manager.cancel_converged_evaluators(completed_inferences);
+                    stopping_manager.cancel_converged_evaluators(completed_datapoints);
 
                     // If all evaluators have stopped, abort remaining tasks
                     if stopping_manager.all_evaluators_stopped() {
