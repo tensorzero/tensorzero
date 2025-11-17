@@ -1323,21 +1323,19 @@ impl ClientExt for Client {
     ) -> Result<HashMap<String, f64>, TensorZeroError> {
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
+                let endpoint = format!("internal/{function_name}/variant_sampling_probabilities");
                 let url = client
                     .base_url
-                    .join("variant_sampling_probabilities")
+                    .join(&endpoint)
                     .map_err(|e| TensorZeroError::Other {
                         source: Error::new(ErrorDetails::InvalidBaseUrl {
                             message: format!(
-                                "Failed to join base URL with /variant_sampling_probabilities endpoint: {e}"
+                                "Failed to join base URL with /internal/{function_name}/variant_sampling_probabilities endpoint: {e}"
                             ),
                         })
                         .into(),
                     })?;
-                let builder = client
-                    .http_client
-                    .get(url)
-                    .query(&[("function_name", function_name)]);
+                let builder = client.http_client.get(url);
                 let response: GetVariantSamplingProbabilitiesResponse =
                     self.parse_http_response(builder.send().await).await?;
                 Ok(response.probabilities)
