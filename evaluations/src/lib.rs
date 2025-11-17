@@ -429,19 +429,13 @@ pub async fn run_evaluation_core_streaming(
     let dataset_len = dataset.len();
     let mut task_id_to_datapoint_id = HashMap::new();
 
-    // Setup cancellation tokens for adaptive stopping (if precision limits are enabled)
-    let cancellation_tokens: Option<HashMap<String, CancellationToken>> =
-        precision_limits.as_ref().map(|_| {
-            inference_evaluation_config
-                .evaluators
-                .keys()
-                .map(|name| (name.clone(), CancellationToken::new()))
-                .collect()
-        });
-
     // Setup stopping manager for adaptive stopping
-    let mut stopping_manager =
-        stopping::StoppingManager::new(precision_limits, cancellation_tokens.clone());
+    let evaluator_names: Vec<String> = inference_evaluation_config
+        .evaluators
+        .keys()
+        .cloned()
+        .collect();
+    let mut stopping_manager = stopping::StoppingManager::new(precision_limits, &evaluator_names);
 
     let run_info = RunInfo {
         evaluation_run_id: args.evaluation_run_id,
@@ -457,9 +451,10 @@ pub async fn run_evaluation_core_streaming(
         tracing::warn!("Failed to send RunInfo: receiver dropped before evaluation started");
     }
 
-    // Wrap cancellation tokens in Arc for cloning into tasks
-    let cancellation_tokens_arc: Option<Arc<HashMap<String, CancellationToken>>> =
-        cancellation_tokens.map(Arc::new);
+    // Get cancellation tokens from stopping manager and wrap in Arc for cloning into tasks
+    let cancellation_tokens_arc: Option<Arc<HashMap<String, CancellationToken>>> = stopping_manager
+        .get_tokens()
+        .map(|tokens| Arc::new(tokens.clone()));
 
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
