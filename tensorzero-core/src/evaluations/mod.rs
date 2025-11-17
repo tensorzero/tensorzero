@@ -12,7 +12,7 @@ use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::Variant;
 use crate::{
     config::{
-        path::ResolvedTomlPath, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
+        path::ResolvedTomlPathData, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
         MetricConfigType, PathWithContents, SchemaData, TimeoutsConfig,
     },
     error::{Error, ErrorDetails},
@@ -541,7 +541,7 @@ struct UninitializedLLMJudgeChatCompletionVariantConfig {
     #[serde(default)]
     active: Option<bool>,
     model: Arc<str>,
-    system_instructions: ResolvedTomlPath,
+    system_instructions: ResolvedTomlPathData,
     temperature: Option<f32>,
     top_p: Option<f32>,
     max_tokens: Option<u32>,
@@ -577,7 +577,7 @@ fn convert_chat_completion_judge_to_variant(
     params: UninitializedLLMJudgeChatCompletionVariantConfig,
     user_schema: Option<StaticJSONSchema>,
 ) -> Result<ChatCompletionConfig, Error> {
-    let system_instructions = &params.system_instructions.read()?;
+    let system_instructions = params.system_instructions.data();
     let templated_system_instructions = format!(
         include_str!("llm_judge_system_instructions.txt"),
         system_instructions = system_instructions,
@@ -675,7 +675,7 @@ struct UninitializedLLMJudgeDiclVariantConfig {
     embedding_model: String,
     k: u32, // k as in k-nearest neighbors
     model: String,
-    system_instructions: Option<ResolvedTomlPath>,
+    system_instructions: Option<ResolvedTomlPathData>,
     temperature: Option<f32>,
     top_p: Option<f32>,
     presence_penalty: Option<f32>,
@@ -705,8 +705,8 @@ fn get_template_path(
     variant_name: &str,
     template_name: &str,
     data: String,
-) -> ResolvedTomlPath {
-    ResolvedTomlPath::new_fake_path(format!(
+) -> ResolvedTomlPathData {
+    ResolvedTomlPathData::new_fake_path(format!(
         "tensorzero::llm_judge::{evaluation_name}::{evaluator_name}::{variant_name}::{template_name}"
     ), data)
 }
@@ -745,7 +745,7 @@ impl UninitializedLLMJudgeVariantInfo {
                 )?)
             }
             UninitializedLLMJudgeVariantConfig::BestOfNSampling(params) => {
-                let evaluator_system_instructions = &params.evaluator.system_instructions.read()?;
+                let evaluator_system_instructions = params.evaluator.system_instructions.data();
                 let templated_evaluator_system_instructions = format!(
                     include_str!("llm_judge_system_instructions.txt"),
                     system_instructions = evaluator_system_instructions,
@@ -817,7 +817,7 @@ impl UninitializedLLMJudgeVariantInfo {
                 )
             }
             UninitializedLLMJudgeVariantConfig::MixtureOfNSampling(params) => {
-                let fuser_system_instructions = &params.fuser.system_instructions.read()?;
+                let fuser_system_instructions = params.fuser.system_instructions.data();
                 let templated_fuser_system_instructions = format!(
                     include_str!("llm_judge_system_instructions.txt"),
                     system_instructions = fuser_system_instructions,
@@ -891,8 +891,7 @@ impl UninitializedLLMJudgeVariantInfo {
             UninitializedLLMJudgeVariantConfig::Dicl(params) => {
                 let dicl_system_instructions = params
                     .system_instructions
-                    .map(|si| si.read())
-                    .transpose()?
+                    .map(|si| si.data().to_string())
                     .map(|si| {
                         format!(
                             include_str!("llm_judge_system_instructions.txt"),
@@ -906,7 +905,7 @@ impl UninitializedLLMJudgeVariantInfo {
                     k: params.k,
                     model: params.model,
                     system_instructions: dicl_system_instructions.map(|s| {
-                        ResolvedTomlPath::new_fake_path("tensorzero::llm_judge".to_string(), s)
+                        ResolvedTomlPathData::new_fake_path("tensorzero::llm_judge".to_string(), s)
                     }),
                     temperature: params.temperature,
                     top_p: params.top_p,
@@ -959,7 +958,7 @@ fn check_convert_variant_to_llm_judge_variant(
                 UninitializedLLMJudgeChatCompletionVariantConfig {
                     active: Some(false),
                     model: variant.model().clone(),
-                    system_instructions: ResolvedTomlPath::new_fake_path(
+                    system_instructions: ResolvedTomlPathData::new_fake_path(
                         String::new(),
                         String::new(),
                     ),
@@ -990,7 +989,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     evaluator: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.evaluator().inner.model().clone(),
-                        system_instructions: ResolvedTomlPath::new_fake_path(
+                        system_instructions: ResolvedTomlPathData::new_fake_path(
                             String::new(),
                             String::new(),
                         ),
@@ -1022,7 +1021,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     fuser: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.fuser().inner.model().clone(),
-                        system_instructions: ResolvedTomlPath::new_fake_path(
+                        system_instructions: ResolvedTomlPathData::new_fake_path(
                             String::new(),
                             String::new(),
                         ),
@@ -1085,7 +1084,7 @@ fn check_convert_variant_to_llm_judge_variant(
                     inner: UninitializedLLMJudgeChatCompletionVariantConfig {
                         active: Some(false),
                         model: variant.inner.model().to_string().into(),
-                        system_instructions: ResolvedTomlPath::new_fake_path(
+                        system_instructions: ResolvedTomlPathData::new_fake_path(
                             String::new(),
                             String::new(),
                         ),
@@ -1513,7 +1512,7 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-4"),
-                            system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
+                            system_instructions: ResolvedTomlPathData::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),
                             temperature: Some(0.5),
@@ -1634,7 +1633,7 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(true),
                             model: Arc::from("gpt-4.1-mini"),
-                            system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
+                            system_instructions: ResolvedTomlPathData::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),
                             temperature: Some(0.7),
@@ -1709,7 +1708,7 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: None, // No 'active' field specified
                             model: Arc::from("gpt-4.1-mini"),
-                            system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
+                            system_instructions: ResolvedTomlPathData::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),
                             temperature: Some(0.7),
@@ -1786,7 +1785,7 @@ mod tests {
                         UninitializedLLMJudgeChatCompletionVariantConfig {
                             active: Some(false), // Explicitly inactive
                             model: Arc::from("gpt-4.1-mini"),
-                            system_instructions: ResolvedTomlPath::new_for_tests(PathBuf::from(
+                            system_instructions: ResolvedTomlPathData::new_for_tests(PathBuf::from(
                                 "fixtures/config/evaluations/evaluation1/llm_judge_bool/system_instructions.txt",
                             ), None),
                             temperature: Some(0.7),
