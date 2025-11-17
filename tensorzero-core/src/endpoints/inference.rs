@@ -565,6 +565,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
     });
 
     if stream {
+        let deferred_tasks = inference_clients.deferred_tasks.clone();
         let result = variant
             .infer_stream(
                 resolved_input.clone(),
@@ -617,10 +618,12 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             inference_metadata,
             stream,
             clickhouse_connection_info.clone(),
+            deferred_tasks.clone(),
         );
 
         Ok(InferenceOutput::Streaming(Box::pin(stream)))
     } else {
+        let deferred_tasks = inference_clients.deferred_tasks.clone();
         let result = variant
             .infer(
                 Arc::clone(&resolved_input),
@@ -659,9 +662,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             // not be cancelled partway through execution if the outer '/inference' request
             // is cancelled. This reduces the chances that we only write to some tables and not others
             // (but this is inherently best-effort due to ClickHouse's lack of transactions).
-            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-            #[expect(clippy::disallowed_methods)]
-            let write_future = tokio::spawn(async move {
+            let write_future = deferred_tasks.spawn(async move {
                 let _: () = write_inference(
                     &clickhouse_connection_info,
                     &config,
@@ -777,6 +778,7 @@ fn create_stream(
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    deferred_tasks: TaskTracker,
 ) -> impl FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
@@ -933,9 +935,7 @@ fn create_stream(
                 drop(clickhouse_connection_info);
             };
             if async_write {
-                // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-                #[expect(clippy::disallowed_methods)]
-                tokio::spawn(write_future);
+                deferred_tasks.spawn(write_future);
             } else {
                 write_future.await;
             }

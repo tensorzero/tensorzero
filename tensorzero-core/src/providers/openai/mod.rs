@@ -1515,6 +1515,12 @@ pub async fn prepare_openai_messages<'a>(
 pub(crate) fn prepare_allowed_tools_constraint<'a>(
     tool_config: &'a ToolCallConfig,
 ) -> Option<AllowedToolsChoice<'a>> {
+    // OpenAI-compatible providers don't allow both tool-choice "none" and tool-choice "allowed_tools",
+    // since they're both set via the top-level "tool_choice" field.
+    // We make `ToolChoice::None` take priority - that is, we allow "none" of the allowed tools.
+    if tool_config.tool_choice == ToolChoice::None {
+        return None;
+    }
     let allowed_tools_list = tool_config.allowed_tools.as_dynamic_allowed_tools()?;
 
     // Construct the OpenAI spec-compliant allowed_tools structure
@@ -5210,16 +5216,11 @@ mod tests {
 
         assert!(tool_choice.is_some());
         let tool_choice = tool_choice.unwrap();
-        match tool_choice {
-            OpenAIToolChoice::AllowedTools(allowed_tools_choice) => {
-                // ToolChoice::None with allowed_tools should map to Auto mode
-                assert_eq!(
-                    allowed_tools_choice.allowed_tools.mode,
-                    AllowedToolsMode::Auto
-                );
-            }
-            _ => panic!("Expected AllowedTools variant"),
-        }
+        // ToolChoice::None with allowed_tools should map to None mode
+        assert_eq!(
+            tool_choice,
+            OpenAIToolChoice::String(OpenAIToolChoiceString::None)
+        );
     }
 
     #[test]
