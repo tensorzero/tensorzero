@@ -416,7 +416,7 @@ fn build_internal_routes() -> Router<AppStateData> {
             get(endpoints::variant_probabilities::get_variant_sampling_probabilities_handler),
         )
         .route(
-            "/internal/{function_name}/variant_sampling_probabilities",
+            "/internal/functions/{function_name}/variant_sampling_probabilities",
             get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),
         )
         .route(
