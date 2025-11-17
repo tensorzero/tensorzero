@@ -3598,7 +3598,7 @@ async fn test_openai_mixed_function_and_custom_tools() {
 
     let payload = json!({
         "function_name": "weather_helper",
-        "variant_name": "openai",
+        "variant_name": "gpt-5-mini",
         "episode_id": episode_id,
         "input": {
             "system": {"assistant_name": "Weather Assistant"},
