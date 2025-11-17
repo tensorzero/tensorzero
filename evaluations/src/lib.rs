@@ -237,7 +237,7 @@ pub async fn run_evaluation(
     };
 
     let output_format = args.format.clone();
-    let result = run_evaluation_core_streaming(core_args, None, None).await?; // No adaptive stopping
+    let result = run_evaluation_core_streaming(core_args, None, HashMap::new()).await?; // No adaptive stopping
 
     let mut receiver = result.receiver;
     let dataset_len = result.run_info.num_datapoints;
@@ -345,7 +345,7 @@ pub async fn run_evaluation(
 ///
 /// **`max_datapoints`**: When `Some(max)`, limits dataset to at most `max` datapoints.
 ///
-/// **`precision_targets`**: When `Some(map)`, enables adaptive stopping:
+/// **`precision_targets`**: When non-empty, enables adaptive stopping:
 /// - Per-evaluator CI half-width thresholds (HashMap<String, f32>)
 /// - Evaluator k stops when the larger of the two halves of the CI has width ≤ threshold_k`
 /// - Only checked after min_datapoints (hardcoded to 20) have been completed
@@ -353,7 +353,7 @@ pub async fn run_evaluation(
 /// - All datapoint tasks are spawned upfront for maximum concurrency
 /// - When all evaluators have stopped, remaining tasks are aborted
 ///
-/// When `precision_targets` is `None`:
+/// When `precision_targets` is empty:
 /// - All evaluators run on all datapoints (up to max_datapoints)
 /// - Standard evaluation behavior
 ///
@@ -376,7 +376,7 @@ pub async fn run_evaluation(
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
     max_datapoints: Option<usize>,
-    precision_targets: Option<HashMap<String, f32>>,
+    precision_targets: HashMap<String, f32>,
 ) -> Result<EvaluationStreamResult> {
     let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
 
@@ -523,18 +523,18 @@ pub async fn run_evaluation_core_streaming(
 
     // Spawn a task to collect results and stream them
     let sender_clone = sender.clone();
-    let mut completed_datapoints = 0;
+    let mut num_completed_datapoints = 0;
     // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
     #[expect(clippy::disallowed_methods)]
     tokio::spawn(async move {
         while let Some(result) = join_set.join_next_with_id().await {
             let update = match result {
                 Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
-                    completed_datapoints += 1;
+                    num_completed_datapoints += 1;
 
                     // Update statistics and cancel any evaluators that have hit their precision target
                     stopping_manager.update_stats(&evaluation_result);
-                    stopping_manager.cancel_converged_evaluators(completed_datapoints);
+                    stopping_manager.cancel_converged_evaluators(num_completed_datapoints);
 
                     // If all evaluators have stopped, abort remaining tasks
                     if stopping_manager.all_evaluators_stopped() {

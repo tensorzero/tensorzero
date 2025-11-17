@@ -41,7 +41,7 @@ impl CancellationTokens {
 
 /// Manager for adaptive stopping logic during evaluation
 pub struct StoppingManager {
-    precision_targets: Option<HashMap<String, f32>>,
+    precision_targets: HashMap<String, f32>,
     min_datapoints: usize,
     cancellation_tokens: CancellationTokens,
     evaluator_stats: HashMap<String, PerEvaluatorStats>,
@@ -50,29 +50,29 @@ pub struct StoppingManager {
 impl StoppingManager {
     /// Create a new StoppingManager with precision targets and evaluator names
     ///
-    /// If precision_targets are provided, this creates:
+    /// If precision_targets is non-empty, this creates:
     /// - Cancellation tokens for all evaluators
     /// - Statistics trackers for evaluators with precision targets
-    pub fn new(
-        precision_targets: Option<HashMap<String, f32>>,
-        evaluator_names: &[String],
-    ) -> Self {
+    ///
+    /// If precision_targets is empty (no adaptive stopping):
+    /// - No cancellation tokens are created
+    /// - No statistics are tracked
+    pub fn new(precision_targets: HashMap<String, f32>, evaluator_names: &[String]) -> Self {
         // Create cancellation tokens and stats only if precision targets are enabled
-        let (cancellation_tokens, evaluator_stats) =
-            if let Some(ref precision_map) = precision_targets {
-                // Create tokens for all evaluators
-                let tokens = CancellationTokens::new(evaluator_names);
+        let (cancellation_tokens, evaluator_stats) = if precision_targets.is_empty() {
+            (CancellationTokens::empty(), HashMap::new())
+        } else {
+            // Create tokens for all evaluators
+            let tokens = CancellationTokens::new(evaluator_names);
 
-                // Create stats only for evaluators with precision targets
-                let stats: HashMap<String, PerEvaluatorStats> = precision_map
-                    .keys()
-                    .map(|name| (name.clone(), PerEvaluatorStats::default()))
-                    .collect();
+            // Create stats only for evaluators with precision targets
+            let stats: HashMap<String, PerEvaluatorStats> = precision_targets
+                .keys()
+                .map(|name| (name.clone(), PerEvaluatorStats::default()))
+                .collect();
 
-                (tokens, stats)
-            } else {
-                (CancellationTokens::empty(), HashMap::new())
-            };
+            (tokens, stats)
+        };
 
         Self {
             precision_targets,
@@ -121,26 +121,29 @@ impl StoppingManager {
             return;
         }
 
-        if let Some(precision_map) = self.precision_targets.as_ref() {
-            let tokens = self.cancellation_tokens.as_map();
+        // If no precision targets configured, nothing to do
+        if self.precision_targets.is_empty() {
+            return;
+        }
 
-            // Check each evaluator's stopping condition
-            for (evaluator_name, evaluator_stats) in &self.evaluator_stats {
-                if let Some(precision_target) = precision_map.get(evaluator_name) {
-                    if let Some(ci_half_width) = evaluator_stats.ci_half_width() {
-                        if ci_half_width <= *precision_target {
-                            if let Some(token) = tokens.get(evaluator_name) {
-                                if !token.is_cancelled() {
-                                    info!(
-                                        evaluator_name = %evaluator_name,
-                                        ci_half_width = ci_half_width,
-                                        precision_target = precision_target,
-                                        count = evaluator_stats.count(),
-                                        mean = ?evaluator_stats.mean(),
-                                        "Stopping evaluator: CI half-width <= precision_target"
-                                    );
-                                    token.cancel();
-                                }
+        let tokens = self.cancellation_tokens.as_map();
+
+        // Check each evaluator's stopping condition
+        for (evaluator_name, evaluator_stats) in &self.evaluator_stats {
+            if let Some(precision_target) = self.precision_targets.get(evaluator_name) {
+                if let Some(ci_half_width) = evaluator_stats.ci_half_width() {
+                    if ci_half_width <= *precision_target {
+                        if let Some(token) = tokens.get(evaluator_name) {
+                            if !token.is_cancelled() {
+                                info!(
+                                    evaluator_name = %evaluator_name,
+                                    ci_half_width = ci_half_width,
+                                    precision_target = precision_target,
+                                    count = evaluator_stats.count(),
+                                    mean = ?evaluator_stats.mean(),
+                                    "Stopping evaluator: CI half-width <= precision_target"
+                                );
+                                token.cancel();
                             }
                         }
                     }
@@ -165,9 +168,9 @@ mod tests {
     #[test]
     fn test_stopping_manager_no_precision_targets() {
         let evaluator_names = vec!["evaluator1".to_string(), "evaluator2".to_string()];
-        let manager = StoppingManager::new(None, &evaluator_names);
+        let manager = StoppingManager::new(HashMap::new(), &evaluator_names);
 
-        // With no precision limits, all_evaluators_stopped should always return false
+        // With no precision targets, all_evaluators_stopped should always return false
         assert!(!manager.all_evaluators_stopped());
 
         // get_tokens should return empty map
@@ -184,7 +187,7 @@ mod tests {
         precision_targets.insert("evaluator1".to_string(), 0.1);
 
         let evaluator_names = vec!["evaluator1".to_string()];
-        let manager = StoppingManager::new(Some(precision_targets), &evaluator_names);
+        let manager = StoppingManager::new(precision_targets, &evaluator_names);
 
         // Initially no evaluators should be stopped
         assert!(!manager.all_evaluators_stopped());
@@ -200,7 +203,7 @@ mod tests {
         precision_targets.insert("evaluator1".to_string(), 0.1);
 
         let evaluator_names = vec!["evaluator1".to_string()];
-        let mut manager = StoppingManager::new(Some(precision_targets), &evaluator_names);
+        let mut manager = StoppingManager::new(precision_targets, &evaluator_names);
 
         // Add some evaluation results
         let mut results: HashMap<String, Result<Option<serde_json::Value>, String>> =
@@ -224,7 +227,7 @@ mod tests {
         precision_targets.insert("evaluator1".to_string(), 0.1);
 
         let evaluator_names = vec!["evaluator1".to_string()];
-        let manager = StoppingManager::new(Some(precision_targets), &evaluator_names);
+        let manager = StoppingManager::new(precision_targets, &evaluator_names);
 
         // Should not cancel before min_datapoints (20)
         manager.cancel_converged_evaluators(10);
@@ -242,7 +245,7 @@ mod tests {
         precision_targets.insert("evaluator1".to_string(), 100.0);
 
         let evaluator_names = vec!["evaluator1".to_string()];
-        let mut manager = StoppingManager::new(Some(precision_targets), &evaluator_names);
+        let mut manager = StoppingManager::new(precision_targets, &evaluator_names);
 
         // Add enough consistent values to converge
         for _ in 0..25 {
@@ -277,7 +280,7 @@ mod tests {
         precision_targets.insert("evaluator2".to_string(), 0.1);
 
         let evaluator_names = vec!["evaluator1".to_string(), "evaluator2".to_string()];
-        let manager = StoppingManager::new(Some(precision_targets), &evaluator_names);
+        let manager = StoppingManager::new(precision_targets, &evaluator_names);
 
         // Initially none stopped
         assert!(!manager.all_evaluators_stopped());
@@ -302,7 +305,7 @@ mod tests {
         precision_targets.insert("evaluator1".to_string(), 0.1);
 
         let evaluator_names = vec!["evaluator1".to_string(), "evaluator2".to_string()];
-        let mut manager = StoppingManager::new(Some(precision_targets), &evaluator_names);
+        let mut manager = StoppingManager::new(precision_targets, &evaluator_names);
 
         // Verify that tokens exist for both evaluators (even though only evaluator1 has precision limit)
         let tokens = manager.get_tokens().as_map();

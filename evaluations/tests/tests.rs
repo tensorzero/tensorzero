@@ -2295,7 +2295,7 @@ async fn test_evaluation_with_dynamic_variant() {
         concurrency: 2,
     };
 
-    let result = run_evaluation_core_streaming(core_args, None, None).await;
+    let result = run_evaluation_core_streaming(core_args, None, HashMap::new()).await;
     assert!(
         result.is_ok(),
         "Evaluation with dynamic variant should succeed"
@@ -2351,7 +2351,7 @@ async fn test_max_inferences_parameter() {
     };
 
     let max_inferences = Some(3);
-    let result = run_evaluation_core_streaming(core_args, max_inferences, None)
+    let result = run_evaluation_core_streaming(core_args, max_inferences, HashMap::new())
         .await
         .unwrap();
 
@@ -2431,7 +2431,7 @@ async fn test_precision_limits_parameter() {
     let result = run_evaluation_core_streaming(
         core_args,
         None, // No max_inferences limit
-        Some(precision_limits.clone()),
+        precision_limits.clone(),
     )
     .await
     .unwrap();
