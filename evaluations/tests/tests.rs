@@ -88,8 +88,7 @@ async fn run_evaluations_json() {
         format: OutputFormat::Jsonl,
         // This test relies on the cache (see below), so we need to enable it
         inference_cache: CacheEnabledMode::On,
-        min_inferences: None,
-        max_inferences: None,
+        max_datapoints: None,
         precision_limits: None,
     };
 
@@ -365,8 +364,7 @@ async fn run_exact_match_evaluation_chat() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
-        min_inferences: None,
-        max_inferences: None,
+        max_datapoints: None,
         precision_limits: None,
     };
 
@@ -492,8 +490,7 @@ async fn run_llm_judge_evaluation_chat() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::On,
-        min_inferences: None,
-        max_inferences: None,
+        max_datapoints: None,
         precision_limits: None,
     };
 
@@ -716,8 +713,7 @@ async fn run_image_evaluation() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::WriteOnly,
-        min_inferences: None,
-        max_inferences: None,
+        max_datapoints: None,
         precision_limits: None,
     };
 
@@ -934,8 +930,7 @@ async fn check_invalid_image_evaluation() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
-        min_inferences: None,
-        max_inferences: None,
+        max_datapoints: None,
         precision_limits: None,
     };
 
@@ -1038,8 +1033,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
         concurrency: 10,
         format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::Off,
-        min_inferences: None,
-        max_inferences: None,
+        max_datapoints: None,
         precision_limits: None,
     };
 
@@ -1084,8 +1078,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
         concurrency: 10,
         format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::Off,
-        min_inferences: None,
-        max_inferences: None,
+        max_datapoints: None,
         precision_limits: None,
     };
 
@@ -1246,8 +1239,7 @@ async fn run_evaluations_errors() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
-        min_inferences: None,
-        max_inferences: None,
+        max_datapoints: None,
         precision_limits: None,
     };
 
@@ -1666,8 +1658,7 @@ async fn run_evaluations_best_of_3() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
-        min_inferences: None,
-        max_inferences: None,
+        max_datapoints: None,
         precision_limits: None,
     };
 
@@ -1857,8 +1848,7 @@ async fn run_evaluations_mixture_of_3() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
-        min_inferences: None,
-        max_inferences: None,
+        max_datapoints: None,
         precision_limits: None,
     };
 
@@ -2051,8 +2041,7 @@ async fn run_evaluations_dicl() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
-        min_inferences: None,
-        max_inferences: None,
+        max_datapoints: None,
         precision_limits: None,
     };
 
@@ -2556,8 +2545,7 @@ async fn test_cli_args_with_adaptive_stopping() {
         concurrency: 5,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
-        min_inferences: Some(5),
-        max_inferences: Some(20),
+        max_datapoints: Some(20),
         precision_limits: Some(vec![("exact_match".to_string(), 0.2)]),
     };
 
@@ -2574,14 +2562,14 @@ async fn test_cli_args_with_adaptive_stopping() {
     let run_info: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
     let num_datapoints = run_info["num_datapoints"].as_u64().unwrap() as usize;
 
-    // Should process at least min_inferences (5) but not more than max_inferences (20)
+    // Should process at least min_inferences (5) but not more than max_datapoints (20)
     assert!(
         num_datapoints >= 5,
         "Should process at least min_inferences (5), got {num_datapoints}"
     );
     assert!(
         num_datapoints <= 20,
-        "Should not exceed max_inferences (20), got {num_datapoints}"
+        "Should not exceed max_datapoints (20), got {num_datapoints}"
     );
 
     println!("CLI adaptive stopping test: processed {num_datapoints} datapoints (min=5, max=20)");
