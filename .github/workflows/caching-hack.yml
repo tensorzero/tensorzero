@@ -58,7 +58,9 @@ jobs:
           powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
           uv python install 3.10
           echo "PYO3_PYTHON=$(uv python find python3.10)" >> $GITHUB_ENV
+        shell: bash
       - run: |
           # Run both of these, as they build dependencies with different features
           cargo build --features e2e_tests --tests
           cargo build-e2e
+
