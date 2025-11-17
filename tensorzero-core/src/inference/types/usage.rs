@@ -8,6 +8,13 @@ pub struct Usage {
 }
 
 impl Usage {
+    pub fn zero() -> Usage {
+        Usage {
+            input_tokens: Some(0),
+            output_tokens: Some(0),
+        }
+    }
+
     pub fn total_tokens(&self) -> Option<u32> {
         match (self.input_tokens, self.output_tokens) {
             (Some(input), Some(output)) => Some(input + output),
@@ -17,23 +24,31 @@ impl Usage {
 
     /// Sum an iterator of Usage values.
     /// If any usage has None for a field, the sum for that field becomes None.
-    pub fn sum_usage_strict<I: Iterator<Item = Usage>>(iter: I) -> Usage {
-        iter.fold(
-            Usage {
-                input_tokens: Some(0),
-                output_tokens: Some(0),
+    pub fn sum_iter_strict<I: Iterator<Item = Usage>>(iter: I) -> Usage {
+        iter.fold(Usage::zero(), |acc, usage| Usage {
+            input_tokens: match (acc.input_tokens, usage.input_tokens) {
+                (Some(a), Some(b)) => Some(a + b),
+                _ => None,
             },
-            |acc, usage| Usage {
-                input_tokens: match (acc.input_tokens, usage.input_tokens) {
-                    (Some(a), Some(b)) => Some(a + b),
-                    _ => None,
-                },
-                output_tokens: match (acc.output_tokens, usage.output_tokens) {
-                    (Some(a), Some(b)) => Some(a + b),
-                    _ => None,
-                },
+            output_tokens: match (acc.output_tokens, usage.output_tokens) {
+                (Some(a), Some(b)) => Some(a + b),
+                _ => None,
             },
-        )
+        })
+    }
+
+    /// Sum two `Usage` instances.
+    /// `None` contaminates on both sides.
+    pub fn sum_strict(&mut self, other: &Usage) {
+        self.input_tokens = match (self.input_tokens, other.input_tokens) {
+            (Some(a), Some(b)) => Some(a + b),
+            _ => None,
+        };
+
+        self.output_tokens = match (self.output_tokens, other.output_tokens) {
+            (Some(a), Some(b)) => Some(a + b),
+            _ => None,
+        };
     }
 }
 
@@ -58,7 +73,7 @@ mod tests {
             },
         ];
 
-        let sum = Usage::sum_usage_strict(usages.into_iter());
+        let sum = Usage::sum_iter_strict(usages.into_iter());
         assert_eq!(sum.input_tokens, Some(18));
         assert_eq!(sum.output_tokens, Some(42));
     }
@@ -81,7 +96,7 @@ mod tests {
             },
         ];
 
-        let sum = Usage::sum_usage_strict(usages.into_iter());
+        let sum = Usage::sum_iter_strict(usages.into_iter());
         assert_eq!(sum.input_tokens, None); // None because one usage had None
         assert_eq!(sum.output_tokens, Some(42)); // All had Some, so sum is Some
     }
@@ -99,7 +114,7 @@ mod tests {
             },
         ];
 
-        let sum = Usage::sum_usage_strict(usages.into_iter());
+        let sum = Usage::sum_iter_strict(usages.into_iter());
         assert_eq!(sum.input_tokens, None);
         assert_eq!(sum.output_tokens, None);
     }
@@ -107,7 +122,7 @@ mod tests {
     #[test]
     fn test_usage_sum_empty() {
         let usages: Vec<Usage> = vec![];
-        let sum = Usage::sum_usage_strict(usages.into_iter());
+        let sum = Usage::sum_iter_strict(usages.into_iter());
         // Empty sum should return Some(0) for both fields since we start with Some(0)
         assert_eq!(sum.input_tokens, Some(0));
         assert_eq!(sum.output_tokens, Some(0));
@@ -120,7 +135,7 @@ mod tests {
             output_tokens: Some(20),
         }];
 
-        let sum = Usage::sum_usage_strict(usages.into_iter());
+        let sum = Usage::sum_iter_strict(usages.into_iter());
         assert_eq!(sum.input_tokens, Some(10));
         assert_eq!(sum.output_tokens, Some(20));
     }

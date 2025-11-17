@@ -1887,7 +1887,7 @@ impl InferenceResult {
     /// Aggregates the usage of all model inference results, considering cached results.
     /// If any of the values are None, the total usage is considered as None (via `sum_usage_strict`).
     pub fn usage_considering_cached(&self) -> Usage {
-        Usage::sum_usage_strict(
+        Usage::sum_iter_strict(
             self.model_inference_results()
                 .iter()
                 .map(ModelInferenceResponseWithMetadata::usage_considering_cached),

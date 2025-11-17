@@ -639,19 +639,18 @@ async fn wrap_provider_stream(
     let base_stream = async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
-        let mut total_usage = Usage {
-            input_tokens: None,
-            output_tokens: None,
-        };
+        // `total_usage` is `None` until we receive a chunk with usage information
+        let mut total_usage: Option<Usage> = None;
         while let Some(chunk) = stream.next().await {
             if let Ok(chunk) = chunk.as_ref() {
                 if let Some(chunk_usage) = &chunk.usage {
-                    if let Some(input_tokens) = chunk_usage.input_tokens {
-                        total_usage.input_tokens = Some(total_usage.input_tokens.unwrap_or(0) + input_tokens);
+                    // `total_usage` will be `None` if this is the first chunk with usage information....
+                    if total_usage.is_none() {
+                        // ... so initialize it to zero ...
+                        total_usage = Some(Usage::zero());
                     }
-                    if let Some(output_tokens) = chunk_usage.output_tokens {
-                        total_usage.output_tokens = Some(total_usage.output_tokens.unwrap_or(0) + output_tokens);
-                    }
+                    // ...and then add the chunk usage to it (handling `None` fields)
+                    if let Some(mut u) = total_usage { u.sum_strict(chunk_usage); }
                 }
             }
             // We can skip cloning the chunk if we know we're not going to write to the cache
@@ -675,6 +674,10 @@ async fn wrap_provider_stream(
             }
             yield chunk;
         }
+
+        // If we don't see a chunk with usage information, set `total_usage` to the default value (fields as `None`)
+        let total_usage = total_usage.unwrap_or_default();
+
         otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {

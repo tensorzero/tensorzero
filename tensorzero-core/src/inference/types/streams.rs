@@ -265,7 +265,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
             .collect::<Vec<&str>>()
             .join("\n")
     });
-    let mut usage: Usage = Usage::default();
+    // `usage` is `None` until we receive a chunk with usage information
+    let mut usage: Option<Usage> = None;
     let mut ttft: Option<Duration> = None;
     let response_time = value
         .last()
@@ -287,21 +288,14 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
 
     for chunk in value {
         if let Some(chunk_usage) = chunk.usage() {
-            if let Some(chunk_input_tokens) = chunk_usage.input_tokens {
-                usage.input_tokens = Some(
-                    usage
-                        .input_tokens
-                        .unwrap_or(0)
-                        .saturating_add(chunk_input_tokens),
-                );
+            // `usage` will be `None` if this is the first chunk with usage information....
+            if usage.is_none() {
+                // ... so initialize it to zero ...
+                usage = Some(Usage::zero());
             }
-            if let Some(chunk_output_tokens) = chunk_usage.output_tokens {
-                usage.output_tokens = Some(
-                    usage
-                        .output_tokens
-                        .unwrap_or(0)
-                        .saturating_add(chunk_output_tokens),
-                );
+            // ...and then add the chunk usage to it (handling `None` fields)
+            if let Some(mut u) = usage {
+                u.sum_strict(chunk_usage);
             }
         }
         match chunk {
@@ -580,7 +574,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         input_messages,
         raw_request,
         raw_response,
-        usage,
+        // `usage` will be None if we don't see usage in any chunks, in which case we take the default value (fields as `None`)
+        usage: usage.unwrap_or_default(),
         latency: latency.clone(),
         finish_reason,
     });
