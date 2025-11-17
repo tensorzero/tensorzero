@@ -162,21 +162,41 @@ mod tests {
 
     #[test]
     fn test_resolve_toml_relative_paths() {
-        let table =
-            DeTable::parse(r#"functions.my_function.system_schema = "relative/schema_path.json""#)
+        // Create a temporary file to test with
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        write!(temp_file, r#"{{"test": "data"}}"#).unwrap();
+        let temp_path = temp_file.path().to_path_buf();
+
+        // Get the directory containing the temp file
+        let temp_dir = temp_path.parent().unwrap();
+
+        // Create a config that references this temp file
+        let config_str = format!(
+            r#"functions.my_function.system_schema = "{}""#,
+            temp_path.file_name().unwrap().to_str().unwrap()
+        );
+        let table = DeTable::parse(&config_str).unwrap();
+
+        // Use the temp directory as the base path
+        let config_path = temp_dir.join("fake_config.toml");
+        let resolved =
+            resolve_toml_relative_paths(table.into_inner(), &SpanMap::new_single_file(config_path))
                 .unwrap();
 
-        let resolved = resolve_toml_relative_paths(
-            table.into_inner(),
-            &SpanMap::new_single_file(PathBuf::from("my/base/path/fake_config.toml")),
-        )
-        .unwrap();
+        // Verify the path was resolved and the data was loaded
+        let schema_table = resolved["functions"]["my_function"]["system_schema"]
+            .as_table()
+            .unwrap();
         assert_eq!(
-            resolved,
-            toml::from_str(
-                r#"functions.my_function.system_schema = { __tensorzero_remapped_path = "my/base/path/relative/schema_path.json" }"#
-            )
-            .unwrap()
+            schema_table["__tensorzero_remapped_path"].as_str().unwrap(),
+            temp_path.to_str().unwrap()
+        );
+        assert_eq!(
+            schema_table["__data"].as_str().unwrap(),
+            r#"{"test": "data"}"#
         );
     }
 

@@ -28,7 +28,7 @@ use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
-use crate::config::path::ResolvedTomlPath;
+use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
 use crate::config::span_map::SpanMap;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
@@ -171,7 +171,7 @@ pub struct TemplateFilesystemAccess {
     /// Defaults to `false`
     #[serde(default)]
     enabled: bool,
-    base_path: Option<ResolvedTomlPath>,
+    base_path: Option<ResolvedTomlPathDirectory>,
 }
 
 #[derive(Clone, Debug, Serialize, ts_rs::TS)]
@@ -912,7 +912,7 @@ impl Config {
                 .ok_or_else(|| Error::new(ErrorDetails::Config {
                     message: "`gateway.template_filesystem_access.enabled` is true but `base_path` is not specified. Please set `gateway.template_filesystem_access.base_path` to the directory containing your template files.".to_string()
                 }))?;
-            Some(base_path.get_real_path()?.to_owned())
+            Some(base_path.get_real_path().to_owned())
         } else {
             None
         };
@@ -1314,7 +1314,7 @@ pub enum UninitializedFunctionConfig {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedSchema {
-    path: ResolvedTomlPath,
+    path: ResolvedTomlPathData,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -1328,9 +1328,9 @@ pub struct UninitializedSchemas {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigChat {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<ResolvedTomlPath>,
-    user_schema: Option<ResolvedTomlPath>,
-    assistant_schema: Option<ResolvedTomlPath>,
+    system_schema: Option<ResolvedTomlPathData>,
+    user_schema: Option<ResolvedTomlPathData>,
+    assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
     schemas: UninitializedSchemas,
     #[serde(default)]
@@ -1348,12 +1348,12 @@ pub struct UninitializedFunctionConfigChat {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigJson {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<ResolvedTomlPath>,
-    user_schema: Option<ResolvedTomlPath>,
-    assistant_schema: Option<ResolvedTomlPath>,
+    system_schema: Option<ResolvedTomlPathData>,
+    user_schema: Option<ResolvedTomlPathData>,
+    assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
     schemas: UninitializedSchemas,
-    output_schema: Option<ResolvedTomlPath>, // schema will default to {} if not specified
+    output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
     #[serde(default)]
     description: Option<String>,
     experimentation: Option<UninitializedExperimentationConfig>,
@@ -1685,7 +1685,7 @@ impl UninitializedVariantInfo {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedToolConfig {
     pub description: String,
-    pub parameters: ResolvedTomlPath,
+    pub parameters: ResolvedTomlPathData,
     pub name: Option<String>,
     #[serde(default)]
     pub strict: bool,
@@ -1707,13 +1707,13 @@ impl UninitializedToolConfig {
 #[ts(export)]
 pub struct PathWithContents {
     #[cfg_attr(test, ts(type = "string"))]
-    pub path: ResolvedTomlPath,
+    pub path: ResolvedTomlPathData,
     pub contents: String,
 }
 
 impl PathWithContents {
-    pub fn from_path(path: ResolvedTomlPath) -> Result<Self, Error> {
-        let contents = path.read()?;
+    pub fn from_path(path: ResolvedTomlPathData) -> Result<Self, Error> {
+        let contents = path.data().to_string();
         Ok(Self { path, contents })
     }
 }

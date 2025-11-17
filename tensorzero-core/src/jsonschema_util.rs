@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::OnceCell;
 use tracing::instrument;
 
-use crate::config::path::ResolvedTomlPath;
+use crate::config::path::ResolvedTomlPathData;
 use crate::error::{Error, ErrorDetails};
 
 #[derive(Debug, Serialize)]
@@ -64,10 +64,10 @@ impl Default for StaticJSONSchema {
 impl StaticJSONSchema {
     /// Just instantiates the struct, does not load the schema
     /// You should call `load` to load the schema
-    pub fn from_path(path: ResolvedTomlPath) -> Result<Self, Error> {
-        let content = path.read()?;
+    pub fn from_path(path: ResolvedTomlPathData) -> Result<Self, Error> {
+        let content = path.data();
 
-        let schema: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+        let schema: serde_json::Value = serde_json::from_str(content).map_err(|e| {
             Error::new(ErrorDetails::JsonSchema {
                 message: format!(
                     "Failed to parse JSON Schema `{}`: {}",
@@ -246,7 +246,7 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        let schema = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
+        let schema = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             temp_file.path().to_owned(),
             None,
         ))
@@ -294,7 +294,7 @@ mod tests {
         write!(temp_file, "{invalid_schema}")
             .expect("Failed to write invalid schema to temporary file");
 
-        let result = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
+        let result = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             temp_file.path().to_owned(),
             None,
         ));
@@ -308,16 +308,17 @@ mod tests {
     }
 
     #[test]
-    fn test_nonexistent_file() {
-        let result = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
-            "nonexistent_file.json".into(),
-            None,
+    fn test_invalid_json_content() {
+        // With eager loading, file contents are loaded during config parsing.
+        // This test verifies that invalid JSON content produces the right error.
+        let result = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
+            "invalid_file.json".into(),
+            Some("not valid json".to_string()),
         ));
-        assert_eq!(
-            result.unwrap_err().to_string(),
-            "Failed to read file at nonexistent_file.json: No such file or directory (os error 2)"
-                .to_string()
-        );
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Failed to parse JSON Schema"));
+        assert!(err_msg.contains("invalid_file.json"));
     }
 
     #[tokio::test]
