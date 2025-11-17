@@ -59,10 +59,8 @@ impl SpanMap {
     /// Loads all config files matching the given glob, and merges them into a single `Table`
     /// All of the `ResolvedTomlPath` entries in the resulting `Table` have been remapped to
     /// take their source toml file into account.
-    /// As a result, almost all consumers of the returned `Table` shouldn't need to care
-    /// about globbing (the exception being the fallback logic for `[gateway.template_filesystem_access]`,
-    /// which needs to check if we globbed exactly one file)
-    pub fn from_glob(glob: &ConfigFileGlob, allow_empty: bool) -> Result<(Self, Table), Error> {
+    /// As a result, consumers of the returned `Table` don't need to care about globbing.
+    pub fn from_glob(glob: &ConfigFileGlob, allow_empty: bool) -> Result<Table, Error> {
         let mut found_file = false;
         let mut range_to_file = Vec::new();
         let mut previous_range_end: usize = 0;
@@ -129,7 +127,7 @@ impl SpanMap {
             merge_tomls(&mut target_config, parsed.get_ref(), &span_map, vec![])?;
         }
         let final_table = resolve_toml_relative_paths(target_config, &span_map)?;
-        Ok((span_map, final_table))
+        Ok(final_table)
     }
 
     /// Obtains the base path for a given range. This range should come from a `Spanned` entry
@@ -151,15 +149,6 @@ impl SpanMap {
             })
             .ok()?;
         Some(&self.range_to_file[idx].1)
-    }
-
-    /// If the glob matched exactly one file, return the path to that file (*not* the base path)
-    pub fn get_single_file(&self) -> Option<&PathBuf> {
-        if let [(_range, single_file)] = self.range_to_file.as_slice() {
-            Some(&single_file.path)
-        } else {
-            None
-        }
     }
 }
 
