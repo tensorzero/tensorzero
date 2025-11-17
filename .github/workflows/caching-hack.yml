@@ -10,7 +10,7 @@ name: Caching Hack (re-runs actions on 'main' to update the cache)
 
 on:
   push:
-    branches: ["main", "aaron/fix-caching-hack"]
+    branches: ["main"]
 
 permissions:
   contents: read
