@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ops::Deref;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -28,14 +29,17 @@ impl CancellationTokens {
         Self(HashMap::new())
     }
 
-    /// Get a reference to the inner HashMap
-    pub fn as_map(&self) -> &HashMap<String, CancellationToken> {
-        &self.0
-    }
-
     /// Check if all tokens are cancelled
     pub fn all_cancelled(&self) -> bool {
-        !self.0.is_empty() && self.0.values().all(|token| token.is_cancelled())
+        !self.is_empty() && self.values().all(|token| token.is_cancelled())
+    }
+}
+
+impl Deref for CancellationTokens {
+    type Target = HashMap<String, CancellationToken>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -126,7 +130,7 @@ impl StoppingManager {
             return;
         }
 
-        let tokens = self.cancellation_tokens.as_map();
+        let tokens = &self.cancellation_tokens;
 
         // Check each evaluator's stopping condition
         for (evaluator_name, evaluator_stats) in &self.evaluator_stats {
@@ -174,7 +178,7 @@ mod tests {
         assert!(!manager.all_evaluators_stopped());
 
         // get_tokens should return empty map
-        assert!(manager.get_tokens().as_map().is_empty());
+        assert!(manager.get_tokens().is_empty());
 
         // Cancel should be a no-op
         manager.cancel_converged_evaluators(100);
@@ -193,8 +197,8 @@ mod tests {
         assert!(!manager.all_evaluators_stopped());
 
         // get_tokens should return non-empty map
-        assert_eq!(manager.get_tokens().as_map().len(), 1);
-        assert!(manager.get_tokens().as_map().contains_key("evaluator1"));
+        assert_eq!(manager.get_tokens().len(), 1);
+        assert!(manager.get_tokens().contains_key("evaluator1"));
     }
 
     #[test]
@@ -209,7 +213,7 @@ mod tests {
         manager.cancel_converged_evaluators(10);
 
         // Get the token to check if it's cancelled
-        let tokens = manager.get_tokens().as_map();
+        let tokens = manager.get_tokens();
         let token = tokens.get("evaluator1").unwrap();
         assert!(!token.is_cancelled());
     }
@@ -235,7 +239,7 @@ mod tests {
         }
 
         // Get the token to check its state
-        let tokens = manager.get_tokens().as_map();
+        let tokens = manager.get_tokens();
         let token = tokens.get("evaluator1").unwrap();
 
         // Should not cancel before calling cancel_converged_evaluators
@@ -262,7 +266,7 @@ mod tests {
         assert!(!manager.all_evaluators_stopped());
 
         // Get tokens and cancel them manually (simulating convergence)
-        let tokens = manager.get_tokens().as_map();
+        let tokens = manager.get_tokens();
         let token1 = tokens.get("evaluator1").unwrap();
         let token2 = tokens.get("evaluator2").unwrap();
 
@@ -284,7 +288,7 @@ mod tests {
         let mut manager = StoppingManager::new(precision_targets, &evaluator_names);
 
         // Verify that tokens exist for both evaluators (even though only evaluator1 has precision limit)
-        let tokens = manager.get_tokens().as_map();
+        let tokens = manager.get_tokens();
         assert!(tokens.contains_key("evaluator1"));
         assert!(tokens.contains_key("evaluator2"));
 

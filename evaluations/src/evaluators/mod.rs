@@ -75,7 +75,6 @@ pub(crate) async fn evaluate_inference(
             // Only run evaluators whose tokens are not in the map or not cancelled
             // Empty map means no adaptive stopping, so all evaluators run
             cancellation_tokens
-                .as_map()
                 .get(*name)
                 .is_none_or(|token| !token.is_cancelled())
         });
