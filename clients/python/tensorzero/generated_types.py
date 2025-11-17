@@ -174,10 +174,11 @@ class InferenceResponseToolCall:
 
 
 @dataclass(kw_only=True)
-class ClientSideFunctionTool:
+class Tool1:
     description: str
     parameters: Any
     name: str
+    type: Literal["client_side_function"] = "client_side_function"
     strict: bool | None = False
     """
     `strict` here specifies that TensorZero should attempt to use any facilities
@@ -186,6 +187,14 @@ class ClientSideFunctionTool:
     This imposes additional restrictions on the JSON schema that may vary across providers
     so we allow it to be configurable.
     """
+
+
+@dataclass(kw_only=True)
+class OpenAICustomToolFormat1:
+    type: Literal["text"] = "text"
+
+
+OpenAIGrammarSyntax = Literal["lark", "regex"]
 
 
 @dataclass(kw_only=True)
@@ -373,6 +382,21 @@ class UpdateDatapointMetadataRequest:
     """
 
 
+@dataclass(kw_only=True)
+class ClientSideFunctionTool:
+    description: str
+    parameters: Any
+    name: str
+    strict: bool | None = False
+    """
+    `strict` here specifies that TensorZero should attempt to use any facilities
+    available from the model provider to force the model to generate an accurate tool call,
+    notably OpenAI's strict tool call mode (https://platform.openai.com/docs/guides/function-calling#strict-mode).
+    This imposes additional restrictions on the JSON schema that may vary across providers
+    so we allow it to be configurable.
+    """
+
+
 CreateDatapointsFromInferenceOutputSource = str
 
 
@@ -520,6 +544,12 @@ ContentBlockChatOutput = (
 
 
 @dataclass(kw_only=True)
+class OpenAIGrammarDefinition:
+    syntax: OpenAIGrammarSyntax
+    definition: str
+
+
+@dataclass(kw_only=True)
 class ProviderTool:
     tool: Any
     scope: ProviderToolScope | None = None
@@ -623,34 +653,6 @@ OrderBy = OrderByTimestamp | OrderByMetric
 
 
 @dataclass(kw_only=True)
-class DynamicToolParams:
-    allowed_tools: list[str] | None = None
-    """
-    A subset of static tools configured for the function that the inference is allowed to use. Optional.
-    If not provided, all static tools are allowed.
-    """
-    additional_tools: list[ClientSideFunctionTool] | None = None
-    """
-    Tools that the user provided at inference time (not in function config), in addition to the function-configured
-    tools, that are also allowed.
-    """
-    tool_choice: ToolChoice | None = None
-    """
-    User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
-    Optional.
-    """
-    parallel_tool_calls: bool | None = None
-    """
-    Whether to use parallel tool calls in the inference. Optional.
-    If provided during inference, it will override the function-configured parallel tool calls.
-    """
-    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
-    """
-    Provider-specific tool configurations
-    """
-
-
-@dataclass(kw_only=True)
 class StoredInputMessageContentFile:
     mime_type: str
     storage_path: StoragePath
@@ -673,6 +675,15 @@ StoredInputMessageContent = (
 
 
 @dataclass(kw_only=True)
+class OpenAICustomToolFormat2:
+    grammar: OpenAIGrammarDefinition
+    type: Literal["grammar"] = "grammar"
+
+
+OpenAICustomToolFormat = OpenAICustomToolFormat1 | OpenAICustomToolFormat2
+
+
+@dataclass(kw_only=True)
 class InputMessageContentFile:
     type: Literal["file"] = "file"
 
@@ -690,15 +701,61 @@ InputMessageContent = (
 
 
 @dataclass(kw_only=True)
+class OpenAICustomTool:
+    name: str
+    description: str | None = None
+    format: OpenAICustomToolFormat | None = None
+
+
+@dataclass(kw_only=True)
 class StoredInputMessage:
     role: Role
     content: list[StoredInputMessageContent]
 
 
 @dataclass(kw_only=True)
+class Tool2:
+    name: str
+    type: Literal["openai_custom"] = "openai_custom"
+    description: str | None = None
+    format: OpenAICustomToolFormat | None = None
+
+
+Tool = Tool1 | Tool2
+
+
+@dataclass(kw_only=True)
 class InputMessage:
     role: Role
     content: list[InputMessageContent]
+
+
+@dataclass(kw_only=True)
+class DynamicToolParams:
+    allowed_tools: list[str] | None = None
+    """
+    A subset of static tools configured for the function that the inference is allowed to use. Optional.
+    If not provided, all static tools are allowed.
+    """
+    additional_tools: list[Tool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured
+    tools, that are also allowed.
+    """
+    tool_choice: ToolChoice | None = None
+    """
+    User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+    Optional.
+    """
+    parallel_tool_calls: bool | None = None
+    """
+    Whether to use parallel tool calls in the inference. Optional.
+    If provided during inference, it will override the function-configured parallel tool calls.
+    """
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
+    """
+    Provider-specific tool configurations
+    """
 
 
 @dataclass(kw_only=True)
@@ -736,7 +793,7 @@ class CreateChatDatapointRequest:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[ClientSideFunctionTool] | None = None
+    additional_tools: list[Tool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -828,7 +885,7 @@ class ChatInferenceDatapoint:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[ClientSideFunctionTool] | None = None
+    additional_tools: list[Tool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -902,7 +959,7 @@ class StoredChatInference:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[ClientSideFunctionTool] | None = None
+    additional_tools: list[Tool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
