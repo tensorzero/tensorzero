@@ -7,8 +7,8 @@ use crate::db::clickhouse::query_builder::{
 };
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::inferences::{
-    ClickHouseStoredInferenceWithDispreferredOutputs, InferenceOutputSource, InferenceQueries,
-    ListInferencesParams,
+    ClickHouseStoredInferenceWithDispreferredOutputs, GetInferenceBoundsParams, InferenceBounds,
+    InferenceOutputSource, InferenceQueries, ListInferencesParams,
 };
 use crate::function::FunctionConfigType;
 use crate::{
@@ -54,6 +54,103 @@ impl InferenceQueries for ClickHouseConnectionInfo {
             })
             .collect::<Result<Vec<StoredInferenceDatabase>, Error>>()?;
         Ok(inferences)
+    }
+
+    async fn get_inference_bounds(
+        &self,
+        params: GetInferenceBoundsParams,
+    ) -> Result<InferenceBounds, Error> {
+        let mut query_params: Vec<QueryParameter> = Vec::new();
+        let mut param_idx_counter = 0;
+        let mut where_clauses: Vec<String> = Vec::new();
+
+        // Add function_name filter
+        if let Some(function_name) = params.function_name {
+            let placeholder = add_parameter(
+                function_name,
+                ClickhouseType::String,
+                &mut query_params,
+                &mut param_idx_counter,
+            );
+            where_clauses.push(format!("function_name = {placeholder}"));
+        }
+
+        // Add variant_name filter
+        if let Some(variant_name) = params.variant_name {
+            let placeholder = add_parameter(
+                variant_name,
+                ClickhouseType::String,
+                &mut query_params,
+                &mut param_idx_counter,
+            );
+            where_clauses.push(format!("variant_name = {placeholder}"));
+        }
+
+        // Add episode_id filter
+        if let Some(episode_id) = params.episode_id {
+            let placeholder = add_parameter(
+                episode_id.to_string(),
+                ClickhouseType::String,
+                &mut query_params,
+                &mut param_idx_counter,
+            );
+            where_clauses.push(format!("episode_id = {placeholder}"));
+        }
+
+        // Build WHERE clause
+        let where_clause = if where_clauses.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", where_clauses.join(" AND "))
+        };
+
+        // Build the query
+        // Note: We use uint_to_uuid() to convert UInt128 back to UUID format
+        // MIN(id_uint) = oldest (last_id), MAX(id_uint) = most recent (first_id)
+        let mut query = format!(
+            r"SELECT
+    uint_to_uuid(MAX(id_uint)) AS first_id,
+    uint_to_uuid(MIN(id_uint)) AS last_id,
+    toUInt64(COUNT()) AS count
+FROM InferenceById FINAL
+{where_clause}"
+        );
+        query.push_str("\nFORMAT JSONEachRow");
+
+        // Execute the query
+        let query_params_map: std::collections::HashMap<&str, &str> = query_params
+            .iter()
+            .map(|p| (p.name.as_str(), p.value.as_str()))
+            .collect();
+
+        let response = self
+            .inner
+            .run_query_synchronous(query, &query_params_map)
+            .await?;
+
+        let rows: Vec<InferenceBounds> = response
+            .response
+            .trim()
+            .lines()
+            .map(|line| {
+                serde_json::from_str(line).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to deserialize bounds response: {e:?}"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Handle empty results
+        if rows.is_empty() || rows[0].count == 0 {
+            return Ok(InferenceBounds::empty());
+        }
+
+        Ok(InferenceBounds {
+            first_id: rows[0].first_id,
+            last_id: rows[0].last_id,
+            count: rows[0].count,
+        })
     }
 }
 
@@ -796,5 +893,283 @@ mod tests {
 
         // Verify the metric filter condition is in WHERE
         assert_query_contains(&sql, "j0.value >");
+    }
+
+    mod get_inference_bounds_tests {
+        use super::*;
+        use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+        use crate::db::clickhouse::{
+            ClickHouseConnectionInfo, ClickHouseResponse, ClickHouseResponseMetadata,
+        };
+        use crate::db::inferences::{GetInferenceBoundsParams, InferenceBounds, InferenceQueries};
+        use std::sync::Arc;
+
+        #[tokio::test]
+        async fn test_get_inference_bounds_no_filters() {
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(|query, _| {
+                    assert_query_contains(query, "SELECT");
+                    assert_query_contains(query, "uint_to_uuid(MAX(id_uint)) AS first_id");
+                    assert_query_contains(query, "uint_to_uuid(MIN(id_uint)) AS last_id");
+                    assert_query_contains(query, "toUInt64(COUNT()) AS count");
+                    assert_query_contains(query, "FROM InferenceById FINAL");
+                    assert_query_does_not_contain(query, "WHERE");
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: r#"{"first_id":"01234567-89ab-cdef-0123-456789abcdef","last_id":"fedcba98-7654-3210-fedc-ba9876543210","count":42}"#.to_string(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 1,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+            let result = conn
+                .get_inference_bounds(GetInferenceBoundsParams {
+                    function_name: None,
+                    variant_name: None,
+                    episode_id: None,
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(
+                result.first_id,
+                Some(Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap())
+            );
+            assert_eq!(
+                result.last_id,
+                Some(Uuid::parse_str("fedcba98-7654-3210-fedc-ba9876543210").unwrap())
+            );
+            assert_eq!(result.count, 42);
+        }
+
+        #[tokio::test]
+        async fn test_get_inference_bounds_with_function_name() {
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(|query, params| {
+                    assert_query_contains(query, "WHERE function_name = {p0:String}");
+                    assert_eq!(params.get("p0"), Some(&"test_function"));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: r#"{"first_id":"11111111-2222-3333-4444-555555555555","last_id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","count":10}"#.to_string(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 1,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+            let result = conn
+                .get_inference_bounds(GetInferenceBoundsParams {
+                    function_name: Some("test_function".to_string()),
+                    variant_name: None,
+                    episode_id: None,
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(
+                result.first_id,
+                Some(Uuid::parse_str("11111111-2222-3333-4444-555555555555").unwrap())
+            );
+            assert_eq!(result.count, 10);
+        }
+
+        #[tokio::test]
+        async fn test_get_inference_bounds_with_variant_name() {
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(|query, params| {
+                    assert_query_contains(query, "WHERE variant_name = {p0:String}");
+                    assert_eq!(params.get("p0"), Some(&"test_variant"));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: r#"{"first_id":"22222222-3333-4444-5555-666666666666","last_id":"bbbbbbbb-cccc-dddd-eeee-ffffffffffff","count":5}"#.to_string(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 1,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+            let result = conn
+                .get_inference_bounds(GetInferenceBoundsParams {
+                    function_name: None,
+                    variant_name: Some("test_variant".to_string()),
+                    episode_id: None,
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(
+                result.first_id,
+                Some(Uuid::parse_str("22222222-3333-4444-5555-666666666666").unwrap())
+            );
+            assert_eq!(result.count, 5);
+        }
+
+        #[tokio::test]
+        async fn test_get_inference_bounds_with_episode_id() {
+            let episode_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "WHERE episode_id = {p0:String}");
+                    assert_eq!(
+                        params.get("p0"),
+                        Some(&"01234567-89ab-cdef-0123-456789abcdef")
+                    );
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: r#"{"first_id":"33333333-4444-5555-6666-777777777777","last_id":"cccccccc-dddd-eeee-ffff-000000000000","count":3}"#.to_string(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 1,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+            let result = conn
+                .get_inference_bounds(GetInferenceBoundsParams {
+                    function_name: None,
+                    variant_name: None,
+                    episode_id: Some(episode_id),
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(
+                result.first_id,
+                Some(Uuid::parse_str("33333333-4444-5555-6666-777777777777").unwrap())
+            );
+            assert_eq!(result.count, 3);
+        }
+
+        #[tokio::test]
+        async fn test_get_inference_bounds_with_multiple_filters() {
+            let episode_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "WHERE");
+                    assert_query_contains(query, "function_name = {p0:String}");
+                    assert_query_contains(query, "variant_name = {p1:String}");
+                    assert_query_contains(query, "episode_id = {p2:String}");
+                    assert_eq!(params.get("p0"), Some(&"test_function"));
+                    assert_eq!(params.get("p1"), Some(&"test_variant"));
+                    assert_eq!(
+                        params.get("p2"),
+                        Some(&"01234567-89ab-cdef-0123-456789abcdef")
+                    );
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: r#"{"first_id":"44444444-5555-6666-7777-888888888888","last_id":"dddddddd-eeee-ffff-0000-111111111111","count":1}"#.to_string(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 1,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+            let result = conn
+                .get_inference_bounds(GetInferenceBoundsParams {
+                    function_name: Some("test_function".to_string()),
+                    variant_name: Some("test_variant".to_string()),
+                    episode_id: Some(episode_id),
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(
+                result.first_id,
+                Some(Uuid::parse_str("44444444-5555-6666-7777-888888888888").unwrap())
+            );
+            assert_eq!(result.count, 1);
+        }
+
+        #[tokio::test]
+        async fn test_get_inference_bounds_with_empty_response() {
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(), // Empty response
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+            let result = conn
+                .get_inference_bounds(GetInferenceBoundsParams {
+                    function_name: None,
+                    variant_name: None,
+                    episode_id: None,
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(result, InferenceBounds::empty());
+            assert_eq!(result.first_id, None);
+            assert_eq!(result.last_id, None);
+            assert_eq!(result.count, 0);
+        }
+
+        #[tokio::test]
+        async fn test_get_inference_bounds_with_zero_count() {
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: r#"{"first_id":null,"last_id":null,"count":0}"#.to_string(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 1,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+            let result = conn
+                .get_inference_bounds(GetInferenceBoundsParams {
+                    function_name: Some("nonexistent_function".to_string()),
+                    variant_name: None,
+                    episode_id: None,
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(result, InferenceBounds::empty());
+            assert_eq!(result.first_id, None);
+            assert_eq!(result.last_id, None);
+            assert_eq!(result.count, 0);
+        }
     }
 }
