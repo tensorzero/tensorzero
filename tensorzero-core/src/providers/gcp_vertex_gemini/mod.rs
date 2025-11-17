@@ -785,18 +785,18 @@ fn make_provider_batch_inference_output(
         })
     })?;
 
-    let usage = response
-        .usage_metadata
-        .clone()
-        .ok_or_else(|| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: "GCP Vertex Gemini batch response has no usage metadata".to_string(),
-                raw_request: Some(raw_request.clone()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?
-        .into();
+    let usage_metadata = response.usage_metadata.clone().ok_or_else(|| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: "GCP Vertex Gemini batch response has no usage metadata".to_string(),
+            raw_request: Some(raw_request.clone()),
+            raw_response: Some(raw_response.clone()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })?;
+    let usage = Usage {
+        input_tokens: usage_metadata.prompt_token_count,
+        output_tokens: usage_metadata.candidates_token_count,
+    };
 
     let (output, finish_reason) = get_response_content(
         response,
@@ -2549,15 +2549,6 @@ struct GCPVertexGeminiUsageMetadata {
     candidates_token_count: Option<u32>,
 }
 
-impl From<GCPVertexGeminiUsageMetadata> for Usage {
-    fn from(usage_metadata: GCPVertexGeminiUsageMetadata) -> Self {
-        Usage {
-            input_tokens: usage_metadata.prompt_token_count.unwrap_or(0),
-            output_tokens: usage_metadata.candidates_token_count.unwrap_or(0),
-        }
-    }
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiResponse {
@@ -2621,19 +2612,20 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             provider_name,
         } = response;
 
-        let usage = response
-            .usage_metadata
-            .clone()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "GCP Vertex Gemini non-streaming response has no usage metadata"
-                        .to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?
-            .into();
+        let usage_metadata = response.usage_metadata.clone().ok_or_else(|| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: "GCP Vertex Gemini non-streaming response has no usage metadata"
+                    .to_string(),
+                raw_request: Some(raw_request.clone()),
+                raw_response: Some(raw_response.clone()),
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+
+        let usage = Usage {
+            input_tokens: usage_metadata.prompt_token_count,
+            output_tokens: usage_metadata.candidates_token_count,
+        };
 
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
@@ -2706,9 +2698,23 @@ fn convert_stream_response_with_metadata_to_chunk(
         ContentBlockChunk::Text(text) => !text.text.is_empty(),
         _ => true,
     });
+
+    // GCP will occasionally return usage metadata objects without token information (it has other GCP-specific metadata).
+    // We should filter those out.
+    let usage = response.usage_metadata.and_then(|metadata| {
+        if metadata.prompt_token_count.is_some() || metadata.candidates_token_count.is_some() {
+            Some(Usage {
+                input_tokens: metadata.prompt_token_count,
+                output_tokens: metadata.candidates_token_count,
+            })
+        } else {
+            None
+        }
+    });
+
     Ok(ProviderInferenceResponseChunk::new(
         content,
-        response.usage_metadata.map(Into::into),
+        usage,
         raw_response,
         latency,
         first_candidate.finish_reason.map(Into::into),
@@ -3342,8 +3348,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 0,
-                output_tokens: 0,
+                input_tokens: None,
+                output_tokens: None,
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -3453,8 +3459,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 15,
-                output_tokens: 20,
+                input_tokens: Some(15),
+                output_tokens: Some(20),
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -3576,8 +3582,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 25,
-                output_tokens: 40,
+                input_tokens: Some(25),
+                output_tokens: Some(40),
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -4252,8 +4258,8 @@ mod tests {
         // Check that usage was captured
         assert!(result.usage.is_some());
         let usage = result.usage.unwrap();
-        assert_eq!(usage.input_tokens, 10);
-        assert_eq!(usage.output_tokens, 5);
+        assert_eq!(usage.input_tokens, Some(10));
+        assert_eq!(usage.output_tokens, Some(5));
     }
 
     #[test]

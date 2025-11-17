@@ -105,7 +105,7 @@ pub enum OpenAIResponsesTextConfigFormat {
 pub(super) struct OpenAIResponsesResponse<'a> {
     #[serde(borrow)]
     pub(super) output: Vec<OpenAIResponsesOutput<'a>>,
-    pub(super) usage: OpenAIResponsesUsage,
+    pub(super) usage: Option<OpenAIResponsesUsage>,
     pub incomplete_details: Option<OpenAIResponsesIncompleteDetails>,
 }
 
@@ -116,8 +116,8 @@ pub struct OpenAIResponsesIncompleteDetails {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct OpenAIResponsesUsage {
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: Option<u32>,
+    pub output_tokens: Option<u32>,
 }
 
 impl From<OpenAIResponsesUsage> for Usage {
@@ -248,7 +248,7 @@ impl OpenAIResponsesResponse<'_> {
                 input_messages: generic_request.messages.clone(),
                 raw_request,
                 raw_response: raw_response.clone(),
-                usage: self.usage.into(),
+                usage: self.usage.map(|u| u.into()).unwrap_or_default(),
                 latency,
                 finish_reason,
             },
@@ -1338,13 +1338,21 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 
         // Completed event - extract usage and finish reason
         OpenAIResponsesStreamEvent::ResponseCompleted { response } => {
-            let usage = response.get("usage").and_then(|u| {
-                let input_tokens = u.get("input_tokens")?.as_u64()? as u32;
-                let output_tokens = u.get("output_tokens")?.as_u64()? as u32;
-                Some(Usage {
+            let usage = response.get("usage").map(|u| {
+                let input_tokens = match u.get("input_tokens") {
+                    None => None,
+                    Some(v) => v.as_u64().map(|v| v as u32),
+                };
+
+                let output_tokens = match u.get("output_tokens") {
+                    None => None,
+                    Some(v) => v.as_u64().map(|v| v as u32),
+                };
+
+                Usage {
                     input_tokens,
                     output_tokens,
-                })
+                }
             });
 
             // The incomplete_details field indicates if response was cut short
@@ -1380,13 +1388,21 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 
         // Incomplete event - extract finish reason
         OpenAIResponsesStreamEvent::ResponseIncomplete { response } => {
-            let usage = response.get("usage").and_then(|u| {
-                let input_tokens = u.get("input_tokens")?.as_u64()? as u32;
-                let output_tokens = u.get("output_tokens")?.as_u64()? as u32;
-                Some(Usage {
+            let usage = response.get("usage").map(|u| {
+                let input_tokens = match u.get("input_tokens") {
+                    None => None,
+                    Some(v) => v.as_u64().map(|v| v as u32),
+                };
+
+                let output_tokens = match u.get("output_tokens") {
+                    None => None,
+                    Some(v) => v.as_u64().map(|v| v as u32),
+                };
+
+                Usage {
                     input_tokens,
                     output_tokens,
-                })
+                }
             });
 
             Ok(Some(ProviderInferenceResponseChunk::new(
@@ -2088,8 +2104,8 @@ mod tests {
         assert_eq!(
             result.usage,
             Some(Usage {
-                input_tokens: 15,
-                output_tokens: 25
+                input_tokens: Some(15),
+                output_tokens: Some(25),
             })
         );
         assert_eq!(result.finish_reason, Some(FinishReason::Stop));
@@ -2134,8 +2150,8 @@ mod tests {
         assert_eq!(
             result.usage,
             Some(Usage {
-                input_tokens: 10,
-                output_tokens: 100
+                input_tokens: Some(10),
+                output_tokens: Some(100),
             })
         );
     }

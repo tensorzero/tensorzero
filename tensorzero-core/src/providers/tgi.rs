@@ -651,8 +651,8 @@ struct TGIUsage {
 impl From<TGIUsage> for Usage {
     fn from(usage: TGIUsage) -> Self {
         Usage {
-            input_tokens: usage.prompt_tokens,
-            output_tokens: usage.completion_tokens,
+            input_tokens: Some(usage.prompt_tokens),
+            output_tokens: Some(usage.completion_tokens),
         }
     }
 }
@@ -1103,8 +1103,8 @@ mod tests {
             "Hello, world!".to_string().into()
         );
         assert_eq!(inference_response.raw_response, "test_response");
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(
             inference_response.latency,

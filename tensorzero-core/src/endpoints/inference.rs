@@ -780,8 +780,9 @@ fn create_stream(
 ) -> impl FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
-        let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).sum());
-        if extra_usage == Some(Usage { input_tokens: 0, output_tokens: 0 }) {
+        let mut extra_usage = Some(Usage::sum_iter_strict(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached)));
+        // If `extra_usage` is zero, we don't want to potentially add the extra chunk below. It is handled already in `prepare_response_chunk`.
+        if extra_usage == Some(Usage { input_tokens: Some(0), output_tokens: Some(0) }) {
             extra_usage = None;
         }
         let mut inference_ttft = None;
@@ -1195,11 +1196,6 @@ pub struct JsonInferenceResponseChunk {
     pub original_chunk: Option<String>,
 }
 
-const ZERO_USAGE: Usage = Usage {
-    input_tokens: 0,
-    output_tokens: 0,
-};
-
 impl InferenceResponseChunk {
     fn new(
         inference_result: InferenceResultChunk,
@@ -1214,7 +1210,10 @@ impl InferenceResponseChunk {
             // When our outer inference result is cached, don't
             // add `extra_usage` to it. We'll append a final usage chunk
             // in `create_stream` if needed
-            Some(ZERO_USAGE)
+            Some(Usage {
+                input_tokens: Some(0),
+                output_tokens: Some(0),
+            })
         } else {
             inference_result.usage().copied()
         };
@@ -1231,8 +1230,7 @@ impl InferenceResponseChunk {
             };
             if is_empty {
                 if let Some(extra_usage) = extra_usage.take() {
-                    result_usage.input_tokens += extra_usage.input_tokens;
-                    result_usage.output_tokens += extra_usage.output_tokens;
+                    result_usage.sum_strict(&extra_usage);
                 }
             }
         }

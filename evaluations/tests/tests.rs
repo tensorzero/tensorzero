@@ -1283,8 +1283,8 @@ async fn test_run_llm_judge_evaluator_chat() {
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         usage: Usage {
-            input_tokens: 0,
-            output_tokens: 0,
+            input_tokens: Some(0),
+            output_tokens: Some(0),
         },
         variant_name: "test_variant".to_string(),
     });
@@ -1459,8 +1459,8 @@ async fn test_run_llm_judge_evaluator_json() {
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         usage: Usage {
-            input_tokens: 0,
-            output_tokens: 0,
+            input_tokens: Some(0),
+            output_tokens: Some(0),
         },
         variant_name: "test_variant".to_string(),
     });

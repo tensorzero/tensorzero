@@ -844,6 +844,12 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "test-embeddings"
 
+[embedding_models.gemini_embedding_001_openrouter]
+routing = ["openrouter"]
+
+[embedding_models.gemini_embedding_001_openrouter.providers.openrouter]
+type = "openrouter"
+model_name = "google/gemini-embedding-001"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │

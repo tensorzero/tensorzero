@@ -199,11 +199,11 @@ async fn test_image_url_with_fetch_true() {
         "Response content should not be empty"
     );
     assert!(
-        chat_response.usage.input_tokens > 0,
+        chat_response.usage.input_tokens.unwrap() > 0,
         "Input tokens should be > 0"
     );
     assert!(
-        chat_response.usage.output_tokens > 0,
+        chat_response.usage.output_tokens.unwrap() > 0,
         "Output tokens should be > 0"
     );
 
@@ -340,11 +340,11 @@ async fn test_base64_image_with_fetch_true() {
         "Response content should not be empty"
     );
     assert!(
-        chat_response.usage.input_tokens > 0,
+        chat_response.usage.input_tokens.unwrap() > 0,
         "Input tokens should be > 0"
     );
     assert!(
-        chat_response.usage.output_tokens > 0,
+        chat_response.usage.output_tokens.unwrap() > 0,
         "Output tokens should be > 0"
     );
 
@@ -420,11 +420,11 @@ async fn test_base64_image_with_fetch_false() {
         "Response content should not be empty"
     );
     assert!(
-        chat_response.usage.input_tokens > 0,
+        chat_response.usage.input_tokens.unwrap() > 0,
         "Input tokens should be > 0"
     );
     assert!(
-        chat_response.usage.output_tokens > 0,
+        chat_response.usage.output_tokens.unwrap() > 0,
         "Output tokens should be > 0"
     );
 
@@ -498,11 +498,11 @@ async fn test_wikipedia_image_url_with_fetch_true() {
         "Response content should not be empty"
     );
     assert!(
-        chat_response.usage.input_tokens > 0,
+        chat_response.usage.input_tokens.unwrap() > 0,
         "Input tokens should be > 0"
     );
     assert!(
-        chat_response.usage.output_tokens > 0,
+        chat_response.usage.output_tokens.unwrap() > 0,
         "Output tokens should be > 0"
     );
 
@@ -574,11 +574,11 @@ async fn test_wikipedia_image_url_with_fetch_false() {
         "Response content should not be empty"
     );
     assert!(
-        chat_response.usage.input_tokens > 0,
+        chat_response.usage.input_tokens.unwrap() > 0,
         "Input tokens should be > 0"
     );
     assert!(
-        chat_response.usage.output_tokens > 0,
+        chat_response.usage.output_tokens.unwrap() > 0,
         "Output tokens should be > 0"
     );
 
