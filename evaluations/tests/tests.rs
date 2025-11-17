@@ -2624,11 +2624,10 @@ async fn test_cli_args_precision_targets() {
     // Collect evaluation results and compute CI half-width for exact_match
     let mut exact_match_values = Vec::new();
     for line in lines.iter().skip(1) {
-        if let Ok(update) = serde_json::from_str::<serde_json::Value>(line) {
-            if update["type"] == "success" {
-                if let Some(exact_match) = update["evaluations"]["exact_match"].as_f64() {
-                    exact_match_values.push(exact_match as f32);
-                }
+        if let Ok(result) = serde_json::from_str::<serde_json::Value>(line) {
+            // Each line (after the first) is a result with evaluations
+            if let Some(exact_match) = result["evaluations"]["exact_match"].as_bool() {
+                exact_match_values.push(if exact_match { 1.0 } else { 0.0 });
             }
         }
     }
