@@ -794,8 +794,8 @@ pub struct GCPVertexAnthropic {
 impl From<GCPVertexAnthropic> for Usage {
     fn from(value: GCPVertexAnthropic) -> Self {
         Usage {
-            input_tokens: value.input_tokens,
-            output_tokens: value.output_tokens,
+            input_tokens: Some(value.input_tokens),
+            output_tokens: Some(value.output_tokens),
         }
     }
 }
@@ -1627,8 +1627,8 @@ mod tests {
 
         let usage: Usage = anthropic_usage.into();
 
-        assert_eq!(usage.input_tokens, 100);
-        assert_eq!(usage.output_tokens, 50);
+        assert_eq!(usage.input_tokens, Some(100));
+        assert_eq!(usage.output_tokens, Some(50));
     }
 
     #[test]
@@ -1712,8 +1712,8 @@ mod tests {
         );
 
         assert_eq!(raw_response, inference_response.raw_response);
-        assert_eq!(inference_response.usage.input_tokens, 100);
-        assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, Some(100));
+        assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.system, Some("system".to_string()));
@@ -1796,8 +1796,8 @@ mod tests {
         );
 
         assert_eq!(raw_response, inference_response.raw_response);
-        assert_eq!(inference_response.usage.input_tokens, 100);
-        assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, Some(100));
+        assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.system, None);
@@ -1887,8 +1887,8 @@ mod tests {
 
         assert_eq!(raw_response, inference_response.raw_response);
 
-        assert_eq!(inference_response.usage.input_tokens, 100);
-        assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, Some(100));
+        assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(inference_response.system, None);

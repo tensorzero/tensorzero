@@ -316,6 +316,13 @@ jobs:
         with:
           cache-provider: "buildjet"
           save-if: ${{ github.event_name == 'merge_group' }}
+      - name: Install uv
+        run: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+      - name: Install Python 3.10
+        run: uv python install 3.10
+      - name: Set PYO3_PYTHON
+        run: echo "PYO3_PYTHON=$(uv python find python3.10)" >> $GITHUB_ENV
+        shell: bash
       - name: Build Rust
         run: cargo build --workspace
 
@@ -510,10 +517,75 @@ jobs:
       - name: pnpm TypeScript type checking
         run: pnpm --filter=tensorzero-ui run typecheck
 
+  rust-build:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
+      - name: Install Rust ${{ env.RUST_MSRV }}
+        run: |
+          for attempt in 1 2 3; do
+            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Install cargo-nextest, cargo-deny, and cargo-hack
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-nextest,cargo-deny,cargo-hack
+
+      - name: Build (Rust)
+        run: cargo build --workspace --verbose
+
+  rust-test:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
+      - name: Install Rust ${{ env.RUST_MSRV }}
+        run: |
+          for attempt in 1 2 3; do
+            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Install cargo-nextest, cargo-deny, and cargo-hack
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-nextest,cargo-deny,cargo-hack
+
+      - name: Test (Rust)
+        env:
+          # Write the exported bindings to somewhere we don't care about
+          TS_RS_EXPORT_DIR: /tmp/tensorzero-bindings
+        run: |
+          cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
+
+
   validate:
     permissions:
       contents: read
-    runs-on: namespace-profile-tensorzero-8x32
+    runs-on: ubuntu-latest
 
     timeout-minutes: 30
     if: github.repository == 'tensorzero/tensorzero'
@@ -560,14 +632,6 @@ jobs:
 
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
-
-      - name: Configure Namespace cache for Rust, Python (pip), and pnpm
-        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
-        with:
-          cache: |
-            pnpm
-            rust
-            uv
 
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
@@ -619,21 +683,11 @@ jobs:
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
-      - name: Build (Rust)
-        run: cargo build --workspace --verbose
-
       - name: Run cargo-deny
         run: cargo deny check
 
       - name: Run cargo fmt
         run: cargo fmt --all --check
-
-      - name: Test (Rust)
-        env:
-          # Write the exported bindings to somewhere we don't care about
-          TS_RS_EXPORT_DIR: /tmp/tensorzero-bindings
-        run: |
-          cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
 
       - name: "Node.js: Run prettier"
         run: pnpm --filter=openai-node run format
@@ -666,15 +720,12 @@ jobs:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        # TODO: Temporarily using 25.9 instead of latest
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"25.9","prefix":"25.9","allow_failure":false}]') || fromJSON('[{"tag":"25.9","prefix":"25.9","allow_failure":false}]') }}
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"latest","prefix":"latest","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]') }}
         exclude:
-          # Use 25.7 instead of 25.9 for replicated tests in merge group
           - replicated: true
             clickhouse_version:
-              { "tag": "25.9", "prefix": "25.9", "allow_failure": false }
-          # Add 25.7 for replicated tests in merge group
-        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.7","prefix":"25.7","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
+              { "tag": "latest", "prefix": "latest", "allow_failure": false }
+        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"latest","prefix":"latest","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -981,6 +1032,20 @@ jobs:
     uses: ./.github/workflows/merge-queue.yml
     secrets: inherit
 
+  minikube:
+    needs: [build-gateway-container, build-ui-container]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/minikube.yml
+
+  mocked-batch-tests:
+    permissions:
+      contents: read
+      actions: read
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    uses: ./.github/workflows/mocked-batch-test.yml
+    secrets: inherit
+
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     permissions: {}
@@ -998,6 +1063,10 @@ jobs:
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
+        mocked-batch-tests,
+        minikube,
+        rust-build,
+        rust-test,
         validate,
         validate-node,
         validate-python,
