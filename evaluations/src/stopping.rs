@@ -198,30 +198,6 @@ mod tests {
     }
 
     #[test]
-    fn test_update_stats() {
-        let mut precision_targets = HashMap::new();
-        precision_targets.insert("evaluator1".to_string(), 0.1);
-
-        let evaluator_names = vec!["evaluator1".to_string()];
-        let mut manager = StoppingManager::new(precision_targets, &evaluator_names);
-
-        // Add some evaluation results
-        let mut results: HashMap<String, Result<Option<serde_json::Value>, String>> =
-            HashMap::new();
-        results.insert(
-            "evaluator1".to_string(),
-            Ok(Some(serde_json::Value::Number(
-                serde_json::Number::from_f64(0.8).unwrap(),
-            ))),
-        );
-
-        manager.update_stats(&results);
-
-        // Stats should be updated (we can't directly check but at least verify no panic)
-        // In a real scenario, we'd need to expose stats for testing or test indirectly
-    }
-
-    #[test]
     fn test_cancel_converged_evaluators_before_min_datapoints() {
         let mut precision_targets = HashMap::new();
         precision_targets.insert("evaluator1".to_string(), 0.1);
@@ -241,7 +217,7 @@ mod tests {
     #[test]
     fn test_cancel_converged_evaluators_after_convergence() {
         let mut precision_targets = HashMap::new();
-        // Set a very high precision limit so it converges easily
+        // Set a very liberal precision limit so it converges easily
         precision_targets.insert("evaluator1".to_string(), 100.0);
 
         let evaluator_names = vec!["evaluator1".to_string()];
@@ -268,7 +244,7 @@ mod tests {
         // Now check stopping after min_datapoints
         manager.cancel_converged_evaluators(25);
 
-        // Should be cancelled now due to convergence with very high precision limit
+        // Should be cancelled now due to convergence with very liberal precision target
         assert!(token.is_cancelled());
         assert!(manager.all_evaluators_stopped());
     }
