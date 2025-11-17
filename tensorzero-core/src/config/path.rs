@@ -19,20 +19,19 @@ use crate::{config::span_map::SpanMap, error::IMPOSSIBLE_ERROR_MESSAGE};
 /// track the original `.toml` file in order to perform correct relative path resolution.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
-pub struct ResolvedTomlPath {
+pub struct ResolvedTomlPathData {
     __tensorzero_remapped_path: PathBuf,
-    /// This should be set for dynamic variants to indicate what the file contents would have been at this remapped path.
-    #[serde(default)]
-    __data: Option<String>,
+    /// This should contain the data that was stored at the path above
+    __data: String,
 }
 
-impl ResolvedTomlPath {
+impl ResolvedTomlPathData {
     /// Creates a new 'fake path' - this is currently used to construct
     /// `tensorzero::llm_judge` template paths for evaluators
     pub fn new_fake_path(fake_path: String, data: String) -> Self {
         Self {
             __tensorzero_remapped_path: PathBuf::from(fake_path),
-            __data: Some(data),
+            __data: data,
         }
     }
 
@@ -41,11 +40,17 @@ impl ResolvedTomlPath {
         self.__tensorzero_remapped_path.display().to_string()
     }
 
+    /// Returns true if this is a real filesystem path (not a synthetic "fake path")
+    pub fn is_real_path(&self) -> bool {
+        // Fake paths use a special prefix like "tensorzero::llm_judge"
+        !self.__tensorzero_remapped_path.starts_with("tensorzero::")
+    }
+
     /// Obtains the real path for this path, if it is a real path.
     /// If it is a fake path, like those passed in from the dynamic variant config
     /// this returns an error.
     pub fn get_real_path(&self) -> Result<&Path, Error> {
-        if self.__data.is_some() {
+        if !self.is_real_path() {
             return Err(ErrorDetails::InternalError {
                 message: "Attempted to get real path for a fake path with data".to_string(),
             }
@@ -55,28 +60,21 @@ impl ResolvedTomlPath {
     }
 
     /// Obtains the data that this path contains.
-    /// For a real path this will read from the file system.
-    /// For a fake path this will return the data that was passed in.
-    pub fn read(&self) -> Result<String, Error> {
-        if let Some(data) = &self.__data {
-            Ok(data.clone())
-        } else {
-            std::fs::read_to_string(&self.__tensorzero_remapped_path).map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "Failed to read file at {}: {}",
-                        self.__tensorzero_remapped_path.to_string_lossy(),
-                        e
-                    ),
-                })
-            })
-        }
+    /// Since data is now eagerly loaded, this simply returns a reference.
+    pub fn data(&self) -> &str {
+        &self.__data
     }
 
     /// Test-only method for unit tests.
     /// This allows constructing a `ResolvedTomlPath` outside of deserializing from a toml file
     #[cfg(any(test, feature = "e2e_tests"))]
-    pub fn new_for_tests(buf: PathBuf, data: Option<String>) -> Self {
+    pub fn new_for_tests(buf: PathBuf, data_override: Option<String>) -> Self {
+        let data = if let Some(data) = data_override {
+            data
+        } else {
+            // If no data override provided, try to read from filesystem
+            std::fs::read_to_string(&buf).unwrap_or_else(|_| String::new())
+        };
         Self {
             __tensorzero_remapped_path: buf,
             __data: data,
@@ -85,11 +83,13 @@ impl ResolvedTomlPath {
 }
 
 #[cfg(any(test, feature = "e2e_tests"))]
-impl From<&str> for ResolvedTomlPath {
+impl From<&str> for ResolvedTomlPathData {
     fn from(path: &str) -> Self {
-        ResolvedTomlPath {
-            __tensorzero_remapped_path: PathBuf::from(path),
-            __data: None,
+        let buf = PathBuf::from(path);
+        let data = std::fs::read_to_string(&buf).unwrap_or_else(|_| String::new());
+        ResolvedTomlPathData {
+            __tensorzero_remapped_path: buf,
+            __data: data,
         }
     }
 }
@@ -689,6 +689,38 @@ pub(super) fn resolve_toml_relative_paths(
                                 let target_path = Path::new(&**target_string);
                                 let mut inner_table = DeTable::new();
 
+                                // Resolve the absolute path
+                                let resolved_path = base_path.join(target_path);
+                                let resolved_path_str = resolved_path
+                                    .to_str()
+                                    .ok_or_else(|| {
+                                        Error::new(ErrorDetails::Config {
+                                            message: format!(
+                                                "`{}`: Path was not valid utf-8: base_path={base_path:?}, target_path={target_path:?}",
+                                                error_path.join(".")
+                                            ),
+                                        })
+                                    })?
+                                    .to_string();
+
+                                // Eagerly read the file contents
+                                // For directories (like gateway.template_filesystem_access.base_path),
+                                // we store an empty string as the data since they don't have file contents
+                                let file_contents = if resolved_path.is_dir() {
+                                    String::new()
+                                } else {
+                                    std::fs::read_to_string(&resolved_path).map_err(|e| {
+                                        Error::new(ErrorDetails::Config {
+                                            message: format!(
+                                                "`{}`: Failed to read file at {}: {}",
+                                                error_path.join("."),
+                                                resolved_path.display(),
+                                                e
+                                            ),
+                                        })
+                                    })?
+                                };
+
                                 // We use dummy spans for now - this may change when we implement globbing
                                 inner_table.insert(
                                     Spanned::new(
@@ -697,25 +729,15 @@ pub(super) fn resolve_toml_relative_paths(
                                     ),
                                     Spanned::new(
                                         0..0,
-                                        DeValue::String(Cow::Owned(
-                                            // Note - when we implement globbing, we'll obtain `base_path` using the span of the `entry`
-                                            base_path
-                                                .join(target_path)
-                                                .to_str()
-                                                .ok_or_else(|| {
-                                                    Error::new(ErrorDetails::Config {
-                                                        message: format!(
-                                                            "`{}`: Path was not valid utf-8: base_path={base_path:?}, target_path={target_path:?}",
-                                                            error_path.join(".")
-                                                        ),
-                                                    })
-                                                })?
-                                                .to_string(),
-                                        )),
+                                        DeValue::String(Cow::Owned(resolved_path_str)),
                                     ),
                                 );
+                                inner_table.insert(
+                                    Spanned::new(0..0, Cow::Owned("__data".to_string())),
+                                    Spanned::new(0..0, DeValue::String(Cow::Owned(file_contents))),
+                                );
                                 // Overwrite the original `"relative/schema_path.json"` value with
-                                // a table that looks like `{"__tensorzero_remapped_path": "/my/base/path/relative/schema_path.json"}`
+                                // a table that looks like `{"__tensorzero_remapped_path": "/my/base/path/relative/schema_path.json", "__data": "..."}`
                                 *entry = Spanned::new(0..0, DeValue::Table(inner_table));
                             } else {
                                 return Err(ErrorDetails::Config {

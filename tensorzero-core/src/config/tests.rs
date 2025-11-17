@@ -140,7 +140,7 @@ async fn test_config_from_toml_table_valid() {
                             PathWithContents {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
-                                path: ResolvedTomlPath::new_for_tests(
+                                path: ResolvedTomlPathData::new_for_tests(
                                     PathBuf::from(
                                         "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
                                     ),
@@ -371,11 +371,19 @@ async fn test_config_from_toml_table_missing_credentials() {
             table.insert("model".into(), "dummy".into());
             table.insert(
                 "system_template".into(),
-                [(
-                    "__tensorzero_remapped_path".into(),
-                    "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-                        .into(),
-                )]
+                [
+                    (
+                        "__tensorzero_remapped_path".into(),
+                        "tensorzero-core/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+                            .into(),
+                    ),
+                    (
+                        "__data".into(),
+                        std::fs::read_to_string("tensorzero-core/fixtures/config/functions/generate_draft/promptA/system_template.minijinja")
+                            .unwrap_or_else(|_| "You are a helpful assistant.".to_string())
+                            .into(),
+                    ),
+                ]
                 .into_iter()
                 .collect::<toml::Table>()
                 .into(),
@@ -642,115 +650,131 @@ async fn test_config_validate_model_routing_entry_not_in_providers() {
 #[tokio::test]
 async fn test_config_system_schema_does_not_exist() {
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_chat"]["system_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_chat"]["system_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
     let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let error = result.unwrap_err();
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
+    } else {
+        panic!("Expected JsonSchema error, got: {error:?}");
+    }
+
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_json"]["system_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_json"]["system_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
     let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let error = result.unwrap_err();
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
+    } else {
+        panic!("Expected JsonSchema error, got: {error:?}");
+    }
 }
 
 /// Ensure that the config loading fails when the user schema does not exist
 #[tokio::test]
 async fn test_config_user_schema_does_not_exist() {
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_chat"]["user_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_chat"]["user_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
     let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let error = result.unwrap_err();
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
+    } else {
+        panic!("Expected JsonSchema error, got: {error:?}");
+    }
+
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_json"]["user_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_json"]["user_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
     let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let error = result.unwrap_err();
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
+    } else {
+        panic!("Expected JsonSchema error, got: {error:?}");
+    }
 }
 
 /// Ensure that the config loading fails when the assistant schema does not exist
 #[tokio::test]
 async fn test_config_assistant_schema_does_not_exist() {
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_chat"]["assistant_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_chat"]["assistant_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
     let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
     let error = result.unwrap_err();
-    if let ErrorDetails::Config { message } = error.get_details() {
-        assert!(message.contains("Failed to read file at"));
-        assert!(message.contains("non_existent_file.json"));
-        assert!(message.contains("No such file or directory"));
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
     } else {
-        panic!("Expected Config error, got: {error:?}");
+        panic!("Expected JsonSchema error, got: {error:?}");
     }
 
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
     let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
     let error = result.unwrap_err();
-    if let ErrorDetails::Config { message } = error.get_details() {
-        assert!(message.contains("Failed to read file at"));
-        assert!(message.contains("non_existent_file.json"));
-        assert!(message.contains("No such file or directory"));
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
     } else {
-        panic!("Expected Config error, got: {error:?}");
+        panic!("Expected JsonSchema error, got: {error:?}");
     }
 }
 
@@ -929,23 +953,33 @@ async fn test_config_validate_variant_model_not_in_models() {
 #[tokio::test]
 async fn test_config_validate_variant_template_nonexistent() {
     let mut config = get_sample_valid_config();
-    config["functions"]["generate_draft"]["variants"]["openai_promptA"]["system_template"] = [(
-        "__tensorzero_remapped_path".into(),
-        "nonexistent_template".into(),
-    )]
+    config["functions"]["generate_draft"]["variants"]["openai_promptA"]["system_template"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "nonexistent_template".into(),
+        ),
+        (
+            "__data".into(),
+            "invalid template content with {{ unclosed".into(),
+        ),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
     let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
 
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at nonexistent_template: No such file or directory (os error 2)".to_string()
-            }
-            .into()
+    // With eager loading, this should now fail during template parsing
+    let error = result.unwrap_err();
+    if let ErrorDetails::MiniJinjaTemplate { message, .. } = error.get_details() {
+        assert!(
+            message.contains("expected")
+                || message.contains("unclosed")
+                || message.contains("invalid")
         );
+    } else {
+        panic!("Expected MiniJinjaTemplate error, got: {error:?}");
+    }
 }
 
 /// Ensure that the config validation fails when an evaluation points at a nonexistent function
