@@ -131,34 +131,6 @@ fn collect_template_loads_with_config(
     Ok(collector.loads)
 }
 
-/// Collects template loads from a template in an environment using that environment's settings.
-///
-/// This extracts the template's source and parser configuration from the environment,
-/// then delegates to `collect_template_loads_with_config`. This ensures we parse the
-/// template with the same settings that MiniJinja uses at runtime.
-fn collect_template_loads_from_env(
-    env: &Environment<'_>,
-    template_name: &str,
-) -> Result<Vec<TemplateLoad>, Error> {
-    let template = env.get_template(template_name)?;
-    let compiled = machinery::get_compiled_template(&template);
-
-    // Extract whitespace configuration from environment
-    let whitespace_config = WhitespaceConfig {
-        keep_trailing_newline: env.keep_trailing_newline(),
-        trim_blocks: env.trim_blocks(),
-        lstrip_blocks: env.lstrip_blocks(),
-    };
-
-    // Parse with the same configuration the template was compiled with
-    collect_template_loads_with_config(
-        template.source(),
-        template.name(),
-        compiled.syntax_config.clone(),
-        whitespace_config,
-    )
-}
-
 /// AST visitor that collects all template load operations from a parsed MiniJinja template.
 ///
 /// This struct implements the visitor pattern to walk through the MiniJinja Abstract Syntax Tree
@@ -544,9 +516,10 @@ fn strings_from_value(value: &Value) -> Option<Vec<String>> {
 ///
 /// let mut env = Environment::new();
 /// env.add_template("base.html", "{% block content %}{% endblock %}").unwrap();
-/// env.add_template("page.html", "{% extends 'base.html' %}{% block content %}Hello{% endblock %}").unwrap();
+/// let page_source = "{% extends 'base.html' %}{% block content %}Hello{% endblock %}";
+/// env.add_template("page.html", page_source).unwrap();
 ///
-/// let paths = collect_all_template_paths(&env, "page.html").unwrap();
+/// let paths = collect_all_template_paths(&env, "page.html", page_source).unwrap();
 /// assert_eq!(paths.len(), 2); // page.html and base.html
 /// ```
 ///
@@ -557,9 +530,10 @@ fn strings_from_value(value: &Value) -> Option<Vec<String>> {
 /// use minijinja_utils::{collect_all_template_paths, AnalysisError};
 ///
 /// let mut env = Environment::new();
-/// env.add_template("dynamic.html", "{% include template_var %}").unwrap();
+/// let dynamic_source = "{% include template_var %}";
+/// env.add_template("dynamic.html", dynamic_source).unwrap();
 ///
-/// match collect_all_template_paths(&env, "dynamic.html") {
+/// match collect_all_template_paths(&env, "dynamic.html", dynamic_source) {
 ///     Err(AnalysisError::DynamicLoadsFound(locations)) => {
 ///         assert_eq!(locations[0].reason, "variable");
 ///         println!("Dynamic load at {}:{}", locations[0].line, locations[0].column);
@@ -570,15 +544,23 @@ fn strings_from_value(value: &Value) -> Option<Vec<String>> {
 pub fn collect_all_template_paths(
     env: &Environment<'_>,
     template_name: &str,
+    template_source: &str,
 ) -> Result<HashSet<PathBuf>, AnalysisError> {
     let mut visited = HashSet::new();
     let mut to_visit = VecDeque::new();
     let mut all_paths = HashSet::new();
     let mut dynamic_loads = Vec::new();
 
-    to_visit.push_back(template_name.to_string());
+    to_visit.push_back((template_name.to_string(), Some(template_source.to_string())));
 
-    while let Some(current_template) = to_visit.pop_front() {
+    // Extract configuration from environment
+    let whitespace_config = WhitespaceConfig {
+        keep_trailing_newline: env.keep_trailing_newline(),
+        trim_blocks: env.trim_blocks(),
+        lstrip_blocks: env.lstrip_blocks(),
+    };
+
+    while let Some((current_template, source_override)) = to_visit.pop_front() {
         if visited.contains(&current_template) {
             continue;
         }
@@ -587,16 +569,38 @@ pub fn collect_all_template_paths(
         // Add the template name as a path
         all_paths.insert(PathBuf::from(&current_template));
 
-        // Get the template to access its source for error reporting
-        let template = env.get_template(&current_template)?;
+        // Get the source - either from override (for initial template) or from env (for references)
+        let source = if let Some(src) = source_override {
+            src
+        } else {
+            // Try to get the template from the environment
+            // If it doesn't exist, skip it (it may be missing or have an unsafe path)
+            match env.get_template(&current_template) {
+                Ok(template) => template.source().to_string(),
+                Err(e) => {
+                    // Template doesn't exist in environment - skip analysis of this template
+                    // The missing template will be handled later (e.g., at render time)
+                    tracing::warn!(
+                        "Could not load referenced template '{}' from environment: {}. Skipping recursive analysis.",
+                        current_template,
+                        e
+                    );
+                    continue;
+                }
+            }
+        };
 
         // Analyze the template for loads
-        let loads = collect_template_loads_from_env(env, &current_template)?;
+        let loads = collect_template_loads_with_config(
+            &source,
+            &current_template,
+            Default::default(), // Use default syntax config
+            whitespace_config,
+        )?;
 
         for load in loads {
             if !load.value.complete {
                 // Found a dynamic load - record it
-                let source = template.source();
                 let span = load.value.span.unwrap_or(Span {
                     start_line: 1,
                     start_col: 1,
@@ -605,7 +609,7 @@ pub fn collect_all_template_paths(
                     end_col: 1,
                     end_offset: 0,
                 });
-                let source_quote = extract_source_quote(source, span);
+                let source_quote = extract_source_quote(&source, span);
 
                 dynamic_loads.push(DynamicLoadLocation {
                     template_name: current_template.clone(),
@@ -618,10 +622,10 @@ pub fn collect_all_template_paths(
                 });
             }
 
-            // Add known templates to visit queue
+            // Add known templates to visit queue (without source override - they'll be looked up from env)
             for known_template in load.value.known {
                 if !visited.contains(&known_template) {
-                    to_visit.push_back(known_template);
+                    to_visit.push_back((known_template, None));
                 }
             }
         }

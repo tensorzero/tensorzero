@@ -51,52 +51,84 @@ impl TemplateConfig<'_> {
             // Cache for storing loaded templates - will be used in future PR
             let mut all_template_load_data = HashMap::new();
 
-            for template_name in configured_templates.keys() {
-                let referenced_templates = collect_all_template_paths(&self.env, template_name)?;
-                for referenced_template_path in referenced_templates {
-                    // Convert PathBuf to string for safe_join and use as template name
-                    let referenced_template_name = referenced_template_path.to_string_lossy();
+            // Create a validation environment with a path loader to discover transitive dependencies
+            let mut validation_env = minijinja::Environment::new();
+            validation_env.set_loader(minijinja::path_loader(base_path));
 
-                    // Safely join the base directory with the referenced template path
-                    let absolute_template_path =
-                        match safe_join(base_path, &referenced_template_name) {
-                            Some(path) => path,
-                            None => {
-                                tracing::warn!(
-                                    "Could not safely join base path with template '{}'",
-                                    referenced_template_path.display()
-                                );
-                                continue;
-                            }
-                        };
+            // Add configured templates to the validation environment
+            for (name, content) in &configured_templates {
+                validation_env
+                    .add_template_owned(name.clone(), content.clone())
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::MiniJinjaTemplate {
+                            template_name: name.clone(),
+                            message: format!("Failed to add template to validation environment: {e}"),
+                        })
+                    })?;
+            }
 
-                    // Read template content from filesystem. Skip if read fails (missing, directory).
-                    let template_content = match std::fs::read_to_string(&absolute_template_path) {
-                        Ok(content) => content,
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to read template at {}: {}. Skipping.",
-                                absolute_template_path.display(),
-                                e
-                            );
-                            continue;
-                        }
-                    };
+            // Analyze each configured template to discover all transitive dependencies
+            let mut all_discovered_templates = HashSet::new();
+            for (template_name, template_source) in &configured_templates {
+                let discovered_templates = collect_all_template_paths(
+                    &validation_env,
+                    template_name,
+                    template_source,
+                )?;
 
-                    // Add the referenced template to the environment
-                    self.env
-                        .add_template_owned(
-                            referenced_template_name.to_string(),
-                            template_content.clone(),
-                        )
-                        .map_err(|e| {
-                            Error::new(ErrorDetails::MiniJinjaTemplate {
-                                template_name: referenced_template_name.to_string(),
-                                message: format!("Failed to add template: {e}"),
-                            })
-                        })?;
-                    all_template_load_data.insert(referenced_template_path, template_content);
+                all_discovered_templates.extend(discovered_templates);
+            }
+
+            // Load discovered templates from filesystem into production environment
+            for template_path in all_discovered_templates {
+                let template_name = template_path.to_string_lossy();
+
+                // Skip configured templates (already in production environment)
+                if configured_templates.contains_key(template_name.as_ref()) {
+                    continue;
                 }
+
+                // Skip hardcoded templates
+                if template_name.starts_with("t0:") {
+                    continue;
+                }
+
+                // Safely join the base directory with the template path
+                let absolute_template_path = match safe_join(base_path, &template_name) {
+                    Some(path) => path,
+                    None => {
+                        tracing::warn!(
+                            "Could not safely join base path with template '{}'",
+                            template_path.display()
+                        );
+                        continue;
+                    }
+                };
+
+                // Read template content from filesystem
+                let template_content = match std::fs::read_to_string(&absolute_template_path) {
+                    Ok(content) => content,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to read template at {}: {}. Skipping.",
+                            absolute_template_path.display(),
+                            e
+                        );
+                        continue;
+                    }
+                };
+
+                // Add to production environment
+                self.env
+                    .add_template_owned(template_name.to_string(), template_content.clone())
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::MiniJinjaTemplate {
+                            template_name: template_name.to_string(),
+                            message: format!("Failed to add template: {e}"),
+                        })
+                    })?;
+
+                all_template_load_data.insert(template_path, template_content);
             }
 
             self.env.set_loader(|name| {
@@ -700,5 +732,226 @@ Candidate response #2
             output, expected,
             "mixture_of_n_fuser_candidates did not match the exact expected text."
         );
+    }
+
+    // Tests for filesystem template loading feature
+
+    #[test]
+    fn test_filesystem_template_loading_with_include() {
+        // Setup: Create temp directory with template files
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let header_path = temp_dir.path().join("header.html");
+        std::fs::write(&header_path, "<h1>{{ title }}</h1>").unwrap();
+
+        // Configure main template that includes the file
+        let mut config = TemplateConfig::new();
+        let templates = HashMap::from([(
+            "main".to_string(),
+            "{% include 'header.html' %}{{ body }}".to_string(),
+        )]);
+
+        // Initialize with filesystem access
+        config
+            .initialize(templates, Some(temp_dir.path()))
+            .unwrap();
+
+        // Assert template renders correctly
+        let result = config.template_message(
+            "main",
+            &json!({"title": "Welcome", "body": "Content"}),
+        );
+        assert_eq!(result.unwrap(), "<h1>Welcome</h1>Content");
+    }
+
+    #[test]
+    fn test_filesystem_template_loading_nested_includes() {
+        // Create temp directory with multiple template files
+        let temp_dir = tempfile::TempDir::new().unwrap();
+
+        std::fs::write(
+            temp_dir.path().join("base.html"),
+            "<html>{% include 'header.html' %}</html>",
+        )
+        .unwrap();
+
+        std::fs::write(
+            temp_dir.path().join("header.html"),
+            "<head>{% include 'title.html' %}</head>",
+        )
+        .unwrap();
+
+        std::fs::write(
+            temp_dir.path().join("title.html"),
+            "<title>{{ page_title }}</title>",
+        )
+        .unwrap();
+
+        // Configure main template that includes base
+        let mut config = TemplateConfig::new();
+        let templates = HashMap::from([(
+            "main".to_string(),
+            "{% include 'base.html' %}".to_string(),
+        )]);
+
+        config
+            .initialize(templates, Some(temp_dir.path()))
+            .unwrap();
+
+        // Assert all nested templates load and render correctly
+        let result = config.template_message("main", &json!({"page_title": "My Page"}));
+        assert_eq!(result.unwrap(), "<html><head><title>My Page</title></head></html>");
+    }
+
+    #[test]
+    fn test_filesystem_template_loading_dynamic_include_error() {
+        // Configure template with dynamic include (variable)
+        let mut config = TemplateConfig::new();
+        let templates = HashMap::from([(
+            "main".to_string(),
+            "{% include template_name %}".to_string(),
+        )]);
+
+        // Create temp directory (though it won't matter since we fail during static analysis)
+        let temp_dir = tempfile::TempDir::new().unwrap();
+
+        // Initialize should FAIL because collect_all_template_paths detects dynamic load
+        let result = config.initialize(templates, Some(temp_dir.path()));
+        assert!(result.is_err());
+
+        // Verify error is DynamicTemplateLoad
+        let err = result.unwrap_err();
+        match err.get_details() {
+            ErrorDetails::DynamicTemplateLoad { internal } => match internal {
+                minijinja_utils::AnalysisError::DynamicLoadsFound(locations) => {
+                    assert_eq!(locations.len(), 1);
+                    assert_eq!(locations[0].reason, "variable");
+                }
+                _ => panic!("Expected DynamicLoadsFound"),
+            },
+            _ => panic!("Expected DynamicTemplateLoad error, got: {:?}", err.get_details()),
+        }
+    }
+
+    #[test]
+    fn test_filesystem_template_loading_missing_file() {
+        // Configure template with static include
+        let mut config = TemplateConfig::new();
+        let templates = HashMap::from([(
+            "main".to_string(),
+            "{% include 'header.html' %}Content".to_string(),
+        )]);
+
+        // Initialize with temp directory but don't create the header.html file
+        let temp_dir = tempfile::TempDir::new().unwrap();
+
+        // Initialize should succeed (file is skipped with warning)
+        config
+            .initialize(templates, Some(temp_dir.path()))
+            .unwrap();
+
+        // Attempting to render should fail because the included template wasn't loaded
+        let result = config.template_message("main", &json!({}));
+        assert!(result.is_err());
+
+        // Verify it's a missing template error
+        match result.unwrap_err().get_details() {
+            ErrorDetails::MiniJinjaTemplateRender { message, .. } => {
+                assert!(message.contains("header.html") || message.contains("the file was missing"));
+            }
+            _ => panic!("Expected MiniJinjaTemplateRender error"),
+        }
+    }
+
+    #[test]
+    fn test_filesystem_template_loading_unsafe_path() {
+        // Configure template with path traversal attempt
+        let mut config = TemplateConfig::new();
+        let templates = HashMap::from([(
+            "main".to_string(),
+            "{% include '../../../etc/passwd' %}Content".to_string(),
+        )]);
+
+        // Initialize with temp directory
+        let temp_dir = tempfile::TempDir::new().unwrap();
+
+        // Initialize should succeed (unsafe path is skipped with warning)
+        config
+            .initialize(templates, Some(temp_dir.path()))
+            .unwrap();
+
+        // Attempting to render should fail because the template wasn't loaded
+        let result = config.template_message("main", &json!({}));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_filesystem_template_loading_without_base_directory() {
+        // Configure template with include
+        let mut config = TemplateConfig::new();
+        let templates = HashMap::from([(
+            "main".to_string(),
+            "{% include 'header.html' %}Content".to_string(),
+        )]);
+
+        // Initialize WITHOUT filesystem access
+        config.initialize(templates, None).unwrap();
+
+        // Attempting to render should fail with helpful error message
+        let result = config.template_message("main", &json!({}));
+        assert!(result.is_err());
+
+        // Verify error message mentions enabling filesystem access
+        match result.unwrap_err().get_details() {
+            ErrorDetails::MiniJinjaTemplateRender { message, .. } => {
+                assert!(message.contains("template_filesystem_access") || message.contains("header.html"));
+            }
+            _ => panic!("Expected MiniJinjaTemplateRender error"),
+        }
+    }
+
+    #[test]
+    fn test_filesystem_template_loading_no_references() {
+        // Configure simple template with no includes
+        let mut config = TemplateConfig::new();
+        let templates = HashMap::from([("simple".to_string(), "Hello {{ name }}".to_string())]);
+
+        // Initialize with temp directory
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        config
+            .initialize(templates, Some(temp_dir.path()))
+            .unwrap();
+
+        // Assert template renders normally
+        let result = config.template_message("simple", &json!({"name": "World"}));
+        assert_eq!(result.unwrap(), "Hello World");
+    }
+
+    #[test]
+    fn test_filesystem_template_loading_subdirectories() {
+        // Create temp directory with subdirectory structure
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let partials_dir = temp_dir.path().join("partials");
+        std::fs::create_dir(&partials_dir).unwrap();
+
+        std::fs::write(
+            partials_dir.join("footer.html"),
+            "<footer>{{ copyright }}</footer>",
+        )
+        .unwrap();
+
+        // Configure template that includes from subdirectory
+        let mut config = TemplateConfig::new();
+        let templates = HashMap::from([(
+            "main".to_string(),
+            "{% include 'partials/footer.html' %}".to_string(),
+        )]);
+
+        config
+            .initialize(templates, Some(temp_dir.path()))
+            .unwrap();
+
+        // Assert file loads correctly from subdirectory
+        let result = config.template_message("main", &json!({"copyright": "2025"}));
+        assert_eq!(result.unwrap(), "<footer>2025</footer>");
     }
 }

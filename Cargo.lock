@@ -3365,6 +3365,7 @@ version = "2025.11.4"
 dependencies = [
  "minijinja",
  "serde",
+ "tracing",
 ]
 
 [[package]]
