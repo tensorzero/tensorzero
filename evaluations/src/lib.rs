@@ -93,9 +93,9 @@ pub struct Args {
 
     /// Per-evaluator precision targets for adaptive stopping.
     /// Format: evaluator_name=threshold, comma-separated for multiple evaluators.
-    /// Example: --precision-limits "exact_match=0.13,llm_judge=0.16"
+    /// Example: --adaptive-stopping-precision "exact_match=0.13,llm_judge=0.16"
     /// Evaluator stops when CI half-width <= threshold.
-    #[arg(long = "precision-limits", value_parser = parse_precision_targets, default_value = "")]
+    #[arg(long = "adaptive-stopping-precision", value_parser = parse_precision_targets, default_value = "")]
     pub precision_targets: Vec<(String, f32)>,
 }
 
@@ -111,7 +111,7 @@ fn parse_precision_targets(s: &str) -> Result<Vec<(String, f32)>, String> {
             let parts: Vec<&str> = pair.trim().splitn(2, '=').collect();
             if parts.len() != 2 {
                 return Err(format!(
-                    "Invalid precision limit format: '{pair}'. Expected format: evaluator_name=threshold"
+                    "Invalid precision format: '{pair}'. Expected format: evaluator_name=threshold"
                 ));
             }
             let evaluator_name = parts[0].to_string();
@@ -120,7 +120,7 @@ fn parse_precision_targets(s: &str) -> Result<Vec<(String, f32)>, String> {
                 .map_err(|e| format!("Invalid threshold value '{}': {e}", parts[1]))?;
             if threshold < 0.0 {
                 return Err(format!(
-                    "Precision limit threshold must be non-negative, got {threshold}"
+                    "Precision value must be non-negative, got {threshold}"
                 ));
             }
             Ok((evaluator_name, threshold))
