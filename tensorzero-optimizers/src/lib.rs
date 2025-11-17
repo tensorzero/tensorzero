@@ -23,6 +23,7 @@ pub mod dicl;
 pub mod endpoints;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
+pub mod gepa;
 pub mod openai;
 pub mod openai_rft;
 pub mod openai_sft;
