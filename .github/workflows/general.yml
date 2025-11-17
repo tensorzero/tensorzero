@@ -546,7 +546,7 @@ jobs:
 
       - name: Build (Rust)
         run: cargo build --workspace --verbose
-        
+
   rust-test:
     permissions:
       contents: read
@@ -1032,6 +1032,12 @@ jobs:
     uses: ./.github/workflows/merge-queue.yml
     secrets: inherit
 
+  minikube:
+    needs: [build-gateway-container, build-ui-container]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/minikube.yml
+
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     permissions: {}
@@ -1049,6 +1055,7 @@ jobs:
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
+        minikube,
         rust-build,
         rust-test,
         validate,
