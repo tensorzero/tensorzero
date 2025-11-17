@@ -3361,6 +3361,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "minijinja-utils"
+version = "2025.11.4"
+dependencies = [
+ "minijinja",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
