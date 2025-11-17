@@ -72,10 +72,10 @@ pub struct GEPAConfig {
     /// Maximum number of concurrent inference calls
     pub max_concurrency: u32,
 
-    /// Model for analysis/prediction (e.g., "openai::gpt-5-mini")
+    /// Model for analysis (e.g., "anthropic::claude-sonnet-4-5-20250929")
     pub analysis_model: String,
 
-    /// Model for mutation (e.g., "openai::gpt-5")
+    /// Model for mutation (e.g., "anthropic::claude-sonnet-4-5-20250929")
     pub mutation_model: String,
 
     /// Optional random seed for reproducibility
@@ -238,8 +238,8 @@ impl UninitializedGEPAConfig {
     /// :param batch_size: Number of training samples to analyze per iteration. Default: 5.
     /// :param max_iterations: Maximum number of training iterations. Default: 1.
     /// :param max_concurrency: Maximum number of concurrent inference calls. Default: 10.
-    /// :param analysis_model: Model for analysis/prediction. Default: "openai::gpt-5-mini".
-    /// :param mutation_model: Model for mutation. Default: "openai::gpt-5".
+    /// :param analysis_model: Model for analysis. Default: "anthropic::claude-sonnet-4-5-20250929".
+    /// :param mutation_model: Model for mutation. Default: "anthropic::claude-sonnet-4-5-20250929".
     /// :param seed: Optional random seed for reproducibility.
     /// :param timeout: Client timeout in seconds for TensorZero gateway operations. Default: 300.
     /// :param include_inference_input_for_mutation: Whether to include inference input in InferenceWithAnalysis for mutation. If True, the mutate function will see the inference input in addition to the output and analysis for each example in the batch. Use with caution for multi-turn conversations or large batch sizes. Default: True.
