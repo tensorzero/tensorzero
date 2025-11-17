@@ -5,11 +5,13 @@ on:
 permissions:
   contents: read
   id-token: write
+  actions: write
 
 jobs:
   general:
     uses: ./.github/workflows/general.yml
     permissions:
       contents: read
+      actions: write
       id-token: write
     secrets: inherit
