@@ -117,8 +117,7 @@ pub struct RunEvaluationStreamingParams {
     pub variant_name: String,
     pub concurrency: u32,
     pub inference_cache: String,
-    pub min_inferences: Option<u32>,
-    pub max_inferences: Option<u32>,
+    pub max_datapoints: Option<u32>,
     /// JSON string mapping evaluator names to precision limit thresholds.
     /// Example: '{"exact_match": 0.13, "llm_judge": 0.16}'
     pub precision_limits: Option<String>,
@@ -185,9 +184,8 @@ pub async fn run_evaluation_streaming(
 
     let evaluation_run_id = Uuid::now_v7();
 
-    // Convert min_inferences and max_inferences from u32 to usize
-    let min_inferences = params.min_inferences.map(|v| v as usize);
-    let max_inferences = params.max_inferences.map(|v| v as usize);
+    // Convert max_datapoints from u32 to usize
+    let max_datapoints = params.max_datapoints.map(|v| v as usize);
 
     // Parse precision_limits from JSON string to HashMap
     let precision_limits = if let Some(limits_json_str) = params.precision_limits {
@@ -196,9 +194,9 @@ pub async fn run_evaluation_streaming(
                 napi::Error::from_reason(format!("Invalid precision_limits JSON: {e}"))
             })?;
         // Convert f64 to f32
-        Some(limits_map.into_iter().map(|(k, v)| (k, v as f32)).collect())
+        limits_map.into_iter().map(|(k, v)| (k, v as f32)).collect()
     } else {
-        None
+        HashMap::new()
     };
 
     let core_args = EvaluationCoreArgs {
@@ -213,7 +211,7 @@ pub async fn run_evaluation_streaming(
         concurrency,
     };
 
-    let result = match run_evaluation_core_streaming(core_args, None, HashMap::new()).await {
+    let result = match run_evaluation_core_streaming(core_args, max_datapoints, precision_limits).await {
         Ok(result) => result,
         Err(error) => {
             let _ = callback.abort();

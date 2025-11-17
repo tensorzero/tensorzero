@@ -1326,8 +1326,7 @@ impl TensorZeroGateway {
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
-    /// * `min_inferences` - Optional minimum number of inferences before checking stopping conditions (default: 20)
-    /// * `max_inferences` - Optional maximum number of inferences to run (limits dataset size)
+    /// * `max_datapoints` - Optional maximum number of datapoints to evaluate from the dataset
     /// * `precision_limits` - Optional dict mapping evaluator names to precision limit thresholds (CI half-width)
     #[pyo3(signature = (*,
                         evaluation_name,
@@ -1336,11 +1335,10 @@ impl TensorZeroGateway {
                         concurrency=1,
                         inference_cache="on".to_string(),
                         dynamic_variant_config=None,
-                        min_inferences=None,
-                        max_inferences=None,
+                        max_datapoints=None,
                         precision_limits=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, min_inferences=None, max_inferences=None, precision_limits=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, max_datapoints=None, precision_limits=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
@@ -1351,8 +1349,7 @@ impl TensorZeroGateway {
         concurrency: usize,
         inference_cache: String,
         dynamic_variant_config: Option<&Bound<'_, PyDict>>,
-        min_inferences: Option<usize>,
-        max_inferences: Option<usize>,
+        max_datapoints: Option<usize>,
         precision_limits: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
@@ -2458,8 +2455,7 @@ impl AsyncTensorZeroGateway {
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
-    /// * `min_inferences` - Optional minimum number of inferences before checking stopping conditions (default: 20)
-    /// * `max_inferences` - Optional maximum number of inferences to run (limits dataset size)
+    /// * `max_datapoints` - Optional maximum number of datapoints to evaluate from the dataset
     /// * `precision_limits` - Optional dict mapping evaluator names to precision limit thresholds (CI half-width)
     #[pyo3(signature = (*,
                         evaluation_name,
@@ -2468,11 +2464,10 @@ impl AsyncTensorZeroGateway {
                         concurrency=1,
                         inference_cache="on".to_string(),
                         dynamic_variant_config=None,
-                        min_inferences=None,
-                        max_inferences=None,
+                        max_datapoints=None,
                         precision_limits=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, min_inferences=None, max_inferences=None, precision_limits=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, max_datapoints=None, precision_limits=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
@@ -2483,8 +2478,7 @@ impl AsyncTensorZeroGateway {
         concurrency: usize,
         inference_cache: String,
         dynamic_variant_config: Option<&Bound<'py, PyDict>>,
-        min_inferences: Option<usize>,
-        max_inferences: Option<usize>,
+        max_datapoints: Option<usize>,
         precision_limits: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();
