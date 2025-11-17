@@ -28,11 +28,10 @@ use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
-use crate::config::path::ResolvedTomlPathData;
+use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
 use crate::config::span_map::SpanMap;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -172,7 +171,7 @@ pub struct TemplateFilesystemAccess {
     /// Defaults to `false`
     #[serde(default)]
     enabled: bool,
-    base_path: Option<ResolvedTomlPathData>,
+    base_path: Option<ResolvedTomlPathDirectory>,
 }
 
 #[derive(Clone, Debug, Serialize, ts_rs::TS)]
@@ -906,11 +905,7 @@ impl Config {
         let template_paths = config.get_templates();
         let template_fs_base_path = if config.gateway.template_filesystem_access.enabled {
             if let Some(base_path) = &config.gateway.template_filesystem_access.base_path {
-                Some(base_path.get_real_path().map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to get real path for base path: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"),
-                    })
-                })?.to_owned())
+                Some(base_path.get_real_path().to_owned())
             } else if let Some(single_file) = span_map.get_single_file() {
                 crate::utils::deprecation_warning("`[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
                 Some(

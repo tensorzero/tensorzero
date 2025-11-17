@@ -13,7 +13,7 @@ use toml::{
 use crate::error::{Error, ErrorDetails};
 use crate::{config::span_map::SpanMap, error::IMPOSSIBLE_ERROR_MESSAGE};
 
-/// Wrapper type to enforce proper handling of toml-relative paths.
+/// Wrapper type to enforce proper handling of toml-relative paths for files.
 /// When we add support for config globbing, we'll require deserializing
 /// all paths (e.g. `system_schema`) as `ResolvedTomlPath`s, which will
 /// track the original `.toml` file in order to perform correct relative path resolution.
@@ -23,6 +23,15 @@ pub struct ResolvedTomlPathData {
     __tensorzero_remapped_path: PathBuf,
     /// This should contain the data that was stored at the path above
     __data: String,
+}
+
+/// Wrapper type for directory paths (as opposed to file paths).
+/// Currently only used for `gateway.template_filesystem_access.base_path`.
+/// Unlike `ResolvedTomlPathData`, this doesn't eagerly load file contents since directories don't have contents.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ResolvedTomlPathDirectory {
+    __tensorzero_remapped_path: PathBuf,
 }
 
 impl ResolvedTomlPathData {
@@ -76,6 +85,21 @@ impl ResolvedTomlPathData {
         Self {
             __tensorzero_remapped_path: buf,
             __data: data,
+        }
+    }
+}
+
+impl ResolvedTomlPathDirectory {
+    /// Obtains the real path for this directory path.
+    pub fn get_real_path(&self) -> &Path {
+        self.__tensorzero_remapped_path.as_ref()
+    }
+
+    /// Test-only method for unit tests.
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub fn new_for_tests(buf: PathBuf) -> Self {
+        Self {
+            __tensorzero_remapped_path: buf,
         }
     }
 }
@@ -701,41 +725,69 @@ pub(super) fn resolve_toml_relative_paths(
                                     })?
                                     .to_string();
 
-                                // Eagerly read the file contents
-                                // For directories (like gateway.template_filesystem_access.base_path),
-                                // we store an empty string as the data since they don't have file contents
-                                let file_contents = if resolved_path.is_dir() {
-                                    String::new()
-                                } else {
-                                    std::fs::read_to_string(&resolved_path).map_err(|e| {
-                                        Error::new(ErrorDetails::Config {
-                                            message: format!(
-                                                "`{}`: Failed to read file at {}: {}",
-                                                error_path.join("."),
-                                                resolved_path.display(),
-                                                e
-                                            ),
-                                        })
-                                    })?
-                                };
+                                // Check if this is a directory or file
+                                let is_directory_path = error_path.as_slice()
+                                    == ["gateway", "template_filesystem_access", "base_path"];
 
-                                // We use dummy spans for now - this may change when we implement globbing
-                                inner_table.insert(
-                                    Spanned::new(
-                                        0..0,
-                                        Cow::Owned("__tensorzero_remapped_path".to_string()),
-                                    ),
-                                    Spanned::new(
-                                        0..0,
-                                        DeValue::String(Cow::Owned(resolved_path_str)),
-                                    ),
-                                );
-                                inner_table.insert(
-                                    Spanned::new(0..0, Cow::Owned("__data".to_string())),
-                                    Spanned::new(0..0, DeValue::String(Cow::Owned(file_contents))),
-                                );
-                                // Overwrite the original `"relative/schema_path.json"` value with
-                                // a table that looks like `{"__tensorzero_remapped_path": "/my/base/path/relative/schema_path.json", "__data": "..."}`
+                                if resolved_path.is_dir() {
+                                    if !is_directory_path {
+                                        // All other paths should be files, not directories
+                                        return Err(Error::new(ErrorDetails::Config {
+                                            message: format!(
+                                                "`{}`: Expected a file path, but '{}' is a directory. Please provide a path to a file.",
+                                                error_path.join("."),
+                                                resolved_path.display()
+                                            ),
+                                        }));
+                                    }
+                                    // For the directory path (gateway.template_filesystem_access.base_path),
+                                    // create a table with only __tensorzero_remapped_path (no __data)
+                                    inner_table.insert(
+                                        Spanned::new(
+                                            0..0,
+                                            Cow::Owned("__tensorzero_remapped_path".to_string()),
+                                        ),
+                                        Spanned::new(
+                                            0..0,
+                                            DeValue::String(Cow::Owned(resolved_path_str)),
+                                        ),
+                                    );
+                                } else {
+                                    // For file paths, eagerly read the file contents
+                                    let file_contents = std::fs::read_to_string(&resolved_path)
+                                        .map_err(|e| {
+                                            Error::new(ErrorDetails::Config {
+                                                message: format!(
+                                                    "`{}`: Failed to read file at {}: {}",
+                                                    error_path.join("."),
+                                                    resolved_path.display(),
+                                                    e
+                                                ),
+                                            })
+                                        })?;
+
+                                    // We use dummy spans for now - this may change when we implement globbing
+                                    inner_table.insert(
+                                        Spanned::new(
+                                            0..0,
+                                            Cow::Owned("__tensorzero_remapped_path".to_string()),
+                                        ),
+                                        Spanned::new(
+                                            0..0,
+                                            DeValue::String(Cow::Owned(resolved_path_str)),
+                                        ),
+                                    );
+                                    inner_table.insert(
+                                        Spanned::new(0..0, Cow::Owned("__data".to_string())),
+                                        Spanned::new(
+                                            0..0,
+                                            DeValue::String(Cow::Owned(file_contents)),
+                                        ),
+                                    );
+                                }
+                                // Overwrite the original path value with the appropriate table structure
+                                // For files: `{"__tensorzero_remapped_path": "...", "__data": "..."}`
+                                // For directories: `{"__tensorzero_remapped_path": "..."}`
                                 *entry = Spanned::new(0..0, DeValue::Table(inner_table));
                             } else {
                                 return Err(ErrorDetails::Config {
