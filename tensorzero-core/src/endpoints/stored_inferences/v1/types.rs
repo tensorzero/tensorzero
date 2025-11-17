@@ -88,7 +88,7 @@ pub enum TagComparisonOperator {
 }
 
 /// The ordering direction.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
 #[ts(export)]
 pub enum OrderDirection {
     #[serde(rename = "ascending")]
@@ -99,11 +99,15 @@ pub enum OrderDirection {
 
 /// The property to order by.
 /// This is flattened in the public API inside the `OrderBy` struct.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
 #[ts(export)]
 #[serde(tag = "by", rename_all = "snake_case")]
 pub enum OrderByTerm {
+    // These titles become the names of the top-level OrderBy structs in the generated
+    // schema, because it's flattened.
+    #[schemars(title = "OrderByTimestamp")]
     Timestamp,
+    #[schemars(title = "OrderByMetric")]
     Metric {
         /// The name of the metric to order by.
         name: String,
@@ -111,7 +115,7 @@ pub enum OrderByTerm {
 }
 
 /// Order by clauses for querying inferences.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
 #[ts(export)]
 pub struct OrderBy {
     /// The property to order by.
@@ -159,8 +163,9 @@ pub enum InferenceFilter {
 
 /// Request to list inferences with pagination and filters.
 /// Used by the `POST /v1/inferences/list_inferences` endpoint.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Default, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export, optional_fields)]
+#[export_schema]
 pub struct ListInferencesRequest {
     /// Optional function name to filter inferences by.
     /// If provided, only inferences from this function will be returned.
@@ -197,8 +202,9 @@ pub struct ListInferencesRequest {
 
 /// Request to get specific inferences by their IDs.
 /// Used by the `POST /v1/inferences/get_inferences` endpoint.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export, optional_fields)]
+#[export_schema]
 pub struct GetInferencesRequest {
     /// The IDs of the inferences to retrieve. Required.
     pub ids: Vec<Uuid>,
@@ -216,8 +222,9 @@ pub struct GetInferencesRequest {
 }
 
 /// Response containing the requested inferences.
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
+#[export_schema]
 pub struct GetInferencesResponse {
     /// The retrieved inferences.
     pub inferences: Vec<StoredInference>,

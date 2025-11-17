@@ -148,7 +148,7 @@ lazy_static! {
         create_implicit_tool_call_config_with_allowed_tools(
             EVALUATOR_OUTPUT_SCHEMA.clone(),
             AllowedTools {
-                tools: vec![IMPLICIT_TOOL_NAME.to_string()],
+                tools: [IMPLICIT_TOOL_NAME.to_string()].into_iter().collect(),
                 choice: AllowedToolsChoice::FunctionDefault,
             },
         )

@@ -32,8 +32,9 @@ use crate::inference::types::{ContentBlock, FinishReason, ProviderInferenceRespo
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, CredentialLocationWithFallback, ModelProvider};
 use crate::providers::helpers::inject_extra_request_data;
-use crate::rate_limiting::ActiveRateLimitKey;
-use crate::rate_limiting::FailedRateLimit;
+use crate::rate_limiting::{
+    ActiveRateLimitKey, FailedRateLimit, RateLimitResource, RateLimitingScopeKey,
+};
 use crate::tool::{ToolCall, ToolCallChunk};
 
 const PROVIDER_NAME: &str = "Dummy";
@@ -284,6 +285,10 @@ impl InferenceProvider for DummyProvider {
                             key: ActiveRateLimitKey(String::from("key")),
                             requested: 100,
                             available: 0,
+                            resource: RateLimitResource::Token,
+                            scope_key: vec![RateLimitingScopeKey::TagTotal {
+                                key: "test".to_string(),
+                            }],
                         }],
                     }
                     .into());

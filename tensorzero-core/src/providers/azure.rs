@@ -35,8 +35,9 @@ use crate::providers::openai::OpenAIMessagesConfig;
 
 use super::openai::{
     handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
-    OpenAIEmbeddingUsage, OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool,
-    OpenAIToolChoice, OpenAIToolChoiceString, SpecificToolChoice, SystemOrDeveloper,
+    AllowedToolsChoice, OpenAIEmbeddingUsage, OpenAIRequestMessage, OpenAIResponse,
+    OpenAIResponseChoice, OpenAITool, OpenAIToolChoice, OpenAIToolChoiceString, SpecificToolChoice,
+    SystemOrDeveloper,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -552,6 +553,7 @@ fn into_embedding_provider_response(
 enum AzureToolChoice<'a> {
     String(AzureToolChoiceString),
     Specific(SpecificToolChoice<'a>),
+    AllowedTools(AllowedToolsChoice<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -579,6 +581,9 @@ impl<'a> From<OpenAIToolChoice<'a>> for AzureToolChoice<'a> {
                 }
             }
             OpenAIToolChoice::Specific(tool_choice) => AzureToolChoice::Specific(tool_choice),
+            OpenAIToolChoice::AllowedTools(allowed_tools) => {
+                AzureToolChoice::AllowedTools(allowed_tools)
+            }
         }
     }
 }

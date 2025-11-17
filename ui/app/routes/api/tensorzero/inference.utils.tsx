@@ -16,8 +16,8 @@ import type {
   ResolvedTomlPath,
   ChatTemplates,
   StaticToolConfig,
-  ClientSideFunctionTool,
   ToolChoice,
+  ClientSideFunctionTool,
 } from "~/types/tensorzero";
 import type {
   InputMessageContent as TensorZeroContent,
