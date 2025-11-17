@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::config::path::ResolvedTomlPath;
+use crate::config::path::ResolvedTomlPathData;
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -163,16 +163,16 @@ impl ChatCompletionConfig {
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedInputWrappers {
-    user: Option<ResolvedTomlPath>,
-    assistant: Option<ResolvedTomlPath>,
-    system: Option<ResolvedTomlPath>,
+    user: Option<ResolvedTomlPathData>,
+    assistant: Option<ResolvedTomlPathData>,
+    system: Option<ResolvedTomlPathData>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedChatTemplate {
-    pub path: ResolvedTomlPath,
+    pub path: ResolvedTomlPathData,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
@@ -189,9 +189,9 @@ pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub weight: Option<f64>,
     pub model: Arc<str>,
-    pub system_template: Option<ResolvedTomlPath>,
-    pub user_template: Option<ResolvedTomlPath>,
-    pub assistant_template: Option<ResolvedTomlPath>,
+    pub system_template: Option<ResolvedTomlPathData>,
+    pub user_template: Option<ResolvedTomlPathData>,
+    pub assistant_template: Option<ResolvedTomlPathData>,
     pub input_wrappers: Option<UninitializedInputWrappers>,
     #[serde(default)]
     pub templates: UninitializedChatTemplates,
@@ -1634,8 +1634,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -1718,8 +1718,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -1815,8 +1815,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -1919,8 +1919,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -2052,8 +2052,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -2178,8 +2178,8 @@ mod tests {
         assert_eq!(
             result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match result {
@@ -2503,8 +2503,8 @@ mod tests {
                 assert_eq!(
                     chunk.usage(),
                     Some(&Usage {
-                        input_tokens: 10,
-                        output_tokens: 16
+                        input_tokens: Some(10),
+                        output_tokens: Some(16),
                     })
                 );
                 break;
@@ -2792,7 +2792,7 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_both_some() {
         let templates = get_test_template_config();
-        let schema = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
+        let schema = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             None,
         ))
@@ -2802,7 +2802,7 @@ mod tests {
             TemplateKind::System,
             Some(&schema),
             Some(&TemplateWithSchema {
-                template: PathWithContents::from_path(ResolvedTomlPath::new_for_tests(
+                template: PathWithContents::from_path(ResolvedTomlPathData::new_for_tests(
                     template,
                     Some("fake_data".to_string()),
                 ))
@@ -2823,7 +2823,7 @@ mod tests {
             TemplateKind::System,
             None,
             Some(&TemplateWithSchema {
-                template: PathWithContents::from_path(ResolvedTomlPath::new_for_tests(
+                template: PathWithContents::from_path(ResolvedTomlPathData::new_for_tests(
                     template,
                     Some("fake_data".to_string()),
                 ))
@@ -2844,7 +2844,7 @@ mod tests {
             TemplateKind::System,
             None,
             Some(&TemplateWithSchema {
-                template: PathWithContents::from_path(ResolvedTomlPath::new_for_tests(
+                template: PathWithContents::from_path(ResolvedTomlPathData::new_for_tests(
                     template,
                     Some("fake_data".to_string()),
                 ))
@@ -2870,7 +2870,7 @@ mod tests {
     #[test]
     fn test_validate_template_and_schema_schema_some_template_none() {
         let templates = get_test_template_config(); // Default TemplateConfig
-        let schema = StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
+        let schema = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             None,
         ))

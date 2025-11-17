@@ -9,6 +9,8 @@
 //! 3. Lossy conversions: provider_tools and AllowedToolsChoice metadata are NOT persisted
 //! 4. Edge cases: empty lists, None values, mixed static/dynamic tools
 
+use std::collections::HashSet;
+
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::test_helpers::make_embedded_gateway;
@@ -154,11 +156,10 @@ async fn test_inference_full_tool_params_round_trip() {
     // Step 4: Verify DynamicToolParams correctly reconstructed
     let retrieved_tool_params = &stored_inference.tool_params;
 
-    // Static + dynamic tools should be in allowed_tools
+    // Only explicitly specified tools should be in allowed tools
     let allowed_tools = retrieved_tool_params.allowed_tools.as_ref().unwrap();
-    assert_eq!(allowed_tools.len(), 2);
+    assert_eq!(allowed_tools.len(), 1);
     assert_eq!(allowed_tools[0], "get_temperature");
-    assert_eq!(allowed_tools[1], "custom_weather_tool");
 
     // Dynamic tools should be in additional_tools
     let additional_tools = retrieved_tool_params.additional_tools.as_ref().unwrap();
@@ -635,17 +636,21 @@ async fn test_allowed_tools_restriction() {
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();
 
-    // Should only have get_temperature in storage
+    // We still send all tools as available
     let tools_available = tool_params
         .get("tools_available")
         .unwrap()
         .as_array()
         .unwrap();
-    assert_eq!(tools_available.len(), 1);
-    assert_eq!(
-        tools_available[0].get("name").unwrap().as_str().unwrap(),
-        "get_temperature"
-    );
+    assert_eq!(tools_available.len(), 2);
+
+    // Verify both tools are present in some order
+    let tool_names: HashSet<&str> = tools_available
+        .iter()
+        .map(|t| t.get("name").unwrap().as_str().unwrap())
+        .collect();
+    assert!(tool_names.contains(&"get_temperature"));
+    assert!(tool_names.contains(&"get_humidity"));
 
     // Retrieve via API
     let client = make_embedded_gateway().await;

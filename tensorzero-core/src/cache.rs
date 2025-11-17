@@ -213,8 +213,8 @@ pub struct CacheData<T: CacheOutput> {
     pub output: T,
     pub raw_request: String,
     pub raw_response: String,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: Option<u32>,
+    pub output_tokens: Option<u32>,
     pub finish_reason: Option<FinishReason>,
 }
 

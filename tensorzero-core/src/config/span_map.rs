@@ -59,10 +59,8 @@ impl SpanMap {
     /// Loads all config files matching the given glob, and merges them into a single `Table`
     /// All of the `ResolvedTomlPath` entries in the resulting `Table` have been remapped to
     /// take their source toml file into account.
-    /// As a result, almost all consumers of the returned `Table` shouldn't need to care
-    /// about globbing (the exception being the fallback logic for `[gateway.template_filesystem_access]`,
-    /// which needs to check if we globbed exactly one file)
-    pub fn from_glob(glob: &ConfigFileGlob, allow_empty: bool) -> Result<(Self, Table), Error> {
+    /// As a result, consumers of the returned `Table` don't need to care about globbing.
+    pub fn from_glob(glob: &ConfigFileGlob, allow_empty: bool) -> Result<Table, Error> {
         let mut found_file = false;
         let mut range_to_file = Vec::new();
         let mut previous_range_end: usize = 0;
@@ -129,7 +127,7 @@ impl SpanMap {
             merge_tomls(&mut target_config, parsed.get_ref(), &span_map, vec![])?;
         }
         let final_table = resolve_toml_relative_paths(target_config, &span_map)?;
-        Ok((span_map, final_table))
+        Ok(final_table)
     }
 
     /// Obtains the base path for a given range. This range should come from a `Spanned` entry
@@ -152,15 +150,6 @@ impl SpanMap {
             .ok()?;
         Some(&self.range_to_file[idx].1)
     }
-
-    /// If the glob matched exactly one file, return the path to that file (*not* the base path)
-    pub fn get_single_file(&self) -> Option<&PathBuf> {
-        if let [(_range, single_file)] = self.range_to_file.as_slice() {
-            Some(&single_file.path)
-        } else {
-            None
-        }
-    }
 }
 
 #[cfg(test)]
@@ -173,21 +162,41 @@ mod tests {
 
     #[test]
     fn test_resolve_toml_relative_paths() {
-        let table =
-            DeTable::parse(r#"functions.my_function.system_schema = "relative/schema_path.json""#)
+        // Create a temporary file to test with
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        write!(temp_file, r#"{{"test": "data"}}"#).unwrap();
+        let temp_path = temp_file.path().to_path_buf();
+
+        // Get the directory containing the temp file
+        let temp_dir = temp_path.parent().unwrap();
+
+        // Create a config that references this temp file
+        let config_str = format!(
+            r#"functions.my_function.system_schema = "{}""#,
+            temp_path.file_name().unwrap().to_str().unwrap()
+        );
+        let table = DeTable::parse(&config_str).unwrap();
+
+        // Use the temp directory as the base path
+        let config_path = temp_dir.join("fake_config.toml");
+        let resolved =
+            resolve_toml_relative_paths(table.into_inner(), &SpanMap::new_single_file(config_path))
                 .unwrap();
 
-        let resolved = resolve_toml_relative_paths(
-            table.into_inner(),
-            &SpanMap::new_single_file(PathBuf::from("my/base/path/fake_config.toml")),
-        )
-        .unwrap();
+        // Verify the path was resolved and the data was loaded
+        let schema_table = resolved["functions"]["my_function"]["system_schema"]
+            .as_table()
+            .unwrap();
         assert_eq!(
-            resolved,
-            toml::from_str(
-                r#"functions.my_function.system_schema = { __tensorzero_remapped_path = "my/base/path/relative/schema_path.json" }"#
-            )
-            .unwrap()
+            schema_table["__tensorzero_remapped_path"].as_str().unwrap(),
+            temp_path.to_str().unwrap()
+        );
+        assert_eq!(
+            schema_table["__data"].as_str().unwrap(),
+            r#"{"test": "data"}"#
         );
     }
 

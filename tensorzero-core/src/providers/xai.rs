@@ -345,6 +345,8 @@ struct XAIRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    parallel_tool_calls: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
@@ -423,7 +425,7 @@ impl<'a> XAIRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
         let mut xai_request = XAIRequest {
             messages,
             model,
@@ -437,6 +439,7 @@ impl<'a> XAIRequest<'a> {
             stream,
             stream_options,
             tools,
+            parallel_tool_calls,
             tool_choice,
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None,
@@ -715,8 +718,8 @@ mod tests {
                 finish_reason: OpenAIFinishReason::Stop,
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -764,8 +767,8 @@ mod tests {
         );
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(inference_response.raw_response, "test_response");
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {

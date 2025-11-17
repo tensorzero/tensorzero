@@ -85,7 +85,7 @@ pub use tensorzero_core::endpoints::workflow_evaluation_run::{
 pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_core::inference::types::{
     Base64File, ContentBlockChunk, File, Input, InputMessage, InputMessageContent,
-    ObjectStoragePointer, Role, System, Unknown, UnknownChunk, UrlFile,
+    ObjectStoragePointer, Role, System, Unknown, UnknownChunk, UrlFile, Usage,
 };
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 pub use tensorzero_core::stored_inference::{
@@ -1077,7 +1077,7 @@ impl ClientExt for Client {
         // Convert storage types to wire types
         let wire_inferences: Result<Vec<StoredInference>, _> = inferences
             .into_iter()
-            .map(|inf| inf.into_stored_inference(&gateway.handle.app_state.config))
+            .map(StoredInferenceDatabase::into_stored_inference)
             .collect();
 
         wire_inferences.map_err(|e| TensorZeroError::Other { source: e.into() })

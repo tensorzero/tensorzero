@@ -155,7 +155,7 @@ jiter==0.11.1 \
 openai==2.5.0 \
     --hash=sha256:21380e5f52a71666dbadbf322dd518bdf2b9d11ed0bb3f96bea17310302d6280 \
     --hash=sha256:f8fa7611f96886a0f31ac6b97e58bc0ada494b255ee2cfd51c8eb502cfcb4814
-    # via tensorzero-examples-docs-gateway-call-the-openai-responses-api
+    # via tensorzero-examples-docs-guides-gateway-call-the-openai-responses-api
 pydantic==2.12.3 \
     --hash=sha256:1da1c82b0fc140bb0103bc1441ffe062154c8d38491189751ee00fd8ca65ce74 \
     --hash=sha256:6986454a854bc3bc6e5443e1369e06a3a456af9d339eda45510f517d9ea5c6bf
@@ -294,7 +294,7 @@ tensorzero==2025.10.4 \
     --hash=sha256:9a52b66dafe4cde568099007661f655f318f2c332909c313f3c049bebc66713f \
     --hash=sha256:d23e2f7ba15b1209c92cec42fc36a02a2f3dec3febeb4c737c1fbb4f984ef69d \
     --hash=sha256:e2c815b1800ef080d2e19b4cd7848e0cc0de1ef3c40533e9b529d51fdba1501e
-    # via tensorzero-examples-docs-gateway-call-the-openai-responses-api
+    # via tensorzero-examples-docs-guides-gateway-call-the-openai-responses-api
 tqdm==4.67.1 \
     --hash=sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2 \
     --hash=sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2
@@ -344,4 +344,4 @@ uuid-utils==0.11.1 \
     --hash=sha256:fd65c41b81b762278997de0d027161f27f9cc4058fa57bbc0a1aaa63a63d6d1a
     # via
     #   tensorzero
-    #   tensorzero-examples-docs-gateway-call-the-openai-responses-api
+    #   tensorzero-examples-docs-guides-gateway-call-the-openai-responses-api

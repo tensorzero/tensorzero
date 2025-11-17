@@ -135,12 +135,6 @@ pub struct EvaluationCoreArgs {
 
     /// Cache configuration for inference requests
     pub inference_cache: CacheEnabledMode,
-
-    /// Maximum number of datapoints to evaluate (None = no limit)
-    pub limit: Option<usize>,
-
-    /// Number of datapoints to skip before starting evaluation (None = no offset)
-    pub offset: Option<usize>,
 }
 
 /// High-level wrapper function for running evaluations called from the CLI.
@@ -242,8 +236,6 @@ pub async fn run_evaluation(
         evaluation_run_id,
         inference_cache: args.inference_cache,
         concurrency: args.concurrency,
-        limit: None,
-        offset: None,
     };
 
     let output_format = args.format.clone();
@@ -399,8 +391,6 @@ pub async fn run_evaluation_core_streaming(
         &args.dataset_name,
         &inference_evaluation_config.function_name,
         &function_config,
-        args.limit,
-        args.offset,
     )
     .await?;
     info!(dataset_size = dataset.len(), "Dataset loaded successfully");
@@ -609,12 +599,10 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
     };
 
     debug!("Processing tool parameters");
-    let function_config = config.get_function(function_name)?;
     let dynamic_tool_params = match datapoint.tool_call_config() {
         Some(tool_params) => {
             debug!("Tool parameters found, processing");
-            let function_config = config.get_function(function_name)?;
-            function_config.database_insert_to_dynamic_tool_params(tool_params.clone())
+            tool_params.clone().into()
         }
         None => {
             debug!("No tool parameters found");
@@ -622,6 +610,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         }
     };
     debug!("Processing output schema");
+    let function_config = config.get_function(function_name)?;
     let output_schema = match (datapoint.output_schema(), &**function_config) {
         // If the datapoint has an output schema, use it only in the case where it is not the same as the output schema of the function
         (Some(output_schema), FunctionConfig::Json(json_function_config)) => {
