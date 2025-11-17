@@ -2295,7 +2295,7 @@ async fn test_evaluation_with_dynamic_variant() {
         concurrency: 2,
     };
 
-    let result = run_evaluation_core_streaming(core_args, None, None, None).await;
+    let result = run_evaluation_core_streaming(core_args, None, None).await;
     assert!(
         result.is_ok(),
         "Evaluation with dynamic variant should succeed"
@@ -2351,7 +2351,7 @@ async fn test_max_inferences_parameter() {
     };
 
     let max_inferences = Some(3);
-    let result = run_evaluation_core_streaming(core_args, None, max_inferences, None)
+    let result = run_evaluation_core_streaming(core_args, max_inferences, None)
         .await
         .unwrap();
 
@@ -2427,11 +2427,10 @@ async fn test_precision_limits_parameter() {
         concurrency: 5,
     };
 
-    // Run with min_inferences=10 and precision limits
+    // Run with precision limits (min_inferences is hardcoded to 20 in StoppingManager)
     let result = run_evaluation_core_streaming(
         core_args,
-        Some(10), // min_inferences
-        None,     // No max_inferences limit
+        None, // No max_inferences limit
         Some(precision_limits.clone()),
     )
     .await
@@ -2461,10 +2460,10 @@ async fn test_precision_limits_parameter() {
         }
     }
 
-    // Verify min_inferences constraint
+    // Verify min_datapoints constraint (hardcoded to 20 in StoppingManager)
     assert!(
-        total_datapoints >= 10,
-        "Should process at least min_inferences (10) datapoints, got {total_datapoints}"
+        total_datapoints >= 20,
+        "Should process at least min_datapoints (20) datapoints, got {total_datapoints}"
     );
 
     // Verify that both evaluators achieved their precision limits
