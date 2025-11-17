@@ -1515,7 +1515,7 @@ pub(crate) fn prepare_allowed_tools_constraint<'a>(
     tool_config: &'a ToolCallConfig,
 ) -> Option<AllowedToolsChoice<'a>> {
     // OpenAI-compatible providers don't allow both tool-choice "none" and tool-choice "allowed_tools",
-    // since the're both set via the top-level "tool_choice" field.
+    // since they're both set via the top-level "tool_choice" field.
     // We make `ToolChoice::None` take priority - that is, we allow "none" of the allowed tools.
     if tool_config.tool_choice == ToolChoice::None {
         return None;
