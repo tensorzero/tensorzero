@@ -720,15 +720,12 @@ jobs:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        # TODO: Temporarily using 25.9 instead of latest
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"25.9","prefix":"25.9","allow_failure":false}]') || fromJSON('[{"tag":"25.9","prefix":"25.9","allow_failure":false}]') }}
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"latest","prefix":"latest","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]') }}
         exclude:
-          # Use 25.7 instead of 25.9 for replicated tests in merge group
           - replicated: true
             clickhouse_version:
-              { "tag": "25.9", "prefix": "25.9", "allow_failure": false }
-          # Add 25.7 for replicated tests in merge group
-        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.7","prefix":"25.7","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
+              { "tag": "latest", "prefix": "latest", "allow_failure": false }
+        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"latest","prefix":"latest","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
