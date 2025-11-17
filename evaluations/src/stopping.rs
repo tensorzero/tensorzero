@@ -70,9 +70,9 @@ impl StoppingManager {
     /// Checks each evaluator's CI half-width against its precision limit and cancels
     /// the token if the evaluator has converged. Only checks after min_datapoints
     /// have been completed.
-    pub fn cancel_converged_evaluators(&self, completed_inferences: usize) {
-        // Only check after min_datapoints have been completed
-        if completed_inferences < self.min_datapoints {
+    pub fn cancel_converged_evaluators(&self, completed_datapoints: usize) {
+        // Only check after inferences have been completed for min_datapoints
+        if completed_datapoints < self.min_datapoints {
             return;
         }
 
