@@ -404,11 +404,163 @@ class DeleteDatapointsResponse:
 
 
 @dataclass(kw_only=True)
+class ExtraBodyReplacementKind1:
+    value: Any
+
+
+ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKind1
+
+
+@dataclass(kw_only=True)
+class ExtraHeaderKind1:
+    value: str
+
+
+ExtraHeaderKind = Literal["delete"] | ExtraHeaderKind1
+
+
+@dataclass(kw_only=True)
 class GetDatapointsRequest:
     ids: list[str]
     """
     The IDs of the datapoints to retrieve. Required.
     """
+
+
+@dataclass(kw_only=True)
+class ProviderExtraBody:
+    model_provider_name: str
+    pointer: str
+    value: Any
+
+
+@dataclass(kw_only=True)
+class ProviderExtraBody1:
+    model_provider_name: str
+    pointer: str
+    delete: None
+
+
+@dataclass(kw_only=True)
+class VariantExtraBody:
+    variant_name: str
+    pointer: str
+    value: Any
+
+
+@dataclass(kw_only=True)
+class VariantExtraBody1:
+    variant_name: str
+    pointer: str
+    delete: None
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraBody:
+    model_name: str
+    pointer: str
+    value: Any
+    provider_name: str | None = None
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraBody1:
+    model_name: str
+    pointer: str
+    delete: None
+    provider_name: str | None = None
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraBody:
+    pointer: str
+    value: Any
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraBody1:
+    pointer: str
+    delete: None
+
+
+InferenceExtraBody = (
+    ProviderExtraBody
+    | ProviderExtraBody1
+    | VariantExtraBody
+    | VariantExtraBody1
+    | ModelProviderExtraBody
+    | ModelProviderExtraBody1
+    | AlwaysExtraBody
+    | AlwaysExtraBody1
+)
+
+
+@dataclass(kw_only=True)
+class ProviderExtraHeader:
+    model_provider_name: str
+    name: str
+    value: str
+
+
+@dataclass(kw_only=True)
+class ProviderExtraHeader1:
+    model_provider_name: str
+    name: str
+    delete: None
+
+
+@dataclass(kw_only=True)
+class VariantExtraHeader:
+    variant_name: str
+    name: str
+    value: str
+
+
+@dataclass(kw_only=True)
+class VariantExtraHeader1:
+    variant_name: str
+    name: str
+    delete: None
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraHeader:
+    model_name: str
+    name: str
+    value: str
+    provider_name: str | None = None
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraHeader1:
+    model_name: str
+    name: str
+    delete: None
+    provider_name: str | None = None
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraHeader:
+    name: str
+    value: str
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraHeader1:
+    name: str
+    delete: None
+
+
+InferenceExtraHeader = (
+    ProviderExtraHeader
+    | ProviderExtraHeader1
+    | VariantExtraHeader
+    | VariantExtraHeader1
+    | ModelProviderExtraHeader
+    | ModelProviderExtraHeader1
+    | AlwaysExtraHeader
+    | AlwaysExtraHeader1
+)
 
 
 @dataclass(kw_only=True)

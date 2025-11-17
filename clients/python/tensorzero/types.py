@@ -11,6 +11,8 @@ import uuid_utils
 from typing_extensions import NotRequired, TypedDict, deprecated
 
 from tensorzero.generated_types import (
+    InferenceExtraBody,
+    InferenceExtraHeader,
     InferenceFilter,
     InferenceFilterAnd,
     InferenceFilterBooleanMetric,
@@ -365,68 +367,10 @@ class JsonChunk:
 InferenceChunk = Union[ChatChunk, JsonChunk]
 
 
-class VariantExtraBody(TypedDict):
-    variant_name: str
-    pointer: str
-    value: NotRequired[Any]
-    delete: NotRequired[bool]
-
-
-# DEPRECATED: Use `ModelProviderExtraBody` instead.
-class ProviderExtraBody(TypedDict):
-    model_provider_name: str
-    pointer: str
-    value: NotRequired[Any]
-    delete: NotRequired[bool]
-
-
-class ModelProviderExtraBody(TypedDict):
-    model_name: str
-    provider_name: NotRequired[str]
-    pointer: str
-    value: NotRequired[Any]
-    delete: NotRequired[bool]
-
-
-class AlwaysExtraBody(TypedDict):
-    pointer: str
-    value: NotRequired[Any]
-    delete: NotRequired[bool]
-
-
-ExtraBody = Union[VariantExtraBody, ProviderExtraBody, ModelProviderExtraBody, AlwaysExtraBody]
-
-
-class VariantExtraHeader(TypedDict):
-    variant_name: str
-    name: str
-    value: NotRequired[str]
-    delete: NotRequired[bool]
-
-
-# DEPRECATED: Use `ModelProviderExtraHeader` instead.
-class ProviderExtraHeader(TypedDict):
-    model_provider_name: str
-    name: str
-    value: NotRequired[str]
-    delete: NotRequired[bool]
-
-
-class ModelProviderExtraHeader(TypedDict):
-    model_name: str
-    provider_name: str
-    name: str
-    value: NotRequired[str]
-    delete: NotRequired[bool]
-
-
-class AlwaysExtraHeader(TypedDict):
-    name: str
-    value: NotRequired[str]
-    delete: NotRequired[bool]
-
-
-ExtraHeader = Union[VariantExtraHeader, ProviderExtraHeader, ModelProviderExtraHeader, AlwaysExtraHeader]
+# ExtraBody and ExtraHeader types are now auto-generated from Rust
+# Re-export the generated union types for backward compatibility
+ExtraBody = InferenceExtraBody
+ExtraHeader = InferenceExtraHeader
 
 
 def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
