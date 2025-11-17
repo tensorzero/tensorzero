@@ -2306,10 +2306,10 @@ async fn test_evaluation_with_dynamic_variant() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_max_inferences_parameter() {
+async fn test_max_datapoints_parameter() {
     init_tracing_for_tests();
     let clickhouse = get_clickhouse().await;
-    let dataset_name = format!("extract_entities_max_inferences-{}", Uuid::now_v7());
+    let dataset_name = format!("extract_entities_max_datapoints-{}", Uuid::now_v7());
     let tensorzero_client = get_tensorzero_client().await;
 
     // Write 10 datapoints to the dataset
@@ -2337,7 +2337,7 @@ async fn test_max_inferences_parameter() {
 
     let evaluation_run_id = Uuid::now_v7();
 
-    // Test with max_inferences = 3 (should only process 3 datapoints)
+    // Test with max_datapoints = 3 (should only process 3 datapoints)
     let core_args = EvaluationCoreArgs {
         tensorzero_client: tensorzero_client.clone(),
         clickhouse_client: clickhouse.clone(),
@@ -2350,15 +2350,15 @@ async fn test_max_inferences_parameter() {
         concurrency: 2,
     };
 
-    let max_inferences = Some(3);
-    let result = run_evaluation_core_streaming(core_args, max_inferences, HashMap::new())
+    let max_datapoints = Some(3);
+    let result = run_evaluation_core_streaming(core_args, max_datapoints, HashMap::new())
         .await
         .unwrap();
 
     // Verify that only 3 datapoints were processed
     assert_eq!(
         result.run_info.num_datapoints, 3,
-        "max_inferences should limit dataset to 3 datapoints"
+        "max_datapoints should limit dataset to 3 datapoints"
     );
 
     // Consume the results to ensure all evaluations complete
@@ -2427,10 +2427,10 @@ async fn test_precision_limits_parameter() {
         concurrency: 5,
     };
 
-    // Run with precision limits (min_inferences is hardcoded to 20 in StoppingManager)
+    // Run with precision limits
     let result = run_evaluation_core_streaming(
         core_args,
-        None, // No max_inferences limit
+        None, // No max_datapoints limit
         precision_limits.clone(),
     )
     .await
