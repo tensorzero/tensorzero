@@ -313,7 +313,7 @@ async fn test_update_datapoints(client: Client) {
         id: datapoint_ids[0],
         input: None,
         output: Some(updated_output),
-        tool_params: None,
+        tool_params: Default::default(),
         tags: None,
         metadata: Default::default(),
     });
