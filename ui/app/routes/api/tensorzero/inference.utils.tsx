@@ -13,11 +13,11 @@ import type {
   PathWithContents,
   UninitializedVariantInfo,
   VariantInfo,
-  ResolvedTomlPath,
   ChatTemplates,
   StaticToolConfig,
   ToolChoice,
   Tool,
+  ResolvedTomlPathData,
 } from "~/types/tensorzero";
 import type {
   InputMessageContent as TensorZeroContent,
@@ -614,7 +614,7 @@ function resolvedFileContentToClientFile(
 
 function convertTemplate(
   template: PathWithContents | null,
-): ResolvedTomlPath | null {
+): ResolvedTomlPathData | null {
   if (!template) return null;
   return {
     __tensorzero_remapped_path: `template_${v7()}`,
@@ -622,7 +622,9 @@ function convertTemplate(
   };
 }
 
-function stringToTemplate(template: string | null): ResolvedTomlPath | null {
+function stringToTemplate(
+  template: string | null,
+): ResolvedTomlPathData | null {
   if (!template) return null;
   return {
     __tensorzero_remapped_path: `template_${v7()}`,
@@ -632,8 +634,8 @@ function stringToTemplate(template: string | null): ResolvedTomlPath | null {
 
 function convertTemplatesToRecord(
   templates: ChatTemplates,
-): Record<string, { path: ResolvedTomlPath }> {
-  const result: Record<string, { path: ResolvedTomlPath }> = {};
+): Record<string, { path: ResolvedTomlPathData }> {
+  const result: Record<string, { path: ResolvedTomlPathData }> = {};
   for (const [name, templateData] of Object.entries(templates)) {
     const converted = convertTemplate(templateData?.template || null);
     if (converted) {

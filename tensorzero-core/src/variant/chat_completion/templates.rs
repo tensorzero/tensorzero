@@ -6,7 +6,7 @@ use std::{
 use serde::Serialize;
 
 use crate::{
-    config::{path::ResolvedTomlPath, ErrorContext, PathWithContents, SchemaData},
+    config::{path::ResolvedTomlPathData, ErrorContext, PathWithContents, SchemaData},
     error::{Error, ErrorDetails},
     inference::types::Role,
     jsonschema_util::StaticJSONSchema,
@@ -74,7 +74,7 @@ impl ChatTemplates {
     fn validate_wrapper(
         template_and_schema: Option<TemplateWithSchema>,
         schema: Option<&StaticJSONSchema>,
-        wrapper: Option<ResolvedTomlPath>,
+        wrapper: Option<ResolvedTomlPathData>,
         error_prefix: &str,
         name: &str,
     ) -> Result<Option<TemplateWithSchema>, Error> {
