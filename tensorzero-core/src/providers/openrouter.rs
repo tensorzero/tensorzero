@@ -29,6 +29,7 @@ use crate::inference::types::chat_completion_inference_params::{
 use crate::inference::types::file::{mime_type_to_audio_format, mime_type_to_ext};
 use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
+    resolved_input::{FileUrl, LazyFile},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
@@ -44,7 +45,7 @@ use crate::tool::{ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolCho
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
-    inject_extra_request_data_and_send_eventsource,
+    inject_extra_request_data_and_send_eventsource, warn_cannot_forward_url_if_missing_mime_type,
 };
 
 use super::chat_completions::{
@@ -660,11 +661,12 @@ impl OpenRouterRequestMessage<'_> {
 pub(super) async fn prepare_openrouter_messages<'a>(
     request: &'a ModelInferenceRequest<'_>,
 ) -> Result<Vec<OpenRouterRequestMessage<'a>>, Error> {
+    let fetch_and_encode = request.fetch_and_encode_input_files_before_inference;
     let mut messages: Vec<_> = try_join_all(
         request
             .messages
             .iter()
-            .map(tensorzero_to_openrouter_messages),
+            .map(|msg| tensorzero_to_openrouter_messages(msg, fetch_and_encode)),
     )
     .await?
     .into_iter()
@@ -750,62 +752,111 @@ pub(super) fn tensorzero_to_openrouter_system_message<'a>(
 }
 
 async fn prepare_openrouter_file_content_block(
-    file: &crate::inference::types::resolved_input::LazyFile,
+    file: &LazyFile,
+    fetch_and_encode_input_files_before_inference: bool,
 ) -> Result<OpenRouterContentBlock<'static>, Error> {
-    let resolved_file = file.resolve().await?;
-    let ObjectStorageFile { file, data } = &*resolved_file;
-    let base64_url = format!("data:{};base64,{}", file.mime_type, data);
-
-    if file.mime_type.type_() == mime::IMAGE {
-        if file.detail.is_some() {
-            tracing::warn!(
-                "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
+    match file {
+        LazyFile::Url {
+            file_url:
+                FileUrl {
+                    mime_type,
+                    url,
+                    detail,
+                },
+            future: _,
+        } if !fetch_and_encode_input_files_before_inference
+            && matches!(
+                mime_type.as_ref().map(mime::MediaType::type_),
+                Some(mime::IMAGE) | None
+            ) =>
+        {
+            if detail.is_some() {
+                tracing::warn!(
+                    "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
+                );
+            }
+            warn_cannot_forward_url_if_missing_mime_type(
+                file,
+                fetch_and_encode_input_files_before_inference,
+                PROVIDER_TYPE,
             );
+            Ok(OpenRouterContentBlock::ImageUrl {
+                image_url: OpenRouterImageUrl {
+                    url: url.to_string(),
+                },
+            })
         }
-        Ok(OpenRouterContentBlock::ImageUrl {
-            image_url: OpenRouterImageUrl { url: base64_url },
-        })
-    } else if file.mime_type.type_() == mime::AUDIO {
-        let format = mime_type_to_audio_format(&file.mime_type)?;
-        Ok(OpenRouterContentBlock::InputAudio {
-            input_audio: OpenRouterInputAudio {
-                data: Cow::Owned(data.clone()),
-                format: Cow::Owned(format.to_string()),
-            },
-        })
-    } else {
-        let filename = if let Some(ref user_filename) = file.filename {
-            // Use the user-provided filename if available
-            Cow::Owned(user_filename.clone())
-        } else {
-            // Otherwise, generate a filename with the appropriate extension
-            let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
-                Error::new(ErrorDetails::InvalidMessage {
-                    message: format!("Mime type {} has no filetype suffix", file.mime_type),
+        _ => {
+            let resolved_file = file.resolve().await?;
+            let ObjectStorageFile { file, data } = &*resolved_file;
+            let base64_url = format!("data:{};base64,{}", file.mime_type, data);
+
+            if file.mime_type.type_() == mime::IMAGE {
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "The image detail parameter is not supported by OpenRouter. The `detail` field will be ignored."
+                    );
+                }
+                Ok(OpenRouterContentBlock::ImageUrl {
+                    image_url: OpenRouterImageUrl { url: base64_url },
                 })
-            })?;
-            Cow::Owned(format!("input.{suffix}"))
-        };
-        Ok(OpenRouterContentBlock::File {
-            file: OpenRouterFile {
-                file_data: Some(Cow::Owned(base64_url)),
-                filename: Some(filename),
-            },
-        })
+            } else if file.mime_type.type_() == mime::AUDIO {
+                let format = mime_type_to_audio_format(&file.mime_type)?;
+                Ok(OpenRouterContentBlock::InputAudio {
+                    input_audio: OpenRouterInputAudio {
+                        data: Cow::Owned(data.clone()),
+                        format: Cow::Owned(format.to_string()),
+                    },
+                })
+            } else {
+                let filename = if let Some(ref user_filename) = file.filename {
+                    // Use the user-provided filename if available
+                    Cow::Owned(user_filename.clone())
+                } else {
+                    // Otherwise, generate a filename with the appropriate extension
+                    let suffix = mime_type_to_ext(&file.mime_type)?.ok_or_else(|| {
+                        Error::new(ErrorDetails::InvalidMessage {
+                            message: format!("Mime type {} has no filetype suffix", file.mime_type),
+                        })
+                    })?;
+                    Cow::Owned(format!("input.{suffix}"))
+                };
+                Ok(OpenRouterContentBlock::File {
+                    file: OpenRouterFile {
+                        file_data: Some(Cow::Owned(base64_url)),
+                        filename: Some(filename),
+                    },
+                })
+            }
+        }
     }
 }
 
 pub(super) async fn tensorzero_to_openrouter_messages(
     message: &RequestMessage,
+    fetch_and_encode_input_files_before_inference: bool,
 ) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
     match message.role {
-        Role::User => tensorzero_to_openrouter_user_messages(&message.content).await,
-        Role::Assistant => tensorzero_to_openrouter_assistant_messages(&message.content).await,
+        Role::User => {
+            tensorzero_to_openrouter_user_messages(
+                &message.content,
+                fetch_and_encode_input_files_before_inference,
+            )
+            .await
+        }
+        Role::Assistant => {
+            tensorzero_to_openrouter_assistant_messages(
+                &message.content,
+                fetch_and_encode_input_files_before_inference,
+            )
+            .await
+        }
     }
 }
 
 async fn tensorzero_to_openrouter_user_messages(
     content_blocks: &[ContentBlock],
+    fetch_and_encode_input_files_before_inference: bool,
 ) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the user content blocks.
 
@@ -833,7 +884,13 @@ async fn tensorzero_to_openrouter_user_messages(
                 ));
             }
             ContentBlock::File(file) => {
-                user_content_blocks.push(prepare_openrouter_file_content_block(file).await?);
+                user_content_blocks.push(
+                    prepare_openrouter_file_content_block(
+                        file,
+                        fetch_and_encode_input_files_before_inference,
+                    )
+                    .await?,
+                );
             }
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);
@@ -863,6 +920,7 @@ async fn tensorzero_to_openrouter_user_messages(
 
 async fn tensorzero_to_openrouter_assistant_messages(
     content_blocks: &[ContentBlock],
+    fetch_and_encode_input_files_before_inference: bool,
 ) -> Result<Vec<OpenRouterRequestMessage<'_>>, Error> {
     // We need to separate the tool result messages from the assistant content blocks.
     let mut assistant_content_blocks = Vec::new();
@@ -893,7 +951,13 @@ async fn tensorzero_to_openrouter_assistant_messages(
                 }));
             }
             ContentBlock::File(file) => {
-                assistant_content_blocks.push(prepare_openrouter_file_content_block(file).await?);
+                assistant_content_blocks.push(
+                    prepare_openrouter_file_content_block(
+                        file,
+                        fetch_and_encode_input_files_before_inference,
+                    )
+                    .await?,
+                );
             }
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);
@@ -2340,7 +2404,7 @@ mod tests {
     #[tokio::test]
     async fn test_tensorzero_to_openrouter_messages() {
         let content_blocks = vec!["Hello".to_string().into()];
-        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks)
+        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks, true)
             .await
             .unwrap();
         assert_eq!(openrouter_messages.len(), 1);
@@ -2361,7 +2425,7 @@ mod tests {
             "Hello".to_string().into(),
             "How are you?".to_string().into(),
         ];
-        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks)
+        let openrouter_messages = tensorzero_to_openrouter_user_messages(&content_blocks, true)
             .await
             .unwrap();
         assert_eq!(openrouter_messages.len(), 1);
@@ -2391,9 +2455,10 @@ mod tests {
             arguments: "{}".to_string(),
         });
         let content_blocks = vec!["Hello".to_string().into(), tool_block];
-        let openrouter_messages = tensorzero_to_openrouter_assistant_messages(&content_blocks)
-            .await
-            .unwrap();
+        let openrouter_messages =
+            tensorzero_to_openrouter_assistant_messages(&content_blocks, true)
+                .await
+                .unwrap();
         assert_eq!(openrouter_messages.len(), 1);
         match &openrouter_messages[0] {
             OpenRouterRequestMessage::Assistant(content) => {
