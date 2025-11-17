@@ -1,5 +1,7 @@
 use super::{deserialize_delete, serialize_delete};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::export_schema;
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(transparent)]
@@ -14,7 +16,8 @@ pub struct ExtraHeader {
     pub kind: ExtraHeaderKind,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+#[export_schema]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum ExtraHeaderKind {
@@ -72,23 +75,27 @@ pub struct FullExtraHeadersConfig {
     pub inference_extra_headers: FilteredInferenceExtraHeaders,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+#[export_schema]
 #[ts(export)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum InferenceExtraHeader {
     // Deprecated (#4640): Migrate to `ModelProvider` and remove in 2026.2+
+    #[schemars(title = "ProviderExtraHeader")]
     Provider {
         model_provider_name: String,
         name: String,
         #[serde(flatten)]
         kind: ExtraHeaderKind,
     },
+    #[schemars(title = "VariantExtraHeader")]
     Variant {
         variant_name: String,
         name: String,
         #[serde(flatten)]
         kind: ExtraHeaderKind,
     },
+    #[schemars(title = "ModelProviderExtraHeader")]
     ModelProvider {
         model_name: String,
         provider_name: Option<String>,
@@ -96,6 +103,7 @@ pub enum InferenceExtraHeader {
         #[serde(flatten)]
         kind: ExtraHeaderKind,
     },
+    #[schemars(title = "AlwaysExtraHeader")]
     Always {
         name: String,
         #[serde(flatten)]

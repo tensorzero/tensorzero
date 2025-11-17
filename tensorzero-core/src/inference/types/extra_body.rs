@@ -1,6 +1,8 @@
 use super::{deserialize_delete, serialize_delete};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tensorzero_derive::export_schema;
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(transparent)]
@@ -15,7 +17,8 @@ pub struct ExtraBodyReplacement {
     pub kind: ExtraBodyReplacementKind,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+#[export_schema]
 #[serde(rename_all = "snake_case")]
 pub enum ExtraBodyReplacementKind {
     Value(Value),
@@ -75,22 +78,26 @@ pub struct FullExtraBodyConfig {
     pub inference_extra_body: FilteredInferenceExtraBody,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+#[export_schema]
 #[serde(untagged, deny_unknown_fields)]
 pub enum InferenceExtraBody {
     // Deprecated (#4640): Migrate to `ModelProvider` and remove in 2026.2+
+    #[schemars(title = "ProviderExtraBody")]
     Provider {
         model_provider_name: String,
         pointer: String,
         #[serde(flatten)]
         kind: ExtraBodyReplacementKind,
     },
+    #[schemars(title = "VariantExtraBody")]
     Variant {
         variant_name: String,
         pointer: String,
         #[serde(flatten)]
         kind: ExtraBodyReplacementKind,
     },
+    #[schemars(title = "ModelProviderExtraBody")]
     ModelProvider {
         model_name: String,
         provider_name: Option<String>,
@@ -98,6 +105,7 @@ pub enum InferenceExtraBody {
         #[serde(flatten)]
         kind: ExtraBodyReplacementKind,
     },
+    #[schemars(title = "AlwaysExtraBody")]
     Always {
         pointer: String,
         #[serde(flatten)]
