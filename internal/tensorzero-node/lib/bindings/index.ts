@@ -246,6 +246,7 @@ export * from "./ResolvedInputMessageContent";
 export * from "./ResolvedRequestMessage";
 export * from "./ResolvedTomlPathData";
 export * from "./ResolvedTomlPathDirectory";
+export * from "./ResolvedTomlPath";
 export * from "./RetryConfig";
 export * from "./Role";
 export * from "./SGLangDefaults";
