@@ -14,7 +14,6 @@ optimization_tests = ["e2e_tests"]
 
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
-evaluations = { path = "../evaluations" }
 
 # Core async and serialization
 async-trait = { workspace = true }
