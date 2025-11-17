@@ -31,7 +31,6 @@ use tokio::{
     sync::{mpsc, Semaphore},
     task::JoinSet,
 };
-use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument};
 use url::Url;
 use uuid::Uuid;
@@ -313,16 +312,16 @@ pub async fn run_evaluation(
 /// Core streaming evaluation function with optional adaptive stopping.
 ///
 /// This function runs an evaluation and streams results as they complete via an mpsc channel.
-/// When `precision_limits` is provided, evaluators can stop independently once confidence
+/// When `precision_targets` is provided, evaluators can stop independently once confidence
 /// interval half-widths (the max of the distances from the CI endpoints to the point estimate)
-/// are within the precision limits.
+/// are within the precision targets.
 ///
 /// ## How it works
 ///
 /// 1. Creates an mpsc channel for streaming `EvaluationUpdate` messages
 /// 2. Loads the evaluation and function configurations
 /// 3. Queries the dataset (limited by `max_datapoints` if specified)
-/// 4. If `precision_limits` is provided:
+/// 4. If `precision_targets` is provided:
 ///    - Creates cancellation tokens for all evaluators
 ///    - Creates a `StoppingManager` to track statistics and manage stopping conditions
 /// 5. Sends `RunInfo` as the first message (evaluation_run_id, num_datapoints)
@@ -333,7 +332,7 @@ pub async fn run_evaluation(
 ///    - Returns (Datapoint, InferenceResponse, EvaluationResult)
 /// 7. Spawns a background collector task that:
 ///    - Collects results from the JoinSet as tasks complete
-///    - If `precision_limits` is provided:
+///    - If `precision_targets` is provided:
 ///      - Updates per-evaluator statistics via `StoppingManager::update_stats()`
 ///      - Cancels converged evaluators via `StoppingManager::cancel_converged_evaluators()`
 ///      - Checks if all evaluators have stopped via `StoppingManager::all_evaluators_stopped()`
@@ -347,7 +346,7 @@ pub async fn run_evaluation(
 ///
 /// **`max_datapoints`**: When `Some(max)`, limits dataset to at most `max` datapoints.
 ///
-/// **`precision_limits`**: When `Some(map)`, enables adaptive stopping:
+/// **`precision_targets`**: When `Some(map)`, enables adaptive stopping:
 /// - Per-evaluator CI half-width thresholds (HashMap<String, f32>)
 /// - Evaluator k stops when the larger of the two halves of the CI has width ≤ threshold_k`
 /// - Only checked after min_datapoints (hardcoded to 20) have been completed
@@ -355,7 +354,7 @@ pub async fn run_evaluation(
 /// - All datapoint tasks are spawned upfront for maximum concurrency
 /// - When all evaluators have stopped, remaining tasks are aborted
 ///
-/// When `precision_limits` is `None`:
+/// When `precision_targets` is `None`:
 /// - All evaluators run on all datapoints (up to max_datapoints)
 /// - Standard evaluation behavior
 ///
@@ -378,7 +377,7 @@ pub async fn run_evaluation(
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
     max_datapoints: Option<usize>,
-    precision_limits: Option<HashMap<String, f32>>,
+    precision_targets: Option<HashMap<String, f32>>,
 ) -> Result<EvaluationStreamResult> {
     let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
 
@@ -419,7 +418,7 @@ pub async fn run_evaluation_core_streaming(
         &args.dataset_name,
         &inference_evaluation_config.function_name,
         &function_config,
-        max_datapoints, // Apply max_inferences limit if provided
+        max_datapoints, // Apply max_datapoints limit if provided
     )
     .await?;
     info!(dataset_size = dataset.len(), "Dataset loaded successfully");
@@ -435,7 +434,7 @@ pub async fn run_evaluation_core_streaming(
         .keys()
         .cloned()
         .collect();
-    let mut stopping_manager = stopping::StoppingManager::new(precision_limits, &evaluator_names);
+    let mut stopping_manager = stopping::StoppingManager::new(precision_targets, &evaluator_names);
 
     let run_info = RunInfo {
         evaluation_run_id: args.evaluation_run_id,
@@ -452,9 +451,7 @@ pub async fn run_evaluation_core_streaming(
     }
 
     // Get cancellation tokens from stopping manager and wrap in Arc for cloning into tasks
-    let cancellation_tokens_arc: Option<Arc<HashMap<String, CancellationToken>>> = stopping_manager
-        .get_tokens()
-        .map(|tokens| Arc::new(tokens.clone()));
+    let cancellation_tokens_arc = Arc::new(stopping_manager.get_tokens().clone());
 
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
@@ -508,7 +505,7 @@ pub async fn run_evaluation_core_streaming(
                     inference_cache,
                     send_feedback,
                 },
-                tokens_clone.as_ref().map(|t| t.as_ref()),  // Pass cancellation tokens if available
+                tokens_clone.as_ref(),  // Pass cancellation tokens
             )
                 .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
             debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
@@ -536,7 +533,7 @@ pub async fn run_evaluation_core_streaming(
                 Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
                     completed_inferences += 1;
 
-                    // Update statistics and cancel any evaluators that have hit their precision limit
+                    // Update statistics and cancel any evaluators that have hit their precision target
                     stopping_manager.update_stats(&evaluation_result);
                     stopping_manager.cancel_converged_evaluators(completed_inferences);
 

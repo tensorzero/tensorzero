@@ -6,12 +6,45 @@ use crate::stats::PerEvaluatorStats;
 
 const MIN_DATAPOINTS: usize = 20;
 
+/// Newtype wrapper for cancellation tokens
+///
+/// An empty map indicates no adaptive stopping is configured.
+#[derive(Debug, Clone)]
+pub struct CancellationTokens(HashMap<String, CancellationToken>);
+
+impl CancellationTokens {
+    /// Create a new CancellationTokens from evaluator names
+    pub fn new(evaluator_names: &[String]) -> Self {
+        Self(
+            evaluator_names
+                .iter()
+                .map(|name| (name.clone(), CancellationToken::new()))
+                .collect(),
+        )
+    }
+
+    /// Create an empty CancellationTokens (no adaptive stopping)
+    pub fn empty() -> Self {
+        Self(HashMap::new())
+    }
+
+    /// Get a reference to the inner HashMap
+    pub fn as_map(&self) -> &HashMap<String, CancellationToken> {
+        &self.0
+    }
+
+    /// Check if all tokens are cancelled
+    pub fn all_cancelled(&self) -> bool {
+        !self.0.is_empty() && self.0.values().all(|token| token.is_cancelled())
+    }
+}
+
 /// Manager for adaptive stopping logic during evaluation
 pub struct StoppingManager {
     precision_limits: Option<HashMap<String, f32>>,
     min_datapoints: usize,
-    cancellation_tokens: Option<HashMap<String, CancellationToken>>,
-    evaluator_stats: Option<HashMap<String, PerEvaluatorStats>>,
+    cancellation_tokens: CancellationTokens,
+    evaluator_stats: HashMap<String, PerEvaluatorStats>,
 }
 
 impl StoppingManager {
@@ -25,10 +58,7 @@ impl StoppingManager {
         let (cancellation_tokens, evaluator_stats) =
             if let Some(ref precision_map) = precision_limits {
                 // Create tokens for all evaluators
-                let tokens: HashMap<String, CancellationToken> = evaluator_names
-                    .iter()
-                    .map(|name| (name.clone(), CancellationToken::new()))
-                    .collect();
+                let tokens = CancellationTokens::new(evaluator_names);
 
                 // Create stats only for evaluators with precision limits
                 let stats: HashMap<String, PerEvaluatorStats> = precision_map
@@ -36,9 +66,9 @@ impl StoppingManager {
                     .map(|name| (name.clone(), PerEvaluatorStats::default()))
                     .collect();
 
-                (Some(tokens), Some(stats))
+                (tokens, stats)
             } else {
-                (None, None)
+                (CancellationTokens::empty(), HashMap::new())
             };
 
         Self {
@@ -50,10 +80,8 @@ impl StoppingManager {
     }
 
     /// Get a reference to the cancellation tokens for use by evaluation tasks
-    ///
-    /// Returns None if no precision limits were configured (no adaptive stopping).
-    pub fn get_tokens(&self) -> Option<&HashMap<String, CancellationToken>> {
-        self.cancellation_tokens.as_ref()
+    pub fn get_tokens(&self) -> &CancellationTokens {
+        &self.cancellation_tokens
     }
 
     /// Update statistics with new evaluation results
@@ -61,21 +89,19 @@ impl StoppingManager {
         &mut self,
         evaluation_result: &HashMap<String, Result<Option<serde_json::Value>, E>>,
     ) {
-        if let Some(stats) = self.evaluator_stats.as_mut() {
-            for (evaluator_name, eval_result) in evaluation_result {
-                // Only track stats for evaluators with stopping conditions
-                if let Some(evaluator_stats) = stats.get_mut(evaluator_name) {
-                    match eval_result {
-                        Ok(Some(serde_json::Value::Number(n))) => {
-                            if let Some(value) = n.as_f64() {
-                                evaluator_stats.push(value as f32);
-                            }
+        for (evaluator_name, eval_result) in evaluation_result {
+            // Only track stats for evaluators with stopping conditions
+            if let Some(evaluator_stats) = self.evaluator_stats.get_mut(evaluator_name) {
+                match eval_result {
+                    Ok(Some(serde_json::Value::Number(n))) => {
+                        if let Some(value) = n.as_f64() {
+                            evaluator_stats.push(value as f32);
                         }
-                        Ok(Some(serde_json::Value::Bool(b))) => {
-                            evaluator_stats.push(if *b { 1.0 } else { 0.0 });
-                        }
-                        _ => {}
                     }
+                    Ok(Some(serde_json::Value::Bool(b))) => {
+                        evaluator_stats.push(if *b { 1.0 } else { 0.0 });
+                    }
+                    _ => {}
                 }
             }
         }
@@ -92,13 +118,11 @@ impl StoppingManager {
             return;
         }
 
-        if let (Some(stats), Some(precision_map), Some(tokens)) = (
-            self.evaluator_stats.as_ref(),
-            self.precision_limits.as_ref(),
-            self.cancellation_tokens.as_ref(),
-        ) {
+        if let Some(precision_map) = self.precision_limits.as_ref() {
+            let tokens = self.cancellation_tokens.as_map();
+
             // Check each evaluator's stopping condition
-            for (evaluator_name, evaluator_stats) in stats {
+            for (evaluator_name, evaluator_stats) in &self.evaluator_stats {
                 if let Some(precision_limit) = precision_map.get(evaluator_name) {
                     if let Some(ci_half_width) = evaluator_stats.ci_half_width() {
                         if ci_half_width <= *precision_limit {
@@ -125,11 +149,9 @@ impl StoppingManager {
     /// Check if all evaluators have been stopped
     ///
     /// Returns true if all cancellation tokens are cancelled, false otherwise.
-    /// If no cancellation tokens exist (no adaptive stopping), returns false.
+    /// If no tokens exist (no adaptive stopping), returns false.
     pub fn all_evaluators_stopped(&self) -> bool {
-        self.cancellation_tokens
-            .as_ref()
-            .is_some_and(|tokens| tokens.values().all(|token| token.is_cancelled()))
+        self.cancellation_tokens.all_cancelled()
     }
 }
 
@@ -145,8 +167,8 @@ mod tests {
         // With no precision limits, all_evaluators_stopped should always return false
         assert!(!manager.all_evaluators_stopped());
 
-        // get_tokens should return None
-        assert!(manager.get_tokens().is_none());
+        // get_tokens should return empty map
+        assert!(manager.get_tokens().as_map().is_empty());
 
         // Cancel should be a no-op
         manager.cancel_converged_evaluators(100);
@@ -164,9 +186,9 @@ mod tests {
         // Initially no evaluators should be stopped
         assert!(!manager.all_evaluators_stopped());
 
-        // get_tokens should return Some
-        assert!(manager.get_tokens().is_some());
-        assert_eq!(manager.get_tokens().unwrap().len(), 1);
+        // get_tokens should return non-empty map
+        assert_eq!(manager.get_tokens().as_map().len(), 1);
+        assert!(manager.get_tokens().as_map().contains_key("evaluator1"));
     }
 
     #[test]
@@ -205,7 +227,7 @@ mod tests {
         manager.cancel_converged_evaluators(10);
 
         // Get the token to check if it's cancelled
-        let tokens = manager.get_tokens().unwrap();
+        let tokens = manager.get_tokens().as_map();
         let token = tokens.get("evaluator1").unwrap();
         assert!(!token.is_cancelled());
     }
@@ -231,7 +253,7 @@ mod tests {
         }
 
         // Get the token to check its state
-        let tokens = manager.get_tokens().unwrap();
+        let tokens = manager.get_tokens().as_map();
         let token = tokens.get("evaluator1").unwrap();
 
         // Should not cancel before calling cancel_converged_evaluators
@@ -258,7 +280,7 @@ mod tests {
         assert!(!manager.all_evaluators_stopped());
 
         // Get tokens and cancel them manually (simulating convergence)
-        let tokens = manager.get_tokens().unwrap();
+        let tokens = manager.get_tokens().as_map();
         let token1 = tokens.get("evaluator1").unwrap();
         let token2 = tokens.get("evaluator2").unwrap();
 
@@ -280,7 +302,7 @@ mod tests {
         let mut manager = StoppingManager::new(Some(precision_limits), &evaluator_names);
 
         // Verify that tokens exist for both evaluators (even though only evaluator1 has precision limit)
-        let tokens = manager.get_tokens().unwrap();
+        let tokens = manager.get_tokens().as_map();
         assert!(tokens.contains_key("evaluator1"));
         assert!(tokens.contains_key("evaluator2"));
 

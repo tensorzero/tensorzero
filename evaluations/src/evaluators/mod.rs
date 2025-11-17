@@ -17,6 +17,7 @@ use llm_judge::{run_llm_judge_evaluator, LLMJudgeEvaluationResult, RunLLMJudgeEv
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
+use crate::stopping::CancellationTokens;
 use crate::Clients;
 
 pub type EvaluationResult = HashMap<String, Result<Option<Value>>>;
@@ -52,9 +53,7 @@ pub struct EvaluateInferenceParams {
 #[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), evaluation_name = %params.evaluation_name))]
 pub(crate) async fn evaluate_inference(
     params: EvaluateInferenceParams,
-    cancellation_tokens: Option<
-        &std::collections::HashMap<String, tokio_util::sync::CancellationToken>,
-    >,
+    cancellation_tokens: &CancellationTokens,
 ) -> Result<EvaluationResult> {
     let EvaluateInferenceParams {
         inference_response,
@@ -74,10 +73,12 @@ pub(crate) async fn evaluate_inference(
         .evaluators
         .keys()
         .filter(|name| {
-            // If no cancellation tokens provided, run all evaluators
-            // Otherwise, only run evaluators whose tokens are not cancelled
+            // Only run evaluators whose tokens are not in the map or not cancelled
+            // Empty map means no adaptive stopping, so all evaluators run
             cancellation_tokens
-                .is_none_or(|tokens| tokens.get(*name).is_none_or(|token| !token.is_cancelled()))
+                .as_map()
+                .get(*name)
+                .is_none_or(|token| !token.is_cancelled())
         });
 
     info!(
