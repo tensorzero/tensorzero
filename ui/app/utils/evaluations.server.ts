@@ -103,7 +103,7 @@ export function runEvaluation(
   concurrency: number,
   inferenceCache: InferenceCacheSetting,
   maxDatapoints?: number,
-  precisionLimits?: Record<string, number>,
+  precisionTargets?: Record<string, number>,
 ): Promise<EvaluationStartInfo> {
   const env = getEnv();
   const startTime = new Date();
@@ -197,8 +197,8 @@ export function runEvaluation(
     concurrency,
     inferenceCache,
     maxDatapoints,
-    precisionLimits: precisionLimits
-      ? JSON.stringify(precisionLimits)
+    precisionTargets: precisionTargets
+      ? JSON.stringify(precisionTargets)
       : undefined,
     onEvent: handleEvent,
   });

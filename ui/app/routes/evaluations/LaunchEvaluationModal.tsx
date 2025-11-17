@@ -56,7 +56,7 @@ function EvaluationForm({
   const [maxDatapoints, setMaxDatapoints] = useState<string>(
     initialFormState?.max_datapoints ?? "",
   );
-  const [precisionLimits, setPrecisionLimits] = useState<
+  const [precisionTargets, setprecisionTargets] = useState<
     Record<string, string>
   >(initialFormState?.precision_targets ?? {});
 
@@ -91,7 +91,7 @@ function EvaluationForm({
     ) {
       setSelectedEvaluationName(null);
       setSelectedVariantName(null);
-      setPrecisionLimits({});
+      setprecisionTargets({});
     }
 
     // Validate dataset name - if datasets have loaded and the dataset doesn't exist, clear it
@@ -135,13 +135,13 @@ function EvaluationForm({
       }
 
       // Only update if the structure changed
-      const currentKeys = Object.keys(precisionLimits).sort().join(",");
+      const currentKeys = Object.keys(precisionTargets).sort().join(",");
       const newKeys = Object.keys(newLimits).sort().join(",");
       if (currentKeys !== newKeys) {
-        setPrecisionLimits(newLimits);
+        setprecisionTargets(newLimits);
       }
     }
-  }, [selectedEvaluationName, config.evaluations, precisionLimits]);
+  }, [selectedEvaluationName, config.evaluations, precisionTargets]);
 
   // Validate max_datapoints: must be empty or a positive integer
   const isMaxDatapointsValid =
@@ -151,7 +151,7 @@ function EvaluationForm({
       !maxDatapoints.includes("."));
 
   // Validate precision_targets: all values must be non-negative numbers
-  const arePrecisionLimitsValid = Object.values(precisionLimits).every(
+  const areprecisionTargetsValid = Object.values(precisionTargets).every(
     (value) => {
       if (value === "") return true;
       // Check if the entire string is a valid number
@@ -170,7 +170,7 @@ function EvaluationForm({
     inferenceCache !== null &&
     concurrencyLimit !== "" &&
     isMaxDatapointsValid &&
-    arePrecisionLimitsValid;
+    areprecisionTargetsValid;
 
   return (
     <fetcher.Form
@@ -333,9 +333,9 @@ function EvaluationForm({
         <AdvancedParametersAccordion
           inferenceCache={inferenceCache}
           setInferenceCache={setInferenceCache}
-          precisionLimits={precisionLimits}
-          setPrecisionLimits={setPrecisionLimits}
-          arePrecisionLimitsValid={arePrecisionLimitsValid}
+          precisionTargets={precisionTargets}
+          setprecisionTargets={setprecisionTargets}
+          areprecisionTargetsValid={areprecisionTargetsValid}
           evaluatorNames={evaluatorNames}
           defaultOpen={inferenceCache !== "on"}
         />
@@ -344,10 +344,10 @@ function EvaluationForm({
           type="hidden"
           name="precision_targets"
           value={
-            Object.keys(precisionLimits).length > 0
+            Object.keys(precisionTargets).length > 0
               ? JSON.stringify(
                   Object.fromEntries(
-                    Object.entries(precisionLimits)
+                    Object.entries(precisionTargets)
                       .filter(([_, value]) => {
                         const num = parseFloat(value);
                         return value !== "" && !isNaN(num) && num > 0;

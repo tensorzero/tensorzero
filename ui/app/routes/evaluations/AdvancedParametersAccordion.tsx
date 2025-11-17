@@ -12,9 +12,9 @@ import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 export interface AdvancedParametersAccordionProps {
   inferenceCache: InferenceCacheSetting;
   setInferenceCache: (inference_cache: InferenceCacheSetting) => void;
-  precisionLimits: Record<string, string>;
-  setPrecisionLimits: (value: Record<string, string>) => void;
-  arePrecisionLimitsValid: boolean;
+  precisionTargets: Record<string, string>;
+  setprecisionTargets: (value: Record<string, string>) => void;
+  areprecisionTargetsValid: boolean;
   evaluatorNames: string[];
   defaultOpen?: boolean;
 }
@@ -22,22 +22,25 @@ export interface AdvancedParametersAccordionProps {
 export function AdvancedParametersAccordion({
   inferenceCache,
   setInferenceCache,
-  precisionLimits,
-  setPrecisionLimits,
-  arePrecisionLimitsValid: _arePrecisionLimitsValid,
+  precisionTargets,
+  setprecisionTargets,
+  areprecisionTargetsValid: _areprecisionTargetsValid,
   evaluatorNames,
   defaultOpen,
 }: AdvancedParametersAccordionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen ?? false);
 
-  const handlePrecisionLimitChange = (evaluatorName: string, value: string) => {
-    setPrecisionLimits({
-      ...precisionLimits,
+  const handleprecisionTargetChange = (
+    evaluatorName: string,
+    value: string,
+  ) => {
+    setprecisionTargets({
+      ...precisionTargets,
       [evaluatorName]: value,
     });
   };
 
-  const isPrecisionLimitValid = (value: string): boolean => {
+  const isprecisionTargetValid = (value: string): boolean => {
     if (value === "") return true;
     // Check if the entire string is a valid number
     const num = Number(value);
@@ -94,8 +97,8 @@ export function AdvancedParametersAccordion({
                 </p>
                 <div className="space-y-3">
                   {evaluatorNames.map((evaluatorName) => {
-                    const value = precisionLimits[evaluatorName] ?? "0.0";
-                    const isValid = isPrecisionLimitValid(value);
+                    const value = precisionTargets[evaluatorName] ?? "0.0";
+                    const isValid = isprecisionTargetValid(value);
                     return (
                       <div key={evaluatorName}>
                         <div className="flex items-center gap-3">
@@ -111,7 +114,7 @@ export function AdvancedParametersAccordion({
                             name={`precision_target_${evaluatorName}`}
                             value={value}
                             onChange={(e) =>
-                              handlePrecisionLimitChange(
+                              handleprecisionTargetChange(
                                 evaluatorName,
                                 e.target.value,
                               )

@@ -155,7 +155,7 @@ interface RunEvaluationStreamingParams {
   concurrency: number;
   inferenceCache: CacheEnabledMode;
   maxDatapoints?: number;
-  precisionLimits?: string;
+  precisionTargets?: string;
   onEvent: (event: EvaluationRunEvent) => void;
 }
 

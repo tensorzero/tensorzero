@@ -42,7 +42,7 @@ export function runNativeEvaluationStreaming(params: {
   concurrency: number;
   inferenceCache: CacheEnabledMode;
   maxDatapoints?: number;
-  precisionLimits?: string;
+  precisionTargets?: string;
   onEvent: (event: EvaluationRunEvent) => void;
 }): Promise<void> {
   return runEvaluationStreaming(params);
