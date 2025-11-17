@@ -10,6 +10,7 @@ use metrics::counter;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::{time::Instant, try_join};
+use tokio_util::task::TaskTracker;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -22,8 +23,10 @@ use crate::inference::types::{
     parse_chat_output, ContentBlockChatOutput, ContentBlockOutput, FunctionType, Text,
 };
 use crate::jsonschema_util::StaticJSONSchema;
-use crate::serde_util::deserialize_optional_json_string;
-use crate::tool::{StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
+use crate::tool::{
+    deserialize_optional_tool_info, StaticToolConfig, ToolCall, ToolCallConfig,
+    ToolCallConfigDatabaseInsert,
+};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -114,6 +117,7 @@ pub async fn feedback(
     AppStateData {
         config,
         clickhouse_connection_info,
+        deferred_tasks,
         ..
     }: AppStateData,
     mut params: Params,
@@ -177,6 +181,7 @@ pub async fn feedback(
         FeedbackType::Comment => {
             write_comment(
                 clickhouse_connection_info,
+                &deferred_tasks,
                 &params,
                 feedback_metadata.target_id,
                 feedback_metadata.level,
@@ -189,6 +194,7 @@ pub async fn feedback(
         FeedbackType::Demonstration => {
             write_demonstration(
                 clickhouse_connection_info,
+                &deferred_tasks,
                 &config,
                 &params,
                 feedback_metadata.target_id,
@@ -200,6 +206,7 @@ pub async fn feedback(
         FeedbackType::Float => {
             write_float(
                 clickhouse_connection_info,
+                &deferred_tasks,
                 &config,
                 params,
                 feedback_metadata.target_id,
@@ -212,6 +219,7 @@ pub async fn feedback(
         FeedbackType::Boolean => {
             write_boolean(
                 clickhouse_connection_info,
+                &deferred_tasks,
                 &config,
                 params,
                 feedback_metadata.target_id,
@@ -287,8 +295,10 @@ fn get_feedback_metadata<'a>(
     })
 }
 
+#[expect(clippy::too_many_arguments)]
 async fn write_comment(
     connection_info: ClickHouseConnectionInfo,
+    deferred_tasks: &TaskTracker,
     params: &Params,
     target_id: Uuid,
     level: &MetricConfigLevel,
@@ -312,9 +322,7 @@ async fn write_comment(
         "tags": tags
     });
     if !dryrun {
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-        #[expect(clippy::disallowed_methods)]
-        tokio::spawn(async move {
+        deferred_tasks.spawn(async move {
             let _ = connection_info
                 .write_batched(&[payload], TableName::CommentFeedback)
                 .await;
@@ -325,6 +333,7 @@ async fn write_comment(
 
 async fn write_demonstration(
     connection_info: ClickHouseConnectionInfo,
+    deferred_tasks: &TaskTracker,
     config: &Config,
     params: &Params,
     inference_id: Uuid,
@@ -356,9 +365,7 @@ async fn write_demonstration(
     })?;
     let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
     if !dryrun {
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-        #[expect(clippy::disallowed_methods)]
-        tokio::spawn(async move {
+        deferred_tasks.spawn(async move {
             let _ = connection_info
                 .write_batched(&[payload], TableName::DemonstrationFeedback)
                 .await;
@@ -367,8 +374,10 @@ async fn write_demonstration(
     Ok(())
 }
 
+#[expect(clippy::too_many_arguments)]
 async fn write_float(
     connection_info: ClickHouseConnectionInfo,
+    deferred_tasks: &TaskTracker,
     config: &Config,
     params: Params,
     target_id: Uuid,
@@ -397,9 +406,7 @@ async fn write_float(
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-        #[expect(clippy::disallowed_methods)]
-        tokio::spawn(async move {
+        deferred_tasks.spawn(async move {
             let payload = payload;
             let payload_array = [payload];
             let clickhouse = connection_info;
@@ -420,8 +427,10 @@ async fn write_float(
     Ok(())
 }
 
+#[expect(clippy::too_many_arguments)]
 async fn write_boolean(
     connection_info: ClickHouseConnectionInfo,
+    deferred_tasks: &TaskTracker,
     config: &Config,
     params: Params,
     target_id: Uuid,
@@ -449,9 +458,7 @@ async fn write_boolean(
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-        #[expect(clippy::disallowed_methods)]
-        tokio::spawn(async move {
+        deferred_tasks.spawn(async move {
             let payload_array = [payload];
             let clickhouse = connection_info;
             let _ = try_join!(
@@ -737,7 +744,7 @@ pub enum DynamicDemonstrationInfo {
 
 #[derive(Debug, Deserialize)]
 struct ToolParamsResult {
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     tool_params: Option<ToolCallConfigDatabaseInsert>,
 }
 
@@ -757,7 +764,7 @@ async fn get_dynamic_demonstration_info(
 ) -> Result<DynamicDemonstrationInfo, Error> {
     match function_config {
         FunctionConfig::Chat(..) => {
-            let parameterized_query = "SELECT tool_params FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
+            let parameterized_query = "SELECT tool_params, dynamic_tools, dynamic_provider_tools, allowed_tools, tool_choice FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
             let result = clickhouse_client
                 .run_query_synchronous(
                     parameterized_query,

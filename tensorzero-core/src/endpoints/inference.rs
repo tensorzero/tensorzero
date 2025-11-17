@@ -297,8 +297,8 @@ pub async fn inference(
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
         function.variants().clone().into_iter().collect();
 
-    // If the function has no variants, return an error
-    if candidate_variants.is_empty() {
+    // If the function has no variants and no dynamic variant config, return an error
+    if candidate_variants.is_empty() && params.internal_dynamic_variant_config.is_none() {
         return Err(ErrorDetails::InvalidFunctionVariants {
             message: format!("Function `{function_name}` has no variants"),
         }
@@ -780,8 +780,9 @@ fn create_stream(
 ) -> impl FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
-        let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).sum());
-        if extra_usage == Some(Usage { input_tokens: 0, output_tokens: 0 }) {
+        let mut extra_usage = Some(Usage::sum_iter_strict(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached)));
+        // If `extra_usage` is zero, we don't want to potentially add the extra chunk below. It is handled already in `prepare_response_chunk`.
+        if extra_usage == Some(Usage { input_tokens: Some(0), output_tokens: Some(0) }) {
             extra_usage = None;
         }
         let mut inference_ttft = None;
@@ -1195,11 +1196,6 @@ pub struct JsonInferenceResponseChunk {
     pub original_chunk: Option<String>,
 }
 
-const ZERO_USAGE: Usage = Usage {
-    input_tokens: 0,
-    output_tokens: 0,
-};
-
 impl InferenceResponseChunk {
     fn new(
         inference_result: InferenceResultChunk,
@@ -1214,7 +1210,10 @@ impl InferenceResponseChunk {
             // When our outer inference result is cached, don't
             // add `extra_usage` to it. We'll append a final usage chunk
             // in `create_stream` if needed
-            Some(ZERO_USAGE)
+            Some(Usage {
+                input_tokens: Some(0),
+                output_tokens: Some(0),
+            })
         } else {
             inference_result.usage().copied()
         };
@@ -1231,8 +1230,7 @@ impl InferenceResponseChunk {
             };
             if is_empty {
                 if let Some(extra_usage) = extra_usage.take() {
-                    result_usage.input_tokens += extra_usage.input_tokens;
-                    result_usage.output_tokens += extra_usage.output_tokens;
+                    result_usage.sum_strict(&extra_usage);
                 }
             }
         }
@@ -1740,6 +1738,7 @@ mod tests {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: Some(mime::IMAGE_PNG),
                 detail: None,
+                filename: None,
             }))
         );
     }
@@ -1769,8 +1768,14 @@ mod tests {
         assert_eq!(
             input_with_base64.messages[0].content[0],
             InputMessageContent::File(File::Base64(
-                Base64File::new(None, mime::IMAGE_PNG, "fake_base64_data".to_string(), None,)
-                    .expect("test data should be valid")
+                Base64File::new(
+                    None,
+                    mime::IMAGE_PNG,
+                    "fake_base64_data".to_string(),
+                    None,
+                    None
+                )
+                .expect("test data should be valid")
             ))
         );
     }
@@ -1782,6 +1787,7 @@ mod tests {
             url: "https://example.com/file.txt".parse().unwrap(),
             mime_type: Some(mime::IMAGE_PNG),
             detail: None,
+            filename: None,
         });
         let serialized = serde_json::to_value(&file_url).unwrap();
         assert_eq!(serialized["file_type"], "url");
@@ -1789,8 +1795,14 @@ mod tests {
         assert_eq!(serialized["mime_type"], "image/png");
 
         let file_base64 = File::Base64(
-            Base64File::new(None, mime::IMAGE_PNG, "fake_base64_data".to_string(), None)
-                .expect("test data should be valid"),
+            Base64File::new(
+                None,
+                mime::IMAGE_PNG,
+                "fake_base64_data".to_string(),
+                None,
+                None,
+            )
+            .expect("test data should be valid"),
         );
         let serialized = serde_json::to_value(&file_base64).unwrap();
         assert_eq!(serialized["file_type"], "base64");
@@ -1825,6 +1837,7 @@ mod tests {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: None,
                 detail: None,
+                filename: None,
             }))
         );
     }
@@ -1854,8 +1867,14 @@ mod tests {
         assert_eq!(
             input_with_base64.messages[0].content[0],
             InputMessageContent::File(File::Base64(
-                Base64File::new(None, mime::IMAGE_PNG, "fake_base64_data".to_string(), None,)
-                    .expect("test data should be valid")
+                Base64File::new(
+                    None,
+                    mime::IMAGE_PNG,
+                    "fake_base64_data".to_string(),
+                    None,
+                    None
+                )
+                .expect("test data should be valid")
             ))
         );
     }
@@ -1909,6 +1928,7 @@ mod tests {
                     path: Path::from("test-path"),
                 },
                 detail: None,
+                filename: None,
             }))
         );
     }
@@ -1917,7 +1937,7 @@ mod tests {
     fn test_file_roundtrip_serialization() {
         // Test that serialize -> deserialize maintains data integrity
         let original = File::Base64(
-            Base64File::new(None, mime::IMAGE_JPEG, "abcdef".to_string(), None)
+            Base64File::new(None, mime::IMAGE_JPEG, "abcdef".to_string(), None, None)
                 .expect("test data should be valid"),
         );
 

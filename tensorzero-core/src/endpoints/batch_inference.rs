@@ -1376,8 +1376,8 @@ struct ChatInferenceResponseDatabaseRead {
     pub episode_id: Uuid,
     pub variant_name: String,
     pub output: String,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: Option<u32>,
+    pub output_tokens: Option<u32>,
     pub finish_reason: Option<FinishReason>,
 }
 
@@ -1414,8 +1414,8 @@ struct JsonInferenceResponseDatabaseRead {
     pub episode_id: Uuid,
     pub variant_name: String,
     pub output: String,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: Option<u32>,
+    pub output_tokens: Option<u32>,
     pub finish_reason: Option<FinishReason>,
 }
 

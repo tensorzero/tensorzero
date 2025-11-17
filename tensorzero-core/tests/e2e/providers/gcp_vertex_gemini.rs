@@ -14,6 +14,7 @@ use super::common::ModelTestProvider;
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
+crate::generate_unified_mock_batch_tests!(get_providers);
 
 async fn get_providers() -> E2ETestProviders {
     // TODO - fine-tune a better model and add it back to our tests
@@ -70,6 +71,14 @@ async fn get_providers() -> E2ETestProviders {
         supports_batch_inference: false,
         variant_name: "gcp_vertex_gemini".to_string(),
         model_name: "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite".into(),
+        model_provider_name: "gcp_vertex_gemini".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let input_audio_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "gcp_vertex_gemini".to_string(),
+        model_name: "gemini-2.5-flash-lite".into(),
         model_provider_name: "gcp_vertex_gemini".into(),
         credentials: HashMap::new(),
     }];
@@ -165,6 +174,7 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers.clone(),
         pdf_inference: pdf_providers,
+        input_audio: input_audio_providers,
         shorthand_inference: shorthand_providers.clone(),
         credential_fallbacks,
     }

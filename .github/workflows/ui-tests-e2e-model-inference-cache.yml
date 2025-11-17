@@ -121,7 +121,7 @@ jobs:
         if: matrix.auth_enabled == true
         working-directory: ui
         run: |
-          sed -i '2a\\n[gateway.auth]\nenabled = true' fixtures/config/tensorzero.e2e.toml
+          sed -i '2a\\n[gateway.auth]\nenabled = true' fixtures/config/tensorzero.toml
 
       - name: Regenerate model inference cache
         working-directory: ui

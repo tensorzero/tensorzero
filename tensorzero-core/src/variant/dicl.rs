@@ -1160,6 +1160,7 @@ mod tests {
                                         path: Default::default(),
                                     },
                                     detail: None,
+                                    filename: None,
                                 },
                             ))),
                         ],

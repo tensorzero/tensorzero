@@ -530,7 +530,10 @@ mod tests {
         StoredInputMessageContent, Text,
     };
     use crate::jsonschema_util::StaticJSONSchema;
-    use crate::tool::{DynamicToolParams, ToolCallConfigDatabaseInsert, ToolChoice};
+    use crate::tool::{
+        AllowedTools, AllowedToolsChoice, DynamicToolParams, ToolCallConfigDatabaseInsert,
+        ToolChoice,
+    };
     use crate::utils::gateway::{AppStateData, GatewayHandle, GatewayHandleTestOptions};
     use object_store::path::Path as ObjectStorePath;
     use serde_json::json;
@@ -561,6 +564,7 @@ mod tests {
                 mime_type: mime::IMAGE_PNG,
                 storage_path: storage_path.clone(),
                 detail: None,
+                filename: None,
             });
 
             let input = Input {
@@ -579,7 +583,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: Some(true),
                 description: None,
-                experimentation: ExperimentationConfig::Uniform,
+                experimentation: ExperimentationConfig::default(),
                 all_explicit_templates_names: HashSet::new(),
             });
 
@@ -635,6 +639,7 @@ mod tests {
                     mime::IMAGE_PNG,
                     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
                     None,
+                    None,
                 )
                 .expect("test data should be valid"),
             );
@@ -655,7 +660,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: Some(true),
                 description: None,
-                experimentation: ExperimentationConfig::Uniform,
+                experimentation: ExperimentationConfig::default(),
                 all_explicit_templates_names: HashSet::new(),
             });
 
@@ -722,11 +727,16 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "original output".to_string(),
                 })]),
-                tool_params: Some(ToolCallConfigDatabaseInsert {
-                    tools_available: vec![],
-                    tool_choice: ToolChoice::Auto,
-                    parallel_tool_calls: Some(true),
-                }),
+                tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                    vec![],
+                    vec![],
+                    AllowedTools {
+                        tools: vec![],
+                        choice: AllowedToolsChoice::FunctionDefault,
+                    },
+                    ToolChoice::Auto,
+                    Some(true),
+                )),
                 tags: Some(HashMap::from([("key".to_string(), "value".to_string())])),
                 auxiliary: "{}".to_string(),
                 staled_at: None,
@@ -799,7 +809,7 @@ mod tests {
                     tool_choice: ToolChoice::Auto,
                     parallel_tool_calls: Some(true),
                     description: None,
-                    experimentation: ExperimentationConfig::Uniform,
+                    experimentation: ExperimentationConfig::default(),
                     all_explicit_templates_names: HashSet::new(),
                 })),
             );
@@ -819,7 +829,7 @@ mod tests {
                     .unwrap(),
                     implicit_tool_call_config: crate::tool::ToolCallConfig::default(),
                     description: None,
-                    experimentation: ExperimentationConfig::Uniform,
+                    experimentation: ExperimentationConfig::default(),
                     all_explicit_template_names: HashSet::new(),
                 })),
             );
@@ -854,11 +864,16 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "original output".to_string(),
                 })]),
-                tool_params: Some(ToolCallConfigDatabaseInsert {
-                    tools_available: vec![],
-                    tool_choice: ToolChoice::Auto,
-                    parallel_tool_calls: Some(true),
-                }),
+                tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                    vec![],
+                    vec![],
+                    AllowedTools {
+                        tools: vec![],
+                        choice: AllowedToolsChoice::FunctionDefault,
+                    },
+                    ToolChoice::Auto,
+                    Some(true),
+                )),
                 tags: Some(HashMap::from([("key".to_string(), "value".to_string())])),
                 auxiliary: "{}".to_string(),
                 staled_at: None,
@@ -1151,7 +1166,7 @@ mod tests {
                 additional_tools: None,
                 tool_choice: Some(ToolChoice::None),
                 parallel_tool_calls: Some(false),
-                provider_tools: None,
+                provider_tools: vec![],
             };
 
             let update = UpdateChatDatapointRequest {
@@ -1379,7 +1394,7 @@ mod tests {
                 additional_tools: None,
                 tool_choice: Some(ToolChoice::None),
                 parallel_tool_calls: Some(false),
-                provider_tools: None,
+                provider_tools: vec![],
             };
 
             let update = UpdateChatDatapointRequest {

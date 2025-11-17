@@ -1,5 +1,7 @@
 /*
 TensorZero Client (for internal use only for now)
+
+TODO(shuyangli): Figure out a way to generate the HTTP client, possibly from Schema.
 */
 
 import { z } from "zod";
@@ -10,7 +12,11 @@ import {
   type StoragePath,
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
-import type { Datapoint as TensorZeroDatapoint } from "~/types/tensorzero";
+import type {
+  Datapoint as TensorZeroDatapoint,
+  UpdateDatapointsMetadataRequest,
+  UpdateDatapointsResponse,
+} from "~/types/tensorzero";
 
 /**
  * Roles for input messages.
@@ -334,90 +340,6 @@ export class TensorZeroClient {
     this.apiKey = apiKey ?? null;
   }
 
-  // Overloads for inference:
-  /*
-  This is deprecated in favor of the native client
-  async inference(
-    request: InferenceRequest & { stream?: false | undefined },
-  ): Promise<InferenceResponse>;
-  inference(
-    request: InferenceRequest & { stream: true },
-  ): Promise<AsyncGenerator<InferenceResponse, void, unknown>>;
-  async inference(
-    request: InferenceRequest,
-  ): Promise<
-    InferenceResponse | AsyncGenerator<InferenceResponse, void, unknown>
-  > {
-    if (request.stream) {
-      // Return an async generator that yields each SSE event as an InferenceResponse.
-      return this.inferenceStream(request);
-    } else {
-      const response = await this.fetch("/inference", {
-        method: "POST",
-        body: JSON.stringify(request),
-      });
-      if (!response.ok) {
-        const message = await this.getErrorText(response);
-        this.handleHttpError({ message, response });
-      }
-      return (await response.json()) as InferenceResponse;
-    }
-  }
-   * Returns an async generator that yields inference responses as they arrive via SSE.
-   *
-   * Note: The TensorZero gateway streams responses as Server-Sent Events (SSE). This simple parser
-   * splits events by a double newline. Adjust if the event format changes.
-  private async *inferenceStream(
-    request: InferenceRequest,
-  ): AsyncGenerator<InferenceResponse, void, unknown> {
-    const response = await this.fetch("/inference", {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
-    if (!response.ok) {
-      const message = await this.getErrorText(response);
-      this.handleHttpError({ message, response });
-    }
-    if (!response.body) {
-      this.handleHttpError({
-        message: `Streaming inference failed; response body is not readable`,
-        response,
-      });
-    }
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let buffer = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const parts = buffer.split("\n\n");
-      buffer = parts.pop() || "";
-      for (const part of parts) {
-        const lines = part.split("\n").map((line) => line.trim());
-        let dataStr = "";
-        for (const line of lines) {
-          if (line.startsWith("data:")) {
-          // note the line below has  an escape backslash for the comment to work
-          dataStr += line.replace(/^data:\s*\/, "");
-          }
-        }
-        if (dataStr === "[DONE]") {
-          return;
-        }
-        if (dataStr) {
-          try {
-            const parsed = JSON.parse(dataStr);
-            yield parsed as InferenceResponse;
-          } catch (err) {
-            logger.error("Failed to parse SSE data:", err);
-          }
-        }
-      }
-    }
-  }
-  */
-
   /**
    * Sends feedback for a particular inference or episode.
    * @param request - The feedback request payload.
@@ -508,7 +430,6 @@ export class TensorZeroClient {
 
     const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapoint.id)}`;
     // We need to remove the id field from the datapoint before sending it to the server
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, ...rest } = datapoint;
 
     const response = await this.fetch(endpoint, {
@@ -554,6 +475,23 @@ export class TensorZeroClient {
     }
     const body = await response.json();
     return body as TensorZeroDatapoint[];
+  }
+
+  async updateDatapointsMetadata(
+    datasetName: string,
+    datapoints: UpdateDatapointsMetadataRequest,
+  ): Promise<UpdateDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}/datapoints/metadata`;
+    const response = await this.fetch(endpoint, {
+      method: "PATCH",
+      body: JSON.stringify(datapoints),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as UpdateDatapointsResponse;
+    return body;
   }
 
   async getObject(storagePath: StoragePath): Promise<string> {

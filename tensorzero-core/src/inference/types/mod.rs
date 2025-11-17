@@ -63,17 +63,18 @@ use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
+use schemars::JsonSchema;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::borrow::Borrow;
-use std::ops::Add;
 use std::{
     borrow::Cow,
     collections::HashMap,
     sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use tensorzero_derive::export_schema;
 use uuid::Uuid;
 
 use crate::cache::{CacheData, NonStreamingCacheData};
@@ -95,12 +96,10 @@ use crate::rate_limiting::{
     get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
     RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
 };
-use crate::serde_util::{
-    deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
-};
+use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::tool::{
-    InferenceResponseToolCall, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
-    ToolCallWrapper, ToolResult,
+    deserialize_optional_tool_info, InferenceResponseToolCall, ToolCall, ToolCallConfig,
+    ToolCallConfigDatabaseInsert, ToolCallWrapper, ToolResult,
 };
 use crate::variant::{InferenceConfig, JsonMode};
 
@@ -117,6 +116,7 @@ mod role;
 pub mod storage;
 pub mod stored_input;
 pub mod streams;
+pub mod usage;
 
 pub use resolved_input::ResolvedRequestMessage;
 pub use role::Role;
@@ -129,6 +129,7 @@ pub use streams::{
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk, UnknownChunk,
 };
+pub use usage::Usage;
 
 /*
  * Data flow in TensorZero
@@ -138,9 +139,10 @@ pub use streams::{
  */
 
 /// A request is made that contains an Input
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, ts_rs::TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, optional_fields)]
+#[export_schema]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -307,6 +309,7 @@ impl InputMessageContent {
                         url,
                         mime_type,
                         detail,
+                        filename,
                     }) => {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
@@ -324,6 +327,7 @@ impl InputMessageContent {
                         let mime_type = mime_type.clone();
                         let detail_clone = detail.clone();
                         let detail_for_future = detail.clone();
+                        let filename_for_future = filename.clone();
                         let delayed_file_future = async move {
                             let base64_file = file.take_or_fetch(&client).await?;
                             let path = storage_kind.file_path(&base64_file)?;
@@ -333,6 +337,7 @@ impl InputMessageContent {
                                     mime_type: base64_file.mime_type.clone(),
                                     storage_path: path,
                                     detail: detail_for_future,
+                                    filename: filename_for_future,
                                 },
                                 data: base64_file.data().to_string(),
                             })
@@ -357,6 +362,7 @@ impl InputMessageContent {
                         let mime_type = &base64_file.mime_type;
                         let data = base64_file.data();
                         let detail = &base64_file.detail;
+                        let filename = &base64_file.filename;
 
                         let storage_kind = get_storage_kind(&context)?;
                         let base64_file_for_path = Base64File::new(
@@ -369,6 +375,9 @@ impl InputMessageContent {
                             // affect the file's hash or storage location. The same image file with
                             // different detail values should map to the same storage path for deduplication.
                             None,
+                            // We also set filename to None when computing the storage path for the same reason.
+                            // The filename is metadata that shouldn't affect the file's hash or storage location.
+                            None,
                         )?;
                         let path = storage_kind.file_path(&base64_file_for_path)?;
 
@@ -379,6 +388,7 @@ impl InputMessageContent {
                                     mime_type: mime_type.clone(),
                                     storage_path: path,
                                     detail: detail.clone(),
+                                    filename: filename.clone(),
                                 },
                                 data: data.to_string(),
                             }),
@@ -403,6 +413,7 @@ impl InputMessageContent {
                         let owned_storage_path = file.storage_path.clone();
                         let mime_type_for_closure = file.mime_type.clone();
                         let detail_for_future = file.detail.clone();
+                        let filename_for_future = file.filename.clone();
                         // Construct a future that will fetch the file from the object store.
                         // Important: the future will not actually begin executing (including opening the network connection)
                         // until the first time the `Shared` wrapper is `.await`ed.
@@ -416,6 +427,7 @@ impl InputMessageContent {
                                     mime_type: mime_type_for_closure,
                                     storage_path: owned_storage_path,
                                     detail: detail_for_future,
+                                    filename: filename_for_future,
                                 },
                                 data: object_response.data,
                             })
@@ -426,6 +438,7 @@ impl InputMessageContent {
                                     source_url: file.source_url.clone(),
                                     mime_type: file.mime_type.clone(),
                                     detail: file.detail.clone(),
+                                    filename: file.filename.clone(),
                                 },
                                 storage_path: file.storage_path.clone(),
                                 future: delayed_file_future.boxed().shared(),
@@ -523,6 +536,7 @@ impl LazyResolvedInputMessageContent {
                     mime_type: metadata.mime_type,
                     storage_path,
                     detail: metadata.detail,
+                    filename: metadata.filename,
                 }))),
                 // File reference to object storage with data in memory.
                 // Origin: Roundtripping from database (e.g., list_inferences → update_datapoints)
@@ -545,6 +559,7 @@ impl LazyResolvedInputMessageContent {
                         resolved_file.file.mime_type.clone(),
                         resolved_file.data.clone(),
                         resolved_file.file.detail.clone(),
+                        resolved_file.file.filename.clone(),
                     )?;
                     write_file(
                         object_store_info,
@@ -565,6 +580,7 @@ impl LazyResolvedInputMessageContent {
                         pending.0.file.mime_type.clone(),
                         pending.0.data.clone(),
                         pending.0.file.detail.clone(),
+                        pending.0.file.filename.clone(),
                     )?;
                     write_file(
                         object_store_info,
@@ -585,8 +601,9 @@ impl LazyResolvedInputMessageContent {
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 /// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
-#[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[ts(export, optional_fields)]
+#[export_schema]
 pub struct InputMessage {
     pub role: Role,
     pub content: Vec<InputMessageContent>,
@@ -596,41 +613,58 @@ pub struct InputMessage {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
 #[ts(export)]
 #[serde(transparent)]
-pub struct Arguments(pub Map<String, Value>);
+pub struct Arguments(
+    // This type cannot be a Python dataclass because it's equivalent to a Map with arbitrary keys, and Python dataclasses
+    // need its slots specified. So all references to this type need to be `Map<String, Value>` in JSON schemas.
+    pub Map<String, Value>,
+);
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
+#[export_schema]
 pub struct Template {
     pub name: String,
+    #[schemars(with = "Map<String, Value>")]
     pub arguments: Arguments,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[serde(untagged)]
 #[ts(export)]
+#[export_schema]
 pub enum System {
     Text(String),
+    #[schemars(with = "Map<String, Value>")]
     Template(Arguments),
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(export, tag = "type", rename_all = "snake_case")]
+#[export_schema]
 pub enum InputMessageContent {
+    #[schemars(title = "InputMessageContentText")]
     Text(Text),
+    #[schemars(title = "InputMessageContentTemplate")]
     Template(Template),
+    #[schemars(title = "InputMessageContentToolCall")]
     ToolCall(ToolCallWrapper),
+    #[schemars(title = "InputMessageContentToolResult")]
     ToolResult(ToolResult),
+    #[schemars(title = "InputMessageContentRawText")]
     RawText(RawText),
+    #[schemars(title = "InputMessageContentThought")]
     Thought(Thought),
     #[serde(alias = "image")]
+    #[schemars(title = "InputMessageContentFile")]
     File(File),
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
     /// of TensorZero.
     /// The `data` field holds the original content block from the provider,
     /// without any validation or transformation by TensorZero.
+    #[schemars(title = "InputMessageContentUnknown")]
     Unknown(Unknown),
 }
 
@@ -684,10 +718,11 @@ impl<'de> Deserialize<'de> for TextKind {
 /// These RequestMessages are collected into a ModelInferenceRequest,
 /// which should contain all information needed by a ModelProvider to perform the
 /// inference that is called for.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
+#[export_schema]
 pub struct Text {
     pub text: String,
 }
@@ -715,10 +750,11 @@ impl Text {
 
 /// Struct that represents raw text content that should be passed directly to the model
 /// without any template processing or validation
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 #[serde(deny_unknown_fields)]
+#[export_schema]
 pub struct RawText {
     pub value: String,
 }
@@ -745,10 +781,11 @@ impl RawText {
 
 /// Struct that represents an unknown provider-specific content block.
 /// We pass this along as-is without any validation or transformation.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[serde(deny_unknown_fields)]
+#[export_schema]
 pub struct Unknown {
     /// The underlying content block to be passed to the model provider.
     pub data: Value,
@@ -772,18 +809,21 @@ impl Unknown {
     }
 }
 
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[export_schema]
 pub enum ThoughtSummaryBlock {
+    #[schemars(title = "ThoughtSummaryBlockSummaryText")]
     SummaryText { text: String },
 }
 
 /// Struct that represents a model's reasoning
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[export_schema]
 pub struct Thought {
     #[ts(optional)]
     pub text: Option<String>,
@@ -1034,13 +1074,18 @@ pub enum ContentBlockOutput {
 }
 
 /// Defines the types of content block that can come from a `chat` function
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[export_schema]
 pub enum ContentBlockChatOutput {
+    #[schemars(title = "ContentBlockChatOutputText")]
     Text(Text),
+    #[schemars(title = "ContentBlockChatOutputToolCall")]
     ToolCall(InferenceResponseToolCall),
+    #[schemars(title = "ContentBlockChatOutputThought")]
     Thought(Thought),
+    #[schemars(title = "ContentBlockChatOutputUnknown")]
     Unknown {
         data: Value,
         model_provider_name: Option<String>,
@@ -1314,23 +1359,16 @@ pub struct ProviderInferenceResponse {
 
 impl ProviderInferenceResponse {
     pub fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
-        Ok(RateLimitResourceUsage::Exact {
-            model_inferences: 1,
-            tokens: self.usage.total_tokens() as u64,
-        })
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export)]
-pub struct Usage {
-    pub input_tokens: u32,
-    pub output_tokens: u32,
-}
-
-impl Usage {
-    pub fn total_tokens(&self) -> u32 {
-        self.input_tokens + self.output_tokens
+        match self.usage.total_tokens() {
+            Some(tokens) => Ok(RateLimitResourceUsage::Exact {
+                model_inferences: 1,
+                tokens: tokens as u64,
+            }),
+            None => Ok(RateLimitResourceUsage::UnderEstimate {
+                model_inferences: 1,
+                tokens: 0,
+            }),
+        }
     }
 }
 
@@ -1413,8 +1451,8 @@ impl ModelInferenceResponseWithMetadata {
     pub fn usage_considering_cached(&self) -> Usage {
         if self.cached {
             Usage {
-                input_tokens: 0,
-                output_tokens: 0,
+                input_tokens: Some(0),
+                output_tokens: Some(0),
             }
         } else {
             self.usage
@@ -1459,7 +1497,8 @@ pub struct JsonInferenceResult {
     pub finish_reason: Option<FinishReason>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
+#[export_schema]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceOutput {
@@ -1530,8 +1569,8 @@ pub struct ChatInferenceDatabaseInsert {
     pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    #[serde(deserialize_with = "deserialize_optional_tool_info")]
+    #[serde(flatten)]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: InferenceParams,
@@ -1733,15 +1772,13 @@ impl ModelInferenceDatabaseInsert {
         // should always consume and produce at least one token.
         // We store this as `null` in ClickHouse, so that we can easily filter
         // out these values from aggregation queries.
-        let input_tokens = if result.usage.input_tokens > 0 {
-            Some(result.usage.input_tokens)
-        } else {
-            None
+        let input_tokens = match result.usage.input_tokens {
+            Some(tokens) if tokens > 0 => Some(tokens),
+            _ => None,
         };
-        let output_tokens = if result.usage.output_tokens > 0 {
-            Some(result.usage.output_tokens)
-        } else {
-            None
+        let output_tokens = match result.usage.output_tokens {
+            Some(tokens) if tokens > 0 => Some(tokens),
+            _ => None,
         };
 
         let stored_input_messages = match result.input_messages {
@@ -1847,11 +1884,14 @@ impl InferenceResult {
         .await
     }
 
+    /// Aggregates the usage of all model inference results, considering cached results.
+    /// If any of the values are None, the total usage is considered as None (via `sum_usage_strict`).
     pub fn usage_considering_cached(&self) -> Usage {
-        self.model_inference_results()
-            .iter()
-            .map(ModelInferenceResponseWithMetadata::usage_considering_cached)
-            .sum()
+        Usage::sum_iter_strict(
+            self.model_inference_results()
+                .iter()
+                .map(ModelInferenceResponseWithMetadata::usage_considering_cached),
+        )
     }
 
     pub fn set_original_response(&mut self, original_response: Option<String>) {
@@ -2140,21 +2180,6 @@ impl From<JsonMode> for ModelInferenceRequestJsonMode {
     }
 }
 
-impl Add for Usage {
-    type Output = Usage;
-    fn add(self, other: Usage) -> Usage {
-        Usage {
-            input_tokens: self.input_tokens.saturating_add(other.input_tokens),
-            output_tokens: self.output_tokens.saturating_add(other.output_tokens),
-        }
-    }
-}
-impl std::iter::Sum<Usage> for Usage {
-    fn sum<I: Iterator<Item = Usage>>(iter: I) -> Self {
-        iter.fold(Usage::default(), |acc, u| acc + u)
-    }
-}
-
 /// Serializes a value that implements `Serialize` into a JSON string.
 /// If serialization fails, it logs the error and returns an empty string.
 ///
@@ -2220,8 +2245,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content = vec!["Hello, world!".to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 20,
+            input_tokens: Some(10),
+            output_tokens: Some(20),
         };
         let raw_request = "raw request".to_string();
         let model_inference_responses = vec![ModelInferenceResponseWithMetadata {
@@ -2981,5 +3006,189 @@ mod tests {
             "content": [{"type": "invalid_type", "value": "test"}]
         });
         assert!(serde_json::from_value::<InputMessage>(input).is_err());
+    }
+
+    /// Test that usage_considering_cached properly propagates None values
+    /// If any of the model inference results have None for input_tokens or output_tokens,
+    /// the aggregated result should also have None for those fields
+    #[tokio::test]
+    async fn test_usage_considering_cached_none_propagation() {
+        let inference_id = Uuid::now_v7();
+
+        // Helper function to create a ModelInferenceResponseWithMetadata with specified usage
+        let create_model_response =
+            |usage: Usage, cached: bool| ModelInferenceResponseWithMetadata {
+                id: Uuid::now_v7(),
+                created: Instant::now().elapsed().as_secs(),
+                system: None,
+                input_messages: RequestMessagesOrBatch::Message(vec![]),
+                output: vec!["test".to_string().into()],
+                raw_request: String::new(),
+                raw_response: String::new(),
+                usage,
+                latency: Latency::NonStreaming {
+                    response_time: Duration::default(),
+                },
+                finish_reason: None,
+                model_provider_name: "test_provider".into(),
+                model_name: "test_model".into(),
+                cached,
+            };
+
+        // Test Case 1: All values are Some() - should aggregate correctly
+        let model_responses_all_some = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: Some(15),
+                    output_tokens: Some(25),
+                },
+                false,
+            ),
+        ];
+        let chat_result_all_some = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_all_some,
+            None,
+            InferenceParams::default(),
+            None,
+        )
+        .await;
+        let result_all_some = InferenceResult::Chat(chat_result_all_some);
+        let usage_all_some = result_all_some.usage_considering_cached();
+        assert_eq!(usage_all_some.input_tokens, Some(25));
+        assert_eq!(usage_all_some.output_tokens, Some(45));
+
+        // Test Case 2: Some input_tokens are None - should propagate None for input_tokens
+        let model_responses_input_none = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: Some(25),
+                },
+                false,
+            ),
+        ];
+        let chat_result_input_none = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_input_none,
+            None,
+            InferenceParams::default(),
+            None,
+        )
+        .await;
+        let result_input_none = InferenceResult::Chat(chat_result_input_none);
+        let usage_input_none = result_input_none.usage_considering_cached();
+        assert_eq!(usage_input_none.input_tokens, None);
+        assert_eq!(usage_input_none.output_tokens, Some(45));
+
+        // Test Case 3: Some output_tokens are None - should propagate None for output_tokens
+        let model_responses_output_none = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: Some(15),
+                    output_tokens: None,
+                },
+                false,
+            ),
+        ];
+        let chat_result_output_none = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_output_none,
+            None,
+            InferenceParams::default(),
+            None,
+        )
+        .await;
+        let result_output_none = InferenceResult::Chat(chat_result_output_none);
+        let usage_output_none = result_output_none.usage_considering_cached();
+        assert_eq!(usage_output_none.input_tokens, Some(25));
+        assert_eq!(usage_output_none.output_tokens, None);
+
+        // Test Case 4: All values are None - should result in all None
+        let model_responses_all_none = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: None,
+                },
+                false,
+            ),
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: None,
+                },
+                false,
+            ),
+        ];
+        let chat_result_all_none = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_all_none,
+            None,
+            InferenceParams::default(),
+            None,
+        )
+        .await;
+        let result_all_none = InferenceResult::Chat(chat_result_all_none);
+        let usage_all_none = result_all_none.usage_considering_cached();
+        assert_eq!(usage_all_none.input_tokens, None);
+        assert_eq!(usage_all_none.output_tokens, None);
+
+        // Test Case 5: Mixed cached and non-cached with None values
+        // Cached results return Usage { input_tokens: Some(0), output_tokens: Some(0) }
+        let model_responses_mixed = vec![
+            create_model_response(
+                Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(20),
+                },
+                true,
+            ), // This will be treated as 0/0 due to cached=true
+            create_model_response(
+                Usage {
+                    input_tokens: None,
+                    output_tokens: Some(25),
+                },
+                false,
+            ),
+        ];
+        let chat_result_mixed = ChatInferenceResult::new(
+            inference_id,
+            vec!["test".to_string().into()],
+            model_responses_mixed,
+            None,
+            InferenceParams::default(),
+            None,
+        )
+        .await;
+        let result_mixed = InferenceResult::Chat(chat_result_mixed);
+        let usage_mixed = result_mixed.usage_considering_cached();
+        assert_eq!(usage_mixed.input_tokens, None); // None propagates
+        assert_eq!(usage_mixed.output_tokens, Some(25)); // 0 (cached) + 25
     }
 }

@@ -394,6 +394,7 @@ fn stream_anthropic(
                                 discard_unknown_chunks,
                                 &model_name,
                                 &provider_name,
+                                PROVIDER_TYPE,
                             )
                         });
 
@@ -415,7 +416,7 @@ fn stream_anthropic(
 #[serde(rename_all = "lowercase")]
 /// Anthropic doesn't handle the system message in this way
 /// It's a field of the POST body instead
-enum AnthropicRole {
+pub(super) enum AnthropicRole {
     User,
     Assistant,
 }
@@ -474,11 +475,11 @@ impl<'a> TryFrom<&'a ToolCallConfig> for AnthropicToolChoice<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct AnthropicTool<'a> {
-    name: &'a str,
+pub(super) struct AnthropicTool<'a> {
+    pub(super) name: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<&'a str>,
-    input_schema: &'a Value,
+    pub(super) description: Option<&'a str>,
+    pub(super) input_schema: &'a Value,
 }
 
 impl<'a> From<&'a ToolConfig> for AnthropicTool<'a> {
@@ -495,8 +496,7 @@ impl<'a> From<&'a ToolConfig> for AnthropicTool<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-// NB: Anthropic also supports Image blocks here but we won't for now
-enum AnthropicMessageContent<'a> {
+pub(super) enum AnthropicMessageContent<'a> {
     Text {
         text: &'a str,
     },
@@ -535,9 +535,10 @@ pub enum AnthropicDocumentSource {
 }
 
 impl<'a> AnthropicMessageContent<'a> {
-    async fn from_content_block(
+    pub(super) async fn from_content_block(
         block: &'a ContentBlock,
         messages_config: AnthropicMessagesConfig,
+        provider_type: &str,
     ) -> Result<Option<FlattenUnknown<'a, AnthropicMessageContent<'a>>>, Error> {
         match block {
             ContentBlock::Text(Text { text }) => Ok(Some(FlattenUnknown::Normal(
@@ -552,7 +553,7 @@ impl<'a> AnthropicMessageContent<'a> {
                             "Error parsing tool call arguments as JSON Value: {}",
                             DisplayOrDebugGateway::new(e)
                         ),
-                        provider_type: PROVIDER_TYPE.to_string(),
+                        provider_type: provider_type.to_string(),
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     })
@@ -562,7 +563,7 @@ impl<'a> AnthropicMessageContent<'a> {
                     return Err(Error::new(ErrorDetails::InferenceClient {
                         status_code: Some(StatusCode::BAD_REQUEST),
                         message: "Tool call arguments must be a JSON object".to_string(),
-                        provider_type: PROVIDER_TYPE.to_string(),
+                        provider_type: provider_type.to_string(),
                         raw_request: None,
                         raw_response: Some(tool_call.arguments.clone()),
                     }));
@@ -623,7 +624,7 @@ impl<'a> AnthropicMessageContent<'a> {
                     warn_cannot_forward_url_if_missing_mime_type(
                         file,
                         messages_config.fetch_and_encode_input_files_before_inference,
-                        PROVIDER_TYPE,
+                        provider_type,
                     );
                     // Otherwise, fetch the file, encode it as base64, and send it to Anthropic
                     let resolved_file = file.resolve().await?;
@@ -673,26 +674,25 @@ impl<'a> AnthropicMessageContent<'a> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-struct AnthropicMessage<'a> {
-    role: AnthropicRole,
-    content: Vec<FlattenUnknown<'a, AnthropicMessageContent<'a>>>,
+pub(super) struct AnthropicMessage<'a> {
+    pub(super) role: AnthropicRole,
+    pub(super) content: Vec<FlattenUnknown<'a, AnthropicMessageContent<'a>>>,
 }
 
 impl<'a> AnthropicMessage<'a> {
-    async fn from_request_message(
+    pub(super) async fn from_request_message(
         message: &'a RequestMessage,
         messages_config: AnthropicMessagesConfig,
+        provider_type: &str,
     ) -> Result<Self, Error> {
-        let content: Vec<FlattenUnknown<AnthropicMessageContent>> = try_join_all(
-            message
-                .content
-                .iter()
-                .map(|c| AnthropicMessageContent::from_content_block(c, messages_config)),
-        )
-        .await?
-        .into_iter()
-        .flatten()
-        .collect();
+        let content: Vec<FlattenUnknown<AnthropicMessageContent>> =
+            try_join_all(message.content.iter().map(|c| {
+                AnthropicMessageContent::from_content_block(c, messages_config, provider_type)
+            }))
+            .await?
+            .into_iter()
+            .flatten()
+            .collect();
 
         Ok(AnthropicMessage {
             role: message.role.into(),
@@ -703,7 +703,7 @@ impl<'a> AnthropicMessage<'a> {
 
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-enum AnthropicSystemBlock<'a> {
+pub(super) enum AnthropicSystemBlock<'a> {
     Text {
         text: &'a str,
         // This also contains cache control and citations but we will ignore these for now.
@@ -743,8 +743,8 @@ struct AnthropicRequestBody<'a> {
 }
 
 #[derive(Copy, Clone, Debug)]
-struct AnthropicMessagesConfig {
-    pub fetch_and_encode_input_files_before_inference: bool,
+pub(super) struct AnthropicMessagesConfig {
+    pub(super) fetch_and_encode_input_files_before_inference: bool,
 }
 
 impl<'a> AnthropicRequestBody<'a> {
@@ -768,13 +768,11 @@ impl<'a> AnthropicRequestBody<'a> {
             Some(text) => Some(vec![AnthropicSystemBlock::Text { text }]),
             None => None,
         };
-        let request_messages: Vec<AnthropicMessage> = try_join_all(
-            request
-                .messages
-                .iter()
-                .map(|m| AnthropicMessage::from_request_message(m, messages_config)),
-        )
-        .await?;
+        let request_messages: Vec<AnthropicMessage> =
+            try_join_all(request.messages.iter().map(|m| {
+                AnthropicMessage::from_request_message(m, messages_config, PROVIDER_TYPE)
+            }))
+            .await?;
         let messages = prepare_messages(request_messages);
         let messages = if matches!(
             request.json_mode,
@@ -793,7 +791,11 @@ impl<'a> AnthropicRequestBody<'a> {
             if matches!(c.tool_choice, ToolChoice::None) {
                 None
             } else {
-                Some(c.tools_available().map(Into::into).collect::<Vec<_>>())
+                Some(
+                    c.strict_tools_available()
+                        .map(Into::into)
+                        .collect::<Vec<_>>(),
+                )
             }
         });
 
@@ -1091,8 +1093,8 @@ pub struct AnthropicUsage {
 impl From<AnthropicUsage> for Usage {
     fn from(value: AnthropicUsage) -> Self {
         Usage {
-            input_tokens: value.input_tokens,
-            output_tokens: value.output_tokens,
+            input_tokens: Some(value.input_tokens),
+            output_tokens: Some(value.output_tokens),
         }
     }
 }
@@ -1113,7 +1115,7 @@ struct AnthropicResponse {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum AnthropicStopReason {
+pub enum AnthropicStopReason {
     EndTurn,
     MaxTokens,
     StopSequence,
@@ -1225,8 +1227,7 @@ pub(super) fn handle_anthropic_error(
 
 #[derive(Deserialize, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[expect(clippy::enum_variant_names)]
-enum AnthropicContentBlockDelta {
+pub enum AnthropicContentBlockDelta {
     TextDelta { text: String },
     InputJsonDelta { partial_json: String },
     SignatureDelta { signature: String },
@@ -1235,16 +1236,16 @@ enum AnthropicContentBlockDelta {
 
 #[derive(Deserialize, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub(crate) struct AnthropicMessageDelta {
+pub struct AnthropicMessageDelta {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) stop_reason: Option<AnthropicStopReason>,
+    pub stop_reason: Option<AnthropicStopReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) stop_sequence: Option<String>,
+    pub stop_sequence: Option<String>,
 }
 
 #[derive(Deserialize, Debug, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-enum AnthropicStreamMessage {
+pub enum AnthropicStreamMessage {
     ContentBlockDelta {
         delta: FlattenUnknown<'static, AnthropicContentBlockDelta>,
         index: u32,
@@ -1277,7 +1278,7 @@ enum AnthropicStreamMessage {
 /// There is no need to do the same bookkeeping for TextDelta chunks since they come with an index (which we use as an ID for a text chunk).
 /// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
 #[expect(clippy::too_many_arguments)]
-fn anthropic_to_tensorzero_stream_message(
+pub(super) fn anthropic_to_tensorzero_stream_message(
     raw_message: String,
     message: AnthropicStreamMessage,
     message_latency: Duration,
@@ -1286,6 +1287,7 @@ fn anthropic_to_tensorzero_stream_message(
     discard_unknown_chunks: bool,
     model_name: &str,
     provider_name: &str,
+    provider_type: &str,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match message {
         AnthropicStreamMessage::ContentBlockDelta {
@@ -1313,7 +1315,7 @@ fn anthropic_to_tensorzero_stream_message(
                         raw_name: None,
                         id: current_tool_id.clone().ok_or_else(|| Error::new(ErrorDetails::InferenceServer {
                             message: "Got InputJsonDelta chunk from Anthropic without current tool id being set by a ToolUse".to_string(),
-                            provider_type: PROVIDER_TYPE.to_string(),
+                            provider_type: provider_type.to_string(),
                             raw_request: None,
                             raw_response: None,
                         }))?,
@@ -1333,7 +1335,7 @@ fn anthropic_to_tensorzero_stream_message(
                         id: index.to_string(),
                         summary_id: None,
                         summary_text: None,
-                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                        provider_type: Some(provider_type.to_string()),
                     })],
                     None,
                     raw_message,
@@ -1349,7 +1351,7 @@ fn anthropic_to_tensorzero_stream_message(
                         id: index.to_string(),
                         summary_id: None,
                         summary_text: None,
-                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                        provider_type: Some(provider_type.to_string()),
                     })],
                     None,
                     raw_message,
@@ -1402,7 +1404,7 @@ fn anthropic_to_tensorzero_stream_message(
                     id: index.to_string(),
                     summary_id: None,
                     summary_text: None,
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                    provider_type: Some(provider_type.to_string()),
                 })],
                 None,
                 raw_message,
@@ -1417,7 +1419,7 @@ fn anthropic_to_tensorzero_stream_message(
                         id: index.to_string(),
                         summary_id: None,
                         summary_text: None,
-                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                        provider_type: Some(provider_type.to_string()),
                     })],
                     None,
                     raw_message,
@@ -1429,7 +1431,7 @@ fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::ContentBlockStop { .. } => Ok(None),
         AnthropicStreamMessage::Error { error } => Err(ErrorDetails::InferenceServer {
             message: error.to_string(),
-            provider_type: PROVIDER_TYPE.to_string(),
+            provider_type: provider_type.to_string(),
             raw_request: None,
             raw_response: None,
         }
@@ -1467,7 +1469,7 @@ fn anthropic_to_tensorzero_stream_message(
             index,
         } => {
             if discard_unknown_chunks {
-                warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
+                warn_discarded_unknown_chunk(provider_type, &delta.to_string());
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
@@ -1487,7 +1489,7 @@ fn anthropic_to_tensorzero_stream_message(
             index,
         } => {
             if discard_unknown_chunks {
-                warn_discarded_unknown_chunk(PROVIDER_TYPE, &content_block.to_string());
+                warn_discarded_unknown_chunk(provider_type, &content_block.to_string());
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
@@ -1507,7 +1509,7 @@ fn anthropic_to_tensorzero_stream_message(
             delta: FlattenUnknown::Unknown(delta),
         } => {
             if discard_unknown_chunks {
-                warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
+                warn_discarded_unknown_chunk(provider_type, &delta.to_string());
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
@@ -1651,6 +1653,7 @@ mod tests {
             AnthropicMessagesConfig {
                 fetch_and_encode_input_files_before_inference: false,
             },
+            PROVIDER_TYPE,
         )
         .await
         .unwrap()
@@ -1670,6 +1673,7 @@ mod tests {
             AnthropicMessagesConfig {
                 fetch_and_encode_input_files_before_inference: false,
             },
+            PROVIDER_TYPE,
         )
         .await
         .unwrap()
@@ -1696,6 +1700,7 @@ mod tests {
             AnthropicMessagesConfig {
                 fetch_and_encode_input_files_before_inference: false,
             },
+            PROVIDER_TYPE,
         )
         .await
         .unwrap();
@@ -1719,6 +1724,7 @@ mod tests {
             AnthropicMessagesConfig {
                 fetch_and_encode_input_files_before_inference: false,
             },
+            PROVIDER_TYPE,
         )
         .await
         .unwrap();
@@ -1746,6 +1752,7 @@ mod tests {
             AnthropicMessagesConfig {
                 fetch_and_encode_input_files_before_inference: false,
             },
+            PROVIDER_TYPE,
         )
         .await
         .unwrap();
@@ -1839,7 +1846,8 @@ mod tests {
                         &inference_request.messages[0],
                         AnthropicMessagesConfig {
                             fetch_and_encode_input_files_before_inference: false,
-                        }
+                        },
+                        PROVIDER_TYPE,
                     )
                     .await
                     .unwrap(),
@@ -1894,7 +1902,8 @@ mod tests {
                         &inference_request.messages[0],
                         AnthropicMessagesConfig {
                             fetch_and_encode_input_files_before_inference: false,
-                        }
+                        },
+                        PROVIDER_TYPE,
                     )
                     .await
                     .unwrap(),
@@ -1902,7 +1911,8 @@ mod tests {
                         &inference_request.messages[1],
                         AnthropicMessagesConfig {
                             fetch_and_encode_input_files_before_inference: false,
-                        }
+                        },
+                        PROVIDER_TYPE,
                     )
                     .await
                     .unwrap(),
@@ -1960,6 +1970,7 @@ mod tests {
                 AnthropicMessagesConfig {
                     fetch_and_encode_input_files_before_inference: false,
                 },
+                PROVIDER_TYPE,
             )
         }))
         .await
@@ -2019,7 +2030,8 @@ mod tests {
                 &inference_request.messages[0],
                 AnthropicMessagesConfig {
                     fetch_and_encode_input_files_before_inference: false,
-                }
+                },
+                PROVIDER_TYPE,
             )
             .await
             .unwrap()
@@ -2030,7 +2042,8 @@ mod tests {
                 &inference_request.messages[1],
                 AnthropicMessagesConfig {
                     fetch_and_encode_input_files_before_inference: false,
-                }
+                },
+                PROVIDER_TYPE,
             )
             .await
             .unwrap()
@@ -2458,8 +2471,8 @@ mod tests {
 
         let usage: Usage = anthropic_usage.into();
 
-        assert_eq!(usage.input_tokens, 100);
-        assert_eq!(usage.output_tokens, 50);
+        assert_eq!(usage.input_tokens, Some(100));
+        assert_eq!(usage.output_tokens, Some(50));
     }
 
     #[test]
@@ -2539,8 +2552,8 @@ mod tests {
         );
 
         assert_eq!(raw_response, inference_response.raw_response);
-        assert_eq!(inference_response.usage.input_tokens, 100);
-        assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, Some(100));
+        assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
@@ -2602,8 +2615,8 @@ mod tests {
         );
 
         assert_eq!(raw_response, inference_response.raw_response);
-        assert_eq!(inference_response.usage.input_tokens, 100);
-        assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, Some(100));
+        assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(
@@ -2677,8 +2690,8 @@ mod tests {
 
         assert_eq!(raw_response, inference_response.raw_response);
 
-        assert_eq!(inference_response.usage.input_tokens, 100);
-        assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, Some(100));
+        assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.finish_reason, None);
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
@@ -2708,6 +2721,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2740,6 +2754,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2772,6 +2787,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2806,8 +2822,10 @@ mod tests {
             false,
             "test_model",
             "test_provider",
-        );
-        let chunk = result.unwrap().unwrap();
+            PROVIDER_TYPE,
+        )
+        .unwrap();
+        let chunk = result.unwrap();
         assert_eq!(chunk.content.len(), 1);
         match &chunk.content[0] {
             ContentBlockChunk::ToolCall(tool_call) => {
@@ -2840,6 +2858,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2864,6 +2883,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2882,6 +2902,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2913,14 +2934,15 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, 10);
-        assert_eq!(usage.output_tokens, 20);
+        assert_eq!(usage.input_tokens, Some(10));
+        assert_eq!(usage.output_tokens, Some(20));
         assert_eq!(chunk.latency, latency);
         assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
 
@@ -2938,14 +2960,15 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, 5);
-        assert_eq!(usage.output_tokens, 15);
+        assert_eq!(usage.input_tokens, Some(5));
+        assert_eq!(usage.output_tokens, Some(15));
         assert_eq!(chunk.latency, latency);
 
         // Test MessageStop
@@ -2960,6 +2983,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2976,6 +3000,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -3249,6 +3274,7 @@ mod tests {
             false,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         )
         .unwrap()
         .unwrap();
@@ -3283,6 +3309,7 @@ mod tests {
             true,
             "test_model",
             "test_provider",
+            PROVIDER_TYPE,
         )
         .unwrap();
         assert_eq!(res, None);
@@ -3346,11 +3373,42 @@ mod tests {
             fetch_and_encode_input_files_before_inference: false,
         };
 
-        let _result = AnthropicMessageContent::from_content_block(&content_block, config).await;
+        let _result =
+            AnthropicMessageContent::from_content_block(&content_block, config, PROVIDER_TYPE)
+                .await;
 
         // Should log a warning about detail not being supported
         assert!(logs_contain(
             "The image detail parameter is not supported by Anthropic"
         ));
+    }
+
+    #[test]
+    fn test_anthropic_respects_allowed_tools() {
+        use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_TOOL};
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+
+        // Create a ToolCallConfig with two tools but only allow one
+        let tool_config = ToolCallConfig {
+            static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools {
+                tools: vec!["get_temperature".to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+
+        // Convert to Anthropic tools
+        let tools: Vec<AnthropicTool> = tool_config
+            .strict_tools_available()
+            .map(AnthropicTool::from)
+            .collect();
+
+        // Verify only the allowed tool is included
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "get_temperature");
     }
 }

@@ -6,7 +6,6 @@ use crate::config::OtlpConfig;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::embeddings::{Embedding, EmbeddingModelResponse, EmbeddingRequest};
 use crate::error::{warn_discarded_cache_write, Error, ErrorDetails};
-use crate::inference::types::file::serialize_with_file_data;
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, ModelInferenceRequest,
     ModelInferenceResponse, ProviderInferenceResponseChunk, Usage,
@@ -167,7 +166,7 @@ impl ModelProviderRequest<'_> {
         hasher.update(&[0]); // null byte after provider name to ensure data is prefix-free
                              // Convert the request to a JSON Value, error if serialization fails
 
-        let mut request_value = serialize_with_file_data(request).map_err(|e| {
+        let mut request_value = serde_json::to_value(request).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
                 message: format!("Failed to serialize request: {e}"),
             })
@@ -214,8 +213,8 @@ pub struct CacheData<T: CacheOutput> {
     pub output: T,
     pub raw_request: String,
     pub raw_response: String,
-    pub input_tokens: u32,
-    pub output_tokens: u32,
+    pub input_tokens: Option<u32>,
+    pub output_tokens: Option<u32>,
     pub finish_reason: Option<FinishReason>,
 }
 

@@ -160,12 +160,9 @@ pub(crate) fn generate_list_inferences_sql(
             json_sql.push('\n');
             json_sql.push_str(&json_query.where_sql_fragment);
 
-            // Combine with UNION ALL
-            let combined_query = format!("{chat_sql}\nUNION ALL\n{json_sql}");
-
-            // For UNION ALL queries, use simplified ORDER BY
-            // We need to wrap in a subquery to ensure ORDER BY applies to the combined result
-            let combined = if let Some(order_by) = opts.order_by {
+            // Generate ORDER BY clause for both inner and outer queries
+            // For UNION ALL queries, we only support timestamp ordering (not metrics)
+            let order_by_sql = if let Some(order_by) = opts.order_by {
                 let order_clauses: Vec<String> = order_by
                     .iter()
                     .map(|o| {
@@ -184,40 +181,86 @@ pub(crate) fn generate_list_inferences_sql(
                     .collect::<Result<Vec<_>, Error>>()?;
 
                 if order_clauses.is_empty() {
-                    combined_query
+                    String::new()
                 } else {
-                    format!(
-                        "SELECT * FROM (\n{}\n) AS combined\nORDER BY {}",
-                        combined_query,
-                        order_clauses.join(", ")
-                    )
+                    format!("\nORDER BY {}", order_clauses.join(", "))
                 }
             } else {
-                combined_query
+                String::new()
             };
 
-            combined
+            // Push LIMIT down into each subquery before UNION ALL
+            // For UNION ALL, we need to fetch (LIMIT + OFFSET) rows from each table
+            // because we don't know which table will contribute to the final result.
+            // We then apply the final LIMIT/OFFSET on the outer query.
+            //
+            // IMPORTANT: When ORDER BY is specified, we add it to each subquery before the LIMIT.
+            // Otherwise, the LIMIT will select rows based on the physical table ordering
+            // (function_name, variant_name, episode_id), not the user's requested ordering
+            // (e.g., timestamp DESC), resulting in incorrect results.
+            let inner_limit = opts.limit + opts.offset;
+
+            if !order_by_sql.is_empty() {
+                chat_sql.push_str(&order_by_sql);
+            }
+            let chat_limit_param_placeholder = add_parameter(
+                inner_limit,
+                ClickhouseType::UInt64,
+                &mut query_params,
+                &mut param_idx_counter,
+            );
+            chat_sql.push_str(&format!("\nLIMIT {chat_limit_param_placeholder}"));
+
+            if !order_by_sql.is_empty() {
+                json_sql.push_str(&order_by_sql);
+            }
+            let json_limit_param_placeholder = add_parameter(
+                inner_limit,
+                ClickhouseType::UInt64,
+                &mut query_params,
+                &mut param_idx_counter,
+            );
+            json_sql.push_str(&format!("\nLIMIT {json_limit_param_placeholder}"));
+
+            // Combine with UNION ALL and apply outer ORDER BY and LIMIT/OFFSET
+            let outer_limit_param_placeholder = add_parameter(
+                opts.limit,
+                ClickhouseType::UInt64,
+                &mut query_params,
+                &mut param_idx_counter,
+            );
+            let outer_offset_param_placeholder = add_parameter(
+                opts.offset,
+                ClickhouseType::UInt64,
+                &mut query_params,
+                &mut param_idx_counter,
+            );
+
+            format!(
+                "SELECT * FROM (\n{chat_sql}\nUNION ALL\n{json_sql}\n) AS combined{order_by_sql}\nLIMIT {outer_limit_param_placeholder}\nOFFSET {outer_offset_param_placeholder}"
+            )
         }
     };
 
-    if let Some(l) = opts.limit {
+    // For single-table queries (function_name provided), apply LIMIT/OFFSET at the end
+    if opts.function_name.is_some() {
         let limit_param_placeholder = add_parameter(
-            l,
+            opts.limit,
             ClickhouseType::UInt64,
             &mut query_params,
             &mut param_idx_counter,
         );
         sql.push_str(&format!("\nLIMIT {limit_param_placeholder}"));
-    }
-    if let Some(o) = opts.offset {
+
         let offset_param_placeholder = add_parameter(
-            o,
+            opts.offset,
             ClickhouseType::UInt64,
             &mut query_params,
             &mut param_idx_counter,
         );
         sql.push_str(&format!("\nOFFSET {offset_param_placeholder}"));
     }
+
     sql.push_str("\nFORMAT JSONEachRow");
 
     Ok((sql, query_params))
@@ -266,8 +309,18 @@ fn generate_single_table_query_for_type(
 
     if is_chat {
         select_clauses.push("i.tool_params as tool_params".to_string());
+        select_clauses.push("i.dynamic_tools as dynamic_tools".to_string());
+        select_clauses.push("i.dynamic_provider_tools as dynamic_provider_tools".to_string());
+        select_clauses.push("i.allowed_tools as allowed_tools".to_string());
+        select_clauses.push("i.tool_choice as tool_choice".to_string());
+        select_clauses.push("i.parallel_tool_calls as parallel_tool_calls".to_string());
     } else {
         select_clauses.push("'' as tool_params".to_string());
+        select_clauses.push("[] as dynamic_tools".to_string());
+        select_clauses.push("[] as dynamic_provider_tools".to_string());
+        select_clauses.push("NULL as allowed_tools".to_string());
+        select_clauses.push("NULL as tool_choice".to_string());
+        select_clauses.push("NULL as parallel_tool_calls".to_string());
     }
 
     select_clauses.push("i.variant_name as variant_name".to_string());
@@ -408,11 +461,13 @@ mod tests {
             ..Default::default()
         };
 
-        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
 
+        // Verify both tables are queried
         assert_query_contains(
             &sql,
-            "SELECT
+            "SELECT * FROM (
+        SELECT
             'chat' as type,
             formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
             i.episode_id as episode_id,
@@ -422,15 +477,19 @@ mod tests {
             '' as output_schema,
             i.tags as tags,
             i.tool_params as tool_params,
+            i.dynamic_tools as dynamic_tools,
+            i.dynamic_provider_tools as dynamic_provider_tools,
+            i.allowed_tools as allowed_tools,
+            i.tool_choice as tool_choice,
+            i.parallel_tool_calls as parallel_tool_calls,
             i.variant_name as variant_name,
             i.output as output
         FROM
             ChatInference AS i
         WHERE
             i.id IN ['01234567-89ab-cdef-0123-456789abcdef','fedcba98-7654-3210-fedc-ba9876543210']
-
+        LIMIT {p0:UInt64}
         UNION ALL
-
         SELECT
             'json' as type,
             formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
@@ -441,16 +500,22 @@ mod tests {
             i.output_schema as output_schema,
             i.tags as tags,
             '' as tool_params,
+            [] as dynamic_tools,
+            [] as dynamic_provider_tools,
+            NULL as allowed_tools,
+            NULL as tool_choice,
+            NULL as parallel_tool_calls,
             i.variant_name as variant_name,
             i.output as output
         FROM
             JsonInference AS i
         WHERE
-            i.id IN ['01234567-89ab-cdef-0123-456789abcdef','fedcba98-7654-3210-fedc-ba9876543210']",
+            i.id IN ['01234567-89ab-cdef-0123-456789abcdef','fedcba98-7654-3210-fedc-ba9876543210']
+        LIMIT {p1:UInt64}
+        ) AS combined
+        LIMIT {p2:UInt64}
+        OFFSET {p3:UInt64}",
         );
-
-        // This query doesn't have any bound parameters.
-        assert_eq!(params.len(), 0);
     }
 
     #[tokio::test]
@@ -467,25 +532,45 @@ mod tests {
 
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
 
+        assert_query_contains(
+            &sql,
+            "SELECT
+            'json' as type,
+            formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+            i.episode_id as episode_id,
+            i.function_name as function_name,
+            i.id as inference_id,
+            i.input as input,
+            i.output_schema as output_schema,
+            i.tags as tags,
+            '' as tool_params,
+            [] as dynamic_tools,
+            [] as dynamic_provider_tools,
+            NULL as allowed_tools,
+            NULL as tool_choice,
+            NULL as parallel_tool_calls,
+            i.variant_name as variant_name,
+            i.output as output
+        FROM
+            JsonInference AS i
+        WHERE
+            i.function_name = {p0:String}
+            AND i.id IN ['01234567-89ab-cdef-0123-456789abcdef']
+        LIMIT {p1:UInt64}
+        OFFSET {p2:UInt64}",
+        );
+
         // Verify NO UNION ALL
         assert_query_does_not_contain(&sql, "UNION ALL");
 
         // Verify only JsonInference is queried (extract_entities is a JSON function)
-        assert_query_contains(&sql, "JsonInference");
         assert_query_does_not_contain(&sql, "ChatInference");
 
-        // Verify ID is in the query with proper table alias
-        assert_query_contains(&sql, "i.id IN ['01234567-89ab-cdef-0123-456789abcdef']");
-
-        // Verify function_name filter is present
-        assert_query_contains(&sql, "i.function_name = {p0:String}");
-        assert_eq!(params.len(), 1);
-        assert_eq!(
-            params[0],
-            QueryParameter {
+        assert!(
+            params.contains(&QueryParameter {
                 name: "p0".to_string(),
                 value: "extract_entities".to_string(),
-            },
+            }),
             "Function name parameter should be present"
         );
     }
@@ -563,7 +648,27 @@ mod tests {
 
         // Verify query is wrapped in subquery with ORDER BY
         assert_query_contains(&sql, "SELECT * FROM");
-        assert_query_contains(&sql, ") AS combined ORDER BY timestamp DESC");
+        assert_query_contains(&sql, ") AS combined");
+        assert_query_contains(&sql, "ORDER BY timestamp DESC");
+
+        // Verify ORDER BY appears 3 times: 2 for inner subqueries, 1 for outer query
+        // This is critical to ensure correct results when LIMIT is pushed down
+        let order_by_count = sql.matches("ORDER BY timestamp DESC").count();
+        assert_eq!(
+            order_by_count, 3,
+            "ORDER BY should appear 3 times: 2 inner + 1 outer to ensure correct LIMIT behavior"
+        );
+
+        // Verify LIMIT appears 3 times: 2 for inner subqueries, 1 for outer query
+        let limit_count = sql.matches("LIMIT {p").count();
+        assert_eq!(
+            limit_count, 3,
+            "LIMIT should appear 3 times: 2 inner + 1 outer"
+        );
+
+        // Verify OFFSET only appears once in the outer query
+        let offset_count = sql.matches("OFFSET {p").count();
+        assert_eq!(offset_count, 1, "OFFSET should appear once in outer query");
     }
 
     #[tokio::test]

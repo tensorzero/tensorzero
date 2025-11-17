@@ -383,11 +383,11 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
         )
         .route(
             "/experimental_optimization_workflow",
-            post(endpoints::optimization::launch_optimization_workflow_handler),
+            post(tensorzero_optimizers::endpoints::launch_optimization_workflow_handler),
         )
         .route(
             "/experimental_optimization/{job_handle}",
-            get(endpoints::optimization::poll_optimization_handler),
+            get(tensorzero_optimizers::endpoints::poll_optimization_handler),
         )
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))

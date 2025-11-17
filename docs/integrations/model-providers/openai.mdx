@@ -10,6 +10,8 @@ This guide shows how to set up a minimal deployment to use the TensorZero Gatewa
 
 You can use the short-hand `openai::model_name` to use an OpenAI model with TensorZero, unless you need advanced features like fallbacks or custom credentials.
 
+### Chat Completions API
+
 You can use OpenAI models in your TensorZero variants by setting the `model` field to `openai::model_name`.
 For example:
 
@@ -36,6 +38,36 @@ curl -X POST http://localhost:3000/inference \
     }
   }'
 ```
+
+### Responses API
+
+For models that use the OpenAI Responses API (like `gpt-5`), use the `openai::responses::model_name` shorthand:
+
+```toml {3}
+[functions.my_function_name.variants.my_variant_name]
+type = "chat_completion"
+model = "openai::responses::gpt-5-codex"
+```
+
+You can also use `model_name` in inference requests:
+
+```bash {4}
+curl -X POST http://localhost:3000/inference \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "openai::responses::gpt-5-codex",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "What is the capital of Japan?"
+        }
+      ]
+    }
+  }'
+```
+
+See the [OpenAI Responses API guide](/gateway/call-the-openai-responses-api/) for more details on using this API.
 
 ## Advanced Setup
 
@@ -86,7 +118,7 @@ See the [Configuration Reference](/gateway/configuration-reference/) for optiona
 You must set the `OPENAI_API_KEY` environment variable before running the gateway.
 
 You can customize the credential location by setting the `api_key_location` to `env::YOUR_ENVIRONMENT_VARIABLE` or `dynamic::ARGUMENT_NAME`.
-See the [Credential Management](/gateway/guides/credential-management/) guide and [Configuration Reference](/gateway/configuration-reference/) for more information.
+See the [Credential Management](/operations/manage-credentials/) guide and [Configuration Reference](/gateway/configuration-reference/) for more information.
 
 Additionally, see the [OpenAI-Compatible](/integrations/model-providers/openai-compatible/) guide for more information on how to use other OpenAI-Compatible providers.
 
@@ -96,7 +128,7 @@ Create a minimal Docker Compose configuration:
 
 ```yaml title="docker-compose.yml"
 # This is a simplified example for learning purposes. Do not use this in production.
-# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+# For production-ready deployments, see: https://www.tensorzero.com/docs/deployment/tensorzero-gateway
 
 services:
   gateway:

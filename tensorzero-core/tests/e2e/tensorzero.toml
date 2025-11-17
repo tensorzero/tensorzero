@@ -844,6 +844,12 @@ routing = ["dummy"]
 type = "dummy"
 model_name = "test-embeddings"
 
+[embedding_models.gemini_embedding_001_openrouter]
+routing = ["openrouter"]
+
+[embedding_models.gemini_embedding_001_openrouter.providers.openrouter]
+type = "openrouter"
+model_name = "google/gemini-embedding-001"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                 FUNCTIONS                                  │
@@ -2838,7 +2844,7 @@ type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
-json_mode = "on"
+json_mode = "strict"
 max_tokens = 100
 
 [functions.dynamic_json.variants.openai-responses]
@@ -3765,6 +3771,11 @@ optimize = "max"
 level = "inference"
 
 [metrics.exact_match]
+type = "boolean"
+optimize = "max"
+level = "inference"
+
+[metrics.test_metric]
 type = "boolean"
 optimize = "max"
 level = "inference"

@@ -148,7 +148,7 @@ lazy_static! {
         create_implicit_tool_call_config_with_allowed_tools(
             EVALUATOR_OUTPUT_SCHEMA.clone(),
             AllowedTools {
-                tools: vec![IMPLICIT_TOOL_NAME.to_string()],
+                tools: [IMPLICIT_TOOL_NAME.to_string()].into_iter().collect(),
                 choice: AllowedToolsChoice::FunctionDefault,
             },
         )
@@ -1068,8 +1068,8 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Example response\"}".to_string(),
             usage: Usage {
-                input_tokens: 50,
-                output_tokens: 100,
+                input_tokens: Some(50),
+                output_tokens: Some(100),
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1104,8 +1104,8 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Example response 2\"}".to_string(),
             usage: Usage {
-                input_tokens: 15,
-                output_tokens: 25,
+                input_tokens: Some(15),
+                output_tokens: Some(25),
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1159,8 +1159,8 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt\"}".to_string(),
             raw_response: "{\"response\": \"Valid JSON response\"}".to_string(),
             usage: Usage {
-                input_tokens: 50,
-                output_tokens: 100,
+                input_tokens: Some(50),
+                output_tokens: Some(100),
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1197,8 +1197,8 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt 2\"}".to_string(),
             raw_response: "{\"response\": \"Malformed JSON response\"".to_string(), // malformed
             usage: Usage {
-                input_tokens: 15,
-                output_tokens: 25,
+                input_tokens: Some(15),
+                output_tokens: Some(25),
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1270,8 +1270,8 @@ mod tests {
                 content: vec!["test_assistant".to_string().into()],
             }]),
             usage: Usage {
-                input_tokens: 50,
-                output_tokens: 100,
+                input_tokens: Some(50),
+                output_tokens: Some(100),
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(500),
@@ -1306,8 +1306,8 @@ mod tests {
             raw_request: "{\"prompt\": \"Example prompt 1\"}".to_string(),
             raw_response: "{\"response\": \"Example response 1\"}".to_string(),
             usage: Usage {
-                input_tokens: 15,
-                output_tokens: 25,
+                input_tokens: Some(15),
+                output_tokens: Some(25),
             },
             latency: Latency::NonStreaming {
                 response_time: std::time::Duration::from_millis(550),
@@ -1413,8 +1413,8 @@ mod tests {
         // based on "answer": 1 in best_of_n_1
         let expected_id = inference_id1;
         let expected_usage = Usage {
-            input_tokens: 75,
-            output_tokens: 126,
+            input_tokens: Some(75),
+            output_tokens: Some(126),
         };
         let expected_content = vec!["Candidate answer 1".to_string().into()];
         assert_eq!(selected.usage_considering_cached(), expected_usage);

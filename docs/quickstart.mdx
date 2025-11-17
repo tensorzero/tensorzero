@@ -91,6 +91,14 @@ model = "openai::gpt-4o-mini"
 
 This minimal configuration file tells the TensorZero Gateway everything it needs to replicate our original OpenAI call.
 
+<Tip>
+
+Using the shorthand `openai::gpt-4o-mini` notation is convenient for getting started.
+To learn about all configuration options including schemas, templates, and advanced variant types, see [Configure functions and variants](/gateway/configure-functions-and-variants).
+For production deployments with multiple providers, routing, and fallbacks, see [Configure models and providers](/gateway/configure-models-and-providers).
+
+</Tip>
+
 ## Deploying TensorZero
 
 We're almost ready to start making API calls.
@@ -109,7 +117,7 @@ curl -LO "https://raw.githubusercontent.com/tensorzero/tensorzero/refs/heads/mai
 
 ```yaml title="docker-compose.yml"
 # This is a simplified example for learning purposes. Do not use this in production.
-# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+# For production-ready deployments, see: https://www.tensorzero.com/docs/deployment/tensorzero-gateway
 
 services:
   clickhouse:

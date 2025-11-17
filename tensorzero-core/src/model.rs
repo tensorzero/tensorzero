@@ -98,19 +98,25 @@ impl UninitializedModelConfig {
         model_name: &str,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
+        http_client: TensorzeroHttpClient,
     ) -> Result<ModelConfig, Error> {
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
         // build `ModelProvider`s using the name keys from the map.
-        let providers = try_join_all(self.providers.into_iter().map(
-            |(name, provider)| async move {
+        let providers = try_join_all(self.providers.into_iter().map(|(name, provider)| {
+            let http_client = http_client.clone();
+            async move {
                 Ok::<_, Error>((
                     name.clone(),
                     ModelProvider {
                         name: name.clone(),
                         config: provider
                             .config
-                            .load(provider_types, provider_type_default_credentials)
+                            .load(
+                                provider_types,
+                                provider_type_default_credentials,
+                                http_client,
+                            )
                             .await
                             .map_err(|e| {
                                 Error::new(ErrorDetails::Config {
@@ -123,8 +129,8 @@ impl UninitializedModelConfig {
                         discard_unknown_chunks: provider.discard_unknown_chunks,
                     },
                 ))
-            },
-        ))
+            }
+        }))
         .await?
         .into_iter()
         .collect::<HashMap<_, _>>();
@@ -633,14 +639,18 @@ async fn wrap_provider_stream(
     let base_stream = async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
-        let mut total_usage = Usage {
-            input_tokens: 0,
-            output_tokens: 0,
-        };
+        // `total_usage` is `None` until we receive a chunk with usage information
+        let mut total_usage: Option<Usage> = None;
         while let Some(chunk) = stream.next().await {
             if let Ok(chunk) = chunk.as_ref() {
                 if let Some(chunk_usage) = &chunk.usage {
-                    total_usage = total_usage + *chunk_usage;
+                    // `total_usage` will be `None` if this is the first chunk with usage information....
+                    if total_usage.is_none() {
+                        // ... so initialize it to zero ...
+                        total_usage = Some(Usage::zero());
+                    }
+                    // ...and then add the chunk usage to it (handling `None` fields)
+                    if let Some(ref mut u) = total_usage { u.sum_strict(chunk_usage); }
                 }
             }
             // We can skip cloning the chunk if we know we're not going to write to the cache
@@ -664,18 +674,25 @@ async fn wrap_provider_stream(
             }
             yield chunk;
         }
+
+        // If we don't see a chunk with usage information, set `total_usage` to the default value (fields as `None`)
+        let total_usage = total_usage.unwrap_or_default();
+
         otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
-            let usage = if errored {
-                RateLimitResourceUsage::UnderEstimate {
-                    model_inferences: 1,
-                    tokens: total_usage.total_tokens() as u64,
+            let usage = match (total_usage.total_tokens(), errored) {
+                (Some(tokens), false) => {
+                    RateLimitResourceUsage::Exact {
+                        model_inferences: 1,
+                        tokens: tokens as u64,
+                    }
                 }
-             } else {
-                RateLimitResourceUsage::Exact {
-                    model_inferences: 1,
-                    tokens: total_usage.total_tokens() as u64,
+                _ => {
+                    RateLimitResourceUsage::UnderEstimate {
+                        model_inferences: 1,
+                        tokens: total_usage.total_tokens().unwrap_or(0) as u64,
+                    }
                 }
             };
 
@@ -1096,6 +1113,7 @@ impl UninitializedProviderConfig {
         self,
         provider_types: &ProviderTypesConfig,
         provider_type_default_credentials: &ProviderTypeDefaultCredentials,
+        http_client: TensorzeroHttpClient,
     ) -> Result<ProviderConfig, Error> {
         Ok(match self {
             UninitializedProviderConfig::Anthropic {
@@ -1122,7 +1140,9 @@ impl UninitializedProviderConfig {
                     return Err(Error::new(ErrorDetails::Config { message: "AWS bedrock provider requires a region to be provided, or `allow_auto_detect_region = true`.".to_string() }));
                 }
 
-                ProviderConfig::AWSBedrock(AWSBedrockProvider::new(model_id, region).await?)
+                ProviderConfig::AWSBedrock(
+                    AWSBedrockProvider::new(model_id, region, http_client).await?,
+                )
             }
             UninitializedProviderConfig::AWSSagemaker {
                 endpoint_name,
@@ -1219,8 +1239,8 @@ impl UninitializedProviderConfig {
                 location,
                 project_id,
                 credential_location: api_key_location,
-            } => ProviderConfig::GCPVertexGemini(
-                GCPVertexGeminiProvider::new(
+            } => {
+                let provider = GCPVertexGeminiProvider::new(
                     model_id,
                     endpoint_id,
                     location,
@@ -1229,8 +1249,10 @@ impl UninitializedProviderConfig {
                     provider_types,
                     provider_type_default_credentials,
                 )
-                .await?,
-            ),
+                .await?;
+
+                ProviderConfig::GCPVertexGemini(provider)
+            }
             UninitializedProviderConfig::GoogleAIStudioGemini {
                 model_name,
                 api_key_location,
@@ -1286,19 +1308,29 @@ impl UninitializedProviderConfig {
                 api_type,
                 include_encrypted_reasoning,
                 provider_tools,
-            } => ProviderConfig::OpenAI(OpenAIProvider::new(
-                model_name,
-                api_base,
-                OpenAIKind
-                    .get_defaulted_credential(
-                        api_key_location.as_ref(),
-                        provider_type_default_credentials,
-                    )
-                    .await?,
-                api_type,
-                include_encrypted_reasoning,
-                provider_tools,
-            )?),
+            } => {
+                // This should only be used when we are mocking batch inferences, otherwise defer to the API base set
+                #[cfg(feature = "e2e_tests")]
+                let api_base = provider_types
+                    .openai
+                    .batch_inference_api_base
+                    .clone()
+                    .or(api_base);
+
+                ProviderConfig::OpenAI(OpenAIProvider::new(
+                    model_name,
+                    api_base,
+                    OpenAIKind
+                        .get_defaulted_credential(
+                            api_key_location.as_ref(),
+                            provider_type_default_credentials,
+                        )
+                        .await?,
+                    api_type,
+                    include_encrypted_reasoning,
+                    provider_tools,
+                )?)
+            }
             UninitializedProviderConfig::OpenRouter {
                 model_name,
                 api_key_location,
@@ -1980,7 +2012,7 @@ impl ModelProvider {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, ts_rs::TS)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum CredentialLocation {
     /// Environment variable containing the actual credential
     Env(String),
@@ -2000,10 +2032,12 @@ pub enum CredentialLocation {
 #[serde(untagged)]
 pub enum CredentialLocationWithFallback {
     /// Single credential location (backward compatible)
-    Single(CredentialLocation),
+    Single(#[ts(type = "string")] CredentialLocation),
     /// Credential location with fallback
     WithFallback {
+        #[ts(type = "string")]
         default: CredentialLocation,
+        #[ts(type = "string")]
         fallback: CredentialLocation,
     },
 }
@@ -2514,8 +2548,8 @@ mod tests {
         assert_eq!(
             usage,
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -2766,8 +2800,8 @@ mod tests {
         assert_eq!(
             usage,
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");

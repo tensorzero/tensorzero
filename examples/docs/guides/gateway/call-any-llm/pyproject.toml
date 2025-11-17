@@ -1,5 +1,5 @@
 [project]
-name = "tensorzero-examples-docs-gateway-call-an-llm"
+name = "tensorzero-examples-docs-guides-gateway-call-an-llm"
 version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"

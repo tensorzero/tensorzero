@@ -7,23 +7,15 @@ license.workspace = true
 
 [dependencies]
 tensorzero-core = { path = "../tensorzero-core" }
+tensorzero-optimizers = { path = "../tensorzero-optimizers" }
 axum = { workspace = true }
 tracing = { version = "0.1.40", features = ["log", "release_max_level_debug"] }
-tracing-subscriber = { version = "0.3.20", features = [
-    "env-filter",
-    "fmt",
-    "json",
-] }
 tokio = { workspace = true }
 mimalloc = "0.1.48"
 clap = { workspace = true }
-serde = { workspace = true }
-tracing-opentelemetry-instrumentation-sdk = { workspace = true }
 tower-http = { workspace = true, features = ["metrics"] }
-tokio-util = "0.7.17"
 metrics-exporter-prometheus = { workspace = true }
 http = { workspace = true }
-pin-project = { workspace = true }
 futures = { workspace = true }
 tokio-stream = { workspace = true }
 tensorzero-auth = { path = "../internal/tensorzero-auth" }

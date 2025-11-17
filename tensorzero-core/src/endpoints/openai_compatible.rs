@@ -44,8 +44,8 @@ use crate::inference::types::{
 };
 
 use crate::tool::{
-    DynamicToolParams, InferenceResponseToolCall, ProviderTool, Tool, ToolCallWrapper, ToolChoice,
-    ToolResult,
+    ClientSideFunctionTool, DynamicToolParams, InferenceResponseToolCall, ProviderTool,
+    ToolCallWrapper, ToolChoice, ToolResult,
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::JsonMode;
@@ -203,7 +203,7 @@ impl TryFrom<OpenAICompatibleEmbeddingParams> for EmbeddingParams {
         {
             Some(model_name) => model_name.to_string(),
             None => {
-                tracing::warn!("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'");
+                crate::utils::deprecation_warning("Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'");
                 params.model
             }
         };
@@ -225,7 +225,7 @@ pub enum OpenAIEmbeddingResponse {
     List {
         data: Vec<OpenAIEmbedding>,
         model: String,
-        usage: OpenAIEmbeddingUsage,
+        usage: Option<OpenAIEmbeddingUsage>,
     },
 }
 
@@ -237,8 +237,8 @@ pub enum OpenAIEmbedding {
 
 #[derive(Debug, Serialize)]
 pub struct OpenAIEmbeddingUsage {
-    prompt_tokens: u32,
-    total_tokens: u32,
+    prompt_tokens: Option<u32>,
+    total_tokens: Option<u32>,
 }
 
 impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
@@ -254,10 +254,10 @@ impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
                 })
                 .collect(),
             model: format!("{TENSORZERO_EMBEDDING_MODEL_NAME_PREFIX}{}", response.model),
-            usage: OpenAIEmbeddingUsage {
+            usage: Some(OpenAIEmbeddingUsage {
                 prompt_tokens: response.usage.input_tokens,
-                total_tokens: response.usage.input_tokens,
-            },
+                total_tokens: response.usage.input_tokens, // there are no output tokens for embeddings
+            }),
         }
     }
 }
@@ -595,18 +595,50 @@ pub struct OpenAICompatibleParams {
     #[serde(rename = "tensorzero::internal_dynamic_variant_config")]
     tensorzero_internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
     #[serde(default, rename = "tensorzero::provider_tools")]
-    tensorzero_provider_tools: Option<Vec<ProviderTool>>,
+    tensorzero_provider_tools: Vec<ProviderTool>,
     #[serde(default, rename = "tensorzero::params")]
     tensorzero_params: Option<InferenceParams>,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
 struct OpenAICompatibleUsage {
-    prompt_tokens: u32,
-    completion_tokens: u32,
-    total_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prompt_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completion_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total_tokens: Option<u32>,
+}
+
+impl OpenAICompatibleUsage {
+    fn zero() -> Self {
+        Self {
+            prompt_tokens: Some(0),
+            completion_tokens: Some(0),
+            total_tokens: Some(0),
+        }
+    }
+
+    /// Sum `OpenAICompatibleUsage` and `Usage` instances.
+    /// `None` contaminates on both sides.
+    fn sum_usage_strict(&mut self, other: &Usage) {
+        self.prompt_tokens = match (self.prompt_tokens, other.input_tokens) {
+            (Some(a), Some(b)) => Some(a + b),
+            _ => None,
+        };
+
+        self.completion_tokens = match (self.completion_tokens, other.output_tokens) {
+            (Some(a), Some(b)) => Some(a + b),
+            _ => None,
+        };
+
+        self.total_tokens = match (self.total_tokens, other.total_tokens()) {
+            (Some(a), Some(b)) => Some(a + b),
+            _ => None,
+        };
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -939,6 +971,9 @@ enum OpenAICompatibleContentBlock {
     File {
         file: OpenAICompatibleFile,
     },
+    InputAudio {
+        input_audio: OpenAICompatibleInputAudio,
+    },
     #[serde(rename = "tensorzero::raw_text")]
     RawText(RawText),
     #[serde(rename = "tensorzero::template")]
@@ -958,10 +993,20 @@ struct OpenAICompatibleImageUrl {
 #[derive(Deserialize, Debug)]
 struct OpenAICompatibleFile {
     file_data: String,
-    // TODO (#4478): collect and store filename
-    // filename: String,
+    #[serde(default)]
+    filename: Option<String>,
     // OpenAI supports file_id with their files API
     // We do not so we require these two fields
+}
+
+#[derive(Deserialize, Debug)]
+struct OpenAICompatibleInputAudio {
+    // The `data` field contains *unprefixed* base64-encoded audio data.
+    data: String,
+    // The `format` field contains the audio format (e.g. `"mp3"`).
+    // Under the hood, we detect the MIME type using magic bytes in the audio data. If the inferred MIME type is not
+    // consistent with the `format` field, the gateway warns and the inferred MIME type takes priority.
+    format: String,
 }
 
 #[derive(Debug)]
@@ -1039,22 +1084,88 @@ fn convert_openai_message_content(
                     Ok(OpenAICompatibleContentBlock::Template(template)) => InputMessageContent::Template(template),
                     Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => InputMessageContent::Text(Text { text }),
                     Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => {
-                        tracing::warn!("Deprecation Warning: Using `tensorzero::arguments` in text content blocks is deprecated. Please use `{{\"type\": \"tensorzero::template\", \"name\": \"role\", \"arguments\": {{...}}}}` instead.");
+                        crate::utils::deprecation_warning("Using `tensorzero::arguments` in text content blocks is deprecated. Please use `{{\"type\": \"tensorzero::template\", \"name\": \"role\", \"arguments\": {{...}}}}` instead.");
                         InputMessageContent::Template(Template { name: role.clone(), arguments: tensorzero_arguments })
                     }
                     Ok(OpenAICompatibleContentBlock::ImageUrl { image_url }) => {
                         if image_url.url.scheme() == "data" {
                             let image_url_str = image_url.url.to_string();
                             let (mime_type, data) = parse_base64_file_data_url(&image_url_str)?;
-                            let base64_file = Base64File::new(None, mime_type, data.to_string(), image_url.detail)?;
+                            let base64_file = Base64File::new(None, mime_type, data.to_string(), image_url.detail, None)?;
                             InputMessageContent::File(File::Base64(base64_file))
                         } else {
-                            InputMessageContent::File(File::Url(UrlFile { url: image_url.url, mime_type: image_url.mime_type, detail: image_url.detail }))
+                            InputMessageContent::File(File::Url(UrlFile { url: image_url.url, mime_type: image_url.mime_type, detail: image_url.detail, filename: None }))
                         }
                     }
                     Ok(OpenAICompatibleContentBlock::File { file }) => {
                         let (mime_type, data) = parse_base64_file_data_url(&file.file_data)?;
-                        let base64_file = Base64File::new(None, mime_type, data.to_string(), None)?;
+                        let base64_file = Base64File::new(None, mime_type, data.to_string(), None, file.filename)?;
+                        InputMessageContent::File(File::Base64(base64_file))
+                    }
+                    Ok(OpenAICompatibleContentBlock::InputAudio { input_audio }) => {
+                        // Decode base64 to bytes for MIME type detection
+                        let bytes = base64::Engine::decode(
+                            &base64::engine::general_purpose::STANDARD,
+                            &input_audio.data
+                        ).map_err(|e| {
+                            Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                message: format!("Invalid base64 data in input_audio: {e}"),
+                            })
+                        })?;
+
+                        // Detect MIME type from file content using infer crate
+                        let mime_type = if let Some(inferred_type) = infer::get(&bytes) {
+                            let inferred_mime = inferred_type
+                                .mime_type()
+                                .parse::<MediaType>()
+                                .map_err(|e| {
+                                    Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                        message: format!("Inferred mime type is not valid: {e}"),
+                                    })
+                                })?;
+
+                            // Validate that the detected file is actually audio
+                            if inferred_mime.type_() != mime::AUDIO {
+                                return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                    message: format!(
+                                        "Expected audio file for input_audio, but detected {} (type: {})",
+                                        inferred_mime,
+                                        inferred_mime.type_()
+                                    ),
+                                }));
+                            }
+
+                            // Log warning if detected MIME type differs from format field
+                            // Map common format strings to expected MIME types for comparison
+                            let expected_mime = match input_audio.format.as_str() {
+                                "wav" => Some("audio/x-wav"),
+                                "mp3" => Some("audio/mpeg"),
+                                _ => None,
+                            };
+
+                            if let Some(expected) = expected_mime {
+                                if inferred_mime.as_ref() != expected {
+                                    tracing::warn!(
+                                        "Inferred audio MIME type `{}` differs from format field `{}` (expected `{}`). Using inferred type.",
+                                        inferred_mime,
+                                        input_audio.format,
+                                        expected
+                                    );
+                                }
+                            }
+
+                            inferred_mime
+                        } else {
+                            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                message: format!(
+                                    "Could not detect audio format from file content. Format field was: {}",
+                                    input_audio.format
+                                ),
+                            }));
+                        };
+
+                        // Create Base64File with the inferred MIME type and original base64 data
+                        let base64_file = Base64File::new(None, mime_type, input_audio.data, None, None)?;
                         InputMessageContent::File(File::Base64(base64_file))
                     }
                     Err(e) => {
@@ -1075,7 +1186,7 @@ fn convert_openai_message_content(
                                 }));
                             }
                         }
-                        tracing::warn!(r#"Deprecation Warning: Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "tensorzero::template", "name": "role", "arguments": {{"custom": "data"}}}}` to pass arbitrary JSON values to TensorZero: {e}"#);
+                        crate::utils::deprecation_warning(&format!(r#"Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "tensorzero::template", "name": "role", "arguments": {{"custom": "data"}}}}` to pass arbitrary JSON values to TensorZero: {e}"#));
                         if let Value::Object(obj) = val {
                             InputMessageContent::Template(Template { name: role.clone(), arguments: Arguments(obj) })
                         } else {
@@ -1095,7 +1206,7 @@ fn convert_openai_message_content(
     }
 }
 
-impl From<OpenAICompatibleTool> for Tool {
+impl From<OpenAICompatibleTool> for ClientSideFunctionTool {
     fn from(tool: OpenAICompatibleTool) -> Self {
         match tool {
             OpenAICompatibleTool::Function {
@@ -1103,7 +1214,7 @@ impl From<OpenAICompatibleTool> for Tool {
                 name,
                 parameters,
                 strict,
-            } => Tool {
+            } => ClientSideFunctionTool {
                 description: description.unwrap_or_default(),
                 parameters,
                 name,
@@ -1170,7 +1281,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                 usage: OpenAICompatibleUsage {
                     prompt_tokens: response.usage.input_tokens,
                     completion_tokens: response.usage.output_tokens,
-                    total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+                    total_tokens: response.usage.total_tokens(),
                 },
                 episode_id: response.episode_id.to_string(),
             },
@@ -1232,7 +1343,7 @@ impl From<Usage> for OpenAICompatibleUsage {
         OpenAICompatibleUsage {
             prompt_tokens: usage.input_tokens,
             completion_tokens: usage.output_tokens,
-            total_tokens: usage.input_tokens + usage.output_tokens,
+            total_tokens: usage.total_tokens(),
         }
     }
 }
@@ -1380,16 +1491,13 @@ fn prepare_serialized_openai_compatible_events(
     async_stream::stream! {
         let mut tool_id_to_index = HashMap::new();
         let mut is_first_chunk = true;
-        let mut total_usage = OpenAICompatibleUsage {
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
-        };
+        // `total_usage` is `None` until we receive a chunk with usage information
+        let mut total_usage: Option<OpenAICompatibleUsage> = None;
         let mut inference_id = None;
         let mut episode_id = None;
         let mut variant_name = None;
         while let Some(chunk) = stream.next().await {
-            // NOTE - in the future, we may want to end the stream early if we get an error
+            // NOTE: in the future, we may want to end the stream early if we get an error
             // For now, we just ignore the error and try to get more chunks
             let Ok(chunk) = chunk else {
                 continue;
@@ -1406,9 +1514,13 @@ fn prepare_serialized_openai_compatible_events(
                 }
             };
             if let Some(chunk_usage) = chunk_usage {
-                total_usage.prompt_tokens += chunk_usage.input_tokens;
-                total_usage.completion_tokens += chunk_usage.output_tokens;
-                total_usage.total_tokens += chunk_usage.input_tokens + chunk_usage.output_tokens;
+                // `total_usage` will be `None` if this is the first chunk with usage information....
+                if total_usage.is_none() {
+                    // ... so initialize it to zero ...
+                    total_usage = Some(OpenAICompatibleUsage::zero());
+                }
+                // ...and then add the chunk usage to it (handling `None` fields)
+                if let Some(ref mut u) = total_usage { u.sum_usage_strict(chunk_usage); }
             }
             let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index, &response_model_prefix);
             for chunk in openai_compatible_chunks {
@@ -1430,6 +1542,10 @@ fn prepare_serialized_openai_compatible_events(
                 })
             }
         }
+
+        // If we don't see a chunk with usage information, set `total_usage` to the default value (fields as `None`)
+        let total_usage = total_usage.unwrap_or_default();
+
         if stream_options.map(|s| s.include_usage).unwrap_or(false) {
             let episode_id = episode_id.ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {
@@ -1482,6 +1598,7 @@ mod tests {
     use crate::inference::types::file::Detail;
     use crate::inference::types::{System, Text, TextChunk};
     use crate::tool::ToolCallChunk;
+    use crate::utils::testing::capture_logs;
 
     #[test]
     fn test_try_from_openai_compatible_params() {
@@ -1518,7 +1635,7 @@ mod tests {
             stream_options: None,
             stop: None,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -1993,6 +2110,207 @@ mod tests {
     }
 
     #[test]
+    fn test_input_audio_content_block() {
+        // Test valid WAV audio (magic bytes: RIFF....WAVE)
+        let wav_bytes = b"RIFF\x00\x00\x00\x00WAVEfmt ";
+        let wav_base64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, wav_bytes);
+
+        let content = json!([{
+            "type": "input_audio",
+            "input_audio": {
+                "data": wav_base64,
+                "format": "wav"
+            }
+        }]);
+
+        let result = convert_openai_message_content("user".to_string(), content).unwrap();
+        assert_eq!(result.len(), 1);
+
+        match &result[0] {
+            InputMessageContent::File(File::Base64(base64_file)) => {
+                // infer crate returns audio/x-wav for WAV files
+                assert_eq!(
+                    base64_file.mime_type,
+                    "audio/x-wav".parse::<MediaType>().unwrap()
+                );
+                assert_eq!(base64_file.data(), wav_base64);
+            }
+            _ => panic!("Expected File(Base64(...))"),
+        }
+
+        // Test valid MP3 audio (magic bytes: FF FB)
+        let mp3_bytes = [0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00];
+        let mp3_base64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, mp3_bytes);
+
+        let content = json!([{
+            "type": "input_audio",
+            "input_audio": {
+                "data": mp3_base64,
+                "format": "mp3"
+            }
+        }]);
+
+        let result = convert_openai_message_content("user".to_string(), content).unwrap();
+        assert_eq!(result.len(), 1);
+
+        match &result[0] {
+            InputMessageContent::File(File::Base64(base64_file)) => {
+                assert_eq!(
+                    base64_file.mime_type,
+                    "audio/mpeg".parse::<MediaType>().unwrap()
+                );
+                assert_eq!(base64_file.data(), mp3_base64);
+            }
+            _ => panic!("Expected File(Base64(...))"),
+        }
+
+        // Test invalid base64 data
+        let content = json!([{
+            "type": "input_audio",
+            "input_audio": {
+                "data": "not-valid-base64!!!",
+                "format": "wav"
+            }
+        }]);
+
+        let error = convert_openai_message_content("user".to_string(), content).unwrap_err();
+        let details = error.get_details();
+        match details {
+            ErrorDetails::InvalidOpenAICompatibleRequest { message } => {
+                assert!(message.contains("Invalid base64 data"));
+            }
+            _ => panic!("Expected InvalidOpenAICompatibleRequest error"),
+        }
+
+        // Test non-audio file (image)
+        let jpeg_bytes = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+        let jpeg_base64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, jpeg_bytes);
+
+        let content = json!([{
+            "type": "input_audio",
+            "input_audio": {
+                "data": jpeg_base64,
+                "format": "wav"
+            }
+        }]);
+
+        let error = convert_openai_message_content("user".to_string(), content).unwrap_err();
+        let details = error.get_details();
+        match details {
+            ErrorDetails::InvalidOpenAICompatibleRequest { message } => {
+                assert!(message.contains("Expected audio file"));
+            }
+            _ => panic!("Expected InvalidOpenAICompatibleRequest error"),
+        }
+
+        // Test undetectable format
+        let unknown_bytes = [0x00, 0x01, 0x02, 0x03];
+        let unknown_base64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, unknown_bytes);
+
+        let content = json!([{
+            "type": "input_audio",
+            "input_audio": {
+                "data": unknown_base64,
+                "format": "wav"
+            }
+        }]);
+
+        let error = convert_openai_message_content("user".to_string(), content).unwrap_err();
+        let details = error.get_details();
+        match details {
+            ErrorDetails::InvalidOpenAICompatibleRequest { message } => {
+                assert!(message.contains("Could not detect audio format"));
+            }
+            _ => panic!("Expected InvalidOpenAICompatibleRequest error"),
+        }
+    }
+
+    #[test]
+    fn test_input_audio_format_mismatch_warning() {
+        let logs_contain = capture_logs();
+
+        // Test WAV file with wrong format field - should warn
+        let wav_bytes = b"RIFF\x00\x00\x00\x00WAVEfmt ";
+        let wav_base64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, wav_bytes);
+
+        let content = json!([{
+            "type": "input_audio",
+            "input_audio": {
+                "data": wav_base64,
+                "format": "mp3"  // Wrong format!
+            }
+        }]);
+
+        let result = convert_openai_message_content("user".to_string(), content).unwrap();
+        assert_eq!(result.len(), 1);
+
+        // Should log a warning about mismatch
+        assert!(
+            logs_contain("Inferred audio MIME type `audio/x-wav` differs from format field `mp3`"),
+            "Expected warning about MIME type mismatch"
+        );
+    }
+
+    #[test]
+    fn test_input_audio_wav_format_correct_no_warning() {
+        let logs_contain = capture_logs();
+
+        // Test WAV file with correct format field - should NOT warn
+        let wav_bytes = b"RIFF\x00\x00\x00\x00WAVEfmt ";
+        let wav_base64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, wav_bytes);
+
+        let content = json!([{
+            "type": "input_audio",
+            "input_audio": {
+                "data": wav_base64,
+                "format": "wav"  // Correct format
+            }
+        }]);
+
+        let result = convert_openai_message_content("user".to_string(), content).unwrap();
+        assert_eq!(result.len(), 1);
+
+        // Should NOT log a warning
+        assert!(
+            !logs_contain("Inferred audio MIME type"),
+            "Should not warn when WAV format matches detected type"
+        );
+    }
+
+    #[test]
+    fn test_input_audio_mp3_format_correct_no_warning() {
+        let logs_contain = capture_logs();
+
+        // Test MP3 file with correct format field - should NOT warn
+        let mp3_bytes = [0xFF, 0xFB, 0x90, 0x44, 0x00, 0x00];
+        let mp3_base64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, mp3_bytes);
+
+        let content = json!([{
+            "type": "input_audio",
+            "input_audio": {
+                "data": mp3_base64,
+                "format": "mp3"  // Correct format
+            }
+        }]);
+
+        let result = convert_openai_message_content("user".to_string(), content).unwrap();
+        assert_eq!(result.len(), 1);
+
+        // Should NOT log a warning
+        assert!(
+            !logs_contain("Inferred audio MIME type"),
+            "Should not warn when MP3 format matches detected type"
+        );
+    }
+
+    #[test]
     fn test_deprecated_custom_block() {
         let logs_contain = crate::utils::testing::capture_logs();
         let content = json!([{
@@ -2233,7 +2551,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2273,7 +2591,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2319,7 +2637,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2365,7 +2683,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: None,
+            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2393,7 +2711,7 @@ mod tests {
         assert_eq!(param.model_name, "text-embedding-ada-002");
         assert_eq!(param.dimensions, Some(15));
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
-        assert!(logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
+        assert!(logs_contain("Deprecation warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
     }
     #[test]
     fn test_try_from_embedding_params_strip() {
@@ -2411,7 +2729,7 @@ mod tests {
         assert_eq!(param.model_name, "text-embedding-ada-002");
         assert_eq!(param.dimensions, Some(15));
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
-        assert!(!logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
+        assert!(!logs_contain("Deprecation warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
     }
 
     #[test]
@@ -2737,5 +3055,106 @@ mod tests {
         });
         let result: Result<OpenAICompatibleContentBlock, _> = serde_json::from_value(json_invalid);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_openai_file_with_custom_filename() {
+        // Test deserialization with custom filename
+        let json = json!({
+            "type": "file",
+            "file": {
+                "file_data": "data:text/plain;base64,SGVsbG8h",
+                "filename": "my_config.txt"
+            }
+        });
+        let block: OpenAICompatibleContentBlock = serde_json::from_value(json).unwrap();
+        match block {
+            OpenAICompatibleContentBlock::File { file } => {
+                assert_eq!(file.filename, Some("my_config.txt".to_string()));
+                assert_eq!(file.file_data, "data:text/plain;base64,SGVsbG8h");
+            }
+            _ => panic!("Expected File variant"),
+        }
+
+        // Test deserialization without filename (should be None)
+        let json_no_filename = json!({
+            "type": "file",
+            "file": {
+                "file_data": "data:application/pdf;base64,JVBERi0xLjQ="
+            }
+        });
+        let block: OpenAICompatibleContentBlock = serde_json::from_value(json_no_filename).unwrap();
+        match block {
+            OpenAICompatibleContentBlock::File { file } => {
+                assert_eq!(file.filename, None);
+                assert_eq!(file.file_data, "data:application/pdf;base64,JVBERi0xLjQ=");
+            }
+            _ => panic!("Expected File variant"),
+        }
+    }
+
+    #[test]
+    fn test_filename_propagated_through_openai_to_tensorzero_conversion() {
+        // Test that filename flows from OpenAI API format to TensorZero Input type
+        let messages = vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+            content: json!([
+                {
+                    "type": "text",
+                    "text": "Please analyze this file"
+                },
+                {
+                    "type": "file",
+                    "file": {
+                        "file_data": "data:text/plain;base64,SGVsbG8h",
+                        "filename": "important_data.txt"
+                    }
+                }
+            ]),
+        })];
+
+        let input: Input = messages.try_into().unwrap();
+
+        assert_eq!(input.messages.len(), 1);
+        assert_eq!(input.messages[0].role, Role::User);
+        assert_eq!(input.messages[0].content.len(), 2);
+
+        // Check text content
+        match &input.messages[0].content[0] {
+            InputMessageContent::Text(text) => {
+                assert_eq!(text.text, "Please analyze this file");
+            }
+            _ => panic!("Expected Text content"),
+        }
+
+        // Check file content with filename
+        match &input.messages[0].content[1] {
+            InputMessageContent::File(File::Base64(base64_file)) => {
+                assert_eq!(base64_file.filename, Some("important_data.txt".to_string()));
+                assert_eq!(base64_file.mime_type, mime::TEXT_PLAIN);
+            }
+            _ => panic!("Expected Base64File with filename"),
+        }
+
+        // Test without filename
+        let messages_no_filename =
+            vec![OpenAICompatibleMessage::User(OpenAICompatibleUserMessage {
+                content: json!([
+                    {
+                        "type": "file",
+                        "file": {
+                            "file_data": "data:application/pdf;base64,JVBERi0xLjQ="
+                        }
+                    }
+                ]),
+            })];
+
+        let input_no_filename: Input = messages_no_filename.try_into().unwrap();
+        match &input_no_filename.messages[0].content[0] {
+            InputMessageContent::File(File::Base64(base64_file)) => {
+                assert_eq!(base64_file.filename, None);
+                assert_eq!(base64_file.mime_type, mime::APPLICATION_PDF);
+            }
+            _ => panic!("Expected Base64File without filename"),
+        }
     }
 }

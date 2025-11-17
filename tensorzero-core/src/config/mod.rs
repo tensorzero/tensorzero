@@ -1,4 +1,5 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
+use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
@@ -31,7 +32,6 @@ use crate::config::path::ResolvedTomlPath;
 use crate::config::span_map::SpanMap;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -53,6 +53,7 @@ use crate::variant::mixture_of_n::UninitializedMixtureOfNConfig;
 use crate::variant::{Variant, VariantConfig, VariantInfo};
 use std::error::Error as StdError;
 
+pub mod built_in;
 pub mod gateway;
 pub mod path;
 pub mod provider_types;
@@ -83,7 +84,7 @@ pub fn skip_credential_validation() -> bool {
 // Note - the `Default` impl only exists for convenience in tests
 // It might produce a completely broken config - if a test fails,
 // use one of the public `Config` constructors instead.
-#[cfg_attr(test, derive(Default))]
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(Default))]
 pub struct Config {
     pub gateway: GatewayConfig,
     pub models: Arc<ModelTable>, // model name => model config
@@ -99,6 +100,8 @@ pub struct Config {
     pub optimizers: HashMap<String, OptimizerInfo>,
     pub postgres: PostgresConfig,
     pub rate_limiting: RateLimitingConfig,
+    #[serde(skip)]
+    pub http_client: TensorzeroHttpClient,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -391,20 +394,26 @@ impl OtlpConfig {
         if self.traces.enabled {
             match self.traces.format {
                 OtlpTracesFormat::OpenTelemetry => {
-                    span.set_attribute("gen_ai.usage.input_tokens", usage.input_tokens as i64);
-                    span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens as i64);
-                    span.set_attribute(
-                        "gen_ai.usage.total_tokens",
-                        (usage.input_tokens + usage.output_tokens) as i64,
-                    );
+                    if let Some(input_tokens) = usage.input_tokens {
+                        span.set_attribute("gen_ai.usage.input_tokens", input_tokens as i64);
+                    }
+                    if let Some(output_tokens) = usage.output_tokens {
+                        span.set_attribute("gen_ai.usage.output_tokens", output_tokens as i64);
+                    }
+                    if let Some(total_tokens) = usage.total_tokens() {
+                        span.set_attribute("gen_ai.usage.total_tokens", total_tokens as i64);
+                    }
                 }
                 OtlpTracesFormat::OpenInference => {
-                    span.set_attribute("llm.token_count.prompt", usage.input_tokens as i64);
-                    span.set_attribute("llm.token_count.completion", usage.output_tokens as i64);
-                    span.set_attribute(
-                        "llm.token_count.total",
-                        (usage.input_tokens + usage.output_tokens) as i64,
-                    );
+                    if let Some(input_tokens) = usage.input_tokens {
+                        span.set_attribute("llm.token_count.prompt", input_tokens as i64);
+                    }
+                    if let Some(output_tokens) = usage.output_tokens {
+                        span.set_attribute("llm.token_count.completion", output_tokens as i64);
+                    }
+                    if let Some(total_tokens) = usage.total_tokens() {
+                        span.set_attribute("llm.token_count.total", total_tokens as i64);
+                    }
                 }
             }
         }
@@ -724,29 +733,6 @@ impl Config {
         .await
     }
 
-    /// Constructs a dummy (possibly invalid) config.
-    /// The only purpose of this method is to be called by `Client::build_dummy` in pyo3 code,
-    /// where we are unable to use `.await`. We should never actually call any methods
-    /// on a client constructed with this config.
-    #[cfg(feature = "pyo3")]
-    pub fn new_dummy_for_pyo3() -> Config {
-        Config {
-            gateway: Default::default(),
-            models: Default::default(),
-            embedding_models: Default::default(),
-            functions: Default::default(),
-            metrics: Default::default(),
-            tools: Default::default(),
-            evaluations: Default::default(),
-            templates: Default::default(),
-            object_store_info: Default::default(),
-            provider_types: Default::default(),
-            optimizers: Default::default(),
-            postgres: Default::default(),
-            rate_limiting: Default::default(),
-        }
-    }
-
     pub async fn load_and_verify_from_path(config_glob: &ConfigFileGlob) -> Result<Config, Error> {
         Self::load_from_path_optional_verify_credentials(config_glob, true).await
     }
@@ -771,13 +757,10 @@ impl Config {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
         let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
             SKIP_CREDENTIAL_VALIDATION
-                .scope(
-                    (),
-                    Self::load_from_toml(globbed_config.table, &globbed_config.span_map),
-                )
+                .scope((), Self::load_from_toml(globbed_config.table))
                 .await?
         } else {
-            Self::load_from_toml(globbed_config.table, &globbed_config.span_map).await?
+            Self::load_from_toml(globbed_config.table).await?
         };
 
         if validate_credentials {
@@ -789,7 +772,7 @@ impl Config {
         Ok(config)
     }
 
-    async fn load_from_toml(table: toml::Table, span_map: &SpanMap) -> Result<Config, Error> {
+    async fn load_from_toml(table: toml::Table) -> Result<Config, Error> {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.");
         }
@@ -803,15 +786,32 @@ impl Config {
             .gateway
             .load(object_store_info.as_ref())?;
 
-        let functions = uninitialized_config
+        let http_client = TensorzeroHttpClient::new(gateway_config.global_outbound_http_timeout)?;
+
+        // Load built-in functions first
+        let mut functions = built_in::get_all_built_in_functions()?;
+
+        // Load user-defined functions and ensure they don't use tensorzero:: prefix
+        let user_functions = uninitialized_config
             .functions
             .into_iter()
             .map(|(name, config)| {
+                // Prevent user functions from using tensorzero:: prefix
+                if name.starts_with("tensorzero::") {
+                    return Err(Error::new(ErrorDetails::Config {
+                        message: format!(
+                            "User-defined function name cannot start with 'tensorzero::': {name}"
+                        ),
+                    }));
+                }
                 config
                     .load(&name, &uninitialized_config.metrics)
                     .map(|c| (name, Arc::new(c)))
             })
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
+
+        // Merge user functions into the functions map
+        functions.extend(user_functions);
 
         let tools = uninitialized_config
             .tools
@@ -829,6 +829,7 @@ impl Config {
                         &name,
                         &uninitialized_config.provider_types,
                         &provider_type_default_credentials,
+                        http_client.clone(),
                     )
                     .await
                     .map(|c| (name, c))
@@ -844,6 +845,7 @@ impl Config {
                     .load(
                         &uninitialized_config.provider_types,
                         &provider_type_default_credentials,
+                        http_client.clone(),
                     )
                     .await
                     .map(|c| (name, c))
@@ -899,38 +901,18 @@ impl Config {
             optimizers,
             postgres: uninitialized_config.postgres,
             rate_limiting: uninitialized_config.rate_limiting.try_into()?,
+            http_client,
         };
 
         // Initialize the templates
         let template_paths = config.get_templates();
         let template_fs_base_path = if config.gateway.template_filesystem_access.enabled {
-            if let Some(base_path) = &config.gateway.template_filesystem_access.base_path {
-                Some(base_path.get_real_path().map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to get real path for base path: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"),
-                    })
-                })?.to_owned())
-            } else if let Some(single_file) = span_map.get_single_file() {
-                tracing::warn!("Deprecation warning: `[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
-                Some(
-                    single_file
-                        .parent()
-                        .ok_or_else(|| {
-                            Error::new(ErrorDetails::Config {
-                                message: format!(
-                                    "Failed to determine base path for config file `{}`",
-                                    single_file.to_string_lossy()
-                                ),
-                            })
-                        })?
-                        .to_owned(),
-                )
-            } else {
-                return Err(ErrorDetails::Config {
-                    message: "`[gateway.template_filesystem_access]` is enabled, but `[gateway.template_filesystem_access.base_path]` is not set.".to_string()
-                }
-                .into());
-            }
+            let base_path = config.gateway.template_filesystem_access.base_path
+                .as_ref()
+                .ok_or_else(|| Error::new(ErrorDetails::Config {
+                    message: "`gateway.template_filesystem_access.enabled` is true but `base_path` is not specified. Please set `gateway.template_filesystem_access.base_path` to the directory containing your template files.".to_string()
+                }))?;
+            Some(base_path.get_real_path()?.to_owned())
         } else {
             None
         };
@@ -1026,15 +1008,10 @@ impl Config {
             .into());
         }
         // Validate each function
+        // Note: We don't check for tensorzero:: prefix here because:
+        // 1. Built-in functions are allowed to have this prefix
+        // 2. User-defined functions are prevented from using it during loading
         for (function_name, function) in &self.functions {
-            if function_name.starts_with("tensorzero::") {
-                return Err(ErrorDetails::Config {
-                    message: format!(
-                        "Function name cannot start with 'tensorzero::': {function_name}"
-                    ),
-                }
-                .into());
-            }
             function
                 .validate(
                     &self.tools,
@@ -1293,7 +1270,6 @@ pub struct UninitializedConfig {
 /// and merging them into a single `toml::Table`
 struct UninitializedGlobbedConfig {
     table: toml::Table,
-    span_map: SpanMap,
 }
 
 impl UninitializedConfig {
@@ -1302,8 +1278,8 @@ impl UninitializedConfig {
         glob: &ConfigFileGlob,
         allow_empty_glob: bool,
     ) -> Result<UninitializedGlobbedConfig, Error> {
-        let (span_map, table) = SpanMap::from_glob(glob, allow_empty_glob)?;
-        Ok(UninitializedGlobbedConfig { table, span_map })
+        let table = SpanMap::from_glob(glob, allow_empty_glob)?;
+        Ok(UninitializedGlobbedConfig { table })
     }
 }
 
@@ -1742,11 +1718,11 @@ impl PathWithContents {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[serde(default)]
-#[derive(ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct PostgresConfig {
+    pub enabled: Option<bool>,
     #[serde(default = "default_connection_pool_size")]
     pub connection_pool_size: u32,
 }
@@ -1758,6 +1734,7 @@ fn default_connection_pool_size() -> u32 {
 impl Default for PostgresConfig {
     fn default() -> Self {
         Self {
+            enabled: None,
             connection_pool_size: 20,
         }
     }

@@ -1,6 +1,7 @@
 {
   "scripts": {
     "build-bindings": "pnpm --filter=tensorzero-node build-bindings",
+    "generate-python-schemas": "cd clients/python && uv run python generate_schema_types.py",
     "ui:dev": "pnpm --filter=tensorzero-ui dev",
     "ui:storybook": "pnpm --filter=tensorzero-ui storybook",
     "ui:test": "pnpm --filter=tensorzero-ui test",
@@ -19,7 +20,8 @@
       "msw"
     ],
     "overrides": {
-      "on-headers@<1.1.0": ">=1.1.0"
+      "js-yaml": ">=4.1.1",
+      "on-headers": ">=1.1.0"
     }
   }
 }

@@ -1038,3 +1038,84 @@ async fn test_openai_compatible_stop_sequence() {
 
     // We don't bother checking ClickHouse, as we do that in lots of other tests
 }
+
+#[tokio::test]
+async fn test_openai_compatible_file_with_custom_filename() {
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let state = client.get_app_state_data().unwrap().clone();
+    let episode_id = Uuid::now_v7();
+
+    let response = tensorzero_core::endpoints::openai_compatible::inference_handler(
+        State(state),
+        None,
+        StructuredJson(
+            serde_json::from_value(serde_json::json!({
+                "model": "tensorzero::function_name::basic_test_no_system_schema",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "What is in this file?"
+                            },
+                            {
+                                "type": "file",
+                                "file": {
+                                    "file_data": "data:application/pdf;base64,JVBERi0xLjQK",
+                                    "filename": "myfile.pdf"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "stream": false,
+                "tensorzero::episode_id": episode_id.to_string(),
+            }))
+            .unwrap(),
+        ),
+    )
+    .await
+    .unwrap();
+
+    // Check Response is OK
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.into_body().collect().await.unwrap().to_bytes();
+    let response_json: Value = serde_json::from_slice(&response_json).unwrap();
+    let inference_id: Uuid = response_json
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    // Verify the input was stored correctly with the custom filename
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+
+    // Check that the file content block has the custom filename
+    let messages = input.get("messages").unwrap().as_array().unwrap();
+    assert_eq!(messages.len(), 1);
+    let content = messages[0].get("content").unwrap().as_array().unwrap();
+    assert_eq!(content.len(), 2);
+
+    // Second content block should be the file
+    let file_block = &content[1];
+    assert_eq!(file_block.get("type").unwrap().as_str().unwrap(), "file");
+
+    // Verify filename is present in the stored file (fields are at top level, not nested)
+    assert_eq!(
+        file_block.get("filename").unwrap().as_str().unwrap(),
+        "myfile.pdf"
+    );
+}

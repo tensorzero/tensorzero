@@ -1,12 +1,16 @@
 ---
-title: Getting Started with Azure OpenAI Service
+title: Getting Started with Azure OpenAI Service & Azure AI Foundry
 sidebarTitle: Azure
-description: "Learn how to use TensorZero with Azure OpenAI Service LLMs: open-source gateway, observability, optimization, evaluations, and experimentation."
+description: "Learn how to use TensorZero with Azure OpenAI Service and Azure AI Foundry LLMs: open-source gateway, observability, optimization, evaluations, and experimentation."
 ---
 
-This guide shows how to set up a minimal deployment to use the TensorZero Gateway with the Azure OpenAI Service.
+TensorZero's `azure` provider supports both **Azure OpenAI Service** and **Azure AI Foundry**. Both use the same OpenAI-compatible API, so configuration is nearly identical—just use different endpoint URLs.
 
-## Setup
+This guide shows how to set up a minimal deployment to use the TensorZero Gateway with Azure OpenAI Service and Azure AI Foundry.
+
+## Azure OpenAI Service
+
+### Setup
 
 For this minimal setup, you'll need just two files in your project directory:
 
@@ -54,7 +58,7 @@ If you need to configure the endpoint at runtime, you can set it to `endpoint = 
 You must set the `AZURE_OPENAI_API_KEY` environment variable before running the gateway.
 
 You can customize the credential location by setting the `api_key_location` to `env::YOUR_ENVIRONMENT_VARIABLE` or `dynamic::ARGUMENT_NAME`.
-See the [Credential Management](/gateway/guides/credential-management/) guide and [Configuration Reference](/gateway/configuration-reference/) for more information.
+See the [Credential Management](/operations/manage-credentials/) guide and [Configuration Reference](/gateway/configuration-reference/) for more information.
 
 ### Deployment (Docker Compose)
 
@@ -62,7 +66,7 @@ Create a minimal Docker Compose configuration:
 
 ```yaml title="docker-compose.yml"
 # This is a simplified example for learning purposes. Do not use this in production.
-# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+# For production-ready deployments, see: https://www.tensorzero.com/docs/deployment/tensorzero-gateway
 
 services:
   gateway:
@@ -80,7 +84,7 @@ services:
 
 You can start the gateway with `docker compose up`.
 
-## Inference
+### Inference
 
 Make an inference request to the gateway:
 
@@ -100,9 +104,17 @@ curl -X POST http://localhost:3000/inference \
   }'
 ```
 
-## Other Features
+### Other Features
 
-### Generate embeddings
+#### Generate embeddings
 
 The Azure OpenAI Service model provider supports generating embeddings.
 You can find a [complete code example on GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/guides/embeddings/providers/azure).
+
+#### Azure AI Foundry
+
+Azure AI Foundry provides access to models from multiple providers (Meta Llama, Mistral, xAI Grok, Microsoft Phi, Cohere, and more). See the [list of available models](https://ai.azure.com/explore/models).
+
+The same `azure` provider works with Azure AI Foundry.
+The key difference is the endpoint URL.
+All other configuration options (credentials, Docker Compose, inference) work the same as Azure OpenAI Service above.

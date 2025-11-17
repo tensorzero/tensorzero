@@ -418,7 +418,7 @@ mod tests {
         ContentBlockChatOutput, JsonInferenceOutput, StoredInput, System,
     };
     use crate::stored_inference::StoredInferenceDatabase;
-    use crate::tool::ToolCallConfigDatabaseInsert;
+    use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert};
     use crate::{config::ConfigFileGlob, inference::types::Text, tool::ToolChoice};
 
     use super::*;
@@ -453,18 +453,35 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String}
+LIMIT {p1:UInt64}
+OFFSET {p2:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
-        let expected_params = vec![QueryParameter {
-            name: "p0".to_string(),
-            value: "extract_entities".to_string(),
-        }];
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "0".to_string(),
+            },
+        ];
         assert_eq!(params, expected_params);
     }
 
@@ -487,18 +504,35 @@ SELECT
     '' as output_schema,
     i.tags as tags,
     i.tool_params as tool_params,
+    i.dynamic_tools as dynamic_tools,
+    i.dynamic_provider_tools as dynamic_provider_tools,
+    i.allowed_tools as allowed_tools,
+    i.tool_choice as tool_choice,
+    i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
     ChatInference AS i
 WHERE
     i.function_name = {p0:String}
+LIMIT {p1:UInt64}
+OFFSET {p2:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
-        let expected_params = vec![QueryParameter {
-            name: "p0".to_string(),
-            value: "write_haiku".to_string(),
-        }];
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "write_haiku".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "0".to_string(),
+            },
+        ];
         assert_eq!(params, expected_params);
     }
 
@@ -527,6 +561,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -541,6 +580,8 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND j0.value > {p2:Float64}
+LIMIT {p3:UInt64}
+OFFSET {p4:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -555,6 +596,14 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p2".to_string(),
                 value: "0.5".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p4".to_string(),
+                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -616,6 +665,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     demo_f.value AS output,
     [i.output] as dispreferred_outputs
@@ -624,12 +678,24 @@ FROM
 JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
 WHERE
     i.function_name = {p0:String}
+LIMIT {p1:UInt64}
+OFFSET {p2:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
-        let expected_params = vec![QueryParameter {
-            name: "p0".to_string(),
-            value: "extract_entities".to_string(),
-        }];
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "0".to_string(),
+            },
+        ];
         assert_eq!(params, expected_params);
     }
 
@@ -657,6 +723,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -671,6 +742,8 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND j0.value = {p2:Bool}
+LIMIT {p3:UInt64}
+OFFSET {p4:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -685,6 +758,14 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p2".to_string(),
                 value: "1".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p4".to_string(),
+                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -714,6 +795,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -728,6 +814,8 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND j0.value = {p2:Bool}
+LIMIT {p3:UInt64}
+OFFSET {p4:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -741,6 +829,14 @@ FORMAT JSONEachRow";
             },
             QueryParameter {
                 name: "p2".to_string(),
+                value: "0".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p4".to_string(),
                 value: "0".to_string(),
             },
         ];
@@ -787,6 +883,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -810,6 +911,8 @@ LEFT JOIN (
 ) AS j1 ON i.id = j1.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(j0.value > {p2:Float64}, 0) AND COALESCE(j0.value < {p3:Float64}, 0) AND COALESCE(j1.value < {p5:Float64}, 0))
+LIMIT {p6:UInt64}
+OFFSET {p7:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -836,6 +939,14 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p5".to_string(),
                 value: "10".to_string(),
+            },
+            QueryParameter {
+                name: "p6".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p7".to_string(),
+                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -879,6 +990,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -911,6 +1027,8 @@ LEFT JOIN (
 ) AS j2 ON i.episode_id = j2.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(j0.value >= {p2:Float64}, 0) OR COALESCE(j1.value = {p4:Bool}, 0) OR COALESCE(j2.value = {p6:Bool}, 0))
+LIMIT {p7:UInt64}
+OFFSET {p8:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -941,6 +1059,14 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p6".to_string(),
                 value: "1".to_string(),
+            },
+            QueryParameter {
+                name: "p7".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p8".to_string(),
+                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -980,6 +1106,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -994,6 +1125,8 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND NOT (COALESCE((COALESCE(j0.value = {p2:Bool}, 0) OR COALESCE(j0.value = {p3:Bool}, 0)), 1))
+LIMIT {p4:UInt64}
+OFFSET {p5:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1011,6 +1144,14 @@ FORMAT JSONEachRow";
             },
             QueryParameter {
                 name: "p3".to_string(),
+                value: "0".to_string(),
+            },
+            QueryParameter {
+                name: "p4".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p5".to_string(),
                 value: "0".to_string(),
             },
         ];
@@ -1061,6 +1202,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1093,9 +1239,11 @@ LEFT JOIN (
 ) AS j2 ON i.id = j2.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE((COALESCE(j0.value > {p2:Float64}, 0) OR COALESCE(j1.value <= {p4:Float64}, 0)), 0) AND COALESCE(NOT (COALESCE(j2.value = {p6:Bool}, 1)), 0))
+LIMIT {p7:UInt64}
+OFFSET {p8:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
-        assert_eq!(params.len(), 7); // p0 (function) + 6 metric-related params
+        assert_eq!(params.len(), 9); // p0 (function) + 6 metric-related params + 2 limit/offset params
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1149,6 +1297,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1163,9 +1316,11 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.timestamp > parseDateTimeBestEffort({p1:String}), 0) AND COALESCE((COALESCE(i.timestamp < parseDateTimeBestEffort({p2:String}), 0) OR COALESCE((COALESCE(j0.value >= {p4:Float64}, 0) AND COALESCE(i.tags[{p5:String}] = {p6:String}, 0)), 0)), 0))
+LIMIT {p7:UInt64}
+OFFSET {p8:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
-        assert_eq!(params.len(), 7); // p0 (function) + 6 filter-related params
+        assert_eq!(params.len(), 9); // p0 (function) + 6 filter-related params + 2 limit/offset params
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1189,12 +1344,19 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.variant_name = {p1:String}
+LIMIT {p2:UInt64}
+OFFSET {p3:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1206,6 +1368,14 @@ FORMAT JSONEachRow";
                 name: "p1".to_string(),
                 value: "v1".to_string(),
             },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "0".to_string(),
+            },
         ];
         assert_eq!(params, expected_params);
     }
@@ -1215,8 +1385,8 @@ FORMAT JSONEachRow";
         let config = get_e2e_config().await;
         let opts = ListInferencesParams {
             function_name: Some("extract_entities"),
-            limit: Some(50),
-            offset: Some(100),
+            limit: 50,
+            offset: 100,
             ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1231,6 +1401,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1282,6 +1457,7 @@ FORMAT JSONEachRow";
                 ..Default::default()
             };
             let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+            // TODO(#4608) LIMIT and OFFSET need to be pushed down to subqueries.
             let expected_sql = format!(
                 r"
 SELECT
@@ -1294,6 +1470,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1308,6 +1489,8 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {{p0:String}} AND j0.value {expected_op_str} {{p2:Float64}}
+LIMIT {{p3:UInt64}}
+OFFSET {{p4:UInt64}}
 FORMAT JSONEachRow",
             );
             assert_query_equals(&sql, &expected_sql);
@@ -1323,6 +1506,14 @@ FORMAT JSONEachRow",
                 QueryParameter {
                     name: "p2".to_string(),
                     value: "0.5".to_string(),
+                },
+                QueryParameter {
+                    name: "p3".to_string(),
+                    value: "20".to_string(),
+                },
+                QueryParameter {
+                    name: "p4".to_string(),
+                    value: "0".to_string(),
                 },
             ];
             assert_eq!(params, expected_params);
@@ -1354,12 +1545,19 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.tags[{p1:String}] = {p2:String}
+LIMIT {p3:UInt64}
+OFFSET {p4:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1374,6 +1572,14 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p2".to_string(),
                 value: "production".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p4".to_string(),
+                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1404,12 +1610,19 @@ SELECT
     '' as output_schema,
     i.tags as tags,
     i.tool_params as tool_params,
+    i.dynamic_tools as dynamic_tools,
+    i.dynamic_provider_tools as dynamic_provider_tools,
+    i.allowed_tools as allowed_tools,
+    i.tool_choice as tool_choice,
+    i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
     ChatInference AS i
 WHERE
     i.function_name = {p0:String} AND i.tags[{p1:String}] != {p2:String}
+LIMIT {p3:UInt64}
+OFFSET {p4:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1424,6 +1637,14 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p2".to_string(),
                 value: "v1.0".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p4".to_string(),
+                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1463,12 +1684,19 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(i.tags[{p3:String}] = {p4:String}, 0))
+LIMIT {p5:UInt64}
+OFFSET {p6:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1491,6 +1719,14 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p4".to_string(),
                 value: "us-west".to_string(),
+            },
+            QueryParameter {
+                name: "p5".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p6".to_string(),
+                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1530,6 +1766,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1544,6 +1785,8 @@ LEFT JOIN (
 ) AS j0 ON i.id = j0.target_id
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(j0.value > {p4:Float64}, 0))
+LIMIT {p5:UInt64}
+OFFSET {p6:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1566,6 +1809,14 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p4".to_string(),
                 value: "0.7".to_string(),
+            },
+            QueryParameter {
+                name: "p5".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p6".to_string(),
+                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1592,8 +1843,8 @@ FORMAT JSONEachRow";
             variant_name: Some("production"),
             filters: Some(&filter_node),
             output_source: InferenceOutputSource::Demonstration,
-            limit: Some(25),
-            offset: Some(50),
+            limit: 25,
+            offset: 50,
             ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1608,6 +1859,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     demo_f.value AS output,
     [i.output] as dispreferred_outputs
@@ -1700,12 +1956,19 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.timestamp > parseDateTimeBestEffort({p1:String})
+LIMIT {p2:UInt64}
+OFFSET {p3:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1716,6 +1979,14 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p1".to_string(),
                 value: "2023-01-01 00:00:00 UTC".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1756,12 +2027,19 @@ SELECT
     '' as output_schema,
     i.tags as tags,
     i.tool_params as tool_params,
+    i.dynamic_tools as dynamic_tools,
+    i.dynamic_provider_tools as dynamic_provider_tools,
+    i.allowed_tools as allowed_tools,
+    i.tool_choice as tool_choice,
+    i.parallel_tool_calls as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
     ChatInference AS i
 WHERE
     i.function_name = {{p0:String}} AND i.timestamp {expected_op_str} parseDateTimeBestEffort({{p1:String}})
+LIMIT {{p2:UInt64}}
+OFFSET {{p3:UInt64}}
 FORMAT JSONEachRow",
             );
             assert_query_equals(&sql, &expected_sql);
@@ -1773,6 +2051,14 @@ FORMAT JSONEachRow",
                 QueryParameter {
                     name: "p1".to_string(),
                     value: "2023-01-01 00:00:00 UTC".to_string(),
+                },
+                QueryParameter {
+                    name: "p2".to_string(),
+                    value: "20".to_string(),
+                },
+                QueryParameter {
+                    name: "p3".to_string(),
+                    value: "0".to_string(),
                 },
             ];
             assert_eq!(params, expected_params);
@@ -1803,7 +2089,7 @@ FORMAT JSONEachRow",
         let opts = ListInferencesParams {
             function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            limit: Some(10),
+            limit: 10,
             ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -1818,6 +2104,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -1833,6 +2124,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.timestamp >= parseDateTimeBestEffort({p1:String}), 0) AND COALESCE(i.tags[{p2:String}] = {p3:String}, 0) AND COALESCE(j0.value > {p5:Float64}, 0))
 LIMIT {p6:UInt64}
+OFFSET {p7:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
@@ -1863,6 +2155,10 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p6".to_string(),
                 value: "10".to_string(),
+            },
+            QueryParameter {
+                name: "p7".to_string(),
+                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -1906,11 +2202,16 @@ FORMAT JSONEachRow";
         assert!(chat_inference.dispreferred_outputs.is_empty());
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert {
-                tools_available: vec![],
-                tool_choice: ToolChoice::None,
-                parallel_tool_calls: Some(false),
-            }
+            ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![],
+                AllowedTools {
+                    tools: vec![],
+                    choice: AllowedToolsChoice::FunctionDefault,
+                },
+                ToolChoice::None,
+                Some(false),
+            )
         );
 
         // Test the Python version (singly serialized)
@@ -1947,11 +2248,16 @@ FORMAT JSONEachRow";
         );
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert {
-                tools_available: vec![],
-                tool_choice: ToolChoice::None,
-                parallel_tool_calls: Some(false),
-            }
+            ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![],
+                AllowedTools {
+                    tools: vec![],
+                    choice: AllowedToolsChoice::FunctionDefault,
+                },
+                ToolChoice::None,
+                Some(false),
+            )
         );
         assert!(chat_inference.dispreferred_outputs.is_empty());
     }
@@ -2209,6 +2515,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -2216,13 +2527,25 @@ FROM
 WHERE
     i.function_name = {p0:String}
 ORDER BY i.timestamp DESC NULLS LAST
+LIMIT {p1:UInt64}
+OFFSET {p2:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
 
-        let expected_params = vec![QueryParameter {
-            name: "p0".to_string(),
-            value: "extract_entities".to_string(),
-        }];
+        let expected_params = vec![
+            QueryParameter {
+                name: "p0".to_string(),
+                value: "extract_entities".to_string(),
+            },
+            QueryParameter {
+                name: "p1".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "0".to_string(),
+            },
+        ];
         assert_eq!(params, expected_params);
     }
 
@@ -2253,6 +2576,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -2268,6 +2596,8 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String}
 ORDER BY j0.value ASC NULLS LAST
+LIMIT {p2:UInt64}
+OFFSET {p3:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
 
@@ -2279,6 +2609,14 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p1".to_string(),
                 value: "jaccard_similarity".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);
@@ -2317,6 +2655,11 @@ SELECT
     i.output_schema as output_schema,
     i.tags as tags,
     '' as tool_params,
+    [] as dynamic_tools,
+    [] as dynamic_provider_tools,
+    NULL as allowed_tools,
+    NULL as tool_choice,
+    NULL as parallel_tool_calls,
     i.variant_name as variant_name,
     i.output as output
 FROM
@@ -2332,6 +2675,8 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String}
 ORDER BY j0.value DESC NULLS LAST, i.timestamp ASC NULLS LAST
+LIMIT {p2:UInt64}
+OFFSET {p3:UInt64}
 FORMAT JSONEachRow";
         assert_query_equals(&sql, expected_sql);
 
@@ -2343,6 +2688,14 @@ FORMAT JSONEachRow";
             QueryParameter {
                 name: "p1".to_string(),
                 value: "jaccard_similarity".to_string(),
+            },
+            QueryParameter {
+                name: "p2".to_string(),
+                value: "20".to_string(),
+            },
+            QueryParameter {
+                name: "p3".to_string(),
+                value: "0".to_string(),
             },
         ];
         assert_eq!(params, expected_params);

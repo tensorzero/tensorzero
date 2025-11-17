@@ -10,12 +10,44 @@ from .client import (
     BaseTensorZeroGateway,
     TensorZeroGateway,
 )
+
+# Generated dataclasses
+from .generated_types import (
+    ContentBlockChatOutput,
+    ContentBlockChatOutputText,
+    CreateDatapointRequest,
+    CreateDatapointRequestChat,
+    CreateDatapointRequestJson,
+    CreateDatapointsFromInferenceRequestParamsInferenceIds,
+    CreateDatapointsResponse,
+    DatapointMetadataUpdate,
+    DeleteDatapointsResponse,
+    GetDatapointsResponse,
+    GetInferencesRequest,
+    GetInferencesResponse,
+    InferenceFilter,
+    InferenceFilterAnd,
+    InferenceFilterBooleanMetric,
+    InferenceFilterFloatMetric,
+    InferenceFilterNot,
+    InferenceFilterOr,
+    InferenceFilterTag,
+    InferenceFilterTime,
+    Input,
+    InputMessage,
+    InputMessageContentTemplate,
+    InputMessageContentText,
+    JsonDatapointOutputUpdate,
+    ListDatapointsRequest,
+    ListInferencesRequest,
+    UpdateDatapointMetadataRequest,
+    UpdateDatapointsResponse,
+)
 from .tensorzero import (
     BestOfNSamplingConfig,
     ChainOfThoughtConfig,
     ChatCompletionConfig,
     Config,
-    Datapoint,
     DICLConfig,
     DICLOptimizationConfig,
     FireworksSFTConfig,
@@ -23,6 +55,7 @@ from .tensorzero import (
     FunctionConfigJson,
     FunctionsConfig,
     GCPVertexGeminiSFTConfig,
+    LegacyDatapoint,
     MixtureOfNConfig,
     OpenAIRFTConfig,
     OpenAISFTConfig,
@@ -40,9 +73,9 @@ from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
-    AndFilter,
+    AndFilter,  # pyright: ignore[reportDeprecated]
     BaseTensorZeroError,
-    BooleanMetricFilter,
+    BooleanMetricFilter,  # pyright: ignore[reportDeprecated]
     ChatDatapointInsert,
     ChatInferenceResponse,
     ContentBlock,
@@ -54,7 +87,7 @@ from .types import (
     FileBase64,
     FileUrl,
     FinishReason,
-    FloatMetricFilter,
+    FloatMetricFilter,  # pyright: ignore[reportDeprecated]
     ImageBase64,
     ImageUrl,
     InferenceChunk,
@@ -64,12 +97,12 @@ from .types import (
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
-    NotFilter,
+    NotFilter,  # pyright: ignore[reportDeprecated]
     OrderBy,
-    OrFilter,
+    OrFilter,  # pyright: ignore[reportDeprecated]
     RawText,
     System,
-    TagFilter,
+    TagFilter,  # pyright: ignore[reportDeprecated]
     Template,
     TensorZeroError,
     TensorZeroInternalError,
@@ -77,7 +110,7 @@ from .types import (
     TextChunk,
     Thought,
     ThoughtChunk,
-    TimeFilter,
+    TimeFilter,  # pyright: ignore[reportDeprecated]
     Tool,
     ToolCall,
     ToolCallChunk,
@@ -93,8 +126,8 @@ from .types import (
 # DEPRECATED: use RenderedSample instead
 RenderedStoredInference = RenderedSample
 # Type aliases to preserve backward compatibility with main
-ChatDatapoint = Datapoint.Chat
-JsonDatapoint = Datapoint.Json
+ChatDatapoint = LegacyDatapoint.Chat
+JsonDatapoint = LegacyDatapoint.Json
 
 
 # CAREFUL: deprecated
@@ -135,9 +168,37 @@ __all__ = [
     "ChatInferenceResponse",
     "Config",
     "ContentBlock",
-    "Datapoint",
+    "CreateDatapointRequest",
+    "CreateDatapointRequestChat",
+    "CreateDatapointRequestJson",
+    "CreateDatapointsResponse",
+    "Input",
+    "InputMessage",
+    "InputMessageContentText",
+    "InputMessageContentTemplate",
+    "ContentBlockChatOutput",
+    "ContentBlockChatOutputText",
+    "CreateDatapointsFromInferenceRequestParamsInferenceIds",
+    "LegacyDatapoint",
+    "DatapointMetadataUpdate",
+    "DeleteDatapointsResponse",
     "DiclOptimizationConfig",  # DEPRECATED
     "DICLOptimizationConfig",
+    "GetDatapointsResponse",
+    "GetInferencesRequest",
+    "GetInferencesResponse",
+    "InferenceFilter",
+    "InferenceFilterAnd",
+    "InferenceFilterBooleanMetric",
+    "InferenceFilterFloatMetric",
+    "InferenceFilterNot",
+    "InferenceFilterOr",
+    "InferenceFilterTag",
+    "InferenceFilterTime",
+    "JsonDatapointOutputUpdate",
+    "ListDatapointsRequest",
+    "ListInferencesRequest",
+    "UpdateDatapointsResponse",
     "DynamicEvaluationRunEpisodeResponse",  # DEPRECATED
     "DynamicEvaluationRunResponse",  # DEPRECATED
     "EvaluatorStatsDict",
@@ -206,6 +267,7 @@ __all__ = [
     "ToolCallChunk",
     "ToolResult",
     "UnknownContentBlock",
+    "UpdateDatapointMetadataRequest",
     "Usage",
 ]
 

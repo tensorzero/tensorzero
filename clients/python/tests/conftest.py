@@ -1,3 +1,4 @@
+# pyright: reportDeprecated=false
 import inspect
 import json
 import os
@@ -350,7 +351,7 @@ def evaluation_datasets(
     json_fixture_path = fixtures_dir / "json_datapoint_fixture.jsonl"
     json_datapoints = _load_json_datapoints_from_fixture(json_fixture_path, "extract_entities_0.8")
     if json_datapoints:
-        embedded_sync_client.create_datapoints(
+        embedded_sync_client.create_datapoints_legacy(
             dataset_name=dataset_mapping["extract_entities_0.8"],
             datapoints=cast(
                 Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
@@ -362,7 +363,7 @@ def evaluation_datasets(
     chat_fixture_path = fixtures_dir / "chat_datapoint_fixture.jsonl"
     chat_datapoints = _load_chat_datapoints_from_fixture(chat_fixture_path, "good-haikus-no-output")
     if chat_datapoints:
-        embedded_sync_client.create_datapoints(
+        embedded_sync_client.create_datapoints_legacy(
             dataset_name=dataset_mapping["good-haikus-no-output"],
             datapoints=cast(
                 Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],

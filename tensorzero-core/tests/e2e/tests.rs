@@ -7,6 +7,7 @@
 )]
 mod batch;
 mod best_of_n;
+mod built_in;
 mod cache;
 mod clickhouse;
 mod common;
@@ -29,7 +30,6 @@ mod inference_evaluation_human_feedback;
 mod mixture_of_n;
 mod object_storage;
 mod openai_compatible;
-mod optimization;
 mod otel;
 mod otel_config_headers;
 mod otel_export;

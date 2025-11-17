@@ -9,10 +9,11 @@ on:
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 
-# When triggered from the merge queue (via the workflow call in 'general.yml'), cancel any existing workflow runs for the same PR branch
+# When triggered from the merge queue, cancel any existing workflow runs for the same PR branch
 # Otherwise, use the unique run id for the concurrency group, to prevent anything from getting cancelled
+# Note that the event will be 'merge_group' when general.yml calls this workflow via a 'workflow_call' event
 concurrency:
-  group: ${{ github.event_name == 'workflow_call' && format('{0}-{1}', github.workflow, github.ref) || github.run_id }}
+  group: ${{ github.event_name == 'merge_group' && format('merge-queue-{0}-{1}', github.workflow, github.ref) || github.run_id }}
   cancel-in-progress: true
 
 env:
@@ -23,6 +24,7 @@ env:
   AZURE_AI_FOUNDRY_API_KEY: ${{ secrets.AZURE_AI_FOUNDRY_API_KEY }}
   AZURE_OPENAI_API_BASE: ${{secrets.AZURE_OPENAI_API_BASE }}
   AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+  AZURE_OPENAI_EASTUS2_API_KEY: ${{ secrets.AZURE_OPENAI_EASTUS2_API_KEY }}
   AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }}
   DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
   FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
@@ -57,12 +59,12 @@ env:
   TENSORZERO_CI: 1
 
 jobs:
-  batch-tests:
+  mocked-batch-tests:
     permissions:
       contents: read
       actions: read
     if: github.repository == 'tensorzero/tensorzero'
-    uses: ./.github/workflows/batch-test.yml
+    uses: ./.github/workflows/mocked-batch-test.yml
     secrets: inherit
 
   live-tests:
@@ -111,9 +113,9 @@ jobs:
       - name: Pull images referenced by the compose file
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml pull --ignore-pull-failures
 
-      - name: Run live tests container via Docker Compos
+      - name: Run live tests container via Docker Compose
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --rm -e TENSORZERO_CI=1 live-tests
+          DOCKER_UID=$(id -u) DOCKER_GID=$(id -g) docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --rm -e TENSORZERO_CI=1 live-tests
 
       - name: Print live tests logs
         if: always()
@@ -133,12 +135,11 @@ jobs:
 
       - name: Upload provider-proxy cache
         # Only upload the cache when we're running from a 'good' run
-        # (running from the merge queue via 'workflow_call' from general.yml, or a cron job)
+        # (running from the merge queue via `general.yml` or a cron job)
         # This prevents manual workflow runs from modifying the cache
-        if: github.event_name == 'workflow_call' || github.event_name == 'schedule'
+        if: github.event_name == 'merge_group' || github.event_name == 'schedule'
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache ./ci/upload-provider-proxy-cache.sh
-
 
   client-tests:
     name: "client-tests (batch_writes: ${{ matrix.batch_writes }})"
@@ -415,7 +416,7 @@ jobs:
         # Only upload the cache when we're running from a 'good' run
         # (running from the merge queue via 'workflow_call' from general.yml, or a cron job)
         # This prevents manual workflow runs from modifying the cache
-        if: github.event_name == 'workflow_call' || github.event_name == 'schedule'
+        if: github.event_name == 'merge_group' || github.event_name == 'schedule'
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache-client-tests ./ci/upload-provider-proxy-cache.sh
 
@@ -485,11 +486,11 @@ jobs:
         ui-tests-e2e-regen-model-inference-cache,
         client-tests,
         live-tests,
-        batch-tests,
+        mocked-batch-tests,
       ]
     runs-on: ubuntu-latest
     steps:
       # When running in the merge queue, jobs should never be skipped.
       # In a scheduled run, some jobs may be intentionally skipped, as we only care about regenerating the model inference cache.
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || (github.event_name == 'workflow_call' && contains(needs.*.result, 'skipped')) }}
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || (github.event_name != 'pull_request' && contains(needs.*.result, 'skipped')) }}
         run: exit 1
