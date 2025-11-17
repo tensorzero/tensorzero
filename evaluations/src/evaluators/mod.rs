@@ -36,12 +36,11 @@ pub struct EvaluateInferenceParams {
 
 /// Evaluates the inference response for the given datapoint using the evaluators specified in the evaluation config.
 ///
-/// ## Adaptive Stopping (Optional)
+/// ## Adaptive Stopping
 ///
-/// If `cancellation_tokens` is provided, evaluators whose tokens are cancelled will be skipped.
-/// This is used for adaptive stopping where evaluators stop independently based on precision convergence.
-/// - If `cancellation_tokens` is None: runs all evaluators in the config
-/// - If `cancellation_tokens` is Some(map): only runs evaluators whose tokens are not cancelled
+/// The `cancellation_tokens` parameter controls which evaluators run:
+/// - If the token map is empty: runs all evaluators in the config (no adaptive stopping)
+/// - If the token map is non-empty: skips evaluators in the map with cancelled tokens
 ///
 /// ## Return Value
 ///
@@ -68,7 +67,7 @@ pub(crate) async fn evaluate_inference(
     } = params;
     let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
 
-    // Filter evaluators based on cancellation tokens (if provided)
+    // Filter evaluators based on cancellation tokens
     let evaluators_to_run = inference_evaluation_config
         .evaluators
         .keys()
