@@ -66,35 +66,35 @@ impl InferenceQueries for ClickHouseConnectionInfo {
 
         // Add function_name filter
         if let Some(function_name) = params.function_name {
-            let placeholder = add_parameter(
+            let function_name_param = add_parameter(
                 function_name,
                 ClickhouseType::String,
                 &mut query_params,
                 &mut param_idx_counter,
             );
-            where_clauses.push(format!("function_name = {placeholder}"));
+            where_clauses.push(format!("function_name = {function_name_param}"));
         }
 
         // Add variant_name filter
         if let Some(variant_name) = params.variant_name {
-            let placeholder = add_parameter(
+            let variant_name_param = add_parameter(
                 variant_name,
                 ClickhouseType::String,
                 &mut query_params,
                 &mut param_idx_counter,
             );
-            where_clauses.push(format!("variant_name = {placeholder}"));
+            where_clauses.push(format!("variant_name = {variant_name_param}"));
         }
 
         // Add episode_id filter
         if let Some(episode_id) = params.episode_id {
-            let placeholder = add_parameter(
+            let episode_id_param = add_parameter(
                 episode_id.to_string(),
                 ClickhouseType::String,
                 &mut query_params,
                 &mut param_idx_counter,
             );
-            where_clauses.push(format!("episode_id = {placeholder}"));
+            where_clauses.push(format!("episode_id = {episode_id_param}"));
         }
 
         // Build WHERE clause
@@ -106,11 +106,11 @@ impl InferenceQueries for ClickHouseConnectionInfo {
 
         // Build the query
         // Note: We use uint_to_uuid() to convert UInt128 back to UUID format
-        // MIN(id_uint) = oldest (last_id), MAX(id_uint) = most recent (first_id)
+        // MIN(id_uint) = oldest (earliest_id), MAX(id_uint) = most recent (latest_id)
         let mut query = format!(
             r"SELECT
-    uint_to_uuid(MAX(id_uint)) AS first_id,
-    uint_to_uuid(MIN(id_uint)) AS last_id,
+    uint_to_uuid(MAX(id_uint)) AS latest_id,
+    uint_to_uuid(MIN(id_uint)) AS earliest_id,
     toUInt64(COUNT()) AS count
 FROM InferenceById FINAL
 {where_clause}"
@@ -118,7 +118,7 @@ FROM InferenceById FINAL
         query.push_str("\nFORMAT JSONEachRow");
 
         // Execute the query
-        let query_params_map: std::collections::HashMap<&str, &str> = query_params
+        let query_params_map = query_params
             .iter()
             .map(|p| (p.name.as_str(), p.value.as_str()))
             .collect();
@@ -139,7 +139,7 @@ FROM InferenceById FINAL
                     })
                 })
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .try_collect()?;
 
         // Handle empty results
         if rows.is_empty() || rows[0].count == 0 {
@@ -147,8 +147,8 @@ FROM InferenceById FINAL
         }
 
         Ok(InferenceBounds {
-            first_id: rows[0].first_id,
-            last_id: rows[0].last_id,
+            latest_id: rows[0].latest_id,
+            earliest_id: rows[0].earliest_id,
             count: rows[0].count,
         })
     }
@@ -990,17 +990,18 @@ mod tests {
             mock_clickhouse_client
                 .expect_run_query_synchronous()
                 .withf(|query, _| {
-                    assert_query_contains(query, "SELECT");
-                    assert_query_contains(query, "uint_to_uuid(MAX(id_uint)) AS first_id");
-                    assert_query_contains(query, "uint_to_uuid(MIN(id_uint)) AS last_id");
-                    assert_query_contains(query, "toUInt64(COUNT()) AS count");
-                    assert_query_contains(query, "FROM InferenceById FINAL");
-                    assert_query_does_not_contain(query, "WHERE");
+                    assert_query_contains(query, "
+                    SELECT
+                        uint_to_uuid(MAX(id_uint)) AS latest_id,
+                        uint_to_uuid(MIN(id_uint)) AS earliest_id,
+                        toUInt64(COUNT()) AS count
+                    FROM InferenceById FINAL
+                    FORMAT JSONEachRow");
                     true
                 })
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"first_id":"01234567-89ab-cdef-0123-456789abcdef","last_id":"fedcba98-7654-3210-fedc-ba9876543210","count":42}"#.to_string(),
+                        response: r#"{"latest_id":"01234567-89ab-cdef-0123-456789abcdef","earliest_id":"fedcba98-7654-3210-fedc-ba9876543210","count":42}"#.to_string(),
                         metadata: ClickHouseResponseMetadata {
                             read_rows: 1,
                             written_rows: 0,
@@ -1019,11 +1020,11 @@ mod tests {
                 .unwrap();
 
             assert_eq!(
-                result.first_id,
+                result.latest_id,
                 Some(Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap())
             );
             assert_eq!(
-                result.last_id,
+                result.earliest_id,
                 Some(Uuid::parse_str("fedcba98-7654-3210-fedc-ba9876543210").unwrap())
             );
             assert_eq!(result.count, 42);
@@ -1041,7 +1042,7 @@ mod tests {
                 })
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"first_id":"11111111-2222-3333-4444-555555555555","last_id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","count":10}"#.to_string(),
+                        response: r#"{"latest_id":"11111111-2222-3333-4444-555555555555","earliest_id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","count":10}"#.to_string(),
                         metadata: ClickHouseResponseMetadata {
                             read_rows: 1,
                             written_rows: 0,
@@ -1060,7 +1061,7 @@ mod tests {
                 .unwrap();
 
             assert_eq!(
-                result.first_id,
+                result.latest_id,
                 Some(Uuid::parse_str("11111111-2222-3333-4444-555555555555").unwrap())
             );
             assert_eq!(result.count, 10);
@@ -1078,7 +1079,7 @@ mod tests {
                 })
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"first_id":"22222222-3333-4444-5555-666666666666","last_id":"bbbbbbbb-cccc-dddd-eeee-ffffffffffff","count":5}"#.to_string(),
+                        response: r#"{"latest_id":"22222222-3333-4444-5555-666666666666","earliest_id":"bbbbbbbb-cccc-dddd-eeee-ffffffffffff","count":5}"#.to_string(),
                         metadata: ClickHouseResponseMetadata {
                             read_rows: 1,
                             written_rows: 0,
@@ -1097,7 +1098,7 @@ mod tests {
                 .unwrap();
 
             assert_eq!(
-                result.first_id,
+                result.latest_id,
                 Some(Uuid::parse_str("22222222-3333-4444-5555-666666666666").unwrap())
             );
             assert_eq!(result.count, 5);
@@ -1119,7 +1120,7 @@ mod tests {
                 })
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"first_id":"33333333-4444-5555-6666-777777777777","last_id":"cccccccc-dddd-eeee-ffff-000000000000","count":3}"#.to_string(),
+                        response: r#"{"latest_id":"33333333-4444-5555-6666-777777777777","earliest_id":"cccccccc-dddd-eeee-ffff-000000000000","count":3}"#.to_string(),
                         metadata: ClickHouseResponseMetadata {
                             read_rows: 1,
                             written_rows: 0,
@@ -1138,7 +1139,7 @@ mod tests {
                 .unwrap();
 
             assert_eq!(
-                result.first_id,
+                result.latest_id,
                 Some(Uuid::parse_str("33333333-4444-5555-6666-777777777777").unwrap())
             );
             assert_eq!(result.count, 3);
@@ -1151,10 +1152,12 @@ mod tests {
             mock_clickhouse_client
                 .expect_run_query_synchronous()
                 .withf(move |query, params| {
-                    assert_query_contains(query, "WHERE");
-                    assert_query_contains(query, "function_name = {p0:String}");
-                    assert_query_contains(query, "variant_name = {p1:String}");
-                    assert_query_contains(query, "episode_id = {p2:String}");
+                    assert_query_contains(query, "
+                    WHERE
+                        function_name = {p0:String}
+                        AND variant_name = {p1:String}
+                        AND episode_id = {p2:String}
+                    ");
                     assert_eq!(params.get("p0"), Some(&"test_function"));
                     assert_eq!(params.get("p1"), Some(&"test_variant"));
                     assert_eq!(
@@ -1165,7 +1168,7 @@ mod tests {
                 })
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"first_id":"44444444-5555-6666-7777-888888888888","last_id":"dddddddd-eeee-ffff-0000-111111111111","count":1}"#.to_string(),
+                        response: r#"{"latest_id":"44444444-5555-6666-7777-888888888888","earliest_id":"dddddddd-eeee-ffff-0000-111111111111","count":1}"#.to_string(),
                         metadata: ClickHouseResponseMetadata {
                             read_rows: 1,
                             written_rows: 0,
@@ -1184,7 +1187,7 @@ mod tests {
                 .unwrap();
 
             assert_eq!(
-                result.first_id,
+                result.latest_id,
                 Some(Uuid::parse_str("44444444-5555-6666-7777-888888888888").unwrap())
             );
             assert_eq!(result.count, 1);
@@ -1216,8 +1219,8 @@ mod tests {
                 .unwrap();
 
             assert_eq!(result, InferenceBounds::empty());
-            assert_eq!(result.first_id, None);
-            assert_eq!(result.last_id, None);
+            assert_eq!(result.latest_id, None);
+            assert_eq!(result.earliest_id, None);
             assert_eq!(result.count, 0);
         }
 
@@ -1228,7 +1231,7 @@ mod tests {
                 .expect_run_query_synchronous()
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"first_id":null,"last_id":null,"count":0}"#.to_string(),
+                        response: r#"{"latest_id":null,"earliest_id":null,"count":0}"#.to_string(),
                         metadata: ClickHouseResponseMetadata {
                             read_rows: 1,
                             written_rows: 0,
@@ -1247,8 +1250,8 @@ mod tests {
                 .unwrap();
 
             assert_eq!(result, InferenceBounds::empty());
-            assert_eq!(result.first_id, None);
-            assert_eq!(result.last_id, None);
+            assert_eq!(result.latest_id, None);
+            assert_eq!(result.earliest_id, None);
             assert_eq!(result.count, 0);
         }
     }

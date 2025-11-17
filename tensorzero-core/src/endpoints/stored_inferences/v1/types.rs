@@ -275,35 +275,17 @@ pub struct GetInferencesResponse {
     pub inferences: Vec<StoredInference>,
 }
 
-/// Query parameters for the inference bounds endpoint.
-/// Used by the `GET /internal/v1/inferences/bounds` endpoint.
-#[derive(Debug, Deserialize)]
-pub struct GetInferenceBoundsQueryParams {
-    /// Optional function name to filter inferences by.
-    pub function_name: Option<String>,
-
-    /// Optional variant name to filter inferences by.
-    pub variant_name: Option<String>,
-
-    /// Optional episode ID to filter inferences by.
-    pub episode_id: Option<Uuid>,
-}
-
 /// Response containing the inference table bounds.
-/// Used by the `GET /internal/v1/inferences/bounds` endpoint.
-#[derive(Debug, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
-#[ts(export)]
-#[export_schema]
+/// Used by the `GET /internal/inferences/bounds` endpoint.
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[serde_with::skip_serializing_none]
+#[ts(export, optional_fields)]
 pub struct GetInferenceBoundsResponse {
     /// The most recent inference ID (MAX id_uint).
-    /// NOTE: Despite the name "first_id", this is actually the MAX/most recent ID
-    /// for backward compatibility with the TypeScript implementation.
-    pub first_id: Option<Uuid>,
+    pub latest_id: Option<Uuid>,
 
     /// The oldest inference ID (MIN id_uint).
-    /// NOTE: Despite the name "last_id", this is actually the MIN/oldest ID
-    /// for backward compatibility with the TypeScript implementation.
-    pub last_id: Option<Uuid>,
+    pub earliest_id: Option<Uuid>,
 
     /// The total number of inferences matching the filter criteria.
     pub count: u64,

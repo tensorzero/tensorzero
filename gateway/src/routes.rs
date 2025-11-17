@@ -218,7 +218,7 @@ fn build_internal_routes() -> Router<AppStateData> {
             get(endpoints::object_storage::get_object_handler),
         )
         .route(
-            "/internal/v1/inferences/bounds",
+            "/internal/inferences/bounds",
             get(endpoints::stored_inferences::v1::get_inference_bounds_handler),
         )
 }

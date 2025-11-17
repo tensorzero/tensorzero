@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_with::{serde_as, DisplayFromStr};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -233,21 +234,18 @@ pub struct GetInferenceBoundsParams {
 
 /// Result from querying inference table bounds.
 /// Contains the min/max inference IDs and the total count.
-///
-/// NOTE: The naming is counterintuitive for backward compatibility with the TypeScript implementation:
-/// - `first_id`: The most recent inference ID (MAX id_uint in ClickHouse)
-/// - `last_id`: The oldest inference ID (MIN id_uint in ClickHouse)
+#[serde_as]
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 pub struct InferenceBounds {
     /// The most recent inference ID (MAX id_uint).
-    /// Despite the name "first_id", this is actually the MAX/most recent ID.
-    pub first_id: Option<Uuid>,
+    pub latest_id: Option<Uuid>,
 
     /// The oldest inference ID (MIN id_uint).
-    /// Despite the name "last_id", this is actually the MIN/oldest ID.
-    pub last_id: Option<Uuid>,
+    pub earliest_id: Option<Uuid>,
 
     /// The total number of inferences matching the filter criteria.
+    /// Note that ClickHouse returns u64s as strings, so we use DisplayFromStr to deserialize it.
+    #[serde_as(as = "DisplayFromStr")]
     pub count: u64,
 }
 
@@ -255,8 +253,8 @@ impl InferenceBounds {
     /// Creates bounds representing no results.
     pub fn empty() -> Self {
         Self {
-            first_id: None,
-            last_id: None,
+            latest_id: None,
+            earliest_id: None,
             count: 0,
         }
     }
