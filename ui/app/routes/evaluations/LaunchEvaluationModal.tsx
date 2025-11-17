@@ -121,7 +121,7 @@ function EvaluationForm({
     functionConfig,
   ]);
 
-  // Initialize precision limits with 0.0 for all evaluators when evaluation changes
+  // Initialize precision targets with 0.0 for all evaluators when evaluation changes
   useEffect(() => {
     if (selectedEvaluationName) {
       const currentEvaluatorNames = Object.keys(

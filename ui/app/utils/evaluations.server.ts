@@ -83,7 +83,7 @@ const evaluationFormDataSchema = z.object({
           Object.values(val).every((v) => typeof v === "number" && v >= 0)),
       {
         message:
-          "Precision limits must be a JSON object mapping evaluator names to non-negative numbers",
+          "Precision targets must be a JSON object mapping evaluator names to non-negative numbers",
       },
     ),
 });

@@ -86,7 +86,7 @@ export function AdvancedParametersAccordion({
             </div>
             {evaluatorNames.length > 0 && (
               <div>
-                <Label>Precision Limits</Label>
+                <Label>Precision Targets</Label>
                 <p className="text-muted-foreground mb-3 text-xs">
                   Stop running an evaluator when both sides of its 95%
                   confidence interval are within the specified threshold of the

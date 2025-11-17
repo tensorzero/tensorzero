@@ -91,7 +91,7 @@ pub struct Args {
     #[arg(long)]
     pub max_datapoints: Option<usize>,
 
-    /// Per-evaluator precision limits for adaptive stopping.
+    /// Per-evaluator precision targets for adaptive stopping.
     /// Format: evaluator_name=threshold, comma-separated for multiple evaluators.
     /// Example: --precision-limits "exact_match=0.13,llm_judge=0.16"
     /// Evaluator stops when CI half-width <= threshold.
@@ -99,7 +99,7 @@ pub struct Args {
     pub precision_limits: Option<Vec<(String, f32)>>,
 }
 
-/// Parse precision limits argument in format "evaluator1=threshold1,evaluator2=threshold2,..."
+/// Parse precision targets argument in format "evaluator1=threshold1,evaluator2=threshold2,..."
 fn parse_precision_limits(s: &str) -> Result<Vec<(String, f32)>, String> {
     s.split(',')
         .map(|pair| {

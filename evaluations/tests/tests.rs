@@ -2430,7 +2430,7 @@ async fn test_precision_limits_parameter() {
 
     let evaluation_run_id = Uuid::now_v7();
 
-    // Set precision limits for both evaluators
+    // Set precision targets for both evaluators
     // exact_match: CI half-width <= 0.10
     // topic_starts_with_f: CI half-width <= 0.13
     let mut precision_limits = HashMap::new();
@@ -2449,7 +2449,7 @@ async fn test_precision_limits_parameter() {
         concurrency: 5,
     };
 
-    // Run with precision limits
+    // Run with precision targets
     let result = run_evaluation_core_streaming(
         core_args,
         None, // No max_datapoints limit
@@ -2488,7 +2488,7 @@ async fn test_precision_limits_parameter() {
         "Should process at least min_datapoints (20) datapoints, got {total_datapoints}"
     );
 
-    // Verify that both evaluators achieved their precision limits
+    // Verify that both evaluators achieved their precision targets
     let exact_match_ci = exact_match_stats.ci_half_width();
     let topic_ci = topic_stats.ci_half_width();
 
