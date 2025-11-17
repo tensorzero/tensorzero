@@ -42,6 +42,7 @@ jobs:
             tag: sha-${{ github.sha }}
             pullPolicy: Never
         EOF
+        # Fix the extra indentation caused by inlining the yaml file in our workflow
         sed -i 's/^        //' helm-ci-overrides.yaml
 
 
