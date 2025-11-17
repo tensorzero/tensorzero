@@ -39,8 +39,8 @@ from .generated_types import (
     ModelProviderExtraBodyDelete,
     ModelProviderExtraHeader,
     ModelProviderExtraHeaderDelete,
-    ProviderExtraBody,
-    ProviderExtraBodyDelete,
+    ProviderExtraBody,  # DEPRECATED
+    ProviderExtraBodyDelete,  # DEPRECATED
     ProviderExtraHeader,
     ProviderExtraHeaderDelete,
     UpdateDatapointMetadataRequest,
@@ -263,8 +263,8 @@ __all__ = [
     "OpenAIRFTConfig",
     "OptimizationConfig",
     "patch_openai_client",
-    "ProviderExtraBody",
-    "ProviderExtraBodyDelete",
+    "ProviderExtraBody",  # DEPRECATED
+    "ProviderExtraBodyDelete",  # DEPRECATED
     "ProviderExtraHeader",
     "ProviderExtraHeaderDelete",
     "RawText",
