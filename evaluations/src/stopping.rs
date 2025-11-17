@@ -10,7 +10,7 @@ const MIN_DATAPOINTS: usize = 20;
 /// Newtype wrapper for cancellation tokens
 ///
 /// An empty map indicates no adaptive stopping is configured.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CancellationTokens(HashMap<String, CancellationToken>);
 
 impl CancellationTokens {
@@ -22,11 +22,6 @@ impl CancellationTokens {
                 .map(|name| (name.clone(), CancellationToken::new()))
                 .collect(),
         )
-    }
-
-    /// Create an empty CancellationTokens (no adaptive stopping)
-    pub fn empty() -> Self {
-        Self(HashMap::new())
     }
 
     /// Check if all tokens are cancelled
@@ -64,7 +59,7 @@ impl StoppingManager {
     pub fn new(precision_targets: HashMap<String, f32>, evaluator_names: &[String]) -> Self {
         // Create cancellation tokens and stats only if precision targets are enabled
         let (cancellation_tokens, evaluator_stats) = if precision_targets.is_empty() {
-            (CancellationTokens::empty(), HashMap::new())
+            (CancellationTokens::default(), HashMap::new())
         } else {
             // Create tokens for all evaluators
             let tokens = CancellationTokens::new(evaluator_names);
