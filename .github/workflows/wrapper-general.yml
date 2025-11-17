@@ -1,5 +1,6 @@
 on:
-  workflow_call:
+  push:
+    branches: ["aaron/wrap-general"]
 
 jobs:
   general:
