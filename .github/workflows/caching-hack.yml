@@ -10,7 +10,7 @@ name: Caching Hack (re-runs actions on 'main' to update the cache)
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "aaron/fix-caching-hack"]
 
 permissions:
   contents: read
@@ -52,6 +52,12 @@ jobs:
           cache-provider: "buildjet"
           # We use this cache key from other jobs that need to build the gateway
           shared-key: "build-gateway-cache"
+      - name: Install Python 3.10
+        if: runner.os == 'windows'
+        run: |
+          powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+          uv python install 3.10
+          echo "PYO3_PYTHON=$(uv python find python3.10)" >> $GITHUB_ENV
       - run: |
           # Run both of these, as they build dependencies with different features
           cargo build --features e2e_tests --tests
