@@ -166,13 +166,14 @@ test("launch evaluation with adaptive stopping parameters", async ({
   await page.getByRole("option", { name: "gpt4o_mini_initial_prompt" }).click();
   await page.getByTestId("concurrency-limit").fill("1");
 
+  // Fill in max_datapoints parameter
+  await page.locator("#max_datapoints").fill("10");
+
   // Open Advanced Parameters accordion
   await page.getByText("Advanced Parameters").click();
   await page.waitForTimeout(500);
 
   // Fill in adaptive stopping parameters
-  await page.locator("#min_inferences").fill("5");
-  await page.locator("#max_inferences").fill("10");
   await page.locator("#precision_limit_exact_match").fill("0.5");
 
   await page.getByRole("button", { name: "Launch" }).click();
@@ -194,7 +195,7 @@ test("launch evaluation with adaptive stopping parameters", async ({
 
   await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
 
-  // Verify the evaluation ran with at least min_inferences (5) and at most max_inferences (10)
+  // Verify the evaluation ran with at most max_datapoints (10)
   const statsText = await page
     .getByText("n=", { exact: false })
     .first()
@@ -203,7 +204,6 @@ test("launch evaluation with adaptive stopping parameters", async ({
   const match = statsText?.match(/n=(\d+)/);
   expect(match).toBeTruthy();
   const n = parseInt(match![1], 10);
-  expect(n).toBeGreaterThanOrEqual(5);
   expect(n).toBeLessThanOrEqual(10);
 
   // Assert that "error" is not in the page

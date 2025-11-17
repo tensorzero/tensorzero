@@ -53,11 +53,8 @@ function EvaluationForm({
   const [inferenceCache, setInferenceCache] = useState<InferenceCacheSetting>(
     initialFormState?.inference_cache ?? "on",
   );
-  const [minInferences, setMinInferences] = useState<string>(
-    initialFormState?.min_inferences ?? "",
-  );
-  const [maxInferences, setMaxInferences] = useState<string>(
-    initialFormState?.max_inferences ?? "",
+  const [maxDatapoints, setMaxDatapoints] = useState<string>(
+    initialFormState?.max_datapoints ?? "",
   );
   const [precisionLimits, setPrecisionLimits] = useState<
     Record<string, string>
@@ -146,19 +143,12 @@ function EvaluationForm({
     }
   }, [selectedEvaluationName, config.evaluations, precisionLimits]);
 
-  // Validate min_inferences: must be empty or a positive integer
-  const isMinInferencesValid =
-    minInferences === "" ||
-    (Number.isInteger(Number(minInferences)) &&
-      Number(minInferences) > 0 &&
-      !minInferences.includes("."));
-
-  // Validate max_inferences: must be empty or a positive integer
-  const isMaxInferencesValid =
-    maxInferences === "" ||
-    (Number.isInteger(Number(maxInferences)) &&
-      Number(maxInferences) > 0 &&
-      !maxInferences.includes("."));
+  // Validate max_datapoints: must be empty or a positive integer
+  const isMaxDatapointsValid =
+    maxDatapoints === "" ||
+    (Number.isInteger(Number(maxDatapoints)) &&
+      Number(maxDatapoints) > 0 &&
+      !maxDatapoints.includes("."));
 
   // Validate precision_limits: all values must be non-negative numbers
   const arePrecisionLimitsValid = Object.values(precisionLimits).every(
@@ -179,8 +169,7 @@ function EvaluationForm({
     datasetCount > 0 &&
     inferenceCache !== null &&
     concurrencyLimit !== "" &&
-    isMinInferencesValid &&
-    isMaxInferencesValid &&
+    isMaxDatapointsValid &&
     arePrecisionLimitsValid;
 
   return (
@@ -313,28 +302,28 @@ function EvaluationForm({
       </div>
       <div className="mt-4">
         <label
-          htmlFor="max_inferences"
+          htmlFor="max_datapoints"
           className="mb-1 block text-sm font-medium"
         >
-          Max Inferences
+          Max Datapoints
         </label>
         <p className="text-muted-foreground mb-2 text-xs">
           Maximum number of datapoints to evaluate (optional)
         </p>
         <input
           type="text"
-          id="max_inferences"
-          name="max_inferences"
-          value={maxInferences}
-          onChange={(e) => setMaxInferences(e.target.value)}
+          id="max_datapoints"
+          name="max_datapoints"
+          value={maxDatapoints}
+          onChange={(e) => setMaxDatapoints(e.target.value)}
           placeholder="No limit"
           className={`border-input bg-background w-full rounded-md border px-3 py-2 text-sm ${
-            !isMaxInferencesValid && maxInferences !== ""
+            !isMaxDatapointsValid && maxDatapoints !== ""
               ? "border-red-500 focus:ring-red-500"
               : ""
           }`}
         />
-        {!isMaxInferencesValid && maxInferences !== "" && (
+        {!isMaxDatapointsValid && maxDatapoints !== "" && (
           <p className="mt-1 text-xs text-red-500">
             Must be a positive integer
           </p>
@@ -347,9 +336,6 @@ function EvaluationForm({
           precisionLimits={precisionLimits}
           setPrecisionLimits={setPrecisionLimits}
           arePrecisionLimitsValid={arePrecisionLimitsValid}
-          minInferences={minInferences}
-          setMinInferences={setMinInferences}
-          isMinInferencesValid={isMinInferencesValid}
           evaluatorNames={evaluatorNames}
           defaultOpen={inferenceCache !== "on"}
         />
@@ -424,8 +410,7 @@ interface EvaluationsFormValues {
   variant_name: string | null;
   concurrency_limit: string;
   inference_cache: InferenceCacheSetting;
-  min_inferences: string;
-  max_inferences: string;
+  max_datapoints: string;
   precision_limits: Record<string, string>;
 }
 

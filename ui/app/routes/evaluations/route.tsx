@@ -45,8 +45,7 @@ export async function action({ request }: Route.ActionArgs) {
     variant_name: formData.get("variant_name"),
     concurrency_limit: formData.get("concurrency_limit"),
     inference_cache: formData.get("inference_cache"),
-    min_inferences: formData.get("min_inferences"),
-    max_inferences: formData.get("max_inferences"),
+    max_datapoints: formData.get("max_datapoints"),
     precision_limits: formData.get("precision_limits"),
   });
 
@@ -60,8 +59,7 @@ export async function action({ request }: Route.ActionArgs) {
     variant_name,
     concurrency_limit,
     inference_cache,
-    min_inferences,
-    max_inferences,
+    max_datapoints,
     precision_limits,
   } = evaluationFormData;
 
@@ -73,8 +71,7 @@ export async function action({ request }: Route.ActionArgs) {
       variant_name,
       concurrency_limit,
       inference_cache,
-      min_inferences,
-      max_inferences,
+      max_datapoints,
       precision_limits,
     );
   } catch (error) {

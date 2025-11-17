@@ -58,19 +58,12 @@ const evaluationFormDataSchema = z.object({
       message: "Concurrency limit must be a positive integer",
     }),
   inference_cache: z.enum(INFERENCE_CACHE_SETTINGS),
-  min_inferences: z
+  max_datapoints: z
     .string()
     .optional()
     .transform((val) => (val ? Number.parseInt(val, 10) : undefined))
     .refine((val) => val === undefined || (!Number.isNaN(val) && val > 0), {
-      message: "Min inferences must be a positive integer",
-    }),
-  max_inferences: z
-    .string()
-    .optional()
-    .transform((val) => (val ? Number.parseInt(val, 10) : undefined))
-    .refine((val) => val === undefined || (!Number.isNaN(val) && val > 0), {
-      message: "Max inferences must be a positive integer",
+      message: "Max datapoints must be a positive integer",
     }),
   precision_limits: z
     .string()
@@ -109,8 +102,7 @@ export function runEvaluation(
   variantName: string,
   concurrency: number,
   inferenceCache: InferenceCacheSetting,
-  minInferences?: number,
-  maxInferences?: number,
+  maxDatapoints?: number,
   precisionLimits?: Record<string, number>,
 ): Promise<EvaluationStartInfo> {
   const env = getEnv();
@@ -204,8 +196,7 @@ export function runEvaluation(
     variantName,
     concurrency,
     inferenceCache,
-    minInferences,
-    maxInferences,
+    maxDatapoints,
     precisionLimits: precisionLimits
       ? JSON.stringify(precisionLimits)
       : undefined,
