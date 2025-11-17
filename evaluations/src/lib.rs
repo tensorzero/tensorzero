@@ -87,14 +87,9 @@ pub struct Args {
     #[arg(long, default_value = "on")]
     pub inference_cache: CacheEnabledMode,
 
-    /// Minimum number of inferences to run before checking stopping conditions (default: 20).
-    /// Only applies when precision_limits is set.
-    #[arg(long)]
-    pub min_inferences: Option<usize>,
-
     /// Maximum number of datapoints to evaluate from the dataset.
     #[arg(long)]
-    pub max_inferences: Option<usize>,
+    pub max_datapoints: Option<usize>,
 
     /// Per-evaluator precision limits for adaptive stopping.
     /// Format: evaluator_name=threshold, comma-separated for multiple evaluators.
@@ -276,15 +271,16 @@ pub async fn run_evaluation(
         concurrency: args.concurrency,
     };
 
-    // // Convert Option<Vec<(String, f32)>> to HashMap<String, f32> for precision_limits
-    // let precision_limits: HashMap<String, f32> = args
-    //     .precision_limits
-    //     .unwrap_or_default()
-    //     .into_iter()
-    //     .collect();
+    // Convert Option<Vec<(String, f32)>> to HashMap<String, f32> for precision_limits
+    let precision_limits: HashMap<String, f32> = args
+        .precision_limits
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
 
     let output_format = args.format.clone();
-    let result = run_evaluation_core_streaming(core_args, None, HashMap::new()).await?; // No adaptive stopping
+    let result =
+        run_evaluation_core_streaming(core_args, args.max_datapoints, precision_limits).await?;
 
     let mut receiver = result.receiver;
     let dataset_len = result.run_info.num_datapoints;
