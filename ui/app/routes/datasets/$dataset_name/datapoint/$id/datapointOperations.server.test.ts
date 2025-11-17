@@ -9,7 +9,7 @@ import type {
   ParsedChatInferenceDatapointRow,
   ParsedJsonInferenceDatapointRow,
 } from "~/utils/clickhouse/datasets";
-import type { Datapoint } from "~/utils/tensorzero";
+import type { ZodDatapoint } from "~/utils/tensorzero";
 import type {
   GetDatasetMetadataParams,
   DatasetMetadata,
@@ -20,7 +20,7 @@ import type {
 
 // Mock TensorZero client at the module boundary
 const mockUpdateDatapoint = vi.fn(
-  async (_datasetName: string, datapoint: Datapoint) => ({
+  async (_datasetName: string, datapoint: ZodDatapoint) => ({
     id: datapoint.id,
   }),
 );

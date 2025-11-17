@@ -13,12 +13,14 @@ import {
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
 import type {
-  Datapoint as TensorZeroDatapoint,
+  Datapoint,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
   UpdateDatapointsMetadataRequest,
+  UpdateDatapointsRequest,
+  UpdateDatapointRequest,
   UpdateDatapointsResponse,
 } from "~/types/tensorzero";
 
@@ -308,7 +310,7 @@ export const DatapointSchema = z.union([
   ChatInferenceDatapointSchema,
   JsonInferenceDatapointSchema,
 ]);
-export type Datapoint = z.infer<typeof DatapointSchema>;
+export type ZodDatapoint = z.infer<typeof DatapointSchema>;
 
 /**
  * Schema for datapoint response
@@ -410,35 +412,27 @@ export class TensorZeroClient {
   }
 
   /**
-   * Updates an existing datapoint in a dataset with the given ID.
+   * Updates an existing datapoint in a dataset.
+   * This operation creates a new datapoint with a new ID and marks the old one as stale.
+   * The v1 endpoint automatically handles both creating the new version and staling the old one.
    * @param datasetName - The name of the dataset containing the datapoint
-   * @param datapointId - The UUID of the datapoint to update
-   * @param datapoint - The datapoint data containing function_name, input, output, and optional fields
-   * @returns A promise that resolves with the response containing the datapoint ID
-   * @throws Error if validation fails or the request fails
+   * @param updateDatapointRequest - The update request containing type, id, input, output, and optional fields
+   * @returns A promise that resolves with the response containing the new datapoint ID
+   * @throws Error if the dataset name is invalid or the request fails
    */
   async updateDatapoint(
     datasetName: string,
-    datapoint: Datapoint,
+    updateDatapointRequest: UpdateDatapointRequest,
   ): Promise<DatapointResponse> {
-    // TODO(#3921): Move to native Rust client.
-    if (!datasetName || typeof datasetName !== "string") {
-      throw new Error("Dataset name must be a non-empty string");
-    }
+    const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}/datapoints`;
 
-    // Validate the datapoint using the Zod schema
-    const validationResult = DatapointSchema.safeParse(datapoint);
-    if (!validationResult.success) {
-      throw new Error(`Invalid datapoint: ${validationResult.error.message}`);
-    }
-
-    const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapoint.id)}`;
-    // We need to remove the id field from the datapoint before sending it to the server
-    const { id, ...rest } = datapoint;
+    const requestBody: UpdateDatapointsRequest = {
+      datapoints: [updateDatapointRequest],
+    };
 
     const response = await this.fetch(endpoint, {
-      method: "PUT",
-      body: JSON.stringify(rest),
+      method: "PATCH",
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -446,11 +440,11 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
 
-    const body = await response.json();
-    return DatapointResponseSchema.parse(body);
+    const body = (await response.json()) as UpdateDatapointsResponse;
+    return { id: body.ids[0] };
   }
 
-  async getDatapoint(datapointId: string): Promise<TensorZeroDatapoint | null> {
+  async getDatapoint(datapointId: string): Promise<Datapoint | null> {
     const endpoint = `/v1/datasets/get_datapoints`;
     const requestBody: GetDatapointsRequest = {
       ids: [datapointId],
@@ -475,7 +469,7 @@ export class TensorZeroClient {
     function_name?: string,
     limit?: number,
     offset?: number,
-  ): Promise<TensorZeroDatapoint[]> {
+  ): Promise<Datapoint[]> {
     const params = new URLSearchParams();
     if (function_name) {
       params.append("function_name", function_name);
@@ -498,7 +492,7 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     const body = await response.json();
-    return body as TensorZeroDatapoint[];
+    return body as Datapoint[];
   }
 
   async updateDatapointsMetadata(

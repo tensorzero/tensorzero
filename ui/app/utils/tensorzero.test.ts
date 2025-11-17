@@ -1,6 +1,5 @@
 import { describe, expect, test, beforeAll } from "vitest";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
-import { type JsonInferenceDatapoint } from "~/utils/tensorzero";
 
 let tensorZeroClient: ReturnType<typeof getTensorZeroClient>;
 
@@ -9,12 +8,10 @@ describe("update datapoints", () => {
     tensorZeroClient = getTensorZeroClient();
   });
 
-  test("should preserve original source_inference_id and is_custom when updating datapoint", async () => {
-    const datapoint: JsonInferenceDatapoint = {
-      function_name: "extract_entities",
-      name: null,
-      episode_id: null,
-      staled_at: null,
+  test("should create new datapoint with new ID when updating", async () => {
+    const result = await tensorZeroClient.updateDatapoint("test", {
+      type: "json",
+      id: "01960832-7028-743c-8c44-a598aa5130fd",
       input: {
         messages: [
           {
@@ -29,13 +26,13 @@ describe("update datapoints", () => {
         ],
       },
       output: {
-        person: [],
-        organization: [],
-        location: [],
-        miscellaneous: [],
+        raw: JSON.stringify({
+          person: [],
+          organization: [],
+          location: [],
+          miscellaneous: [],
+        }),
       },
-      tags: {},
-      auxiliary: "",
       output_schema: {
         $schema: "http://json-schema.org/draft-07/schema#",
         type: "object",
@@ -68,20 +65,14 @@ describe("update datapoints", () => {
         required: ["person", "organization", "location", "miscellaneous"],
         additionalProperties: false,
       },
-      source_inference_id: "01982323-3460-71dd-8cc8-bc4d44a0c88f",
-      is_custom: false,
-      id: "01960832-7028-743c-8c44-a598aa5130fd",
-    };
+    });
 
-    await tensorZeroClient.updateDatapoint("test", datapoint);
+    // The v1 endpoint creates a new datapoint with a new ID
+    expect(result.id).not.toBe("01960832-7028-743c-8c44-a598aa5130fd");
 
-    const retrievedDatapoint = await tensorZeroClient.getDatapoint(
-      "01960832-7028-743c-8c44-a598aa5130fd",
-    );
-    expect(retrievedDatapoint?.source_inference_id).toBe(
-      datapoint.source_inference_id,
-    );
-    expect(retrievedDatapoint?.is_custom).toBe(false);
+    // Verify the new datapoint exists
+    const retrievedDatapoint = await tensorZeroClient.getDatapoint(result.id);
+    expect(retrievedDatapoint).not.toBeNull();
   });
 
   test("should list datapoints", async () => {
