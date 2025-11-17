@@ -49,3 +49,14 @@ pub async fn unbounded_recursion_wrapper<R: Send + 'static>(
 pub fn deprecation_warning(message: &str) {
     tracing::warn!("Deprecation warning: {message}");
 }
+
+/// Spawns a background task that does not interact with gateway shutdown -
+/// it will be cancelled at some arbitrary `.await` point when the gateway shuts down.
+/// This method should only be used for 'best-effort' background tasks (e.g. cache writes,
+/// Howdy, etc) where we don't care if they finish or not (so they don't need to block
+/// the gateway shutdown).
+pub fn spawn_ignoring_shutdown(fut: impl Future<Output = ()> + Send + 'static) {
+    // The `spawn_ignoring_shutdown` function is an explicit way of invoking `tokio::spawn`
+    #[expect(clippy::disallowed_methods)]
+    tokio::spawn(fut);
+}

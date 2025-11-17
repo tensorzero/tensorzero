@@ -31,9 +31,9 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
-use crate::config::Config;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::{config::Config, utils::spawn_ignoring_shutdown};
 
 lazy_static! {
     /// The URL to send usage data to.
@@ -59,9 +59,7 @@ pub fn setup_howdy(
     if clickhouse.client_type() == ClickHouseClientType::Disabled {
         return;
     }
-    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-    #[expect(clippy::disallowed_methods)]
-    tokio::spawn(howdy_loop(clickhouse, token));
+    spawn_ignoring_shutdown(howdy_loop(clickhouse, token));
 }
 
 /// Loops and sends usage data to the Howdy service every 6 hours.
@@ -84,9 +82,7 @@ pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo, token: Cancellatio
             }
             _ = interval.tick() => {}
         }
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-        #[expect(clippy::disallowed_methods)]
-        tokio::spawn(async move {
+        spawn_ignoring_shutdown(async move {
             if let Err(e) =
                 send_howdy(&copied_clickhouse, &copied_client, &copied_deployment_id).await
             {
