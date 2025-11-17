@@ -13,6 +13,7 @@ members = [
     "tensorzero-optimizers",
     "internal/tensorzero-derive",
     "internal/tensorzero-auth",
+    "internal/minijinja-utils",
     "examples/integrations/cursor/feedback",
 ]
 resolver = "2"
@@ -49,6 +50,14 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
 clap = { version = "4.5.51", features = ["derive"] }
 futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
+minijinja = { version = "2.12.0", features = [
+    "loader",
+    "debug",
+    "json",
+    "loop_controls",
+    "builtins",
+    "unstable_machinery",
+] }
 url = "2.5.4"
 google-cloud-auth = "1.1.0"
 serde-untagged = "0.1.8"

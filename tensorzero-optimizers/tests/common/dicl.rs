@@ -169,6 +169,9 @@ pub async fn test_dicl_optimization_chat() {
                 _ => panic!("Expected DICL variant config"),
             }
         }
+        OptimizerOutput::Variants(_) => {
+            panic!("Expected variant output from DICL optimizer, got variants output");
+        }
         OptimizerOutput::Model(_) => {
             panic!("Expected variant output from DICL optimizer, got model output");
         }
@@ -449,6 +452,9 @@ pub async fn test_dicl_optimization_json() {
                 UninitializedVariantConfig::Dicl(dicl_config) => dicl_config.clone(),
                 _ => panic!("Expected DICL variant config"),
             }
+        }
+        OptimizerOutput::Variants(_) => {
+            panic!("Expected variant output from DICL optimizer, got variants output");
         }
         OptimizerOutput::Model(_) => {
             panic!("Expected variant output from DICL optimizer, got model output");
