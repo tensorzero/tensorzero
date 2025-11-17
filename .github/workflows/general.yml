@@ -2,11 +2,10 @@ name: General Checks
 run-name: "General Checks for: ${{ github.event.pull_request.title || github.ref }}"
 
 on:
+  workflow_call:
   merge_group:
     paths-ignore:
       - "docs/**"
-  pull_request:
-    branches: ["main"]
   workflow_dispatch:
 
 concurrency:
@@ -34,6 +33,11 @@ jobs:
 
       - name: Check version consistency
         run: ./ci/check-version-consistency.sh
+
+      - name: Fake error
+        run: |
+          echo "Fake error"
+          exit 1
 
   # This checks for specific markers in the codebase that require multiple files to be edited together.
   check-if-edited-then-edit:

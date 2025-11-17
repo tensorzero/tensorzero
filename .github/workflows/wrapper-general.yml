@@ -1,0 +1,7 @@
+on:
+  workflow_call:
+
+jobs:
+  general:
+    uses: ./.github/workflows/general.yml
+    secrets: inherit
