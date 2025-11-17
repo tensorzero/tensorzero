@@ -3,7 +3,10 @@ use std::{collections::HashMap, sync::Arc};
 use crate::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, JsonInferenceDatapointInsert,
 };
-use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
+use crate::endpoints::datasets::v1::types::{
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceOutputSource,
+    CreateJsonDatapointRequest, JsonDatapointOutputUpdate,
+};
 use crate::function::FunctionConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
@@ -17,7 +20,9 @@ use crate::tool::{ClientSideFunctionTool, ProviderTool, ToolChoice};
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedInput},
+    inference::types::{
+        ContentBlockChatOutput, Input, JsonInferenceOutput, ModelInput, ResolvedInput,
+    },
     tool::ToolCallConfigDatabaseInsert,
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
@@ -751,6 +756,55 @@ impl RenderedSample {
             tool_params: self.tool_params,
             output_schema: self.output_schema,
             tags: self.tags,
+        }
+    }
+
+    /// Convert this RenderedSample into a CreateDatapointRequest for use with the datasets v1 API.
+    ///
+    /// This method handles the conversion from RenderedSample (which has StoredInput and StoredOutput)
+    /// to CreateDatapointRequest (which expects Input and type-specific output).
+    ///
+    /// The type discrimination (Chat vs JSON) is based on the stored_output enum variant.
+    pub fn into_create_datapoint_request(self) -> Result<CreateDatapointRequest, Error> {
+        // Convert StoredInput to Input via JSON round-trip
+        // This is necessary because StoredInput is the database representation
+        // while Input is the API representation
+        let input: Input = serde_json::to_value(&self.stored_input)
+            .and_then(serde_json::from_value)
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Failed to convert stored input to input: {e}"),
+                })
+            })?;
+
+        // Use stored_output to determine whether this is a Chat or JSON datapoint
+        match self.stored_output {
+            Some(StoredOutput::Json(json_output)) => {
+                // JSON function datapoint
+                let output = json_output.raw.map(|raw| JsonDatapointOutputUpdate { raw });
+
+                Ok(CreateDatapointRequest::Json(CreateJsonDatapointRequest {
+                    function_name: self.function_name,
+                    episode_id: self.episode_id,
+                    input,
+                    output,
+                    output_schema: self.output_schema,
+                    tags: Some(self.tags),
+                    name: None,
+                }))
+            }
+            Some(StoredOutput::Chat(_)) | None => {
+                // Chat function datapoint
+                Ok(CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+                    function_name: self.function_name,
+                    episode_id: self.episode_id,
+                    input,
+                    output: self.output,
+                    dynamic_tool_params: self.tool_params,
+                    tags: Some(self.tags),
+                    name: None,
+                }))
+            }
         }
     }
 }

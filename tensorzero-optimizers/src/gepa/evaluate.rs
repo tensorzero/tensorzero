@@ -10,16 +10,12 @@ use tensorzero_core::{
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::datasets::v1::{
         create_datapoints,
-        types::{
-            CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest,
-            CreateJsonDatapointRequest, JsonDatapointOutputUpdate,
-        },
+        types::{CreateDatapointRequest, CreateDatapointsRequest},
     },
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
     http::TensorzeroHttpClient,
-    inference::types::Input,
-    stored_inference::{RenderedSample, StoredOutput},
+    stored_inference::RenderedSample,
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
@@ -128,10 +124,12 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
 /// Create an evaluation dataset from rendered samples
 ///
 /// Uses the datasets v1 API to create datapoints in ClickHouse.
-/// This approach provides type-safe validation and handles both Chat and JSON functions.
+/// Converts each RenderedSample to a CreateDatapointRequest using the
+/// `into_create_datapoint_request()` method, which handles type discrimination
+/// and validation for both Chat and JSON functions.
 ///
 /// # Arguments
-/// * `tensorzero_config` - The TensorZero configuration
+/// * `config` - The TensorZero configuration
 /// * `http_client` - The HTTP client for fetching resources
 /// * `clickhouse_connection_info` - The ClickHouse connection info
 /// * `samples` - The rendered samples to convert into datapoints
@@ -140,62 +138,16 @@ pub async fn evaluate_variant(params: EvaluateVariantParams) -> Result<Evaluatio
 /// # Returns
 /// * `()` - Returns success or error
 pub async fn create_evaluation_dataset(
-    tensorzero_config: &Config,
+    config: &Config,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     samples: &[RenderedSample],
     dataset_name: &str,
 ) -> Result<(), Error> {
-    // Convert RenderedSamples to CreateDatapointRequest
+    // Convert RenderedSamples to CreateDatapointRequest using the helper method
     let datapoints: Result<Vec<CreateDatapointRequest>, Error> = samples
         .iter()
-        .map(|sample| {
-            // Convert StoredInput to Input via JSON round-trip
-            let input: Input = serde_json::to_value(&sample.stored_input)
-                .and_then(serde_json::from_value)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to convert stored input to input: {e}"),
-                    })
-                })?;
-
-            // Determine if this is a Chat or JSON function based on output type
-            let request = if sample.output_schema.is_some()
-                || matches!(sample.stored_output, Some(StoredOutput::Json(_)))
-            {
-                // JSON function
-                let output = match &sample.stored_output {
-                    Some(StoredOutput::Json(json_output)) => json_output
-                        .raw
-                        .as_ref()
-                        .map(|raw| JsonDatapointOutputUpdate { raw: raw.clone() }),
-                    _ => None,
-                };
-
-                CreateDatapointRequest::Json(CreateJsonDatapointRequest {
-                    function_name: sample.function_name.clone(),
-                    episode_id: sample.episode_id,
-                    input,
-                    output,
-                    output_schema: sample.output_schema.clone(),
-                    tags: Some(sample.tags.clone()),
-                    name: None,
-                })
-            } else {
-                // Chat function
-                CreateDatapointRequest::Chat(CreateChatDatapointRequest {
-                    function_name: sample.function_name.clone(),
-                    episode_id: sample.episode_id,
-                    input,
-                    output: sample.output.clone(),
-                    dynamic_tool_params: sample.tool_params.clone(),
-                    tags: Some(sample.tags.clone()),
-                    name: None,
-                })
-            };
-
-            Ok(request)
-        })
+        .map(|sample| sample.clone().into_create_datapoint_request())
         .collect();
 
     let request = CreateDatapointsRequest {
@@ -204,7 +156,7 @@ pub async fn create_evaluation_dataset(
 
     // Call the datasets v1 create_datapoints function
     create_datapoints(
-        tensorzero_config,
+        config,
         http_client,
         clickhouse_connection_info,
         dataset_name,
