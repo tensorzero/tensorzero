@@ -27,26 +27,6 @@ use std::path::PathBuf;
 
 use crate::error::{AnalysisError, DynamicLoadLocation, LoadKind};
 
-/// Span information extracted from minijinja AST.
-#[derive(Debug, Clone, Copy)]
-struct SpanInfo {
-    line: usize,
-    column: usize,
-    start_offset: usize,
-    end_offset: usize,
-}
-
-impl SpanInfo {
-    fn from_ast_span(span: Span) -> Self {
-        SpanInfo {
-            line: span.start_line as usize,
-            column: span.start_col as usize,
-            start_offset: span.start_offset as usize,
-            end_offset: span.end_offset as usize,
-        }
-    }
-}
-
 /// Outcome of analysing an expression used for template loading.
 #[derive(Debug, Clone)]
 struct LoadValue {
@@ -57,7 +37,7 @@ struct LoadValue {
     /// Optional explanation when the expression cannot be fully resolved.
     reason: Option<&'static str>,
     /// Span information (if incomplete).
-    span: Option<SpanInfo>,
+    span: Option<Span>,
 }
 
 impl LoadValue {
@@ -78,7 +58,7 @@ impl LoadValue {
         rv
     }
 
-    fn fully_dynamic(reason: &'static str, span: SpanInfo) -> Self {
+    fn fully_dynamic(reason: &'static str, span: Span) -> Self {
         LoadValue {
             known: Vec::new(),
             complete: false,
@@ -119,9 +99,11 @@ struct TemplateLoad {
 /// Extracts the source code text corresponding to a span for error reporting.
 ///
 /// This is used to show the user exactly what code caused a dynamic load error.
-fn extract_source_quote(source: &str, span: SpanInfo) -> String {
-    let end = span.end_offset.min(source.len());
-    source[span.start_offset..end].to_string()
+fn extract_source_quote(source: &str, span: Span) -> String {
+    let start_offset = span.start_offset as usize;
+    let end_offset = span.end_offset as usize;
+    let end = end_offset.min(source.len());
+    source[start_offset..end].to_string()
 }
 
 /// Parses template source and collects template loads with explicit parser configuration.
@@ -394,10 +376,7 @@ fn analyse_expr(expr: &ast::Expr<'_>) -> LoadValue {
             None => {
                 // Constant exists but isn't a string or list of strings
                 // Example: {% include 42 %} (invalid but we catch it)
-                LoadValue::fully_dynamic(
-                    "non-string constant",
-                    SpanInfo::from_ast_span(expr.span()),
-                )
+                LoadValue::fully_dynamic("non-string constant", expr.span())
             }
         },
 
@@ -412,7 +391,7 @@ fn analyse_expr(expr: &ast::Expr<'_>) -> LoadValue {
             }
             // If we accumulated dynamic items without a span, use the list's overall span
             if !aggregate.complete && aggregate.span.is_none() {
-                aggregate.span = Some(SpanInfo::from_ast_span(expr.span()));
+                aggregate.span = Some(expr.span());
             }
             aggregate
         }
@@ -449,9 +428,7 @@ fn analyse_expr(expr: &ast::Expr<'_>) -> LoadValue {
         // - ast::Expr::Filter → {% include name|default("x.html") %} (filter application)
         //
         // Note: expr.description() provides a user-friendly name like "variable" or "call"
-        other => {
-            LoadValue::fully_dynamic(other.description(), SpanInfo::from_ast_span(other.span()))
-        }
+        other => LoadValue::fully_dynamic(other.description(), other.span()),
     }
 }
 
@@ -620,19 +597,21 @@ pub fn collect_all_template_paths(
             if !load.value.complete {
                 // Found a dynamic load - record it
                 let source = template.source();
-                let span = load.value.span.unwrap_or(SpanInfo {
-                    line: 1,
-                    column: 1,
+                let span = load.value.span.unwrap_or(Span {
+                    start_line: 1,
+                    start_col: 1,
                     start_offset: 0,
+                    end_line: 1,
+                    end_col: 1,
                     end_offset: 0,
                 });
                 let source_quote = extract_source_quote(source, span);
 
                 dynamic_loads.push(DynamicLoadLocation {
                     template_name: current_template.clone(),
-                    line: span.line,
-                    column: span.column,
-                    span: (span.start_offset, span.end_offset),
+                    line: span.start_line as usize,
+                    column: span.start_col as usize,
+                    span: (span.start_offset as usize, span.end_offset as usize),
                     source_quote,
                     reason: load.value.reason.unwrap_or("unknown").to_string(),
                     load_kind: load.kind,
