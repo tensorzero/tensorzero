@@ -107,16 +107,6 @@ impl LoadValue {
             }
         }
     }
-
-    fn mark_incomplete(&mut self, reason: &'static str, span: SpanInfo) {
-        self.complete = false;
-        if self.reason.is_none() {
-            self.reason = Some(reason);
-        }
-        if self.span.is_none() {
-            self.span = Some(span);
-        }
-    }
 }
 
 /// Captures a single load site inside a template.
@@ -381,8 +371,8 @@ impl LoadCollector {
 ///   and aggregate the results. If any element is dynamic, the entire list is partially complete.
 ///
 /// - **IfExpr**: Ternary expressions like `"a.html" if condition else "b.html"`. We analyze
-///   both branches and combine their results. If there's no else branch, we mark it incomplete
-///   since the expression could evaluate to None.
+///   both branches and combine their results. If there's no else branch (e.g., `"a.html" if condition`),
+///   we still extract the static template name from the true branch for dependency analysis.
 ///
 /// - **Other**: All other expression types (Var, Call, GetAttr, BinOp, etc.) are conservatively
 ///   marked as fully dynamic since we cannot determine their values without runtime execution.
@@ -439,15 +429,11 @@ fn analyse_expr(expr: &ast::Expr<'_>) -> LoadValue {
             // Analyze the false branch if it exists
             if let Some(false_expr) = &if_expr.false_expr {
                 aggregate.extend(analyse_expr(false_expr));
-            } else {
-                // No else clause means the expression could evaluate to None/undefined
-                // Example: {% include "template.html" if condition %}
-                // If condition is false, no template is loaded - this is incomplete
-                aggregate.mark_incomplete(
-                    "conditional without else",
-                    SpanInfo::from_ast_span(expr.span()),
-                );
             }
+            // Note: If there's no else clause (e.g., {% include "template.html" if condition %}),
+            // we still extract the static template name from the true branch. The template may
+            // not be loaded at runtime if the condition is false, but we know which template
+            // WOULD be loaded if the condition is true, allowing static dependency analysis.
             aggregate
         }
 

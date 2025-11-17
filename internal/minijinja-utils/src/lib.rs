@@ -12,10 +12,10 @@
 //!   - `{% extends 'base.html' %}` ✓
 //!   - `{% include ['a.html', 'b.html'] %}` ✓
 //!   - `{% include 'optional.html' if condition else 'default.html' %}` ✓
+//!   - `{% include 'optional.html' if condition %}` ✓
 //!
 //! - **Dynamic loads**: Template names depend on runtime values and cannot be statically determined
 //!   - `{% include template_var %}` ✗ (variable)
-//!   - `{% include 'optional.html' if condition %}` ✗ (conditional without else)
 //!   - `{% include get_template() %}` ✗ (function call)
 //!
 //! ## Main Function

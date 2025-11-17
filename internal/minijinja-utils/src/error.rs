@@ -86,7 +86,6 @@ pub struct DynamicLoadLocation {
     ///
     /// Common reasons include:
     /// - `"variable"`: Template name is a variable reference
-    /// - `"conditional without else"`: Using `if` without a corresponding `else`
     /// - `"function call"`: Template name comes from a function
     /// - `"filter"`: Template name uses a filter expression
     /// - `"non-string constant"`: Template name is not a string literal
@@ -135,12 +134,9 @@ pub enum AnalysisError {
     /// # Example
     ///
     /// ```text
-    /// Cannot statically analyze all template dependencies. Found 2 dynamic load(s):
+    /// Cannot statically analyze all template dependencies. Found 1 dynamic load(s):
     /// template.html:5:12: dynamic include - variable:
     ///   {% include template_name %}
-    ///
-    /// template.html:8:3: dynamic include - conditional without else:
-    ///   {% include 'optional.html' if show_header %}
     /// ```
     DynamicLoadsFound(Vec<DynamicLoadLocation>),
 }

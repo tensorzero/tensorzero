@@ -18,6 +18,7 @@ Template names that can be determined at parse time:
 {% import 'macros.html' as m %}
 {% include ['first.html', 'second.html'] %}
 {% include 'a.html' if condition else 'b.html' %}
+{% include 'optional.html' if condition %}
 ```
 
 ### Dynamic Loads ✗
@@ -26,7 +27,6 @@ Template names that depend on runtime values:
 
 ```jinja
 {% include template_var %}
-{% include 'optional.html' if condition %}
 {% include get_template() %}
 ```
 
@@ -135,8 +135,22 @@ match collect_all_template_paths(&env, "dynamic.html") {
 ## Limitations
 
 - **Requires static template names**: Cannot resolve variables, function calls, or expressions
-- **Conditionals must have else**: `{% include 'a.html' if x %}` is considered dynamic
 - **Dependency on unstable API**: Uses MiniJinja's `unstable_machinery` feature which may change between versions
+
+## Conditional Template Loading
+
+When a template uses a conditional include without an else clause, the static template name is still extracted:
+
+```jinja
+{% include 'optional.html' if show_feature %}
+```
+
+This will:
+- ✓ Extract `'optional.html'` as a dependency
+- ✓ Require that `'optional.html'` exists at analysis time
+- ⚠️ The template may or may not be loaded at runtime depending on the condition
+
+This behavior enables static validation of all template paths while supporting conditional loading patterns. If the template name is dynamically computed (e.g., from a variable or function call), it will still be considered a dynamic load and produce an error.
 
 ## Implementation Note
 
