@@ -711,7 +711,7 @@ fn validate_single_message(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::path::ResolvedTomlPath;
+    use crate::config::path::ResolvedTomlPathData;
     use crate::config::UninitializedSchemas;
     use crate::endpoints::inference::InferenceIds;
     use crate::inference::types::Arguments;
@@ -748,7 +748,7 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
+        StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             temp_file.path().to_owned(),
             None,
         ))
