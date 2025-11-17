@@ -60,6 +60,7 @@ By default, TensorZero reads the path to your GCP service account JSON file from
 You must generate a GCP service account key in JSON format as described [here](https://cloud.google.com/docs/authentication/provide-credentials-adc#service-account).
 
 You can customize the credential location using:
+
 - `sdk`: use the Google Cloud SDK to auto-discover credentials
 - `path::/path/to/credentials.json`: use a specific file path
 - `path_from_env::YOUR_ENVIRONMENT_VARIABLE`: read file path from an environment variable (default behavior)
@@ -74,7 +75,7 @@ Create a minimal Docker Compose configuration:
 
 ```yaml title="docker-compose.yml"
 # This is a simplified example for learning purposes. Do not use this in production.
-# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+# For production-ready deployments, see: https://www.tensorzero.com/docs/deployment/tensorzero-gateway
 
 services:
   gateway:

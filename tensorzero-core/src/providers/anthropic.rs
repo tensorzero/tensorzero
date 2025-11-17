@@ -791,7 +791,11 @@ impl<'a> AnthropicRequestBody<'a> {
             if matches!(c.tool_choice, ToolChoice::None) {
                 None
             } else {
-                Some(c.tools_available().map(Into::into).collect::<Vec<_>>())
+                Some(
+                    c.strict_tools_available()
+                        .map(Into::into)
+                        .collect::<Vec<_>>(),
+                )
             }
         });
 
@@ -1089,8 +1093,8 @@ pub struct AnthropicUsage {
 impl From<AnthropicUsage> for Usage {
     fn from(value: AnthropicUsage) -> Self {
         Usage {
-            input_tokens: value.input_tokens,
-            output_tokens: value.output_tokens,
+            input_tokens: Some(value.input_tokens),
+            output_tokens: Some(value.output_tokens),
         }
     }
 }
@@ -2467,8 +2471,8 @@ mod tests {
 
         let usage: Usage = anthropic_usage.into();
 
-        assert_eq!(usage.input_tokens, 100);
-        assert_eq!(usage.output_tokens, 50);
+        assert_eq!(usage.input_tokens, Some(100));
+        assert_eq!(usage.output_tokens, Some(50));
     }
 
     #[test]
@@ -2548,8 +2552,8 @@ mod tests {
         );
 
         assert_eq!(raw_response, inference_response.raw_response);
-        assert_eq!(inference_response.usage.input_tokens, 100);
-        assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, Some(100));
+        assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.finish_reason, Some(FinishReason::Stop));
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
@@ -2611,8 +2615,8 @@ mod tests {
         );
 
         assert_eq!(raw_response, inference_response.raw_response);
-        assert_eq!(inference_response.usage.input_tokens, 100);
-        assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, Some(100));
+        assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
         assert_eq!(
@@ -2686,8 +2690,8 @@ mod tests {
 
         assert_eq!(raw_response, inference_response.raw_response);
 
-        assert_eq!(inference_response.usage.input_tokens, 100);
-        assert_eq!(inference_response.usage.output_tokens, 50);
+        assert_eq!(inference_response.usage.input_tokens, Some(100));
+        assert_eq!(inference_response.usage.output_tokens, Some(50));
         assert_eq!(inference_response.finish_reason, None);
         assert_eq!(inference_response.latency, latency);
         assert_eq!(inference_response.raw_request, raw_request);
@@ -2937,8 +2941,8 @@ mod tests {
         assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, 10);
-        assert_eq!(usage.output_tokens, 20);
+        assert_eq!(usage.input_tokens, Some(10));
+        assert_eq!(usage.output_tokens, Some(20));
         assert_eq!(chunk.latency, latency);
         assert_eq!(chunk.finish_reason, Some(FinishReason::Stop));
 
@@ -2963,8 +2967,8 @@ mod tests {
         assert_eq!(chunk.content.len(), 0);
         assert!(chunk.usage.is_some());
         let usage = chunk.usage.unwrap();
-        assert_eq!(usage.input_tokens, 5);
-        assert_eq!(usage.output_tokens, 15);
+        assert_eq!(usage.input_tokens, Some(5));
+        assert_eq!(usage.output_tokens, Some(15));
         assert_eq!(chunk.latency, latency);
 
         // Test MessageStop
@@ -3377,5 +3381,34 @@ mod tests {
         assert!(logs_contain(
             "The image detail parameter is not supported by Anthropic"
         ));
+    }
+
+    #[test]
+    fn test_anthropic_respects_allowed_tools() {
+        use crate::providers::test_helpers::{QUERY_TOOL, WEATHER_TOOL};
+        use crate::tool::{AllowedTools, AllowedToolsChoice};
+
+        // Create a ToolCallConfig with two tools but only allow one
+        let tool_config = ToolCallConfig {
+            static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools {
+                tools: vec!["get_temperature".to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+
+        // Convert to Anthropic tools
+        let tools: Vec<AnthropicTool> = tool_config
+            .strict_tools_available()
+            .map(AnthropicTool::from)
+            .collect();
+
+        // Verify only the allowed tool is included
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "get_temperature");
     }
 }

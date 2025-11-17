@@ -41,7 +41,7 @@ async fn test_create_from_inference_ids_success() {
     // Get some existing inferences from the database
     let params = ListInferencesParams {
         function_name: Some("write_haiku"),
-        limit: Some(2),
+        limit: 2,
         ..Default::default()
     };
     let inferences = clickhouse.list_inferences(config, &params).await.unwrap();
@@ -111,7 +111,7 @@ async fn test_create_from_same_inference_multiple_times_succeeds() {
     // Get an existing inference from the database
     let params = ListInferencesParams {
         function_name: Some("write_haiku"),
-        limit: Some(1),
+        limit: 1,
         ..Default::default()
     };
     let inferences = clickhouse.list_inferences(config, &params).await.unwrap();
@@ -164,7 +164,7 @@ async fn test_create_from_inference_missing_ids_error() {
     // Get one real inference
     let params = ListInferencesParams {
         function_name: Some("write_haiku"),
-        limit: Some(1),
+        limit: 1,
         ..Default::default()
     };
     let inferences = clickhouse.list_inferences(config, &params).await.unwrap();

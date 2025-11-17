@@ -234,6 +234,7 @@ async fn get_providers() -> E2ETestProviders {
 
     let embedding_providers = vec![EmbeddingTestProvider {
         model_name: "text-embedding-3-small".into(),
+        dimensions: 1536,
     }];
 
     let provider_type_default_credentials_providers = vec![E2ETestProvider {
@@ -1200,6 +1201,7 @@ async fn test_embedding_request() {
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
                 &ProviderTypeDefaultCredentials::default(),
+                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();
@@ -1297,11 +1299,11 @@ async fn test_embedding_request() {
     );
     // The randomness affects the exact number of tokens, so we just check that it's at least 20
     assert!(
-        response.usage.input_tokens >= 20,
-        "Unexpected input tokens: {}",
+        response.usage.input_tokens.unwrap() >= 20,
+        "Unexpected input tokens: {:?}",
         response.usage.input_tokens
     );
-    assert_eq!(response.usage.output_tokens, 0);
+    assert_eq!(response.usage.output_tokens, Some(0));
     match response.latency {
         Latency::NonStreaming { response_time } => {
             assert!(
@@ -1343,11 +1345,11 @@ async fn test_embedding_request() {
     assert!(cached_response.cached);
     assert_eq!(response.embeddings, cached_response.embeddings);
     assert!(
-        cached_response.usage.input_tokens >= 20,
-        "Unexpected input tokens: {}",
+        cached_response.usage.input_tokens.unwrap() >= 20,
+        "Unexpected input tokens: {:?}",
         cached_response.usage.input_tokens
     );
-    assert_eq!(cached_response.usage.output_tokens, 0);
+    assert_eq!(cached_response.usage.output_tokens, Some(0));
 }
 
 #[tokio::test]
@@ -1364,6 +1366,7 @@ async fn test_embedding_sanity_check() {
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
                 &ProviderTypeDefaultCredentials::default(),
+                TensorzeroHttpClient::new_testing().unwrap(),
             )
             .await
             .unwrap();
@@ -2795,7 +2798,7 @@ model = "test-model"
                 additional_tools: None,
                 tool_choice: None,
                 parallel_tool_calls: None,
-                provider_tools: Some(vec![
+                provider_tools: vec![
                     ProviderTool {
                         scope: ProviderToolScope::Unscoped,
                         tool: json!({"type": "web_search"}),
@@ -2808,7 +2811,7 @@ model = "test-model"
                         },
                         tool: json!({"type": "garbage"}),
                     },
-                ]),
+                ],
             },
             ..Default::default()
         })
@@ -2935,10 +2938,10 @@ model = "test-model"
                 additional_tools: None,
                 tool_choice: None,
                 parallel_tool_calls: None,
-                provider_tools: Some(vec![ProviderTool {
+                provider_tools: vec![ProviderTool {
                     scope: ProviderToolScope::Unscoped,
                     tool: json!({"type": "web_search"}),
-                }]),
+                }],
             },
             ..Default::default()
         })

@@ -338,8 +338,8 @@ async fn test_write_read_completed_batch_inference_chat() {
         output: vec!["hello world".to_string().into()],
         raw_response: String::new(),
         usage: Usage {
-            input_tokens: 10,
-            output_tokens: 20,
+            input_tokens: Some(10),
+            output_tokens: Some(20),
         },
         finish_reason: Some(FinishReason::Stop),
     };
@@ -349,8 +349,8 @@ async fn test_write_read_completed_batch_inference_chat() {
         output: vec!["goodbye world".to_string().into()],
         raw_response: String::new(),
         usage: Usage {
-            input_tokens: 20,
-            output_tokens: 30,
+            input_tokens: Some(20),
+            output_tokens: Some(30),
         },
         finish_reason: Some(FinishReason::ToolCall),
     };
@@ -384,8 +384,8 @@ async fn test_write_read_completed_batch_inference_chat() {
                 }
                 _ => panic!("Unexpected content block type"),
             }
-            assert_eq!(chat_inference_response.usage.input_tokens, 10);
-            assert_eq!(chat_inference_response.usage.output_tokens, 20);
+            assert_eq!(chat_inference_response.usage.input_tokens, Some(10));
+            assert_eq!(chat_inference_response.usage.output_tokens, Some(20));
         }
         InferenceResponse::Json(_) => panic!("Unexpected inference response type"),
     }
@@ -399,8 +399,8 @@ async fn test_write_read_completed_batch_inference_chat() {
                 }
                 _ => panic!("Unexpected content block type"),
             }
-            assert_eq!(chat_inference_response.usage.input_tokens, 20);
-            assert_eq!(chat_inference_response.usage.output_tokens, 30);
+            assert_eq!(chat_inference_response.usage.input_tokens, Some(20));
+            assert_eq!(chat_inference_response.usage.output_tokens, Some(30));
         }
         InferenceResponse::Json(_) => panic!("Unexpected inference response type"),
     }
@@ -538,8 +538,8 @@ async fn test_write_read_completed_batch_inference_json() {
         output: vec!["{\"answer\": \"hello world\"}".to_string().into()],
         raw_response: String::new(),
         usage: Usage {
-            input_tokens: 10,
-            output_tokens: 20,
+            input_tokens: Some(10),
+            output_tokens: Some(20),
         },
         finish_reason: Some(FinishReason::Stop),
     };
@@ -549,8 +549,8 @@ async fn test_write_read_completed_batch_inference_json() {
         output: vec!["{\"response\": \"goodbye world\"}".to_string().into()],
         raw_response: String::new(),
         usage: Usage {
-            input_tokens: 20,
-            output_tokens: 30,
+            input_tokens: Some(20),
+            output_tokens: Some(30),
         },
         finish_reason: Some(FinishReason::ToolCall),
     };
@@ -593,7 +593,7 @@ async fn test_write_read_completed_batch_inference_json() {
                 json_inference_response.output.parsed.as_ref().unwrap()["answer"],
                 "hello world"
             );
-            assert_eq!(json_inference_response.usage.input_tokens, 10);
+            assert_eq!(json_inference_response.usage.input_tokens, Some(10));
             assert_eq!(
                 json_inference_response.finish_reason,
                 Some(FinishReason::Stop)

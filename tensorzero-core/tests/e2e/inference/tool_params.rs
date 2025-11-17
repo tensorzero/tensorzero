@@ -9,6 +9,8 @@
 //! 3. Lossy conversions: provider_tools and AllowedToolsChoice metadata are NOT persisted
 //! 4. Edge cases: empty lists, None values, mixed static/dynamic tools
 
+use std::collections::HashSet;
+
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::test_helpers::make_embedded_gateway;
@@ -16,7 +18,7 @@ use tensorzero::ClientExt;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse,
 };
-use tensorzero_core::tool::ToolChoice;
+use tensorzero_core::tool::{ProviderToolScope, ToolChoice};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -135,26 +137,26 @@ async fn test_inference_full_tool_params_round_trip() {
         &json!(false)
     );
 
-    // Step 3: Retrieve via list_inferences API (wire format with DynamicToolParams)
+    // Step 3: Retrieve via get_inferences API (wire format with DynamicToolParams)
     let client = make_embedded_gateway().await;
-    let stored_inferences = client
-        .experimental_list_inferences(tensorzero::ListInferencesParams {
-            function_name: Some("weather_helper"),
-            ids: Some(&[inference_id]),
-            ..Default::default()
-        })
+    let response = client
+        .get_inferences(
+            vec![inference_id],
+            Some("weather_helper".to_string()),
+            tensorzero::InferenceOutputSource::Inference,
+        )
         .await
         .unwrap();
 
-    assert_eq!(stored_inferences.len(), 1);
-    let tensorzero::StoredInference::Chat(stored_inference) = &stored_inferences[0] else {
+    assert_eq!(response.inferences.len(), 1);
+    let tensorzero::StoredInference::Chat(stored_inference) = &response.inferences[0] else {
         panic!("Expected Chat inference");
     };
 
     // Step 4: Verify DynamicToolParams correctly reconstructed
     let retrieved_tool_params = &stored_inference.tool_params;
 
-    // Static tools should be in allowed_tools
+    // Only explicitly specified tools should be in allowed tools
     let allowed_tools = retrieved_tool_params.allowed_tools.as_ref().unwrap();
     assert_eq!(allowed_tools.len(), 1);
     assert_eq!(allowed_tools[0], "get_temperature");
@@ -176,11 +178,11 @@ async fn test_inference_full_tool_params_round_trip() {
     );
     assert_eq!(retrieved_tool_params.parallel_tool_calls, Some(false));
 
-    // IMPORTANT: provider_tools is LOSSY - should always be None after round-trip
+    // IMPORTANT: provider_tools is LOSSY - should always be empty after round-trip
     // Will fix this in a follow up with databae migrations.
     assert!(
-        retrieved_tool_params.provider_tools.is_none(),
-        "provider_tools should be None after database round-trip (lossy conversion)"
+        retrieved_tool_params.provider_tools.is_empty(),
+        "provider_tools should be empty after database round-trip (lossy conversion)"
     );
 }
 
@@ -220,24 +222,26 @@ async fn test_inference_only_static_tools() {
     let response_json = response.json::<Value>().await.unwrap();
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    println!("Inference ID: {inference_id}");
 
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
-    let stored_inferences = client
-        .experimental_list_inferences(tensorzero::ListInferencesParams {
-            function_name: Some("weather_helper"),
-            ids: Some(&[inference_id]),
-            ..Default::default()
-        })
+    let response = client
+        .get_inferences(
+            vec![inference_id],
+            Some("weather_helper".to_string()),
+            tensorzero::InferenceOutputSource::Inference,
+        )
         .await
         .unwrap();
 
-    let tensorzero::StoredInference::Chat(stored_inference) = &stored_inferences[0] else {
+    let tensorzero::StoredInference::Chat(stored_inference) = &response.inferences[0] else {
         panic!("Expected Chat inference");
     };
 
+    println!("stored inference: {stored_inference:?}");
     let retrieved_tool_params = &stored_inference.tool_params;
 
     // Should have allowed_tools
@@ -315,26 +319,23 @@ async fn test_inference_only_dynamic_tools() {
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
-    let stored_inferences = client
-        .experimental_list_inferences(tensorzero::ListInferencesParams {
-            function_name: Some("weather_helper"),
-            ids: Some(&[inference_id]),
-            ..Default::default()
-        })
+    let response = client
+        .get_inferences(
+            vec![inference_id],
+            Some("weather_helper".to_string()),
+            tensorzero::InferenceOutputSource::Inference,
+        )
         .await
         .unwrap();
 
-    let tensorzero::StoredInference::Chat(stored_inference) = &stored_inferences[0] else {
+    let tensorzero::StoredInference::Chat(stored_inference) = &response.inferences[0] else {
         panic!("Expected Chat inference");
     };
 
     let retrieved_tool_params = &stored_inference.tool_params;
 
-    // When no allowed_tools passed, function config tools become allowed_tools
-    // (see database_insert_to_dynamic_tool_params logic)
-    let allowed_tools = retrieved_tool_params.allowed_tools.as_ref().unwrap();
-    assert_eq!(allowed_tools.len(), 1);
-    assert_eq!(allowed_tools[0], "get_temperature"); // From function config
+    // If we don't specify allowed tools on the way in we don't get allowed tools on the way out.
+    assert!(retrieved_tool_params.allowed_tools.is_none());
 
     // Dynamic tool should be in additional_tools
     let additional_tools = retrieved_tool_params.additional_tools.as_ref().unwrap();
@@ -457,23 +458,33 @@ async fn test_provider_tools_not_persisted() {
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
-    let stored_inferences = client
-        .experimental_list_inferences(tensorzero::ListInferencesParams {
-            function_name: Some("weather_helper"),
-            ids: Some(&[inference_id]),
-            ..Default::default()
-        })
+    let response = client
+        .get_inferences(
+            vec![inference_id],
+            Some("weather_helper".to_string()),
+            tensorzero::InferenceOutputSource::Inference,
+        )
         .await
         .unwrap();
 
-    let tensorzero::StoredInference::Chat(stored_inference) = &stored_inferences[0] else {
+    let tensorzero::StoredInference::Chat(stored_inference) = &response.inferences[0] else {
         panic!("Expected Chat inference");
     };
 
-    // VERIFY: provider_tools should be None after round-trip
-    assert!(
-        stored_inference.tool_params.provider_tools.is_none(),
-        "LOSSY CONVERSION: provider_tools are not persisted to database"
+    // VERIFY: provider_tools should be present after round-trip
+    println!("{:?}", stored_inference.tool_params.provider_tools);
+    let stored_provider_tools = &stored_inference.tool_params.provider_tools;
+    assert_eq!(stored_provider_tools.len(), 1);
+    let first_tool = stored_provider_tools.first().unwrap();
+    assert_eq!(first_tool.scope, ProviderToolScope::Unscoped);
+    assert_eq!(
+        first_tool.tool,
+        json!({"type": "computer_20241022",
+            "name": "computer",
+            "display_width_px": 1024,
+            "display_height_px": 768,
+            "display_number": 1
+        })
     );
 }
 
@@ -543,16 +554,16 @@ async fn test_tool_strict_flag_preserved() {
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
-    let stored_inferences = client
-        .experimental_list_inferences(tensorzero::ListInferencesParams {
-            function_name: Some("weather_helper"),
-            ids: Some(&[inference_id]),
-            ..Default::default()
-        })
+    let response = client
+        .get_inferences(
+            vec![inference_id],
+            Some("weather_helper".to_string()),
+            tensorzero::InferenceOutputSource::Inference,
+        )
         .await
         .unwrap();
 
-    let tensorzero::StoredInference::Chat(stored_inference) = &stored_inferences[0] else {
+    let tensorzero::StoredInference::Chat(stored_inference) = &response.inferences[0] else {
         panic!("Expected Chat inference");
     };
 
@@ -625,30 +636,34 @@ async fn test_allowed_tools_restriction() {
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
     let tool_params: Value = serde_json::from_str(tool_params).unwrap();
 
-    // Should only have get_temperature in storage
+    // We still send all tools as available
     let tools_available = tool_params
         .get("tools_available")
         .unwrap()
         .as_array()
         .unwrap();
-    assert_eq!(tools_available.len(), 1);
-    assert_eq!(
-        tools_available[0].get("name").unwrap().as_str().unwrap(),
-        "get_temperature"
-    );
+    assert_eq!(tools_available.len(), 2);
+
+    // Verify both tools are present in some order
+    let tool_names: HashSet<&str> = tools_available
+        .iter()
+        .map(|t| t.get("name").unwrap().as_str().unwrap())
+        .collect();
+    assert!(tool_names.contains(&"get_temperature"));
+    assert!(tool_names.contains(&"get_humidity"));
 
     // Retrieve via API
     let client = make_embedded_gateway().await;
-    let stored_inferences = client
-        .experimental_list_inferences(tensorzero::ListInferencesParams {
-            function_name: Some("weather_helper_parallel"),
-            ids: Some(&[inference_id]),
-            ..Default::default()
-        })
+    let response = client
+        .get_inferences(
+            vec![inference_id],
+            Some("weather_helper_parallel".to_string()),
+            tensorzero::InferenceOutputSource::Inference,
+        )
         .await
         .unwrap();
 
-    let tensorzero::StoredInference::Chat(stored_inference) = &stored_inferences[0] else {
+    let tensorzero::StoredInference::Chat(stored_inference) = &response.inferences[0] else {
         panic!("Expected Chat inference");
     };
 

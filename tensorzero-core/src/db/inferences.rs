@@ -1,6 +1,7 @@
 /// Definitions for inference-related traits and types.
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -13,11 +14,13 @@ use crate::config::Config;
 use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
-use crate::serde_util::{deserialize_defaulted_string, deserialize_json_string};
+use crate::serde_util::deserialize_json_string;
 use crate::stored_inference::{
     StoredChatInferenceDatabase, StoredInferenceDatabase, StoredJsonInference,
 };
-use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::{deserialize_tool_info, ToolCallConfigDatabaseInsert};
+
+pub(crate) const DEFAULT_INFERENCE_QUERY_LIMIT: u32 = 20;
 
 #[derive(Debug, Deserialize)]
 pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
@@ -32,7 +35,7 @@ pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<String>,
-    #[serde(deserialize_with = "deserialize_defaulted_string")]
+    #[serde(flatten, deserialize_with = "deserialize_tool_info")]
     pub tool_params: ToolCallConfigDatabaseInsert,
     pub tags: HashMap<String, String>,
 }
@@ -150,11 +153,12 @@ impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferen
 // TODO(shuyangli): Move to tensorzero-core/src/endpoints/stored_inferences/v1/types.rs
 /// Source of an inference output when querying inferences. Users can choose this because there may be
 /// demonstration feedback (manually-curated output) for the inference that should be preferred.
-#[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum InferenceOutputSource {
     /// The inference output is the original output from the inference.
+    #[default]
     Inference,
     /// The inference output is the demonstration feedback for the inference.
     Demonstration,
@@ -189,9 +193,11 @@ pub struct ListInferencesParams<'a> {
     /// Source of the inference output to query.
     pub output_source: InferenceOutputSource,
     /// Maximum number of inferences to return.
-    pub limit: Option<u64>,
-    /// Number of inferences to skip.
-    pub offset: Option<u64>,
+    /// We always enforce a limit at the database level to avoid unbounded queries.
+    pub limit: u32,
+    /// Number of inferences to skip before starting to return results.
+    pub offset: u32,
+    /// Ordering criteria for the results.
     pub order_by: Option<&'a [OrderBy]>,
 }
 
@@ -204,8 +210,8 @@ impl Default for ListInferencesParams<'_> {
             episode_id: None,
             filters: None,
             output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
+            limit: DEFAULT_INFERENCE_QUERY_LIMIT,
+            offset: 0,
             order_by: None,
         }
     }

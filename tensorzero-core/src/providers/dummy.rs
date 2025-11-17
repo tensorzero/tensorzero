@@ -32,8 +32,9 @@ use crate::inference::types::{ContentBlock, FinishReason, ProviderInferenceRespo
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, CredentialLocationWithFallback, ModelProvider};
 use crate::providers::helpers::inject_extra_request_data;
-use crate::rate_limiting::ActiveRateLimitKey;
-use crate::rate_limiting::FailedRateLimit;
+use crate::rate_limiting::{
+    ActiveRateLimitKey, FailedRateLimit, RateLimitResource, RateLimitingScopeKey,
+};
 use crate::tool::{ToolCall, ToolCallChunk};
 
 const PROVIDER_NAME: &str = "Dummy";
@@ -77,24 +78,24 @@ impl DummyProvider {
     fn get_model_usage(&self, output_tokens: u32) -> Usage {
         match self.model_name.as_str() {
             "input_tokens_zero" => Usage {
-                input_tokens: 0,
-                output_tokens,
+                input_tokens: Some(0),
+                output_tokens: Some(output_tokens),
             },
             "output_tokens_zero" => Usage {
-                input_tokens: 10,
-                output_tokens: 0,
+                input_tokens: Some(10),
+                output_tokens: Some(0),
             },
             "input_tokens_output_tokens_zero" => Usage {
-                input_tokens: 0,
-                output_tokens: 0,
+                input_tokens: Some(0),
+                output_tokens: Some(0),
             },
             "input_five_output_six" => Usage {
-                input_tokens: 5,
-                output_tokens: 6,
+                input_tokens: Some(5),
+                output_tokens: Some(6),
             },
             _ => Usage {
-                input_tokens: 10,
-                output_tokens,
+                input_tokens: Some(10),
+                output_tokens: Some(output_tokens),
             },
         }
     }
@@ -284,6 +285,10 @@ impl InferenceProvider for DummyProvider {
                             key: ActiveRateLimitKey(String::from("key")),
                             requested: 100,
                             available: 0,
+                            resource: RateLimitResource::Token,
+                            scope_key: vec![RateLimitingScopeKey::TagTotal {
+                                key: "test".to_string(),
+                            }],
                         }],
                     }
                     .into());
@@ -830,8 +835,8 @@ impl EmbeddingProvider for DummyProvider {
         let raw_request = DUMMY_RAW_REQUEST.to_string();
         let raw_response = DUMMY_RAW_REQUEST.to_string();
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 1,
+            input_tokens: Some(10),
+            output_tokens: Some(0),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
