@@ -382,7 +382,7 @@ class ProviderExtraBody(TypedDict):
 
 class ModelProviderExtraBody(TypedDict):
     model_name: str
-    provider_name: str
+    provider_name: NotRequired[str]
     pointer: str
     value: NotRequired[Any]
     delete: NotRequired[bool]
