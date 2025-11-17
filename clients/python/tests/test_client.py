@@ -2323,6 +2323,7 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
     assert request["params"]["chat_completion"]["temperature"] == 0.1
     assert request["tool_choice"] == "auto"
     assert request["additional_tools"][0] == {
+        "type": "client_side_function",
         "name": "drill",
         "parameters": '{"foo": "bar"}',
         "description": "drills",
@@ -3078,7 +3079,8 @@ def test_text_arguments_deprecation_1170_warning(
                         "role": "user",
                         # Intentionally ignore the type error to check the deprecation warning
                         "content": [
-                            Text(type="text", text={"country": "Japan"}),  # type: ignore
+                            # type: ignore
+                            Text(type="text", text={"country": "Japan"}),
                         ],
                     }
                 ],

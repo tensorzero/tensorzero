@@ -1328,7 +1328,7 @@ async def test_dynamic_json_mode_inference_openai(async_openai_client):
     result = await async_openai_client.chat.completions.create(
         extra_body={
             "tensorzero::episode_id": episode_id,
-            "tensorzero::variant_name": "openai-responses",
+            "tensorzero::variant_name": "openai",
         },
         messages=messages,
         model="tensorzero::function_name::dynamic_json",
