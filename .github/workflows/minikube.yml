@@ -66,7 +66,7 @@ jobs:
       run: |
         kubectl port-forward service/tensorzero-gateway -n tensorzero 3000:3000 &
         kubectl port-forward service/tensorzero-ui -n tensorzero 4000:4000 &
-    
+
     - name: Ping the gateway
       run: |
         # TODO - add a 'startupProbe' to the gateway helm chart
