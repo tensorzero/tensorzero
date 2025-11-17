@@ -802,6 +802,7 @@ pub fn validate_all_schemas_have_templates(
 #[cfg(test)]
 mod tests {
     use crate::rate_limiting::ScopeInfo;
+    use indexmap::IndexMap;
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -1534,7 +1535,7 @@ mod tests {
         assert_eq!(
             *details,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "error".to_string(),
                     Error::new(ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider for model 'error'."
