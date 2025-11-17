@@ -298,3 +298,84 @@ impl PerEvaluatorStats {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::PerEvaluatorStats;
+
+    #[test]
+    fn test_per_evaluator_stats_basic() {
+        let mut stats = PerEvaluatorStats::new();
+        assert_eq!(stats.count(), 0);
+        assert_eq!(stats.mean(), None);
+        assert_eq!(stats.stderr(), None);
+        assert_eq!(stats.ci_half_width(), None);
+
+        // Add a single value
+        stats.push(1.0);
+        assert_eq!(stats.count(), 1);
+        assert_eq!(stats.mean(), Some(1.0));
+        assert_eq!(stats.stderr(), None); // Need at least 2 values
+        assert_eq!(stats.ci_half_width(), None);
+    }
+
+    #[test]
+    fn test_per_evaluator_stats_mean_and_stderr() {
+        let mut stats = PerEvaluatorStats::new();
+
+        // Add values: [1.0, 2.0, 3.0, 4.0, 5.0]
+        // Mean = 3.0
+        // Variance = ((3-1)^2 + (3-2)^2 + (3-3)^2 + (3-4)^2 + (3-5)^2) / 5 = (4+1+0+1+4)/5 = 2.0
+        // StdDev = sqrt(2.0) = 1.414...
+        // Stderr = 1.414.../sqrt(5) = 0.632...
+        for value in [1.0, 2.0, 3.0, 4.0, 5.0] {
+            stats.push(value);
+        }
+
+        assert_eq!(stats.count(), 5);
+        assert_eq!(stats.mean(), Some(3.0));
+
+        let stderr = stats.stderr().unwrap();
+        assert!((stderr - 0.632).abs() < 0.01); // Approximately 0.632
+    }
+
+    #[test]
+    fn test_per_evaluator_stats_ci_half_width() {
+        let mut stats = PerEvaluatorStats::new();
+
+        // Add values with known statistics
+        for value in [1.0, 2.0, 3.0, 4.0, 5.0] {
+            stats.push(value);
+        }
+
+        let ci_half_width = stats.ci_half_width().unwrap();
+        let stderr = stats.stderr().unwrap();
+
+        // CI half-width should be 1.96 * stderr
+        assert!((ci_half_width - 1.96 * stderr).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_per_evaluator_stats_to_evaluator_stats() {
+        let mut stats = PerEvaluatorStats::new();
+        for value in [1.0, 2.0, 3.0, 4.0, 5.0] {
+            stats.push(value);
+        }
+
+        let evaluator_stats = stats.to_evaluator_stats();
+        assert_eq!(evaluator_stats.count, 5);
+        assert_eq!(evaluator_stats.mean, 3.0);
+        assert!((evaluator_stats.stderr - 0.632).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_per_evaluator_stats_empty_conversion() {
+        let stats = PerEvaluatorStats::new();
+        let evaluator_stats = stats.to_evaluator_stats();
+
+        // Empty stats should have defaults
+        assert_eq!(evaluator_stats.count, 0);
+        assert_eq!(evaluator_stats.mean, 0.0);
+        assert_eq!(evaluator_stats.stderr, 0.0);
+    }
+}
