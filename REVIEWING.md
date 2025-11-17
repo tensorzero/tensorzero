@@ -3,6 +3,7 @@
 We require a code review of every PR to the repository.
 Code review itself is an important part of the engineering process and should allow us to catch issues with correctness, developer experience, and conformance to a spec.
 In this document, we list some guidelines (a checklist) to follow when reviewing PRs so that we do not forget to check the necessary boxes.
+Reviewers should aim to review internal PRs they are assigned within 1 business day.
 We omit changes that will be automatically caught by CI.
 
 ## Reviewer checklist
@@ -77,7 +78,7 @@ UI:
 
 #### Reliability
 
-* Try and factor out repeated test code into helpers.
+* Tests should be [complete and concise](https://abseil.io/resources/swe-book/html/ch12.html#make_your_tests_complete_and_concise) with [descriptive and meaningful](https://testing.googleblog.com/2019/12/testing-on-toilet-tests-too-dry-make.html) code phrases and names.
 * Are the tests well-isolated? Will writing another test break them?
 * Are the tests going to require a lot of compute? disk? memory?
 * As much as possible: can we cache flaky network responses?
@@ -87,7 +88,7 @@ UI:
 * Can tests be combined into units that preserve coverage but reduce the overall volume of code? Helpful for saving context and test runtime.
 
 ### Performance
-* Is there anything that could be expensive added to the latency-critical path for inference?
+* Is the PR adding anything expensive to inference requests, possibly on the critical path?
 
 #### ClickHouse
 
