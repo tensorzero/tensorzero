@@ -404,30 +404,6 @@ class DeleteDatapointsResponse:
 
 
 @dataclass(kw_only=True)
-class ExtraBodyReplacementKind1:
-    value: Any
-
-
-ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKind1
-
-
-@dataclass(kw_only=True)
-class ExtraHeaderKind1:
-    value: str
-
-
-ExtraHeaderKind = Literal["delete"] | ExtraHeaderKind1
-
-
-@dataclass(kw_only=True)
-class GetDatapointsRequest:
-    ids: list[str]
-    """
-    The IDs of the datapoints to retrieve. Required.
-    """
-
-
-@dataclass(kw_only=True)
 class ProviderExtraBody:
     model_provider_name: str
     pointer: str
@@ -483,7 +459,7 @@ class AlwaysExtraBodyDelete:
     delete: None
 
 
-InferenceExtraBody = (
+ExtraBody = (
     ProviderExtraBody
     | ProviderExtraBodyDelete
     | VariantExtraBody
@@ -493,6 +469,14 @@ InferenceExtraBody = (
     | AlwaysExtraBody
     | AlwaysExtraBodyDelete
 )
+
+
+@dataclass(kw_only=True)
+class ExtraBodyReplacementKind1:
+    value: Any
+
+
+ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKind1
 
 
 @dataclass(kw_only=True)
@@ -551,7 +535,7 @@ class AlwaysExtraHeaderDelete:
     delete: None
 
 
-InferenceExtraHeader = (
+ExtraHeader = (
     ProviderExtraHeader
     | ProviderExtraHeaderDelete
     | VariantExtraHeader
@@ -561,6 +545,14 @@ InferenceExtraHeader = (
     | AlwaysExtraHeader
     | AlwaysExtraHeaderDelete
 )
+
+
+@dataclass(kw_only=True)
+class GetDatapointsRequest:
+    ids: list[str]
+    """
+    The IDs of the datapoints to retrieve. Required.
+    """
 
 
 @dataclass(kw_only=True)

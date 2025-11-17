@@ -1,7 +1,5 @@
 use super::{deserialize_delete, serialize_delete};
-use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tensorzero_derive::export_schema;
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(transparent)]
@@ -16,8 +14,7 @@ pub struct ExtraHeader {
     pub kind: ExtraHeaderKind,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
-#[export_schema]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum ExtraHeaderKind {
@@ -35,7 +32,7 @@ pub enum ExtraHeaderKind {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(transparent)]
 pub struct UnfilteredInferenceExtraHeaders {
-    pub extra_headers: Vec<InferenceExtraHeader>,
+    pub extra_headers: Vec<DynamicExtraHeader>,
 }
 
 impl UnfilteredInferenceExtraHeaders {
@@ -44,7 +41,7 @@ impl UnfilteredInferenceExtraHeaders {
     }
 
     /// Get a reference to the extra_headers vector
-    pub fn as_slice(&self) -> &[InferenceExtraHeader] {
+    pub fn as_slice(&self) -> &[DynamicExtraHeader] {
         &self.extra_headers
     }
 
@@ -65,7 +62,7 @@ impl UnfilteredInferenceExtraHeaders {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(transparent)]
 pub struct FilteredInferenceExtraHeaders {
-    pub data: Vec<InferenceExtraHeader>,
+    pub data: Vec<DynamicExtraHeader>,
 }
 
 /// Holds the config-level and inference-level extra headers options
@@ -75,93 +72,98 @@ pub struct FullExtraHeadersConfig {
     pub inference_extra_headers: FilteredInferenceExtraHeaders,
 }
 
-#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
-#[export_schema]
-#[ts(export)]
-#[serde(untagged, deny_unknown_fields)]
-pub enum InferenceExtraHeader {
-    // Deprecated (#4640): Migrate to `ModelProvider` and remove in 2026.2+
-    #[schemars(title = "ProviderExtraHeader")]
-    Provider {
-        model_provider_name: String,
-        name: String,
-        value: String,
-    },
-    #[schemars(title = "ProviderExtraHeaderDelete")]
-    ProviderDelete {
-        model_provider_name: String,
-        name: String,
-        #[serde(
-            serialize_with = "super::serialize_delete_field",
-            deserialize_with = "super::deserialize_delete_field"
-        )]
-        delete: (),
-    },
-    #[schemars(title = "VariantExtraHeader")]
-    Variant {
-        variant_name: String,
-        name: String,
-        value: String,
-    },
-    #[schemars(title = "VariantExtraHeaderDelete")]
-    VariantDelete {
-        variant_name: String,
-        name: String,
-        #[serde(
-            serialize_with = "super::serialize_delete_field",
-            deserialize_with = "super::deserialize_delete_field"
-        )]
-        delete: (),
-    },
-    #[schemars(title = "ModelProviderExtraHeader")]
-    ModelProvider {
-        model_name: String,
-        provider_name: Option<String>,
-        name: String,
-        value: String,
-    },
-    #[schemars(title = "ModelProviderExtraHeaderDelete")]
-    ModelProviderDelete {
-        model_name: String,
-        provider_name: Option<String>,
-        name: String,
-        #[serde(
-            serialize_with = "super::serialize_delete_field",
-            deserialize_with = "super::deserialize_delete_field"
-        )]
-        delete: (),
-    },
-    #[schemars(title = "AlwaysExtraHeader")]
-    Always { name: String, value: String },
-    #[schemars(title = "AlwaysExtraHeaderDelete")]
-    AlwaysDelete {
-        name: String,
-        #[serde(
-            serialize_with = "super::serialize_delete_field",
-            deserialize_with = "super::deserialize_delete_field"
-        )]
-        delete: (),
-    },
-}
+pub mod dynamic {
+    use schemars::JsonSchema;
+    use serde::{Deserialize, Serialize};
+    use tensorzero_derive::export_schema;
 
-impl InferenceExtraHeader {
-    pub fn should_apply_variant(&self, variant_name: &str) -> bool {
-        match self {
-            InferenceExtraHeader::Provider { .. } | InferenceExtraHeader::ProviderDelete { .. } => {
-                true
+    #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+    #[export_schema]
+    #[ts(export)]
+    #[serde(untagged, deny_unknown_fields)]
+    pub enum ExtraHeader {
+        // Deprecated (#4640): Migrate to `ModelProvider` and remove in 2026.2+
+        #[schemars(title = "ProviderExtraHeader")]
+        Provider {
+            model_provider_name: String,
+            name: String,
+            value: String,
+        },
+        #[schemars(title = "ProviderExtraHeaderDelete")]
+        ProviderDelete {
+            model_provider_name: String,
+            name: String,
+            #[serde(
+                serialize_with = "super::super::serialize_delete_field",
+                deserialize_with = "super::super::deserialize_delete_field"
+            )]
+            delete: (),
+        },
+        #[schemars(title = "VariantExtraHeader")]
+        Variant {
+            variant_name: String,
+            name: String,
+            value: String,
+        },
+        #[schemars(title = "VariantExtraHeaderDelete")]
+        VariantDelete {
+            variant_name: String,
+            name: String,
+            #[serde(
+                serialize_with = "super::super::serialize_delete_field",
+                deserialize_with = "super::super::deserialize_delete_field"
+            )]
+            delete: (),
+        },
+        #[schemars(title = "ModelProviderExtraHeader")]
+        ModelProvider {
+            model_name: String,
+            provider_name: Option<String>,
+            name: String,
+            value: String,
+        },
+        #[schemars(title = "ModelProviderExtraHeaderDelete")]
+        ModelProviderDelete {
+            model_name: String,
+            provider_name: Option<String>,
+            name: String,
+            #[serde(
+                serialize_with = "super::super::serialize_delete_field",
+                deserialize_with = "super::super::deserialize_delete_field"
+            )]
+            delete: (),
+        },
+        #[schemars(title = "AlwaysExtraHeader")]
+        Always { name: String, value: String },
+        #[schemars(title = "AlwaysExtraHeaderDelete")]
+        AlwaysDelete {
+            name: String,
+            #[serde(
+                serialize_with = "super::super::serialize_delete_field",
+                deserialize_with = "super::super::deserialize_delete_field"
+            )]
+            delete: (),
+        },
+    }
+
+    impl ExtraHeader {
+        pub fn should_apply_variant(&self, variant_name: &str) -> bool {
+            match self {
+                ExtraHeader::Provider { .. } | ExtraHeader::ProviderDelete { .. } => true,
+                ExtraHeader::Variant {
+                    variant_name: v, ..
+                }
+                | ExtraHeader::VariantDelete {
+                    variant_name: v, ..
+                } => v == variant_name,
+                ExtraHeader::ModelProvider { .. } | ExtraHeader::ModelProviderDelete { .. } => true,
+                ExtraHeader::Always { .. } | ExtraHeader::AlwaysDelete { .. } => true,
             }
-            InferenceExtraHeader::Variant {
-                variant_name: v, ..
-            }
-            | InferenceExtraHeader::VariantDelete {
-                variant_name: v, ..
-            } => v == variant_name,
-            InferenceExtraHeader::ModelProvider { .. }
-            | InferenceExtraHeader::ModelProviderDelete { .. } => true,
-            InferenceExtraHeader::Always { .. } | InferenceExtraHeader::AlwaysDelete { .. } => true,
         }
     }
 }
+
+pub use dynamic::ExtraHeader as DynamicExtraHeader;
 
 #[cfg(test)]
 mod tests {
@@ -170,9 +172,9 @@ mod tests {
     #[test]
     fn test_inference_extra_header_all_deserialize() {
         let json = r#"{"name": "X-Custom-Header", "value": "custom-value"}"#;
-        let result: InferenceExtraHeader = serde_json::from_str(json).unwrap();
+        let result: DynamicExtraHeader = serde_json::from_str(json).unwrap();
         match result {
-            InferenceExtraHeader::Always { name, value } => {
+            DynamicExtraHeader::Always { name, value } => {
                 assert_eq!(name, "X-Custom-Header");
                 assert_eq!(value, "custom-value");
             }
@@ -183,9 +185,9 @@ mod tests {
     #[test]
     fn test_inference_extra_header_all_with_delete() {
         let json = r#"{"name": "X-Custom-Header", "delete": true}"#;
-        let result: InferenceExtraHeader = serde_json::from_str(json).unwrap();
+        let result: DynamicExtraHeader = serde_json::from_str(json).unwrap();
         match result {
-            InferenceExtraHeader::AlwaysDelete { name, .. } => {
+            DynamicExtraHeader::AlwaysDelete { name, .. } => {
                 assert_eq!(name, "X-Custom-Header");
             }
             _ => panic!("Expected AlwaysDelete variant"),
@@ -194,7 +196,7 @@ mod tests {
 
     #[test]
     fn test_should_apply_variant_all() {
-        let all_variant = InferenceExtraHeader::Always {
+        let all_variant = DynamicExtraHeader::Always {
             name: "X-Custom-Header".to_string(),
             value: "value".to_string(),
         };
@@ -207,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_should_apply_variant_provider() {
-        let provider_variant = InferenceExtraHeader::Provider {
+        let provider_variant = DynamicExtraHeader::Provider {
             model_provider_name: "openai".to_string(),
             name: "Authorization".to_string(),
             value: "Bearer token".to_string(),
@@ -220,7 +222,7 @@ mod tests {
 
     #[test]
     fn test_should_apply_variant_variant_match() {
-        let variant = InferenceExtraHeader::Variant {
+        let variant = DynamicExtraHeader::Variant {
             variant_name: "variant1".to_string(),
             name: "X-Variant-Header".to_string(),
             value: "value".to_string(),
@@ -232,7 +234,7 @@ mod tests {
 
     #[test]
     fn test_should_apply_variant_variant_no_match() {
-        let variant = InferenceExtraHeader::Variant {
+        let variant = DynamicExtraHeader::Variant {
             variant_name: "variant1".to_string(),
             name: "X-Variant-Header".to_string(),
             value: "value".to_string(),
@@ -246,16 +248,16 @@ mod tests {
     fn test_filter_includes_all_variant() {
         let unfiltered = UnfilteredInferenceExtraHeaders {
             extra_headers: vec![
-                InferenceExtraHeader::Variant {
+                DynamicExtraHeader::Variant {
                     variant_name: "variant1".to_string(),
                     name: "X-V1".to_string(),
                     value: "v1".to_string(),
                 },
-                InferenceExtraHeader::Always {
+                DynamicExtraHeader::Always {
                     name: "X-All".to_string(),
                     value: "all".to_string(),
                 },
-                InferenceExtraHeader::Variant {
+                DynamicExtraHeader::Variant {
                     variant_name: "variant2".to_string(),
                     name: "X-V2".to_string(),
                     value: "v2".to_string(),
@@ -270,28 +272,28 @@ mod tests {
         assert!(filtered
             .data
             .iter()
-            .any(|item| matches!(item, InferenceExtraHeader::Always { .. })));
+            .any(|item| matches!(item, DynamicExtraHeader::Always { .. })));
     }
 
     #[test]
     fn test_filter_mixed_variants() {
         let unfiltered = UnfilteredInferenceExtraHeaders {
             extra_headers: vec![
-                InferenceExtraHeader::Provider {
+                DynamicExtraHeader::Provider {
                     model_provider_name: "openai".to_string(),
                     name: "X-Provider".to_string(),
                     value: "provider".to_string(),
                 },
-                InferenceExtraHeader::Variant {
+                DynamicExtraHeader::Variant {
                     variant_name: "variant1".to_string(),
                     name: "X-V1".to_string(),
                     value: "v1".to_string(),
                 },
-                InferenceExtraHeader::Always {
+                DynamicExtraHeader::Always {
                     name: "X-All".to_string(),
                     value: "all".to_string(),
                 },
-                InferenceExtraHeader::Variant {
+                DynamicExtraHeader::Variant {
                     variant_name: "variant2".to_string(),
                     name: "X-V2".to_string(),
                     value: "v2".to_string(),
@@ -306,35 +308,35 @@ mod tests {
         assert!(filtered
             .data
             .iter()
-            .any(|item| matches!(item, InferenceExtraHeader::Provider { .. })));
+            .any(|item| matches!(item, DynamicExtraHeader::Provider { .. })));
         assert!(filtered
             .data
             .iter()
-            .any(|item| matches!(item, InferenceExtraHeader::Always { .. })));
+            .any(|item| matches!(item, DynamicExtraHeader::Always { .. })));
         assert!(filtered.data.iter().any(|item| match item {
-            InferenceExtraHeader::Variant { variant_name, .. } => variant_name == "variant1",
+            DynamicExtraHeader::Variant { variant_name, .. } => variant_name == "variant1",
             _ => false,
         }));
     }
 
     #[test]
     fn test_inference_extra_header_all_roundtrip() {
-        let original = InferenceExtraHeader::Always {
+        let original = DynamicExtraHeader::Always {
             name: "X-Test-Header".to_string(),
             value: "test-value".to_string(),
         };
 
         let json = serde_json::to_string(&original).unwrap();
-        let deserialized: InferenceExtraHeader = serde_json::from_str(&json).unwrap();
+        let deserialized: DynamicExtraHeader = serde_json::from_str(&json).unwrap();
         assert_eq!(original, deserialized);
     }
 
     #[test]
     fn test_inference_extra_header_model_provider_deserialize() {
         let json = r#"{"model_name": "gpt-4o", "provider_name": "openai", "name": "X-Custom-Header", "value": "custom-value"}"#;
-        let result: InferenceExtraHeader = serde_json::from_str(json).unwrap();
+        let result: DynamicExtraHeader = serde_json::from_str(json).unwrap();
         match result {
-            InferenceExtraHeader::ModelProvider {
+            DynamicExtraHeader::ModelProvider {
                 model_name,
                 provider_name,
                 name,
@@ -352,9 +354,9 @@ mod tests {
     #[test]
     fn test_inference_extra_header_model_provider_with_delete() {
         let json = r#"{"model_name": "gpt-4o", "provider_name": "openai", "name": "X-Custom-Header", "delete": true}"#;
-        let result: InferenceExtraHeader = serde_json::from_str(json).unwrap();
+        let result: DynamicExtraHeader = serde_json::from_str(json).unwrap();
         match result {
-            InferenceExtraHeader::ModelProviderDelete {
+            DynamicExtraHeader::ModelProviderDelete {
                 model_name,
                 provider_name,
                 name,
@@ -370,7 +372,7 @@ mod tests {
 
     #[test]
     fn test_should_apply_variant_model_provider() {
-        let model_provider_variant = InferenceExtraHeader::ModelProvider {
+        let model_provider_variant = DynamicExtraHeader::ModelProvider {
             model_name: "gpt-4o".to_string(),
             provider_name: Some("openai".to_string()),
             name: "X-Custom-Header".to_string(),
@@ -386,18 +388,18 @@ mod tests {
     fn test_filter_includes_model_provider() {
         let unfiltered = UnfilteredInferenceExtraHeaders {
             extra_headers: vec![
-                InferenceExtraHeader::Variant {
+                DynamicExtraHeader::Variant {
                     variant_name: "variant1".to_string(),
                     name: "X-V1".to_string(),
                     value: "v1".to_string(),
                 },
-                InferenceExtraHeader::ModelProvider {
+                DynamicExtraHeader::ModelProvider {
                     model_name: "gpt-4o".to_string(),
                     provider_name: Some("openai".to_string()),
                     name: "X-MP".to_string(),
                     value: "mp".to_string(),
                 },
-                InferenceExtraHeader::Variant {
+                DynamicExtraHeader::Variant {
                     variant_name: "variant2".to_string(),
                     name: "X-V2".to_string(),
                     value: "v2".to_string(),
@@ -412,12 +414,12 @@ mod tests {
         assert!(filtered
             .data
             .iter()
-            .any(|item| matches!(item, InferenceExtraHeader::ModelProvider { .. })));
+            .any(|item| matches!(item, DynamicExtraHeader::ModelProvider { .. })));
     }
 
     #[test]
     fn test_inference_extra_header_model_provider_roundtrip() {
-        let original = InferenceExtraHeader::ModelProvider {
+        let original = DynamicExtraHeader::ModelProvider {
             model_name: "gpt-4o".to_string(),
             provider_name: Some("openai".to_string()),
             name: "X-Test-Header".to_string(),
@@ -425,7 +427,7 @@ mod tests {
         };
 
         let json = serde_json::to_string(&original).unwrap();
-        let deserialized: InferenceExtraHeader = serde_json::from_str(&json).unwrap();
+        let deserialized: DynamicExtraHeader = serde_json::from_str(&json).unwrap();
         assert_eq!(original, deserialized);
     }
 
@@ -433,7 +435,7 @@ mod tests {
     fn test_inference_extra_header_rejects_partial_model_provider_missing_model() {
         // Missing model_name should be rejected, not silently become Always
         let json = r#"{"provider_name": "openai", "name": "X-Custom-Header", "value": "test"}"#;
-        let result: Result<InferenceExtraHeader, _> = serde_json::from_str(json);
+        let result: Result<DynamicExtraHeader, _> = serde_json::from_str(json);
         assert!(
             result.is_err(),
             "Expected error when provider_name is present but model_name is missing"
@@ -444,7 +446,7 @@ mod tests {
     fn test_inference_extra_header_rejects_extra_fields() {
         // Extra fields should be rejected
         let json = r#"{"name": "X-Custom-Header", "value": "test", "unknown_field": "value"}"#;
-        let result: Result<InferenceExtraHeader, _> = serde_json::from_str(json);
+        let result: Result<DynamicExtraHeader, _> = serde_json::from_str(json);
         assert!(
             result.is_err(),
             "Expected error when unknown fields are present"

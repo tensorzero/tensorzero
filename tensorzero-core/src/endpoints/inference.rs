@@ -36,10 +36,8 @@ use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier,
 };
-use crate::inference::types::extra_body::{InferenceExtraBody, UnfilteredInferenceExtraBody};
-use crate::inference::types::extra_headers::{
-    InferenceExtraHeader, UnfilteredInferenceExtraHeaders,
-};
+use crate::inference::types::extra_body::{DynamicExtraBody, UnfilteredInferenceExtraBody};
+use crate::inference::types::extra_headers::{DynamicExtraHeader, UnfilteredInferenceExtraHeaders};
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     collect_chunks, ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
@@ -1590,28 +1588,28 @@ async fn validate_inference_filters(
     // Validate extra_body filters
     for filter in extra_body.as_slice() {
         match filter {
-            InferenceExtraBody::Variant { variant_name, .. }
-            | InferenceExtraBody::VariantDelete { variant_name, .. } => {
+            DynamicExtraBody::Variant { variant_name, .. }
+            | DynamicExtraBody::VariantDelete { variant_name, .. } => {
                 if let Some(func) = function {
                     validate_variant_filter(variant_name, func)?;
                 }
             }
-            InferenceExtraBody::Provider {
+            DynamicExtraBody::Provider {
                 model_provider_name,
                 ..
             }
-            | InferenceExtraBody::ProviderDelete {
+            | DynamicExtraBody::ProviderDelete {
                 model_provider_name,
                 ..
             } => {
                 validate_provider_filter(model_provider_name)?;
             }
-            InferenceExtraBody::ModelProvider {
+            DynamicExtraBody::ModelProvider {
                 model_name,
                 provider_name,
                 ..
             }
-            | InferenceExtraBody::ModelProviderDelete {
+            | DynamicExtraBody::ModelProviderDelete {
                 model_name,
                 provider_name,
                 ..
@@ -1619,7 +1617,7 @@ async fn validate_inference_filters(
                 validate_model_provider_filter(model_name, provider_name.as_deref(), models)
                     .await?;
             }
-            InferenceExtraBody::Always { .. } | InferenceExtraBody::AlwaysDelete { .. } => {
+            DynamicExtraBody::Always { .. } | DynamicExtraBody::AlwaysDelete { .. } => {
                 // Always variant has no filter to validate
             }
         }
@@ -1628,28 +1626,28 @@ async fn validate_inference_filters(
     // Validate extra_headers filters
     for filter in extra_headers.as_slice() {
         match filter {
-            InferenceExtraHeader::Variant { variant_name, .. }
-            | InferenceExtraHeader::VariantDelete { variant_name, .. } => {
+            DynamicExtraHeader::Variant { variant_name, .. }
+            | DynamicExtraHeader::VariantDelete { variant_name, .. } => {
                 if let Some(func) = function {
                     validate_variant_filter(variant_name, func)?;
                 }
             }
-            InferenceExtraHeader::Provider {
+            DynamicExtraHeader::Provider {
                 model_provider_name,
                 ..
             }
-            | InferenceExtraHeader::ProviderDelete {
+            | DynamicExtraHeader::ProviderDelete {
                 model_provider_name,
                 ..
             } => {
                 validate_provider_filter(model_provider_name)?;
             }
-            InferenceExtraHeader::ModelProvider {
+            DynamicExtraHeader::ModelProvider {
                 model_name,
                 provider_name,
                 ..
             }
-            | InferenceExtraHeader::ModelProviderDelete {
+            | DynamicExtraHeader::ModelProviderDelete {
                 model_name,
                 provider_name,
                 ..
@@ -1657,7 +1655,7 @@ async fn validate_inference_filters(
                 validate_model_provider_filter(model_name, provider_name.as_deref(), models)
                     .await?;
             }
-            InferenceExtraHeader::Always { .. } | InferenceExtraHeader::AlwaysDelete { .. } => {
+            DynamicExtraHeader::Always { .. } | DynamicExtraHeader::AlwaysDelete { .. } => {
                 // Always variant has no filter to validate
             }
         }

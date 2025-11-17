@@ -13,6 +13,10 @@ from .client import (
 
 # Generated dataclasses
 from .generated_types import (
+    AlwaysExtraBody,
+    AlwaysExtraBodyDelete,
+    AlwaysExtraHeader,
+    AlwaysExtraHeaderDelete,
     ContentBlockChatOutput,
     ContentBlockChatOutputText,
     CreateDatapointRequest,
@@ -22,6 +26,8 @@ from .generated_types import (
     CreateDatapointsResponse,
     DatapointMetadataUpdate,
     DeleteDatapointsResponse,
+    ExtraBody,
+    ExtraHeader,
     GetDatapointsResponse,
     Input,
     InputMessage,
@@ -29,8 +35,20 @@ from .generated_types import (
     InputMessageContentText,
     JsonDatapointOutputUpdate,
     ListDatapointsRequest,
+    ModelProviderExtraBody,
+    ModelProviderExtraBodyDelete,
+    ModelProviderExtraHeader,
+    ModelProviderExtraHeaderDelete,
+    ProviderExtraBody,
+    ProviderExtraBodyDelete,
+    ProviderExtraHeader,
+    ProviderExtraHeaderDelete,
     UpdateDatapointMetadataRequest,
     UpdateDatapointsResponse,
+    VariantExtraBody,
+    VariantExtraBodyDelete,
+    VariantExtraHeader,
+    VariantExtraHeaderDelete,
 )
 from .tensorzero import (
     BestOfNSamplingConfig,
@@ -62,8 +80,6 @@ from .tensorzero import (
     _start_http_gateway as _start_http_gateway,
 )
 from .types import (
-    AlwaysExtraBody,
-    AlwaysExtraHeader,
     AndFilter,  # pyright: ignore[reportDeprecated]
     BaseTensorZeroError,
     BooleanMetricFilter,  # pyright: ignore[reportDeprecated]
@@ -73,8 +89,6 @@ from .types import (
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
     DynamicEvaluationRunResponse,  # DEPRECATED
     EvaluatorStatsDict,
-    ExtraBody,
-    ExtraHeader,
     FeedbackResponse,
     FileBase64,
     FileUrl,
@@ -96,13 +110,9 @@ from .types import (
     JsonInferenceOutput,
     JsonInferenceResponse,
     Message,
-    ModelProviderExtraBody,
-    ModelProviderExtraHeader,
     NotFilter,  # pyright: ignore[reportDeprecated]
     OrderBy,
     OrFilter,  # pyright: ignore[reportDeprecated]
-    ProviderExtraBody,  # DEPRECATED
-    ProviderExtraHeader,  # DEPRECATED
     RawText,
     System,
     TagFilter,  # pyright: ignore[reportDeprecated]
@@ -122,8 +132,6 @@ from .types import (
     ToolResult,
     UnknownContentBlock,
     Usage,
-    VariantExtraBody,
-    VariantExtraHeader,
     WorkflowEvaluationRunEpisodeResponse,
     WorkflowEvaluationRunResponse,
 )
@@ -164,7 +172,9 @@ ChatInferenceOutput = t.List[ContentBlock]
 
 __all__ = [
     "AlwaysExtraBody",
+    "AlwaysExtraBodyDelete",
     "AlwaysExtraHeader",
+    "AlwaysExtraHeaderDelete",
     "AndFilter",
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
@@ -246,13 +256,17 @@ __all__ = [
     "FireworksSFTConfig",
     "GCPVertexGeminiSFTConfig",
     "ModelProviderExtraBody",
+    "ModelProviderExtraBodyDelete",
     "ModelProviderExtraHeader",
+    "ModelProviderExtraHeaderDelete",
     "OpenAISFTConfig",
     "OpenAIRFTConfig",
     "OptimizationConfig",
     "patch_openai_client",
     "ProviderExtraBody",
+    "ProviderExtraBodyDelete",
     "ProviderExtraHeader",
+    "ProviderExtraHeaderDelete",
     "RawText",
     "RenderedStoredInference",  # DEPRECATED
     "RenderedSample",
@@ -278,7 +292,9 @@ __all__ = [
     "UpdateDatapointMetadataRequest",
     "Usage",
     "VariantExtraBody",
+    "VariantExtraBodyDelete",
     "VariantExtraHeader",
+    "VariantExtraHeaderDelete",
 ]
 
 T = t.TypeVar("T", bound=t.Any)

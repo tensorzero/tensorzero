@@ -11,10 +11,8 @@ use crate::{
     http::{TensorZeroEventSource, TensorzeroRequestBuilder},
     inference::types::{
         batch::{ProviderBatchInferenceOutput, ProviderBatchInferenceResponse},
-        extra_body::{ExtraBodyReplacementKind, FullExtraBodyConfig, InferenceExtraBody},
-        extra_headers::{
-            ExtraHeader, ExtraHeaderKind, FullExtraHeadersConfig, InferenceExtraHeader,
-        },
+        extra_body::{DynamicExtraBody, ExtraBodyReplacementKind, FullExtraBodyConfig},
+        extra_headers::{DynamicExtraHeader, ExtraHeader, ExtraHeaderKind, FullExtraHeadersConfig},
         resolved_input::{FileUrl, LazyFile},
         ProviderInferenceResponseChunk,
     },
@@ -291,7 +289,7 @@ pub fn inject_extra_request_data(
     // Finally, write the inference-level extra_body information. This can overwrite values set from the config-level extra_body.
     for extra_body in &config.inference_extra_body.data {
         match extra_body {
-            InferenceExtraBody::Variant {
+            DynamicExtraBody::Variant {
                 // We're iterating over a 'FilteredInferenceExtraBody', so we've already removed any non-matching variant names.
                 // Any remaining `InferenceExtraBody::Variant` values should be applied to the current request
                 pointer,
@@ -300,10 +298,10 @@ pub fn inject_extra_request_data(
             } => {
                 write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
             }
-            InferenceExtraBody::VariantDelete { pointer, .. } => {
+            DynamicExtraBody::VariantDelete { pointer, .. } => {
                 delete_json_pointer(body, pointer)?;
             }
-            InferenceExtraBody::Provider {
+            DynamicExtraBody::Provider {
                 model_provider_name,
                 pointer,
                 value,
@@ -312,7 +310,7 @@ pub fn inject_extra_request_data(
                     write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
                 }
             }
-            InferenceExtraBody::ProviderDelete {
+            DynamicExtraBody::ProviderDelete {
                 model_provider_name,
                 pointer,
                 ..
@@ -321,7 +319,7 @@ pub fn inject_extra_request_data(
                     delete_json_pointer(body, pointer)?;
                 }
             }
-            InferenceExtraBody::ModelProvider {
+            DynamicExtraBody::ModelProvider {
                 model_name: filter_model_name,
                 provider_name: filter_provider_name,
                 pointer,
@@ -335,7 +333,7 @@ pub fn inject_extra_request_data(
                     write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
                 }
             }
-            InferenceExtraBody::ModelProviderDelete {
+            DynamicExtraBody::ModelProviderDelete {
                 model_name: filter_model_name,
                 provider_name: filter_provider_name,
                 pointer,
@@ -349,10 +347,10 @@ pub fn inject_extra_request_data(
                     delete_json_pointer(body, pointer)?;
                 }
             }
-            InferenceExtraBody::Always { pointer, value } => {
+            DynamicExtraBody::Always { pointer, value } => {
                 write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
             }
-            InferenceExtraBody::AlwaysDelete { pointer, .. } => {
+            DynamicExtraBody::AlwaysDelete { pointer, .. } => {
                 delete_json_pointer(body, pointer)?;
             }
         }
@@ -401,7 +399,7 @@ pub fn inject_extra_request_data(
     // Finally, write the inference-level extra_headers information. This can overwrite header set from the config-level extra_headers.
     for extra_header in &extra_headers_config.inference_extra_headers.data {
         match extra_header {
-            InferenceExtraHeader::Variant { name, value, .. } => {
+            DynamicExtraHeader::Variant { name, value, .. } => {
                 // We're iterating over a 'FilteredInferenceExtraHeaders', so we've already removed any non-matching variant names.
                 // Any remaining `InferenceExtraHeader::Variant` values should be applied to the current request
                 let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
@@ -424,7 +422,7 @@ pub fn inject_extra_request_data(
                     })?,
                 );
             }
-            InferenceExtraHeader::VariantDelete { name, .. } => {
+            DynamicExtraHeader::VariantDelete { name, .. } => {
                 let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
@@ -435,7 +433,7 @@ pub fn inject_extra_request_data(
                 })?;
                 headers.remove(name);
             }
-            InferenceExtraHeader::Provider {
+            DynamicExtraHeader::Provider {
                 model_provider_name,
                 name,
                 value,
@@ -463,7 +461,7 @@ pub fn inject_extra_request_data(
                     );
                 }
             }
-            InferenceExtraHeader::ProviderDelete {
+            DynamicExtraHeader::ProviderDelete {
                 model_provider_name,
                 name,
                 ..
@@ -481,7 +479,7 @@ pub fn inject_extra_request_data(
                     headers.remove(name);
                 }
             }
-            InferenceExtraHeader::ModelProvider {
+            DynamicExtraHeader::ModelProvider {
                 model_name: filter_model_name,
                 provider_name: filter_provider_name,
                 name,
@@ -514,7 +512,7 @@ pub fn inject_extra_request_data(
                     );
                 }
             }
-            InferenceExtraHeader::ModelProviderDelete {
+            DynamicExtraHeader::ModelProviderDelete {
                 model_name: filter_model_name,
                 provider_name: filter_provider_name,
                 name,
@@ -537,7 +535,7 @@ pub fn inject_extra_request_data(
                     headers.remove(name);
                 }
             }
-            InferenceExtraHeader::Always { name, value } => {
+            DynamicExtraHeader::Always { name, value } => {
                 let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
@@ -558,7 +556,7 @@ pub fn inject_extra_request_data(
                     })?,
                 );
             }
-            InferenceExtraHeader::AlwaysDelete { name, .. } => {
+            DynamicExtraHeader::AlwaysDelete { name, .. } => {
                 let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
@@ -859,7 +857,7 @@ mod tests {
 
     use crate::inference::types::{
         extra_body::{ExtraBodyConfig, ExtraBodyReplacement, FilteredInferenceExtraBody},
-        extra_headers::{ExtraHeadersConfig, FilteredInferenceExtraHeaders, InferenceExtraHeader},
+        extra_headers::{DynamicExtraHeader, ExtraHeadersConfig, FilteredInferenceExtraHeaders},
         ContentBlockChunk, TextChunk,
     };
     use futures::{stream, StreamExt};
@@ -950,7 +948,7 @@ mod tests {
             &FullExtraBodyConfig {
                 extra_body: Some(ExtraBodyConfig { data: vec![] }),
                 inference_extra_body: FilteredInferenceExtraBody {
-                    data: vec![InferenceExtraBody::Provider {
+                    data: vec![DynamicExtraBody::Provider {
                         model_provider_name: "wrong_provider".to_string(),
                         pointer: "/my_key".to_string(),
                         value: Value::String("My Value".to_string()),
@@ -960,7 +958,7 @@ mod tests {
             &FullExtraHeadersConfig {
                 variant_extra_headers: Some(ExtraHeadersConfig { data: vec![] }),
                 inference_extra_headers: FilteredInferenceExtraHeaders {
-                    data: vec![InferenceExtraHeader::Provider {
+                    data: vec![DynamicExtraHeader::Provider {
                         model_provider_name: "wrong_provider".to_string(),
                         name: "X-My-Header".to_string(),
                         value: "My Value".to_string(),
@@ -1032,14 +1030,14 @@ mod tests {
                 }),
                 inference_extra_headers: FilteredInferenceExtraHeaders {
                     data: vec![
-                        InferenceExtraHeader::Provider {
+                        DynamicExtraHeader::Provider {
                             model_provider_name:
                                 "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
                                     .to_string(),
                             name: "X-My-Inference".to_string(),
                             value: "My inference header value".to_string(),
                         },
-                        InferenceExtraHeader::Variant {
+                        DynamicExtraHeader::Variant {
                             variant_name: "dummy_variant".to_string(),
                             name: "X-My-Overridden-Inference".to_string(),
                             value: "My inference value".to_string(),
@@ -1115,7 +1113,7 @@ mod tests {
                     ],
                 }),
                 inference_extra_body: FilteredInferenceExtraBody {
-                    data: vec![InferenceExtraBody::Provider {
+                    data: vec![DynamicExtraBody::Provider {
                         model_provider_name:
                             "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
                                 .to_string(),
@@ -1189,7 +1187,7 @@ mod tests {
                     ],
                 }),
                 inference_extra_body: FilteredInferenceExtraBody {
-                    data: vec![InferenceExtraBody::Provider {
+                    data: vec![DynamicExtraBody::Provider {
                         model_provider_name:
                             "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
                                 .to_string(),
@@ -1559,7 +1557,7 @@ mod tests {
         let config = FullExtraBodyConfig {
             extra_body: None,
             inference_extra_body: FilteredInferenceExtraBody {
-                data: vec![InferenceExtraBody::ModelProvider {
+                data: vec![DynamicExtraBody::ModelProvider {
                     model_name: "gpt-4o".to_string(), // NOT using shorthand
                     provider_name: Some("openai".to_string()),
                     pointer: "/test_no_shorthand".to_string(),
@@ -1594,7 +1592,7 @@ mod tests {
         let config = FullExtraBodyConfig {
             extra_body: None,
             inference_extra_body: FilteredInferenceExtraBody {
-                data: vec![InferenceExtraBody::ModelProvider {
+                data: vec![DynamicExtraBody::ModelProvider {
                     model_name: "anthropic::claude-3".to_string(), // Wrong prefix
                     provider_name: Some("openai".to_string()),
                     pointer: "/test_wrong".to_string(),
@@ -1629,7 +1627,7 @@ mod tests {
         let config = FullExtraBodyConfig {
             extra_body: None,
             inference_extra_body: FilteredInferenceExtraBody {
-                data: vec![InferenceExtraBody::ModelProvider {
+                data: vec![DynamicExtraBody::ModelProvider {
                     // External model with :: but not a known prefix
                     model_name: "custom::deployment::model".to_string(),
                     provider_name: Some("custom".to_string()),
@@ -1664,7 +1662,7 @@ mod tests {
         let headers_config = FullExtraHeadersConfig {
             variant_extra_headers: None,
             inference_extra_headers: FilteredInferenceExtraHeaders {
-                data: vec![InferenceExtraHeader::ModelProvider {
+                data: vec![DynamicExtraHeader::ModelProvider {
                     model_name: "gpt-4o".to_string(), // NOT using shorthand
                     provider_name: Some("openai".to_string()),
                     name: "X-Custom-Header-2".to_string(),

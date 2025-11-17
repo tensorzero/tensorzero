@@ -24,8 +24,8 @@ from tensorzero import (
     ContentBlock,
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
     DynamicEvaluationRunResponse,  # DEPRECATED
-    ExtraBody,
-    ExtraHeader,
+    ExtraBody,  # DEPRECATED
+    ExtraHeader,  # DEPRECATED
     FeedbackResponse,
     InferenceChunk,
     InferenceInput,
