@@ -92,14 +92,15 @@ pub struct Args {
     pub max_datapoints: Option<usize>,
 
     /// Per-evaluator precision targets for adaptive stopping.
-    /// Format: evaluator_name=threshold, comma-separated for multiple evaluators.
-    /// Example: --adaptive-stopping-precision "exact_match=0.13,llm_judge=0.16"
-    /// Evaluator stops when CI half-width <= threshold.
+    /// Format: evaluator_name=precision_target, comma-separated for multiple evaluators.
+    /// Example: --adaptive-stopping-precision exact_match=0.13,llm_judge=0.16
+    /// Evaluator stops when confidence interval (CI) half-width (or the maximum width of the two
+    /// halves of the CI in the case of asymmetric CIs) <= precision_target.
     #[arg(long = "adaptive-stopping-precision", value_parser = parse_precision_targets, default_value = "")]
     pub precision_targets: Vec<(String, f32)>,
 }
 
-/// Parse precision targets argument in format "evaluator1=threshold1,evaluator2=threshold2,..."
+/// Parse precision targets argument in format "evaluator1=target_value1,evaluator2=target_value2,..."
 fn parse_precision_targets(s: &str) -> Result<Vec<(String, f32)>, String> {
     // Return empty vec if input is empty
     if s.trim().is_empty() {
@@ -111,19 +112,19 @@ fn parse_precision_targets(s: &str) -> Result<Vec<(String, f32)>, String> {
             let parts: Vec<&str> = pair.trim().splitn(2, '=').collect();
             if parts.len() != 2 {
                 return Err(format!(
-                    "Invalid precision format: '{pair}'. Expected format: evaluator_name=threshold"
+                    "Invalid precision format: '{pair}'. Expected format: evaluator_name=precision_target"
                 ));
             }
             let evaluator_name = parts[0].to_string();
-            let threshold = parts[1]
+            let precision_target = parts[1]
                 .parse::<f32>()
-                .map_err(|e| format!("Invalid threshold value '{}': {e}", parts[1]))?;
-            if threshold < 0.0 {
+                .map_err(|e| format!("Invalid pr value '{}': {e}", parts[1]))?;
+            if precision_target < 0.0 {
                 return Err(format!(
-                    "Precision value must be non-negative, got {threshold}"
+                    "Precision value must be non-negative, got {precision_target}"
                 ));
             }
-            Ok((evaluator_name, threshold))
+            Ok((evaluator_name, precision_target))
         })
         .collect()
 }
@@ -390,8 +391,8 @@ pub async fn run_evaluation(
 /// **`max_datapoints`**: When `Some(max)`, limits dataset to at most `max` datapoints.
 ///
 /// **`precision_targets`**: When non-empty, enables adaptive stopping:
-/// - Per-evaluator CI half-width thresholds (HashMap<String, f32>)
-/// - Evaluator k stops when the larger of the two halves of the CI has width ≤ threshold_k`
+/// - Per-evaluator CI half-width precision_targets (HashMap<String, f32>)
+/// - Evaluator k stops when the larger of the two halves of the CI has width ≤ precision_target_k`
 /// - Only checked after min_datapoints (hardcoded to 20) have been completed
 /// - Evaluators not in the map run on all datapoints (up to max_datapoints)
 /// - All datapoint tasks are spawned upfront for maximum concurrency
