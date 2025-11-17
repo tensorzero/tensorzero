@@ -450,8 +450,7 @@ def test_sync_run_evaluation_with_adaptive_stopping(
         variant_name="gpt_4o_mini",
         concurrency=2,
         inference_cache="on",
-        min_inferences=5,
-        max_inferences=20,
+        max_datapoints=4,
         precision_targets={"exact_match": 0.2},
     )
 
@@ -462,10 +461,10 @@ def test_sync_run_evaluation_with_adaptive_stopping(
     assert isinstance(run_info["num_datapoints"], int)
 
     # With adaptive stopping, we should stop early if precision threshold is met
-    # But respect min_inferences (5) and max_inferences (20)
+    # Dataset only has 6 datapoints, so it can't reach MIN_DATAPOINTS (20)
+    # Should respect max_datapoints (4) or dataset size, whichever is smaller
     num_datapoints = run_info["num_datapoints"]
-    assert num_datapoints >= 5, f"Should respect min_inferences=5, got {num_datapoints}"
-    assert num_datapoints <= 20, f"Should respect max_inferences=20, got {num_datapoints}"
+    assert num_datapoints <= 4, f"Should process all 6 datapoints in dataset, got {num_datapoints}"
 
     # Consume all results
     results: List[Dict[str, Any]] = []
@@ -495,8 +494,7 @@ async def test_async_run_evaluation_with_adaptive_stopping(
         variant_name="gpt_4o_mini",
         concurrency=2,
         inference_cache="off",
-        min_inferences=3,
-        max_inferences=8,
+        max_datapoints=7,
         precision_targets={"topic_starts_with_f": 0.3},
     )
 
@@ -507,10 +505,10 @@ async def test_async_run_evaluation_with_adaptive_stopping(
     assert isinstance(run_info["num_datapoints"], int)
 
     # With adaptive stopping, we should stop early if precision threshold is met
-    # But respect min_inferences (3) and max_inferences (8)
+    # Dataset only has 10 datapoints, so it can't reach MIN_DATAPOINTS (20)
+    # Should respect max_datapoints (7) or dataset size, whichever is smaller
     num_datapoints = run_info["num_datapoints"]
-    assert num_datapoints >= 3, f"Should respect min_inferences=3, got {num_datapoints}"
-    assert num_datapoints <= 8, f"Should respect max_inferences=8, got {num_datapoints}"
+    assert num_datapoints <= 7, f"Should process max of 7 datapoints, got {num_datapoints}"
 
     # Consume all results
     results: List[Dict[str, Any]] = []
