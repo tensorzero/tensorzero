@@ -1371,18 +1371,17 @@ impl TensorZeroGateway {
             construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
 
         // Parse precision_limits from Python dict to Rust HashMap
-        let precision_limits_map: Option<std::collections::HashMap<String, f32>> =
-            if let Some(limits_dict) = precision_limits {
-                let mut map = std::collections::HashMap::new();
-                for (key, value) in limits_dict.iter() {
-                    let key_str: String = key.extract()?;
-                    let value_f64: f64 = value.extract()?;
-                    map.insert(key_str, value_f64 as f32);
-                }
-                Some(map)
-            } else {
-                None
-            };
+        let precision_limits_map = if let Some(limits_dict) = precision_limits {
+            let mut map = std::collections::HashMap::new();
+            for (key, value) in limits_dict.iter() {
+                let key_str: String = key.extract()?;
+                let value_f64: f64 = value.extract()?;
+                map.insert(key_str, value_f64 as f32);
+            }
+            map
+        } else {
+            HashMap::new()
+        };
 
         let core_args = EvaluationCoreArgs {
             tensorzero_client: (*client).clone(),
@@ -1398,7 +1397,7 @@ impl TensorZeroGateway {
 
         let result = tokio_block_on_without_gil(
             this.py(),
-            run_evaluation_core_streaming(core_args, None, HashMap::new()),
+            run_evaluation_core_streaming(core_args, max_datapoints, precision_limits_map),
         )
         .map_err(|e| {
             pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
@@ -2493,18 +2492,17 @@ impl AsyncTensorZeroGateway {
             construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
 
         // Parse precision_limits from Python dict to Rust HashMap
-        let precision_limits_map: Option<std::collections::HashMap<String, f32>> =
-            if let Some(limits_dict) = precision_limits {
-                let mut map = std::collections::HashMap::new();
-                for (key, value) in limits_dict.iter() {
-                    let key_str: String = key.extract()?;
-                    let value_f64: f64 = value.extract()?;
-                    map.insert(key_str, value_f64 as f32);
-                }
-                Some(map)
-            } else {
-                None
-            };
+        let precision_limits_map = if let Some(limits_dict) = precision_limits {
+            let mut map = std::collections::HashMap::new();
+            for (key, value) in limits_dict.iter() {
+                let key_str: String = key.extract()?;
+                let value_f64: f64 = value.extract()?;
+                map.insert(key_str, value_f64 as f32);
+            }
+            map
+        } else {
+            HashMap::new()
+        };
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             // Get app state data
@@ -2526,11 +2524,12 @@ impl AsyncTensorZeroGateway {
                 inference_cache: inference_cache_enum,
             };
 
-            let result = run_evaluation_core_streaming(core_args, None, HashMap::new())
-                .await
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
-                })?;
+            let result =
+                run_evaluation_core_streaming(core_args, max_datapoints, precision_limits_map)
+                    .await
+                    .map_err(|e| {
+                        pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
+                    })?;
 
             Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let handler = AsyncEvaluationJobHandler {
