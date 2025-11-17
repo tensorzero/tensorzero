@@ -213,14 +213,7 @@ pub async fn run_evaluation_streaming(
         concurrency,
     };
 
-    let result = match run_evaluation_core_streaming(
-        core_args,
-        min_inferences,
-        max_inferences,
-        precision_limits,
-    )
-    .await
-    {
+    let result = match run_evaluation_core_streaming(core_args, None, HashMap::new()).await {
         Ok(result) => result,
         Err(error) => {
             let _ = callback.abort();

@@ -1401,12 +1401,7 @@ impl TensorZeroGateway {
 
         let result = tokio_block_on_without_gil(
             this.py(),
-            run_evaluation_core_streaming(
-                core_args,
-                min_inferences,
-                max_inferences,
-                precision_limits_map,
-            ),
+            run_evaluation_core_streaming(core_args, None, HashMap::new()),
         )
         .map_err(|e| {
             pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
@@ -2537,16 +2532,11 @@ impl AsyncTensorZeroGateway {
                 inference_cache: inference_cache_enum,
             };
 
-            let result = run_evaluation_core_streaming(
-                core_args,
-                min_inferences,
-                max_inferences,
-                precision_limits_map,
-            )
-            .await
-            .map_err(|e| {
-                pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
-            })?;
+            let result = run_evaluation_core_streaming(core_args, None, HashMap::new())
+                .await
+                .map_err(|e| {
+                    pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
+                })?;
 
             Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let handler = AsyncEvaluationJobHandler {

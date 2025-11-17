@@ -31,7 +31,6 @@ use tokio::{
     sync::{mpsc, Semaphore},
     task::JoinSet,
 };
-use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, instrument};
 use url::Url;
 use uuid::Uuid;
@@ -40,6 +39,7 @@ pub mod dataset;
 pub mod evaluators;
 pub mod helpers;
 pub mod stats;
+pub mod stopping;
 
 /// Buffer size for the mpsc channel used to stream evaluation updates.
 /// This provides backpressure if the consumer can't keep up with the producer.
@@ -276,19 +276,15 @@ pub async fn run_evaluation(
         concurrency: args.concurrency,
     };
 
-    // Convert Option<Vec<(String, f32)>> to Option<HashMap<String, f32>> for precision_limits
-    let precision_limits = args
-        .precision_limits
-        .map(|limits| limits.into_iter().collect());
+    // // Convert Option<Vec<(String, f32)>> to HashMap<String, f32> for precision_limits
+    // let precision_limits: HashMap<String, f32> = args
+    //     .precision_limits
+    //     .unwrap_or_default()
+    //     .into_iter()
+    //     .collect();
 
     let output_format = args.format.clone();
-    let result = run_evaluation_core_streaming(
-        core_args,
-        args.min_inferences,
-        args.max_inferences,
-        precision_limits,
-    )
-    .await?;
+    let result = run_evaluation_core_streaming(core_args, None, HashMap::new()).await?; // No adaptive stopping
 
     let mut receiver = result.receiver;
     let dataset_len = result.run_info.num_datapoints;
@@ -363,47 +359,49 @@ pub async fn run_evaluation(
 /// Core streaming evaluation function with optional adaptive stopping.
 ///
 /// This function runs an evaluation and streams results as they complete via an mpsc channel.
-/// When `precision_limits` is provided, evaluators can stop independently once confidence
-/// interval half-widths are within the precision limits.
+/// When `precision_targets` is provided, evaluators can stop independently once confidence
+/// interval half-widths (the max of the distances from the CI endpoints to the point estimate)
+/// are within the precision targets.
 ///
 /// ## How it works
 ///
 /// 1. Creates an mpsc channel for streaming `EvaluationUpdate` messages
 /// 2. Loads the evaluation and function configurations
-/// 3. Queries the dataset (limited by `max_inferences` if specified)
-/// 4. If `precision_limits` is provided: creates cancellation tokens for each evaluator with a precision limit
+/// 3. Queries the dataset (limited by `max_datapoints` if specified)
+/// 4. If `precision_targets` is provided, creates a `StoppingManager` which internally creates cancellation
+///    tokens and tracks evaluator statistics
 /// 5. Sends `RunInfo` as the first message (evaluation_run_id, num_datapoints)
-/// 6. Spawns a concurrent task for each datapoint (up to `max_inferences`) that:
+/// 6. Spawns a concurrent task for each datapoint (up to `max_datapoints`) that:
 ///    - Acquires a semaphore permit (controls concurrency)
 ///    - Runs inference for the datapoint
-///    - Evaluates the inference response (skipping cancelled evaluators)
+///    - Evaluates the inference response (skipping cancelled evaluators via `StoppingManager::get_tokens()`)
 ///    - Returns (Datapoint, InferenceResponse, EvaluationResult)
 /// 7. Spawns a background collector task that:
 ///    - Collects results from the JoinSet as tasks complete
-///    - If `precision_limits` is provided: updates per-evaluator statistics after `min_inferences`
-///    - Checks stopping conditions: cancels evaluator tokens when CI half-width ≤ precision_limit
-///    - When all evaluators with precision limits stop: aborts remaining tasks
+///    - If `precision_targets` is provided:
+///      - Updates per-evaluator statistics via `StoppingManager::update_stats()`
+///      - Cancels converged evaluators via `StoppingManager::cancel_converged_evaluators()`
+///      - Checks if all evaluators have stopped via `StoppingManager::all_evaluators_stopped()`
+///      - Aborts remaining tasks when all evaluators have stopped
 ///    - Converts results to `EvaluationUpdate::Success` or `EvaluationUpdate::Error`
 ///    - Sends each update through the channel
 ///    - Closes the channel when all tasks complete or are aborted
 /// 8. Returns immediately with the receiver, run_info, and evaluation_config
 ///
-/// **Min Inferences**: Minimum number of inferences to run before checking stopping conditions (default: 20)
-///   - Ensures sufficient samples for statistical validity
+/// ## Parameters
 ///
-/// **Max Inferences**: When `max_inferences` is `Some(max)`, limits dataset to at most `max` datapoints.
+/// **`max_datapoints`**: When `Some(max)`, limits dataset to at most `max` datapoints.
 ///
-/// **Precision Limits**: When `precision_limits` is `Some(map)`:
+/// **`precision_targets`**: When non-empty, enables adaptive stopping:
 /// - Per-evaluator CI half-width thresholds (HashMap<String, f32>)
-///   - Evaluator k stops when: `1.96 * stderr ≤ threshold_k` (1.96 gives a 95% Wald-style confidence interval)
-///   - Only checked after `min_inferences` have completed
-///   - Implemented via cancellation tokens that skip the evaluator on subsequent datapoints
-/// - **Evaluators not in precision_limits map**: Run on all datapoints (up to max_inferences)
+/// - Evaluator k stops when the larger of the two halves of the CI has width ≤ threshold_k`
+/// - Only checked after min_datapoints (hardcoded to 20) have been completed
+/// - Evaluators not in the map run on all datapoints (up to max_datapoints)
 /// - All datapoint tasks are spawned upfront for maximum concurrency
-/// - When all evaluators with precision limits have stopped, remaining tasks are aborted
+/// - When all evaluators have stopped, remaining tasks are aborted
 ///
-/// When `precision_limits` is `None`:
-/// - All evaluators run on all datapoints (up to max_inferences)
+/// When `precision_targets` is empty:
+/// - All evaluators run on all datapoints (up to max_datapoints)
 /// - Standard evaluation behavior
 ///
 /// ## Return value
@@ -424,12 +422,9 @@ pub async fn run_evaluation(
 #[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant = ?args.variant, concurrency = %args.concurrency))]
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
-    min_inferences: Option<usize>,
-    max_inferences: Option<usize>,
-    precision_limits: Option<HashMap<String, f32>>,
+    max_datapoints: Option<usize>,
+    precision_targets: HashMap<String, f32>,
 ) -> Result<EvaluationStreamResult> {
-    // Default to 20 for min_inferences
-    let min_inferences = min_inferences.unwrap_or(20);
     let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
 
     // Build the semaphore and clients
@@ -469,7 +464,7 @@ pub async fn run_evaluation_core_streaming(
         &args.dataset_name,
         &inference_evaluation_config.function_name,
         &function_config,
-        max_inferences, // Apply max_inferences limit if provided
+        max_datapoints, // Apply max_datapoints limit if provided
     )
     .await?;
     info!(dataset_size = dataset.len(), "Dataset loaded successfully");
@@ -479,25 +474,13 @@ pub async fn run_evaluation_core_streaming(
     let dataset_len = dataset.len();
     let mut task_id_to_datapoint_id = HashMap::new();
 
-    // Setup for adaptive stopping (if enabled)
-    let cancellation_tokens: Option<Arc<HashMap<String, CancellationToken>>> =
-        precision_limits.as_ref().map(|_| {
-            Arc::new(
-                inference_evaluation_config
-                    .evaluators
-                    .keys()
-                    .map(|name| (name.clone(), CancellationToken::new()))
-                    .collect(),
-            )
-        });
-
-    let mut evaluator_stats: Option<HashMap<String, PerEvaluatorStats>> =
-        precision_limits.as_ref().map(|precision_map| {
-            precision_map
-                .keys()
-                .map(|name| (name.clone(), PerEvaluatorStats::new()))
-                .collect()
-        });
+    // Setup stopping manager for adaptive stopping
+    let evaluator_names: Vec<String> = inference_evaluation_config
+        .evaluators
+        .keys()
+        .cloned()
+        .collect();
+    let mut stopping_manager = stopping::StoppingManager::new(precision_targets, &evaluator_names);
 
     let run_info = RunInfo {
         evaluation_run_id: args.evaluation_run_id,
@@ -513,6 +496,9 @@ pub async fn run_evaluation_core_streaming(
         tracing::warn!("Failed to send RunInfo: receiver dropped before evaluation started");
     }
 
+    // Get cancellation tokens from stopping manager and wrap in Arc for cloning into tasks
+    let cancellation_tokens_arc = Arc::new(stopping_manager.get_tokens().clone());
+
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
         let clients_clone = clients.clone();
@@ -526,7 +512,7 @@ pub async fn run_evaluation_core_streaming(
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let inference_cache = args.inference_cache;
-        let tokens_clone = cancellation_tokens.clone();
+        let tokens_clone = cancellation_tokens_arc.clone();
         let semaphore_clone = semaphore.clone();
         // Skip feedback for dynamic variants (they're not production-ready)
         // Named variants: send_feedback=true, Dynamic variants: send_feedback=false
@@ -565,7 +551,7 @@ pub async fn run_evaluation_core_streaming(
                     inference_cache,
                     send_feedback,
                 },
-                tokens_clone.as_ref().map(|t| t.as_ref()),  // Pass cancellation tokens if available
+                tokens_clone.as_ref(),  // Pass cancellation tokens
             )
                 .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
             debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
@@ -584,75 +570,22 @@ pub async fn run_evaluation_core_streaming(
 
     // Spawn a task to collect results and stream them
     let sender_clone = sender.clone();
-    let precision_limits_clone = precision_limits.clone();
-    let mut completed_inferences = 0;
+    let mut num_completed_datapoints = 0;
     // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
     #[expect(clippy::disallowed_methods)]
     tokio::spawn(async move {
         while let Some(result) = join_set.join_next_with_id().await {
             let update = match result {
                 Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
-                    completed_inferences += 1;
+                    num_completed_datapoints += 1;
 
-                    // Update statistics for adaptive stopping (if enabled)
-                    if let (Some(stats), Some(precision_map)) =
-                        (evaluator_stats.as_mut(), precision_limits_clone.as_ref())
-                    {
-                        for (evaluator_name, eval_result) in &evaluation_result {
-                            // Only track stats for evaluators with stopping conditions
-                            if let Some(evaluator_stats) = stats.get_mut(evaluator_name) {
-                                match eval_result {
-                                    Ok(Some(serde_json::Value::Number(n))) => {
-                                        if let Some(value) = n.as_f64() {
-                                            evaluator_stats.push(value as f32);
-                                        }
-                                    }
-                                    Ok(Some(serde_json::Value::Bool(b))) => {
-                                        evaluator_stats.push(if *b { 1.0 } else { 0.0 });
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
+                    // Update statistics and cancel any evaluators that have hit their precision target
+                    stopping_manager.update_stats(&evaluation_result);
+                    stopping_manager.cancel_converged_evaluators(num_completed_datapoints);
 
-                        // Check stopping conditions and cancel tokens if needed
-                        // Only check after min_inferences have been completed
-                        if completed_inferences >= min_inferences {
-                            if let Some(tokens) = cancellation_tokens.as_ref() {
-                                for (evaluator_name, evaluator_stats) in stats.iter() {
-                                    if let Some(precision_limit) = precision_map.get(evaluator_name)
-                                    {
-                                        if let Some(ci_half_width) = evaluator_stats.ci_half_width()
-                                        {
-                                            if ci_half_width <= *precision_limit {
-                                                if let Some(token) = tokens.get(evaluator_name) {
-                                                    if !token.is_cancelled() {
-                                                        info!(
-                                                            evaluator_name = %evaluator_name,
-                                                            ci_half_width = ci_half_width,
-                                                            precision_limit = precision_limit,
-                                                            count = evaluator_stats.count(),
-                                                            mean = ?evaluator_stats.mean(),
-                                                            "Stopping evaluator: CI half-width <= precision_limit"
-                                                        );
-                                                        token.cancel();
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Check if all evaluators (not just those with specified precision limits) are now cancelled
-                                let all_evaluators_stopped =
-                                    tokens.values().all(|token| token.is_cancelled());
-
-                                // If they are, then abort remaining inference tasks
-                                if all_evaluators_stopped {
-                                    join_set.abort_all();
-                                }
-                            }
-                        }
+                    // If all evaluators have stopped, abort remaining tasks
+                    if stopping_manager.all_evaluators_stopped() {
+                        join_set.abort_all();
                     }
 
                     Some(EvaluationUpdate::Success(EvaluationInfo::new(
@@ -668,7 +601,7 @@ pub async fn run_evaluation_core_streaming(
                         message: e.to_string(),
                     }))
                 }
-                // Check if error is due to cancellation: if so, assign None, otherwise wrap Error in Some()
+                // If JoinError, check if error is due to cancellation: if so, assign None, otherwise wrap Error in Some()
                 Err(e) => {
                     if e.is_cancelled() {
                         None
@@ -966,81 +899,5 @@ mod tests {
 
         // Check that evaluator3 is not in the failures list since it has no cutoff
         assert!(!failures.iter().any(|(name, _, _)| name == "evaluator3"));
-    }
-
-    #[test]
-    fn test_per_evaluator_stats_basic() {
-        let mut stats = PerEvaluatorStats::new();
-        assert_eq!(stats.count(), 0);
-        assert_eq!(stats.mean(), None);
-        assert_eq!(stats.stderr(), None);
-        assert_eq!(stats.ci_half_width(), None);
-
-        // Add a single value
-        stats.push(1.0);
-        assert_eq!(stats.count(), 1);
-        assert_eq!(stats.mean(), Some(1.0));
-        assert_eq!(stats.stderr(), None); // Need at least 2 values
-        assert_eq!(stats.ci_half_width(), None);
-    }
-
-    #[test]
-    fn test_per_evaluator_stats_mean_and_stderr() {
-        let mut stats = PerEvaluatorStats::new();
-
-        // Add values: [1.0, 2.0, 3.0, 4.0, 5.0]
-        // Mean = 3.0
-        // Variance = ((3-1)^2 + (3-2)^2 + (3-3)^2 + (3-4)^2 + (3-5)^2) / 5 = (4+1+0+1+4)/5 = 2.0
-        // StdDev = sqrt(2.0) = 1.414...
-        // Stderr = 1.414.../sqrt(5) = 0.632...
-        for value in [1.0, 2.0, 3.0, 4.0, 5.0] {
-            stats.push(value);
-        }
-
-        assert_eq!(stats.count(), 5);
-        assert_eq!(stats.mean(), Some(3.0));
-
-        let stderr = stats.stderr().unwrap();
-        assert!((stderr - 0.632).abs() < 0.01); // Approximately 0.632
-    }
-
-    #[test]
-    fn test_per_evaluator_stats_ci_half_width() {
-        let mut stats = PerEvaluatorStats::new();
-
-        // Add values with known statistics
-        for value in [1.0, 2.0, 3.0, 4.0, 5.0] {
-            stats.push(value);
-        }
-
-        let ci_half_width = stats.ci_half_width().unwrap();
-        let stderr = stats.stderr().unwrap();
-
-        // CI half-width should be 1.96 * stderr
-        assert!((ci_half_width - 1.96 * stderr).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_per_evaluator_stats_to_evaluator_stats() {
-        let mut stats = PerEvaluatorStats::new();
-        for value in [1.0, 2.0, 3.0, 4.0, 5.0] {
-            stats.push(value);
-        }
-
-        let evaluator_stats = stats.to_evaluator_stats();
-        assert_eq!(evaluator_stats.count, 5);
-        assert_eq!(evaluator_stats.mean, 3.0);
-        assert!((evaluator_stats.stderr - 0.632).abs() < 0.01);
-    }
-
-    #[test]
-    fn test_per_evaluator_stats_empty_conversion() {
-        let stats = PerEvaluatorStats::new();
-        let evaluator_stats = stats.to_evaluator_stats();
-
-        // Empty stats should have defaults
-        assert_eq!(evaluator_stats.count, 0);
-        assert_eq!(evaluator_stats.mean, 0.0);
-        assert_eq!(evaluator_stats.stderr, 0.0);
     }
 }

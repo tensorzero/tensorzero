@@ -22,21 +22,21 @@ pub async fn query_dataset(
     debug!(table_name = %table_name, "Determined table name for function type");
 
     // Construct the query to fetch datapoints from the appropriate table
-    let query = if let Some(limit_value) = limit {
+    let limit_clause = if let Some(limit_value) = limit {
         debug!(limit = limit_value, "Applying LIMIT to dataset query");
-        r"SELECT * FROM {table_name: Identifier} FINAL
-         WHERE dataset_name = {dataset_name: String}
-         AND function_name = {function_name: String}
-         AND staled_at IS NULL
-         LIMIT {limit: UInt64}
-         FORMAT JSON"
+        "LIMIT {limit: UInt64}"
     } else {
-        r"SELECT * FROM {table_name: Identifier} FINAL
-         WHERE dataset_name = {dataset_name: String}
-         AND function_name = {function_name: String}
-         AND staled_at IS NULL
-         FORMAT JSON"
+        ""
     };
+
+    let query = format!(
+        r"SELECT * FROM {{table_name: Identifier}} FINAL
+         WHERE dataset_name = {{dataset_name: String}}
+         AND function_name = {{function_name: String}}
+         AND staled_at IS NULL
+         {limit_clause}
+         FORMAT JSON"
+    );
 
     // Need to bind limit_str to extend its lifetime beyond the HashMap creation
     let limit_str;
