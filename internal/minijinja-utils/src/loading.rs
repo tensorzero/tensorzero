@@ -1,3 +1,23 @@
+// # MiniJinja Template Dependency Analysis
+//
+// This module performs **static analysis** of MiniJinja templates to discover template
+// dependencies through `include`, `import`, `from`, and `extends` statements.
+//
+// ## Three-Phase Analysis
+//
+// 1. **Parse**: MiniJinja's `machinery::parse` converts template source into an AST
+// 2. **Traverse**: `LoadCollector` walks the AST to find template load statements
+// 3. **Analyze**: `analyse_expr` extracts template names from expressions
+//
+// ## Static Analysis Results
+//
+// - **Static** : `"template.html"` → knows exact template name
+// - **Dynamic** : `template_var` → cannot resolve (variable, function call, etc.)
+// - **Partial** : `["known.html", var]` → knows some values, not all
+//
+// The analysis is conservative: when uncertain, expressions are marked dynamic.
+// Conditional expressions like `"a.html" if x else "b.html"` analyze both branches.
+
 use minijinja::machinery::{self, ast, Span, WhitespaceConfig};
 use minijinja::syntax::SyntaxConfig;
 use minijinja::value::Value;
@@ -106,26 +126,44 @@ struct TemplateLoad {
     value: LoadValue,
 }
 
-/// Extract source quote from span.
+/// Extracts the source code text corresponding to a span for error reporting.
+///
+/// This is used to show the user exactly what code caused a dynamic load error.
 fn extract_source_quote(source: &str, span: SpanInfo) -> String {
     let end = span.end_offset.min(source.len());
     source[span.start_offset..end].to_string()
 }
 
-/// Analyse template source with an explicit configuration.
+/// Parses template source and collects template loads with explicit parser configuration.
+///
+/// This is the low-level parsing function that:
+/// 1. Calls MiniJinja's `machinery::parse` to convert source text into an AST
+/// 2. Creates a `LoadCollector` visitor to traverse the AST
+/// 3. Returns all discovered template load operations
+///
+/// The syntax and whitespace configurations control how MiniJinja parses the template
+/// (e.g., custom delimiters, whitespace handling).
 fn collect_template_loads_with_config(
     source: &str,
     name: &str,
     syntax_config: SyntaxConfig,
     whitespace_config: WhitespaceConfig,
 ) -> Result<Vec<TemplateLoad>, Error> {
+    // Parse the template source into an AST
     let ast = machinery::parse(source, name, syntax_config, whitespace_config)?;
+
+    // Visit the AST to collect template loads
     let mut collector = LoadCollector::default();
     collector.visit_stmt(&ast);
+
     Ok(collector.loads)
 }
 
-/// Analyse a template registered in an environment using the environment settings.
+/// Collects template loads from a template in an environment using that environment's settings.
+///
+/// This extracts the template's source and parser configuration from the environment,
+/// then delegates to `collect_template_loads_with_config`. This ensures we parse the
+/// template with the same settings that MiniJinja uses at runtime.
 fn collect_template_loads_from_env(
     env: &Environment<'_>,
     template_name: &str,
@@ -133,12 +171,14 @@ fn collect_template_loads_from_env(
     let template = env.get_template(template_name)?;
     let compiled = machinery::get_compiled_template(&template);
 
+    // Extract whitespace configuration from environment
     let whitespace_config = WhitespaceConfig {
         keep_trailing_newline: env.keep_trailing_newline(),
         trim_blocks: env.trim_blocks(),
         lstrip_blocks: env.lstrip_blocks(),
     };
 
+    // Parse with the same configuration the template was compiled with
     collect_template_loads_with_config(
         template.source(),
         template.name(),
@@ -147,36 +187,114 @@ fn collect_template_loads_from_env(
     )
 }
 
+/// AST visitor that collects all template load operations from a parsed MiniJinja template.
+///
+/// This struct implements the visitor pattern to walk through the MiniJinja Abstract Syntax Tree
+/// (AST) and identify all statements that load other templates. The visitor recursively descends
+/// through the AST, examining each statement node and extracting template load operations.
+///
+/// # MiniJinja AST Structure
+///
+/// MiniJinja templates are parsed into an AST consisting of two primary node types:
+/// - **Statements (`ast::Stmt`)**: Control flow and structural elements (loops, conditionals, blocks, etc.)
+/// - **Expressions (`ast::Expr`)**: Values and computations (variables, constants, operations, etc.)
+///
+/// Template loading occurs at the statement level via:
+/// - `{% import "template.html" as name %}` → `ast::Stmt::Import`
+/// - `{% from "template.html" import macro %}` → `ast::Stmt::FromImport`
+/// - `{% extends "base.html" %}` → `ast::Stmt::Extends`
+/// - `{% include "partial.html" %}` → `ast::Stmt::Include`
+///
+/// Each of these statements contains an expression that specifies the template name.
+/// This visitor identifies these statements and analyzes their expressions to extract
+/// the template names.
 #[derive(Default)]
 struct LoadCollector {
+    /// Accumulated list of template load operations discovered during AST traversal.
     loads: Vec<TemplateLoad>,
 }
 
 impl LoadCollector {
+    /// Visits a single AST statement node and processes any template loads it contains.
+    ///
+    /// This method implements the core of the visitor pattern, using pattern matching to
+    /// handle each type of statement in the MiniJinja AST. The method either:
+    /// 1. Records template load operations (import, from, extends, include)
+    /// 2. Recursively visits child statements for container nodes
+    /// 3. Ignores statements that don't affect template loading
+    ///
+    /// # AST Node Categories
+    ///
+    /// ## Container Nodes (recursive descent)
+    /// These nodes contain child statements that must be visited:
+    /// - `Template`: Root node containing top-level statements
+    /// - `ForLoop`: Loop body and else body must both be visited
+    /// - `IfCond`: True and false branches must both be visited
+    /// - `WithBlock`, `SetBlock`, `AutoEscape`, `FilterBlock`: Single body to visit
+    /// - `Block`: Template inheritance block body
+    /// - `Macro`, `CallBlock`: Macro definition bodies
+    ///
+    /// ## Template Load Nodes (extraction)
+    /// These nodes reference other templates and are the primary targets:
+    /// - `Import`: `{% import "template" as name %}` - loads entire template as namespace
+    /// - `FromImport`: `{% from "template" import name %}` - imports specific items
+    /// - `Extends`: `{% extends "base" %}` - template inheritance
+    /// - `Include`: `{% include "partial" %}` - inline template inclusion
+    ///
+    /// ## Leaf Nodes (ignored)
+    /// These nodes don't contain child statements or template references:
+    /// - `EmitRaw`, `EmitExpr`: Output statements
+    /// - `Set`, `Do`: Variable assignment and expression evaluation
+    /// - `Continue`, `Break`: Loop control flow
     fn visit_stmt<'a>(&mut self, stmt: &ast::Stmt<'a>) {
         match stmt {
+            // Root template node - visit all top-level statements
             ast::Stmt::Template(template) => self.visit_stmts(&template.children),
+
+            // For loops have two statement lists: body and else body
+            // Both must be visited because template loads can appear in either
             ast::Stmt::ForLoop(for_loop) => {
                 self.visit_stmts(&for_loop.body);
                 self.visit_stmts(&for_loop.else_body);
             }
+
+            // If statements have two branches that must both be visited
+            // Even if a branch is never executed at runtime, we need to know
+            // about all possible template loads for static analysis
             ast::Stmt::IfCond(if_cond) => {
                 self.visit_stmts(&if_cond.true_body);
                 self.visit_stmts(&if_cond.false_body);
             }
+
+            // Single-body container nodes - visit their children
             ast::Stmt::WithBlock(with_block) => self.visit_stmts(&with_block.body),
             ast::Stmt::SetBlock(set_block) => self.visit_stmts(&set_block.body),
             ast::Stmt::AutoEscape(auto_escape) => self.visit_stmts(&auto_escape.body),
             ast::Stmt::FilterBlock(filter_block) => self.visit_stmts(&filter_block.body),
+
+            // TEMPLATE LOAD STATEMENTS - These are what we're looking for!
+
+            // {% import "template.html" as namespace %}
+            // Loads an entire template and binds it to a namespace variable
             ast::Stmt::Import(import_stmt) => {
                 self.record_load(LoadKind::Import, &import_stmt.expr);
             }
+
+            // {% from "template.html" import macro1, macro2 %}
+            // Imports specific macros or variables from another template
             ast::Stmt::FromImport(from_import) => {
                 self.record_load(LoadKind::FromImport, &from_import.expr);
             }
+
+            // {% extends "base.html" %}
+            // Template inheritance - this template extends a parent template
             ast::Stmt::Extends(extends) => {
                 self.record_load(LoadKind::Extends, &extends.name);
             }
+
+            // {% include "partial.html" %}
+            // Inline inclusion of another template
+            // Note: can have ignore_missing flag for optional includes
             ast::Stmt::Include(include) => {
                 self.record_load(
                     LoadKind::Include {
@@ -185,56 +303,146 @@ impl LoadCollector {
                     &include.name,
                 );
             }
+
+            // Template inheritance and macro blocks - visit their bodies
             ast::Stmt::Block(block) => self.visit_stmts(&block.body),
             ast::Stmt::Macro(macro_stmt) => self.visit_stmts(&macro_stmt.body),
             ast::Stmt::CallBlock(call_block) => {
                 self.visit_stmts(&call_block.macro_decl.body);
             }
+
+            // Leaf nodes that don't affect template loading - no action needed
             ast::Stmt::EmitRaw(_) | ast::Stmt::EmitExpr(_) => {}
             ast::Stmt::Set(_) | ast::Stmt::Do(_) => {}
             ast::Stmt::Continue(_) | ast::Stmt::Break(_) => {}
         }
     }
 
+    /// Helper to visit multiple statements sequentially.
     fn visit_stmts<'a>(&mut self, stmts: &[ast::Stmt<'a>]) {
         for stmt in stmts {
             self.visit_stmt(stmt);
         }
     }
 
+    /// Records a template load operation by analyzing its expression.
+    ///
+    /// This is called when we encounter an import, from, extends, or include statement.
+    /// The expression is analyzed to determine which template(s) it refers to.
     fn record_load(&mut self, kind: LoadKind, expr: &ast::Expr<'_>) {
         let value = analyse_expr(expr);
         self.loads.push(TemplateLoad { kind, value });
     }
 }
 
+/// Analyzes an expression to determine which template names it could resolve to.
+///
+/// This function performs **static analysis** on MiniJinja expressions to extract template names.
+/// The goal is to determine all possible template names an expression could evaluate to at runtime,
+/// without actually executing the template.
+///
+/// # Analysis Strategy
+///
+/// We classify expressions into three categories:
+///
+/// ## 1. Fully Static (complete=true)
+/// Expressions that resolve to a known, fixed set of string values at compile time.
+/// These are safe for static analysis.
+///
+/// **Examples:**
+/// - `"template.html"` → single known value
+/// - `["a.html", "b.html"]` → multiple known values
+/// - `"a.html" if true else "b.html"` → both branches analyzed, both values extracted
+///
+/// ## 2. Partially Static (complete=false, known=non-empty)
+/// Expressions where we know *some* possible values, but not all.
+///
+/// **Examples:**
+/// - `"a.html" if condition else template_var` → we know "a.html" but not what template_var is
+/// - `["known.html", some_variable]` → we know "known.html" but not the variable value
+///
+/// ## 3. Fully Dynamic (complete=false, known=empty)
+/// Expressions that cannot be resolved without runtime information.
+///
+/// **Examples:**
+/// - `template_var` → variable reference (could be anything)
+/// - `get_template()` → function call (result unknown)
+/// - `config.template_name` → attribute access (value unknown)
+/// - `templates[index]` → computed access (index unknown)
+///
+/// # Expression Type Handling
+///
+/// The function uses pattern matching to handle each expression type from the MiniJinja AST:
+///
+/// - **Const**: Constants like strings, numbers, or lists. We attempt to extract string values
+///   using constant folding. Numbers and other non-string constants are considered dynamic.
+///
+/// - **List**: List literals like `["a.html", "b.html"]`. We recursively analyze each element
+///   and aggregate the results. If any element is dynamic, the entire list is partially complete.
+///
+/// - **IfExpr**: Ternary expressions like `"a.html" if condition else "b.html"`. We analyze
+///   both branches and combine their results. If there's no else branch, we mark it incomplete
+///   since the expression could evaluate to None.
+///
+/// - **Other**: All other expression types (Var, Call, GetAttr, BinOp, etc.) are conservatively
+///   marked as fully dynamic since we cannot determine their values without runtime execution.
+///
+/// # Return Value
+///
+/// Returns a [`LoadValue`] containing:
+/// - `known`: All statically-known template names extracted from the expression
+/// - `complete`: Whether `known` represents the complete set of possible values
+/// - `reason`: Human-readable explanation if the expression is dynamic (e.g., "variable", "call")
+/// - `span`: Source location information for error reporting
 fn analyse_expr(expr: &ast::Expr<'_>) -> LoadValue {
     match expr {
+        // CONSTANT EXPRESSIONS: {% include "template.html" %}
+        // These are the ideal case - direct string literals or constant lists.
+        // We use constant folding to extract the actual string values.
         ast::Expr::Const(constant) => match strings_from_value(&constant.value) {
             Some(values) => LoadValue::fully_static(values),
-            None => LoadValue::fully_dynamic(
-                "non-string constant",
-                SpanInfo::from_ast_span(expr.span()),
-            ),
+            None => {
+                // Constant exists but isn't a string or list of strings
+                // Example: {% include 42 %} (invalid but we catch it)
+                LoadValue::fully_dynamic(
+                    "non-string constant",
+                    SpanInfo::from_ast_span(expr.span()),
+                )
+            }
         },
+
+        // LIST EXPRESSIONS: {% include ["a.html", "b.html", some_var] %}
+        // We recursively analyze each item in the list and aggregate the results.
+        // If any item is dynamic, the overall result is incomplete.
         ast::Expr::List(list) => {
             let mut aggregate = LoadValue::empty_static();
             for item in &list.items {
                 let item_value = analyse_expr(item);
                 aggregate.extend(item_value);
             }
-            // Use the overall list span if incomplete
+            // If we accumulated dynamic items without a span, use the list's overall span
             if !aggregate.complete && aggregate.span.is_none() {
                 aggregate.span = Some(SpanInfo::from_ast_span(expr.span()));
             }
             aggregate
         }
+
+        // CONDITIONAL EXPRESSIONS: {% include "a.html" if cond else "b.html" %}
+        // We must analyze BOTH branches because either could execute at runtime.
+        // For static analysis, we assume both possibilities must be accounted for.
         ast::Expr::IfExpr(if_expr) => {
             let mut aggregate = LoadValue::empty_static();
+
+            // Analyze the true branch
             aggregate.extend(analyse_expr(&if_expr.true_expr));
+
+            // Analyze the false branch if it exists
             if let Some(false_expr) = &if_expr.false_expr {
                 aggregate.extend(analyse_expr(false_expr));
             } else {
+                // No else clause means the expression could evaluate to None/undefined
+                // Example: {% include "template.html" if condition %}
+                // If condition is false, no template is loaded - this is incomplete
                 aggregate.mark_incomplete(
                     "conditional without else",
                     SpanInfo::from_ast_span(expr.span()),
@@ -242,24 +450,82 @@ fn analyse_expr(expr: &ast::Expr<'_>) -> LoadValue {
             }
             aggregate
         }
+
+        // ALL OTHER EXPRESSIONS: Variables, function calls, operations, etc.
+        // These cannot be statically resolved, so we mark them as fully dynamic.
+        //
+        // Examples:
+        // - ast::Expr::Var → {% include template_var %} (variable reference)
+        // - ast::Expr::Call → {% include get_template() %} (function call)
+        // - ast::Expr::GetAttr → {% include config.template %} (attribute access)
+        // - ast::Expr::GetItem → {% include templates[0] %} (subscript)
+        // - ast::Expr::BinOp → {% include "base" ~ ".html" %} (string concatenation)
+        // - ast::Expr::Filter → {% include name|default("x.html") %} (filter application)
+        //
+        // Note: expr.description() provides a user-friendly name like "variable" or "call"
         other => {
             LoadValue::fully_dynamic(other.description(), SpanInfo::from_ast_span(other.span()))
         }
     }
 }
 
+/// Extracts string values from a MiniJinja [`Value`] through constant folding.
+///
+/// This function performs **constant folding** - the process of evaluating constant expressions
+/// at compile time rather than runtime. For template loading, we need to extract string values
+/// from MiniJinja's runtime value representation.
+///
+/// # MiniJinja Value System
+///
+/// MiniJinja uses a dynamic [`Value`] type that can represent various runtime types:
+/// - Strings: `Value::from("template.html")`
+/// - Numbers: `Value::from(42)`
+/// - Lists: `Value::from(vec!["a.html", "b.html"])`
+/// - Maps: `Value::from_object(...)`
+/// - And more: booleans, None, objects, etc.
+///
+/// This function attempts to extract strings from these values, supporting both:
+/// 1. Direct string values
+/// 2. Lists/sequences of strings (including nested lists)
+///
+/// # Algorithm
+///
+/// The function uses a recursive strategy:
+///
+/// 1. **Base case - String**: If the value is a string, return it as a single-element vector
+/// 2. **Recursive case - Iterable**: If the value is iterable (list, tuple, etc.):
+///    - Recursively extract strings from each element
+///    - Flatten and deduplicate the results
+/// 3. **Failure case**: If the value is neither a string nor an iterable, return `None`
+///
+/// # Deduplication
+///
+/// The function automatically deduplicates string values to avoid redundant template loads.
+/// For example, `["a.html", "b.html", "a.html"]` returns just `["a.html", "b.html"]`.
+///
+/// # Return Value
+///
+/// - `Some(Vec<String>)`: Successfully extracted string values (deduplicated)
+/// - `None`: Value cannot be converted to strings (wrong type or mixed types)
 fn strings_from_value(value: &Value) -> Option<Vec<String>> {
+    // Base case: value is a direct string
     if let Some(as_str) = value.as_str() {
         return Some(vec![as_str.to_owned()]);
     }
 
+    // Recursive case: value is iterable (list, tuple, etc.)
+    // try_iter() returns Ok(iterator) for sequences, Err for non-iterables
     let Ok(iter) = value.try_iter() else {
-        return None;
+        return None; // Not a string and not iterable → cannot extract strings
     };
 
     let mut values = Vec::new();
     for item in iter {
+        // Recursively extract strings from this item
+        // If any item fails to produce strings, the entire operation fails (? operator)
         let nested = strings_from_value(&item)?;
+
+        // Add each extracted string, deduplicating as we go
         for nested_value in nested {
             if !values.iter().any(|existing| existing == &nested_value) {
                 values.push(nested_value);
