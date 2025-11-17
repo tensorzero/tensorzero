@@ -3328,6 +3328,33 @@ async fn test_responses_api_custom_tool_text_format() {
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
     assert_eq!(retrieved_episode_id, episode_id);
+
+    // Check that dynamic_tools contains the custom tool
+    let dynamic_tools = result.get("dynamic_tools").unwrap().as_array().unwrap();
+    assert_eq!(
+        dynamic_tools.len(),
+        1,
+        "Should have exactly one custom tool"
+    );
+
+    // Parse the tool JSON and verify structure
+    let tool_json: Value = serde_json::from_str(dynamic_tools[0].as_str().unwrap()).unwrap();
+    assert_eq!(
+        tool_json.get("type").unwrap().as_str().unwrap(),
+        "openai_custom"
+    );
+    assert_eq!(
+        tool_json.get("name").unwrap().as_str().unwrap(),
+        "code_generator"
+    );
+    assert_eq!(
+        tool_json.get("description").unwrap().as_str().unwrap(),
+        "Generates Python code snippets based on the given description"
+    );
+
+    // Verify the format is text
+    let format = tool_json.get("format").unwrap();
+    assert_eq!(format.get("type").unwrap().as_str().unwrap(), "text");
 }
 
 /// Test that OpenAI accepts and uses a custom tool with text format
@@ -3371,14 +3398,42 @@ async fn test_openai_custom_tool_text_format() {
         .get("inference_id")
         .and_then(|v| v.as_str())
         .expect("inference_id should be present in response");
-    // TODO: assert that the response contains a tool call to the code_generator tool
 
     println!("Response: {response_json:#?}");
 
-    // Wait for ClickHouse to write the data
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    // Check that we got tool calls in the response
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(!content_blocks.is_empty());
 
-    // Verify the tool was stored in ClickHouse
+    // Find a tool_call block (there should be at least one)
+    let tool_call_blocks: Vec<&Value> = content_blocks
+        .iter()
+        .filter(|block| block.get("type").unwrap().as_str().unwrap() == "tool_call")
+        .collect();
+    assert!(
+        !tool_call_blocks.is_empty(),
+        "Should have at least one tool call block"
+    );
+
+    // Check that one of the tool calls is to code_generator
+    let code_generator_calls: Vec<&Value> = tool_call_blocks
+        .into_iter()
+        .filter(|block| block.get("raw_name").unwrap().as_str().unwrap() == "code_generator")
+        .collect();
+    assert_eq!(code_generator_calls.len(), 1);
+
+    let tool_call = code_generator_calls.first().unwrap();
+    let tool_call_id = tool_call.get("id").unwrap().as_str().unwrap();
+    let raw_arguments = tool_call.get("raw_arguments").unwrap().as_str().unwrap();
+    let name = tool_call.get("name").unwrap().as_str().unwrap();
+    assert!(!raw_arguments.is_empty());
+    assert!(!tool_call_id.is_empty());
+    assert_eq!(name, "code_generator");
+
+    // Wait for ClickHouse to write the data
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Verify the tool was stored in ClickHouse ModelInference
     let clickhouse = get_clickhouse().await;
     let model_inference =
         select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
@@ -3403,11 +3458,42 @@ async fn test_openai_custom_tool_text_format() {
         "Expected custom tool type in raw_request, got: {raw_request}"
     );
 
-    // Check if the LLM actually called the tool (best effort - may be non-deterministic)
-    if let Some(content) = response_json.get("content") {
-        println!("Content from LLM: {content:#?}");
-        // The response might contain tool calls if the LLM decided to use the tool
-    }
+    // Query ChatInference table to verify dynamic_tools
+    let chat_inference =
+        select_chat_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
+            .await
+            .unwrap();
+
+    // Check that dynamic_tools contains the custom tool
+    let dynamic_tools = chat_inference
+        .get("dynamic_tools")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        dynamic_tools.len(),
+        1,
+        "Should have exactly one custom tool"
+    );
+
+    // Parse the tool JSON and verify structure
+    let tool_json: Value = serde_json::from_str(dynamic_tools[0].as_str().unwrap()).unwrap();
+    assert_eq!(
+        tool_json.get("type").unwrap().as_str().unwrap(),
+        "openai_custom"
+    );
+    assert_eq!(
+        tool_json.get("name").unwrap().as_str().unwrap(),
+        "code_generator"
+    );
+    assert_eq!(
+        tool_json.get("description").unwrap().as_str().unwrap(),
+        "Generates Python code snippets based on requirements"
+    );
+
+    // Verify the format is text
+    let format = tool_json.get("format").unwrap();
+    assert_eq!(format.get("type").unwrap().as_str().unwrap(), "text");
 }
 
 /// Test that OpenAI accepts and uses a custom tool with Lark grammar format
@@ -3476,12 +3562,40 @@ NUMBER: /\d+(\.\d+)?/
         .expect("inference_id should be present in response");
 
     println!("Response: {response_json:#?}");
-    //TODO: as
+
+    // Check that we got tool calls in the response
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(!content_blocks.is_empty());
+
+    // Find a tool_call block (there should be at least one)
+    let tool_call_blocks: Vec<&Value> = content_blocks
+        .iter()
+        .filter(|block| block.get("type").unwrap().as_str().unwrap() == "tool_call")
+        .collect();
+    assert!(
+        !tool_call_blocks.is_empty(),
+        "Should have at least one tool call block"
+    );
+
+    // Check that one of the tool calls is to calculator
+    let calculator_calls: Vec<&Value> = tool_call_blocks
+        .into_iter()
+        .filter(|block| block.get("raw_name").unwrap().as_str().unwrap() == "calculator")
+        .collect();
+    assert_eq!(calculator_calls.len(), 1);
+
+    let tool_call = calculator_calls.first().unwrap();
+    let tool_call_id = tool_call.get("id").unwrap().as_str().unwrap();
+    let raw_arguments = tool_call.get("raw_arguments").unwrap().as_str().unwrap();
+    let name = tool_call.get("name").unwrap().as_str().unwrap();
+    assert!(!raw_arguments.is_empty());
+    assert!(!tool_call_id.is_empty());
+    assert_eq!(name, "calculator");
 
     // Wait for ClickHouse to write the data
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Verify the tool was stored in ClickHouse
+    // Verify the tool was stored in ClickHouse ModelInference
     let clickhouse = get_clickhouse().await;
     let model_inference =
         select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
@@ -3507,6 +3621,51 @@ NUMBER: /\d+(\.\d+)?/
         raw_request.contains("lark"),
         "Expected lark grammar syntax in raw_request"
     );
+
+    // Query ChatInference table to verify dynamic_tools
+    let chat_inference =
+        select_chat_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
+            .await
+            .unwrap();
+
+    // Check that dynamic_tools contains the custom tool
+    let dynamic_tools = chat_inference
+        .get("dynamic_tools")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        dynamic_tools.len(),
+        1,
+        "Should have exactly one custom tool"
+    );
+
+    // Parse the tool JSON and verify structure
+    let tool_json: Value = serde_json::from_str(dynamic_tools[0].as_str().unwrap()).unwrap();
+    assert_eq!(
+        tool_json.get("type").unwrap().as_str().unwrap(),
+        "openai_custom"
+    );
+    assert_eq!(
+        tool_json.get("name").unwrap().as_str().unwrap(),
+        "calculator"
+    );
+    assert_eq!(
+        tool_json.get("description").unwrap().as_str().unwrap(),
+        "Evaluates arithmetic expressions"
+    );
+
+    // Verify the format is grammar with lark syntax
+    let format = tool_json.get("format").unwrap();
+    assert_eq!(format.get("type").unwrap().as_str().unwrap(), "grammar");
+    let grammar = format.get("grammar").unwrap();
+    assert_eq!(grammar.get("syntax").unwrap().as_str().unwrap(), "lark");
+    assert!(grammar
+        .get("definition")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .contains("start: expr"));
 }
 
 /// Test that OpenAI accepts and uses a custom tool with Regex grammar format
@@ -3559,10 +3718,39 @@ async fn test_openai_custom_tool_grammar_regex() {
 
     println!("Response: {response_json:#?}");
 
-    // Wait for ClickHouse to write the data
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    // Check that we got tool calls in the response
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(!content_blocks.is_empty());
 
-    // Verify the tool was stored in ClickHouse
+    // Find a tool_call block (there should be at least one)
+    let tool_call_blocks: Vec<&Value> = content_blocks
+        .iter()
+        .filter(|block| block.get("type").unwrap().as_str().unwrap() == "tool_call")
+        .collect();
+    assert!(
+        !tool_call_blocks.is_empty(),
+        "Should have at least one tool call block"
+    );
+
+    // Check that one of the tool calls is to phone_formatter
+    let phone_formatter_calls: Vec<&Value> = tool_call_blocks
+        .into_iter()
+        .filter(|block| block.get("raw_name").unwrap().as_str().unwrap() == "phone_formatter")
+        .collect();
+    assert_eq!(phone_formatter_calls.len(), 1);
+
+    let tool_call = phone_formatter_calls.first().unwrap();
+    let tool_call_id = tool_call.get("id").unwrap().as_str().unwrap();
+    let raw_arguments = tool_call.get("raw_arguments").unwrap().as_str().unwrap();
+    let name = tool_call.get("name").unwrap().as_str().unwrap();
+    assert!(!raw_arguments.is_empty());
+    assert!(!tool_call_id.is_empty());
+    assert_eq!(name, "phone_formatter");
+
+    // Wait for ClickHouse to write the data
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Verify the tool was stored in ClickHouse ModelInference
     let clickhouse = get_clickhouse().await;
     let model_inference =
         select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
@@ -3588,6 +3776,49 @@ async fn test_openai_custom_tool_grammar_regex() {
         raw_request.contains("regex"),
         "Expected regex grammar syntax in raw_request"
     );
+
+    // Query ChatInference table to verify dynamic_tools
+    let chat_inference =
+        select_chat_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
+            .await
+            .unwrap();
+
+    // Check that dynamic_tools contains the custom tool
+    let dynamic_tools = chat_inference
+        .get("dynamic_tools")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        dynamic_tools.len(),
+        1,
+        "Should have exactly one custom tool"
+    );
+
+    // Parse the tool JSON and verify structure
+    let tool_json: Value = serde_json::from_str(dynamic_tools[0].as_str().unwrap()).unwrap();
+    assert_eq!(
+        tool_json.get("type").unwrap().as_str().unwrap(),
+        "openai_custom"
+    );
+    assert_eq!(
+        tool_json.get("name").unwrap().as_str().unwrap(),
+        "phone_formatter"
+    );
+    assert_eq!(
+        tool_json.get("description").unwrap().as_str().unwrap(),
+        "Formats phone numbers in the standard XXX-XXX-XXXX format"
+    );
+
+    // Verify the format is grammar with regex syntax
+    let format = tool_json.get("format").unwrap();
+    assert_eq!(format.get("type").unwrap().as_str().unwrap(), "grammar");
+    let grammar = format.get("grammar").unwrap();
+    assert_eq!(grammar.get("syntax").unwrap().as_str().unwrap(), "regex");
+    assert_eq!(
+        grammar.get("definition").unwrap().as_str().unwrap(),
+        regex_pattern
+    );
 }
 
 /// Test that standard function tools and custom tools can be used together
@@ -3604,7 +3835,7 @@ async fn test_openai_mixed_function_and_custom_tools() {
             "system": {"assistant_name": "Weather Assistant"},
             "messages": [{
                 "role": "user",
-                "content": "Get the temperature in Paris, France and then use the weather_report tool to format it nicely."
+                "content": "Get the temperature in Paris, France."
             }],
         },
         "additional_tools": [
@@ -3636,10 +3867,35 @@ async fn test_openai_mixed_function_and_custom_tools() {
 
     println!("Response: {response_json:#?}");
 
-    // Wait for ClickHouse to write the data
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    // Check that we got content in the response
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert!(!content_blocks.is_empty());
 
-    // Verify both tool types were stored in ClickHouse
+    // Check if we got tool calls (LLM behavior can be non-deterministic)
+    let tool_call_blocks: Vec<&Value> = content_blocks
+        .iter()
+        .filter(|block| block.get("type").unwrap().as_str().unwrap() == "tool_call")
+        .collect();
+
+    // If we got tool calls, verify they're to the expected tools
+    if tool_call_blocks.is_empty() {
+        println!("Note: LLM did not make any tool calls in this run (non-deterministic behavior)");
+    } else {
+        println!("LLM made {} tool call(s)", tool_call_blocks.len());
+        for tool_call in &tool_call_blocks {
+            let name = tool_call.get("name").unwrap().as_str().unwrap();
+            println!("  - Tool called: {name}");
+            assert!(
+                name == "get_temperature" || name == "weather_report",
+                "Tool call should be to either get_temperature or weather_report, got: {name}"
+            );
+        }
+    }
+
+    // Wait for ClickHouse to write the data
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Verify both tool types were stored in ClickHouse ModelInference
     let clickhouse = get_clickhouse().await;
     let model_inference =
         select_model_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
@@ -3674,4 +3930,53 @@ async fn test_openai_mixed_function_and_custom_tools() {
             || raw_request.contains("\"type\": \"function\""),
         "Expected function tool type in raw_request"
     );
+
+    // Query ChatInference table to verify dynamic_tools
+    let chat_inference =
+        select_chat_inference_clickhouse(&clickhouse, inference_id.parse().unwrap())
+            .await
+            .unwrap();
+
+    // Check that dynamic_tools contains both the custom tool and function tool
+    let dynamic_tools = chat_inference
+        .get("dynamic_tools")
+        .unwrap()
+        .as_array()
+        .unwrap();
+
+    println!("Found {} tool(s) in dynamic_tools:", dynamic_tools.len());
+    for (i, tool_str) in dynamic_tools.iter().enumerate() {
+        let tool_json: Value = serde_json::from_str(tool_str.as_str().unwrap()).unwrap();
+        println!(
+            "  Tool {}: type={}, name={}",
+            i,
+            tool_json.get("type").unwrap().as_str().unwrap(),
+            tool_json.get("name").unwrap().as_str().unwrap()
+        );
+    }
+
+    // Note: dynamic_tools only contains additional_tools passed at inference time,
+    // not the function's configured tools (which are stored elsewhere)
+    assert_eq!(
+        dynamic_tools.len(),
+        1,
+        "Should have exactly one custom tool (weather_report)"
+    );
+
+    // Parse and verify the custom tool
+    let tool_json: Value = serde_json::from_str(dynamic_tools[0].as_str().unwrap()).unwrap();
+    assert_eq!(
+        tool_json.get("type").unwrap().as_str().unwrap(),
+        "openai_custom"
+    );
+    assert_eq!(
+        tool_json.get("name").unwrap().as_str().unwrap(),
+        "weather_report"
+    );
+    assert_eq!(
+        tool_json.get("description").unwrap().as_str().unwrap(),
+        "Generates a formatted weather report from temperature data"
+    );
+    let format = tool_json.get("format").unwrap();
+    assert_eq!(format.get("type").unwrap().as_str().unwrap(), "text");
 }
