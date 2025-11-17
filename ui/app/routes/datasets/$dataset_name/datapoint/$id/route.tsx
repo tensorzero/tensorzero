@@ -213,14 +213,14 @@ export async function loader({
       status: 404,
     });
   }
-  const tensorZeroDatapoint = await getTensorZeroClient().getDatapoint(id);
-  if (!tensorZeroDatapoint) {
+  const t0Datapoint = await getTensorZeroClient().getDatapoint(id);
+  if (!t0Datapoint) {
     throw data(`No datapoint found for ID \`${id}\`.`, {
       status: 404,
     });
   }
   // Note (GabrielBianconi): `getDatapoint` no longer depends on the dataset name, but maybe it should?
-  if (tensorZeroDatapoint.dataset_name !== dataset_name) {
+  if (t0Datapoint.dataset_name !== dataset_name) {
     throw data(
       `The datapoint \`${id}\` does not belong to dataset \`${dataset_name}\`.`,
       {
@@ -228,45 +228,45 @@ export async function loader({
       },
     );
   }
-  const datapoint = await datapointToParsedDatasetRow(tensorZeroDatapoint);
+  const zodDatapoint = await datapointToParsedDatasetRow(t0Datapoint);
   return {
-    datapoint,
-    tensorZeroDatapoint,
+    zodDatapoint,
+    t0Datapoint,
   };
 }
 
 export default function DatapointPage({ loaderData }: Route.ComponentProps) {
-  const { datapoint, tensorZeroDatapoint } = loaderData;
+  const { zodDatapoint, t0Datapoint } = loaderData;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
-  const [originalInput, setOriginalInput] = useState(datapoint.input);
-  const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
+  const [originalInput, setOriginalInput] = useState(zodDatapoint.input);
+  const [input, setInput] = useState<typeof zodDatapoint.input>(
+    zodDatapoint.input,
+  );
 
-  const [originalOutput, setOriginalOutput] = useState(datapoint.output);
+  const [originalOutput, setOriginalOutput] = useState(zodDatapoint.output);
   const [output, setOutput] = useState<
     ContentBlockChatOutput[] | JsonInferenceOutput | null
-  >(datapoint.output ?? null);
+  >(zodDatapoint.output ?? null);
 
-  const [originalTags, setOriginalTags] = useState(
-    tensorZeroDatapoint.tags || {},
-  );
-  const [tags, setTags] = useState(tensorZeroDatapoint.tags || {});
+  const [originalTags, setOriginalTags] = useState(t0Datapoint.tags || {});
+  const [tags, setTags] = useState(t0Datapoint.tags || {});
 
   const [isEditing, setIsEditing] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   // Reset state when datapoint changes (e.g., after save redirect)
   useEffect(() => {
-    setInput(datapoint.input);
-    setOriginalInput(datapoint.input);
-    setOutput(datapoint.output ?? null);
-    setOriginalOutput(datapoint.output);
-    setTags(tensorZeroDatapoint.tags || {});
-    setOriginalTags(tensorZeroDatapoint.tags || {});
+    setInput(zodDatapoint.input);
+    setOriginalInput(zodDatapoint.input);
+    setOutput(zodDatapoint.output ?? null);
+    setOriginalOutput(zodDatapoint.output);
+    setTags(t0Datapoint.tags || {});
+    setOriginalTags(t0Datapoint.tags || {});
     setIsEditing(false);
     setValidationError(null);
-  }, [datapoint, tensorZeroDatapoint]);
+  }, [zodDatapoint, t0Datapoint]);
 
   const canSave = useMemo(() => {
     return (
@@ -293,9 +293,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const toggleEditing = () => setIsEditing(!isEditing);
 
   const handleReset = () => {
-    setInput(datapoint.input);
-    setOutput(datapoint.output ?? null);
-    setTags(tensorZeroDatapoint.tags || {});
+    setInput(zodDatapoint.input);
+    setOutput(zodDatapoint.output ?? null);
+    setTags(t0Datapoint.tags || {});
   };
 
   const handleSystemChange = (system: string | object | null) => {
@@ -320,7 +320,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
   const submitDatapointAction = (action: string) => {
     // Create a copy of datapoint with updated input, output, and tags if we're saving
-    const dataToSubmit = { ...datapoint, input, output, tags };
+    const dataToSubmit = { ...zodDatapoint, input, output, tags };
 
     const formData = serializeDatapointToFormData(dataToSubmit);
     formData.append("action", action);
@@ -347,7 +347,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     }
   };
 
-  const functionConfig = useFunctionConfig(datapoint.function_name);
+  const functionConfig = useFunctionConfig(zodDatapoint.function_name);
   const variants = Object.keys(functionConfig?.variants || {});
 
   const variantInferenceFetcher = useInferenceActionFetcher();
@@ -385,7 +385,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setSelectedVariant(variant);
     setIsModalOpen(true);
     submitVariantInference({
-      resource: datapoint,
+      resource: zodDatapoint,
       source: variantSource,
       variant,
     });
@@ -405,7 +405,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   const handleRenameDatapoint = async (newName: string) => {
-    const dataToSubmit = { ...datapoint, name: newName };
+    const dataToSubmit = { ...zodDatapoint, name: newName };
     const formData = serializeDatapointToFormData(dataToSubmit);
     formData.append("action", "rename");
     await fetcher.submit(formData, { method: "post", action: "." });
@@ -415,10 +415,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     <PageLayout>
       <PageHeader
         label="Datapoint"
-        name={datapoint.id}
+        name={zodDatapoint.id}
         tag={
           <>
-            {datapoint.is_custom && (
+            {zodDatapoint.is_custom && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge variant="secondary" className="ml-2 cursor-help">
@@ -431,7 +431,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
                 </TooltipContent>
               </Tooltip>
             )}
-            {datapoint.staled_at && (
+            {zodDatapoint.staled_at && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge variant="secondary" className="ml-2 cursor-help">
@@ -457,7 +457,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <DatapointBasicInfo
-            datapoint={datapoint}
+            datapoint={zodDatapoint}
             onRenameDatapoint={handleRenameDatapoint}
           />
         </SectionLayout>
@@ -474,8 +474,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             canSave={canSave}
             onSave={handleSave}
             onReset={handleReset}
-            showTryWithButton={datapoint.function_name !== DEFAULT_FUNCTION}
-            isStale={!!datapoint.staled_at}
+            showTryWithButton={zodDatapoint.function_name !== DEFAULT_FUNCTION}
+            isStale={!!zodDatapoint.staled_at}
           />
         </SectionLayout>
 
@@ -519,7 +519,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           variantResponse={variantInferenceFetcher.data?.info ?? null}
           rawResponse={variantInferenceFetcher.data?.raw ?? null}
           onClose={handleModalClose}
-          item={datapoint}
+          item={zodDatapoint}
           selectedVariant={selectedVariant}
           source="datapoint"
           onRefresh={lastRequestArgs ? handleRefresh : null}
