@@ -19,6 +19,7 @@ env:
   SQLX_OFFLINE: 1
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  RUST_MSRV: 1.88.0
 
 jobs:
   check-version-consistency:
@@ -315,6 +316,13 @@ jobs:
         with:
           cache-provider: "buildjet"
           save-if: ${{ github.event_name == 'merge_group' }}
+      - name: Install uv
+        run: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+      - name: Install Python 3.10
+        run: uv python install 3.10
+      - name: Set PYO3_PYTHON
+        run: echo "PYO3_PYTHON=$(uv python find python3.10)" >> $GITHUB_ENV
+        shell: bash
       - name: Build Rust
         run: cargo build --workspace
 
@@ -350,10 +358,234 @@ jobs:
         run: |
           cargo hack --partition '${{ matrix.partition }}/${{ matrix.total_partitions }}' clippy --all-targets --each-feature -- -D warnings
 
+
+  validate-python:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
+      - name: Install Rust ${{ env.RUST_MSRV }}
+        run: |
+          for attempt in 1 2 3; do
+            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Print Rust version
+        run: rustc --version
+
+      - name: Install uv
+        run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: uv-lock
+        run: |
+          bash -c '
+          git ls-files "**/pyproject.toml" \
+            | while read f; do
+                dir=$(dirname "$f")
+                (cd "$dir" && uv lock --project="pyproject.toml")
+              done
+          '
+
+      - name: uv-export
+        run: |
+          bash -c '
+          git ls-files "**/pyproject.toml" \
+            | while read f; do
+                dir=$(dirname "$f")
+                (cd "$dir" && uv export --project="pyproject.toml" --output-file=requirements.txt --quiet)
+              done
+          '
+      - name: verify uv generated files
+        run: git diff --exit-code
+
+      - name: Install Python for python async client tests
+        run: uv python install 3.9
+
+      - name: Lint (Python:ruff)
+        run: |
+          uvx ruff@0.14.0 check --output-format=github --extend-select I .
+          uvx ruff@0.14.0 format --check .
+
+      - name: "Python: Pyo3 Client: Build and install dependencies"
+        working-directory: clients/python
+        run: |
+          uv venv
+          uv pip sync requirements.txt
+
+      - name: "Python: PyO3 Client: pyright"
+        working-directory: clients/python
+        run: |
+          uv pip install pyright==1.1.394
+          uv run pyright
+
+      - name: "Python: PyO3 Client: stubtest"
+        working-directory: clients/python
+        run: |
+          uv run stubtest tensorzero.tensorzero
+
+      - name: "Python: Recipes: Install dependencies"
+        working-directory: recipes
+        run: |
+          uv venv
+          uv sync
+
+      - name: "Python: Recipes: pyright"
+        working-directory: recipes
+        run: |
+          uv run pyright
+
+      - name: Compile / validate notebooks
+        run: ci/compile-check-notebooks.sh
+
+
+  validate-node:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
+      - name: Install Rust ${{ env.RUST_MSRV }}
+        run: |
+          for attempt in 1 2 3; do
+            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Print Rust version
+        run: rustc --version
+
+      - name: Setup Node.js
+        uses: actions/setup-node@cdca7365b2dadb8aad0a33bc7601856ffabcc48e
+        with:
+          node-version: "24.11.0"
+
+      - name: Install pnpm
+        run: |
+          for attempt in 1 2 3; do
+            if npm install -g pnpm@latest; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install pnpm after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build npm workspace
+        run: pnpm -r build
+
+      - name: Format tensorzero-node package
+        run: pnpm --filter=tensorzero-node run format:check
+
+      - name: Lint tensorzero-node package
+        run: pnpm --filter=tensorzero-node run lint:check
+
+      - name: Typecheck tensorzero-node package
+        run: pnpm --filter=tensorzero-node run typecheck
+
+      - name: Run ESLint
+        run: pnpm --filter=tensorzero-ui run lint:check
+
+      - name: Run Prettier
+        run: pnpm --filter=tensorzero-ui run format:check
+
+      - name: pnpm TypeScript type checking
+        run: pnpm --filter=tensorzero-ui run typecheck
+
+  rust-build:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
+      - name: Install Rust ${{ env.RUST_MSRV }}
+        run: |
+          for attempt in 1 2 3; do
+            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Install cargo-nextest, cargo-deny, and cargo-hack
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-nextest,cargo-deny,cargo-hack
+
+      - name: Build (Rust)
+        run: cargo build --workspace --verbose
+
+  rust-test:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
+      - name: Install Rust ${{ env.RUST_MSRV }}
+        run: |
+          for attempt in 1 2 3; do
+            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
+              break
+            fi
+            if [ $attempt -eq 3 ]; then
+              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
+              exit 1
+            fi
+            sleep $((10 * attempt))
+          done
+        shell: bash
+
+      - name: Install cargo-nextest, cargo-deny, and cargo-hack
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-nextest,cargo-deny,cargo-hack
+
+      - name: Test (Rust)
+        env:
+          # Write the exported bindings to somewhere we don't care about
+          TS_RS_EXPORT_DIR: /tmp/tensorzero-bindings
+        run: |
+          cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
+
+
   validate:
     permissions:
       contents: read
-    runs-on: namespace-profile-tensorzero-8x32
+    runs-on: ubuntu-latest
 
     timeout-minutes: 30
     if: github.repository == 'tensorzero/tensorzero'
@@ -362,14 +594,14 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust 1.88.0
+      - name: Install Rust ${{ env.RUST_MSRV }}
         run: |
           for attempt in 1 2 3; do
-            if rustup install 1.88.0 --component rustfmt && rustup default 1.88.0; then
+            if rustup install ${{ env.RUST_MSRV }} --component rustfmt && rustup default ${{ env.RUST_MSRV }}; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust 1.88.0 after 3 attempts"
+              echo "Failed to install Rust ${{ env.RUST_MSRV }} after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -400,14 +632,6 @@ jobs:
 
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
-
-      - name: Configure Namespace cache for Rust, Python (pip), and pnpm
-        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
-        with:
-          cache: |
-            pnpm
-            rust
-            uv
 
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
@@ -450,28 +674,6 @@ jobs:
       # - name: trailing‑whitespace
       #   run: uv run --with pre-commit pre-commit run trailing-whitespace
 
-      - name: uv-lock
-        run: |
-          bash -c '
-          git ls-files "**/pyproject.toml" \
-            | while read f; do
-                dir=$(dirname "$f")
-                (cd "$dir" && uv lock --project="pyproject.toml")
-              done
-          '
-
-      - name: uv-export
-        run: |
-          bash -c '
-          git ls-files "**/pyproject.toml" \
-            | while read f; do
-                dir=$(dirname "$f")
-                (cd "$dir" && uv export --project="pyproject.toml" --output-file=requirements.txt --quiet)
-              done
-          '
-      - name: verify uv generated files
-        run: git diff --exit-code
-
       # TODO: Enable this if we can figure out the invocation
       # - name: Run nb-clean
       #   run: uv run --with nb-clean nb-clean check --remove-empty-cells
@@ -481,46 +683,11 @@ jobs:
         with:
           tool: cargo-nextest,cargo-deny,cargo-hack
 
-      - name: Build (Rust)
-        run: cargo build --workspace --verbose
-
       - name: Run cargo-deny
         run: cargo deny check
 
       - name: Run cargo fmt
         run: cargo fmt --all --check
-
-      - name: Test (Rust)
-        env:
-          # Write the exported bindings to somewhere we don't care about
-          TS_RS_EXPORT_DIR: /tmp/tensorzero-bindings
-        run: |
-          cargo test-unit ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }}
-
-      - name: Install Python for python async client tests
-        run: uv python install 3.9
-
-      - name: Lint (Python:ruff)
-        run: |
-          uvx ruff@0.14.0 check --output-format=github --extend-select I .
-          uvx ruff@0.14.0 format --check .
-
-      - name: "Python: Pyo3 Client: Build and install dependencies"
-        working-directory: clients/python
-        run: |
-          uv venv
-          uv pip sync requirements.txt
-
-      - name: "Python: PyO3 Client: pyright"
-        working-directory: clients/python
-        run: |
-          uv pip install pyright==1.1.394
-          uv run pyright
-
-      - name: "Python: PyO3 Client: stubtest"
-        working-directory: clients/python
-        run: |
-          uv run stubtest tensorzero.tensorzero
 
       - name: "Node.js: Run prettier"
         run: pnpm --filter=openai-node run format
@@ -531,41 +698,6 @@ jobs:
       - name: "Node.js: OpenAI Client: lint"
         working-directory: clients/openai-node
         run: pnpm --filter=openai-node run lint
-
-      - name: "Python: Recipes: Install dependencies"
-        working-directory: recipes
-        run: |
-          uv venv
-          uv sync
-
-      - name: "Python: Recipes: pyright"
-        working-directory: recipes
-        run: |
-          uv run pyright
-
-      - name: Build npm workspace
-        run: pnpm -r build
-
-      - name: Format tensorzero-node package
-        run: pnpm --filter=tensorzero-node run format:check
-
-      - name: Lint tensorzero-node package
-        run: pnpm --filter=tensorzero-node run lint:check
-
-      - name: Typecheck tensorzero-node package
-        run: pnpm --filter=tensorzero-node run typecheck
-
-      - name: Run ESLint
-        run: pnpm --filter=tensorzero-ui run lint:check
-
-      - name: Run Prettier
-        run: pnpm --filter=tensorzero-ui run format:check
-
-      - name: pnpm TypeScript type checking
-        run: pnpm --filter=tensorzero-ui run typecheck
-
-      - name: Compile / validate notebooks
-        run: ci/compile-check-notebooks.sh
 
       - name: Lint Helm charts
         run: find . -name "Chart.yaml" -exec dirname {} \; | xargs -I {} helm lint {}
@@ -588,15 +720,12 @@ jobs:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        # TODO: Temporarily using 25.9 instead of latest
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12","prefix":"24.12","allow_failure":false},{"tag":"25.9","prefix":"25.9","allow_failure":false}]') || fromJSON('[{"tag":"25.9","prefix":"25.9","allow_failure":false}]') }}
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false},{"tag":"latest","prefix":"latest","allow_failure":false}]') || fromJSON('[{"tag":"lts","prefix":"lts","allow_failure":false}]') }}
         exclude:
-          # Use 25.7 instead of 25.9 for replicated tests in merge group
           - replicated: true
             clickhouse_version:
-              { "tag": "25.9", "prefix": "25.9", "allow_failure": false }
-          # Add 25.7 for replicated tests in merge group
-        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.7","prefix":"25.7","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
+              { "tag": "latest", "prefix": "latest", "allow_failure": false }
+        include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"latest","prefix":"latest","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -903,6 +1032,12 @@ jobs:
     uses: ./.github/workflows/merge-queue.yml
     secrets: inherit
 
+  minikube:
+    needs: [build-gateway-container, build-ui-container]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/minikube.yml
+
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     permissions: {}
@@ -920,7 +1055,12 @@ jobs:
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
+        minikube,
+        rust-build,
+        rust-test,
         validate,
+        validate-node,
+        validate-python,
         lint-rust,
         clickhouse-tests,
         ui-tests,

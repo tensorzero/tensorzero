@@ -63,7 +63,11 @@ use crate::model::{
     fully_qualified_name, Credential, CredentialLocationWithFallback, ModelProvider,
 };
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
-use crate::tool::{ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+#[cfg(test)]
+use crate::tool::{AllowedTools, AllowedToolsChoice};
+use crate::tool::{
+    ClientSideFunctionTool, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig,
+};
 
 use super::helpers::{convert_stream_error, parse_jsonl_batch_file, JsonlBatchFileInfo};
 
@@ -780,18 +784,18 @@ fn make_provider_batch_inference_output(
         })
     })?;
 
-    let usage = response
-        .usage_metadata
-        .clone()
-        .ok_or_else(|| {
-            Error::new(ErrorDetails::InferenceServer {
-                message: "GCP Vertex Gemini batch response has no usage metadata".to_string(),
-                raw_request: Some(raw_request.clone()),
-                raw_response: Some(raw_response.clone()),
-                provider_type: PROVIDER_TYPE.to_string(),
-            })
-        })?
-        .into();
+    let usage_metadata = response.usage_metadata.clone().ok_or_else(|| {
+        Error::new(ErrorDetails::InferenceServer {
+            message: "GCP Vertex Gemini batch response has no usage metadata".to_string(),
+            raw_request: Some(raw_request.clone()),
+            raw_response: Some(raw_response.clone()),
+            provider_type: PROVIDER_TYPE.to_string(),
+        })
+    })?;
+    let usage = Usage {
+        input_tokens: usage_metadata.prompt_token_count,
+        output_tokens: usage_metadata.candidates_token_count,
+    };
 
     let (output, finish_reason) = get_response_content(
         response,
@@ -1777,10 +1781,9 @@ impl<'a> From<&'a ClientSideFunctionTool> for GCPVertexGeminiSFTTool<'a> {
 // which will cause us to fall back to Auto
 const MODELS_NOT_SUPPORTING_ANY_MODE: &[&str] = &[];
 
-impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
-    fn from(input: (&'a ToolChoice, &'a str)) -> Self {
-        let (tool_choice, model_name) = input;
-        match tool_choice {
+impl<'a> GCPVertexGeminiToolConfig<'a> {
+    fn from_tool_config(tool_config: &'a ToolCallConfig, model_name: &'a str) -> Self {
+        match &tool_config.tool_choice {
             ToolChoice::None => GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                     mode: GCPVertexGeminiFunctionCallingMode::None,
@@ -1790,7 +1793,7 @@ impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
             ToolChoice::Auto => GCPVertexGeminiToolConfig {
                 function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                     mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                    allowed_function_names: None,
+                    allowed_function_names: tool_config.allowed_tools.as_dynamic_allowed_tools(),
                 },
             },
             ToolChoice::Required => {
@@ -1798,14 +1801,18 @@ impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                             mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                            allowed_function_names: None,
+                            allowed_function_names: tool_config
+                                .allowed_tools
+                                .as_dynamic_allowed_tools(),
                         },
                     }
                 } else {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                             mode: GCPVertexGeminiFunctionCallingMode::Any,
-                            allowed_function_names: None,
+                            allowed_function_names: tool_config
+                                .allowed_tools
+                                .as_dynamic_allowed_tools(),
                         },
                     }
                 }
@@ -1815,7 +1822,7 @@ impl<'a> From<(&'a ToolChoice, &'a str)> for GCPVertexGeminiToolConfig<'a> {
                     GCPVertexGeminiToolConfig {
                         function_calling_config: GCPVertexGeminiFunctionCallingConfig {
                             mode: GCPVertexGeminiFunctionCallingMode::Auto,
-                            allowed_function_names: None,
+                            allowed_function_names: Some(vec![tool_name]),
                         },
                     }
                 } else {
@@ -2055,7 +2062,10 @@ fn prepare_tools<'a>(
                     .map(GCPVertexGeminiFunctionDeclaration::from)
                     .collect(),
             )]);
-            let tool_config = Some((&tool_config.tool_choice, model_name).into());
+            let tool_config = Some(GCPVertexGeminiToolConfig::from_tool_config(
+                tool_config,
+                model_name,
+            ));
             (tools, tool_config)
         }
         None => (None, None),
@@ -2538,15 +2548,6 @@ struct GCPVertexGeminiUsageMetadata {
     candidates_token_count: Option<u32>,
 }
 
-impl From<GCPVertexGeminiUsageMetadata> for Usage {
-    fn from(usage_metadata: GCPVertexGeminiUsageMetadata) -> Self {
-        Usage {
-            input_tokens: usage_metadata.prompt_token_count.unwrap_or(0),
-            output_tokens: usage_metadata.candidates_token_count.unwrap_or(0),
-        }
-    }
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiResponse {
@@ -2610,19 +2611,20 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
             provider_name,
         } = response;
 
-        let usage = response
-            .usage_metadata
-            .clone()
-            .ok_or_else(|| {
-                Error::new(ErrorDetails::InferenceServer {
-                    message: "GCP Vertex Gemini non-streaming response has no usage metadata"
-                        .to_string(),
-                    raw_request: Some(raw_request.clone()),
-                    raw_response: Some(raw_response.clone()),
-                    provider_type: PROVIDER_TYPE.to_string(),
-                })
-            })?
-            .into();
+        let usage_metadata = response.usage_metadata.clone().ok_or_else(|| {
+            Error::new(ErrorDetails::InferenceServer {
+                message: "GCP Vertex Gemini non-streaming response has no usage metadata"
+                    .to_string(),
+                raw_request: Some(raw_request.clone()),
+                raw_response: Some(raw_response.clone()),
+                provider_type: PROVIDER_TYPE.to_string(),
+            })
+        })?;
+
+        let usage = Usage {
+            input_tokens: usage_metadata.prompt_token_count,
+            output_tokens: usage_metadata.candidates_token_count,
+        };
 
         let system = generic_request.system.clone();
         let input_messages = generic_request.messages.clone();
@@ -2695,9 +2697,23 @@ fn convert_stream_response_with_metadata_to_chunk(
         ContentBlockChunk::Text(text) => !text.text.is_empty(),
         _ => true,
     });
+
+    // GCP will occasionally return usage metadata objects without token information (it has other GCP-specific metadata).
+    // We should filter those out.
+    let usage = response.usage_metadata.and_then(|metadata| {
+        if metadata.prompt_token_count.is_some() || metadata.candidates_token_count.is_some() {
+            Some(Usage {
+                input_tokens: metadata.prompt_token_count,
+                output_tokens: metadata.candidates_token_count,
+            })
+        } else {
+            None
+        }
+    });
+
     Ok(ProviderInferenceResponseChunk::new(
         content,
-        response.usage_metadata.map(Into::into),
+        usage,
         raw_response,
         latency,
         first_candidate.finish_reason.map(Into::into),
@@ -2858,10 +2874,20 @@ mod tests {
     }
 
     #[test]
-    fn test_from_tool_choice() {
-        let tool_choice = ToolChoice::Auto;
+    fn test_from_tool_config() {
         let supports_any_model_name = "gemini-2.5-pro";
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
+
+        // Test Auto mode
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_call_config, supports_any_model_name);
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -2873,8 +2899,16 @@ mod tests {
         );
 
         // The Pro model supports Any mode
-        let tool_choice = ToolChoice::Required;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_call_config, supports_any_model_name);
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -2886,8 +2920,19 @@ mod tests {
         );
 
         // The Pro model supports Any mode with allowed function names
-        let tool_choice = ToolChoice::Specific("get_temperature".to_string());
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Specific("get_temperature".to_string()),
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools {
+                tools: vec!["get_temperature".to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_call_config, supports_any_model_name);
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -2898,8 +2943,67 @@ mod tests {
             }
         );
 
-        let tool_choice = ToolChoice::None;
-        let tool_config = GCPVertexGeminiToolConfig::from((&tool_choice, supports_any_model_name));
+        // Test Auto mode with specific allowed tools (new behavior)
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools {
+                tools: vec!["tool1".to_string(), "tool2".to_string()]
+                    .into_iter()
+                    .collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_call_config, supports_any_model_name);
+        assert_eq!(
+            tool_config.function_calling_config.mode,
+            GCPVertexGeminiFunctionCallingMode::Auto
+        );
+        let mut allowed_names = tool_config
+            .function_calling_config
+            .allowed_function_names
+            .unwrap();
+        allowed_names.sort();
+        assert_eq!(allowed_names, vec!["tool1", "tool2"]);
+
+        // Test Required mode with specific allowed tools (new behavior)
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools {
+                tools: vec!["allowed_tool".to_string()].into_iter().collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+        };
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_call_config, supports_any_model_name);
+        assert_eq!(
+            tool_config,
+            GCPVertexGeminiToolConfig {
+                function_calling_config: GCPVertexGeminiFunctionCallingConfig {
+                    mode: GCPVertexGeminiFunctionCallingMode::Any,
+                    allowed_function_names: Some(vec!["allowed_tool"]),
+                }
+            }
+        );
+
+        let tool_call_config = ToolCallConfig {
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            tool_choice: ToolChoice::None,
+            parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
+        };
+        let tool_config =
+            GCPVertexGeminiToolConfig::from_tool_config(&tool_call_config, supports_any_model_name);
         assert_eq!(
             tool_config,
             GCPVertexGeminiToolConfig {
@@ -3235,8 +3339,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 0,
-                output_tokens: 0,
+                input_tokens: None,
+                output_tokens: None,
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -3346,8 +3450,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 15,
-                output_tokens: 20,
+                input_tokens: Some(15),
+                output_tokens: Some(20),
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -3469,8 +3573,8 @@ mod tests {
         assert_eq!(
             model_inference_response.usage,
             Usage {
-                input_tokens: 25,
-                output_tokens: 40,
+                input_tokens: Some(25),
+                output_tokens: Some(40),
             }
         );
         assert_eq!(model_inference_response.latency, latency);
@@ -4145,8 +4249,8 @@ mod tests {
         // Check that usage was captured
         assert!(result.usage.is_some());
         let usage = result.usage.unwrap();
-        assert_eq!(usage.input_tokens, 10);
-        assert_eq!(usage.output_tokens, 5);
+        assert_eq!(usage.input_tokens, Some(10));
+        assert_eq!(usage.output_tokens, Some(5));
     }
 
     #[test]

@@ -87,6 +87,7 @@ pub struct ModelTestProvider {
 #[derive(Clone, Debug)]
 pub struct EmbeddingTestProvider {
     pub model_name: String,
+    pub dimensions: usize,
 }
 
 /// Enforce that every provider implements a common set of tests.
@@ -2351,7 +2352,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
         "fireworks" => {
             assert!(
-                res["error"].as_str().unwrap().contains("unauthorized"),
+                res["error"]
+                    .as_str()
+                    .unwrap()
+                    .to_lowercase()
+                    .contains("unauthorized"),
                 "Unexpected error: {res}"
             );
         }
@@ -2622,11 +2627,11 @@ pub async fn check_base64_pdf_response(
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     if should_be_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert_eq!(input_tokens, Some(0));
+        assert_eq!(output_tokens, Some(0));
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.unwrap() > 0);
+        assert!(output_tokens.unwrap() > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -2775,11 +2780,11 @@ pub async fn check_base64_image_response(
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     if should_be_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert_eq!(input_tokens, Some(0));
+        assert_eq!(output_tokens, Some(0));
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.unwrap() > 0);
+        assert!(output_tokens.unwrap() > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -2929,11 +2934,11 @@ pub async fn check_url_image_response(
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     if should_be_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert_eq!(input_tokens, Some(0));
+        assert_eq!(output_tokens, Some(0));
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.unwrap() > 0);
+        assert!(output_tokens.unwrap() > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)

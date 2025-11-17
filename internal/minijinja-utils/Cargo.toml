@@ -1,0 +1,12 @@
+[package]
+name = "minijinja-utils"
+edition = "2021"
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+minijinja.workspace = true
+
+[lints]
+workspace = true

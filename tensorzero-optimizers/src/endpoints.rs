@@ -25,12 +25,14 @@ use tensorzero_core::{
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
     optimization::{OptimizationJobHandle, OptimizationJobInfo, UninitializedOptimizerInfo},
-    serde_util::deserialize_option_u64,
     stored_inference::RenderedSample,
     utils::gateway::{AppState, AppStateData, StructuredJson},
 };
 
 use crate::{JobHandle, Optimizer};
+
+// TODO(shuyangli): revisit this and see if it should be u32::MAX.
+const DEFAULT_LIST_INFERENCES_QUERY_LIMIT_MAX_FOR_OPTIMIZATIONS: u32 = u32::MAX;
 
 #[derive(ts_rs::TS, Debug, Deserialize, Serialize)]
 #[ts(export)]
@@ -41,10 +43,8 @@ pub struct LaunchOptimizationWorkflowParams {
     pub filters: Option<InferenceFilter>,
     pub output_source: InferenceOutputSource,
     pub order_by: Option<Vec<OrderBy>>,
-    #[serde(deserialize_with = "deserialize_option_u64")]
-    pub limit: Option<u64>,
-    #[serde(deserialize_with = "deserialize_option_u64")]
-    pub offset: Option<u64>,
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
     pub val_fraction: Option<f64>,
     pub optimizer_config: UninitializedOptimizerInfo,
 }
@@ -99,8 +99,8 @@ pub async fn launch_optimization_workflow(
                 episode_id: None,
                 filters: filters.as_ref(),
                 output_source,
-                limit,
-                offset,
+                limit: limit.unwrap_or(DEFAULT_LIST_INFERENCES_QUERY_LIMIT_MAX_FOR_OPTIMIZATIONS),
+                offset: offset.unwrap_or(0),
                 order_by: order_by.as_deref(),
             },
         )

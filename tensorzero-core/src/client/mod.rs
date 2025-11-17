@@ -3,6 +3,7 @@ use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Dur
 use crate::config::ConfigFileGlob;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::stored_input::StoragePathResolver;
+use crate::utils::gateway::DropWrapper;
 use crate::{
     config::Config,
     db::clickhouse::ClickHouseConnectionInfo,
@@ -105,6 +106,7 @@ pub struct ClientBuilder {
     verbose_errors: bool,
     api_key: Option<String>,
     timeout: Option<Duration>,
+    drop_wrapper: Option<DropWrapper>,
 }
 
 /// An error type representing an error from within the TensorZero gateway
@@ -233,6 +235,7 @@ impl ClientBuilder {
             verbose_errors: false,
             api_key: None,
             timeout: None,
+            drop_wrapper: None,
         }
     }
 
@@ -267,6 +270,18 @@ impl ClientBuilder {
     /// This is only used in `HTTPGateway` mode.
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
+        self
+    }
+
+    /// Sets the drop wrapper for embedded gateway mode.
+    /// This is used internally by the Python client, since we need to enter the Tokio runtime
+    /// and release the Python GIL (the drop may have been originally triggered from the Python
+    /// interpreter performing garbage collection of the wrapping Python object)
+    /// When the embedded gateway shuts down, the provided `DropWrapper` will be called
+    /// with a closure representing the actual drop logic (e.g. waiting for the ClickHouse batch insert task to complete)
+    #[cfg(feature = "pyo3")]
+    pub fn with_drop_wrapper(mut self, drop_wrapper: DropWrapper) -> Self {
+        self.drop_wrapper = Some(drop_wrapper);
         self
     }
 
@@ -355,6 +370,7 @@ impl ClientBuilder {
                                 clickhouse_connection_info,
                                 postgres_connection_info,
                                 http_client,
+                                self.drop_wrapper,
                             )
                             .await
                             .map_err(|e| {
@@ -392,6 +408,7 @@ impl ClientBuilder {
                                 clickhouse_connection_info.clone(),
                                 postgres_connection_info.clone(),
                                 http_client.clone(),
+                                self.drop_wrapper,
                             )
                             .await
                             .map_err(|e| {
@@ -407,34 +424,6 @@ impl ClientBuilder {
                     last_body: Default::default(),
                 })
             }
-        }
-    }
-
-    /// Builds a dummy client for use in pyo3. Should not otherwise be used
-    /// This avoids logging any messages
-    ///
-    /// # Panics
-    /// This will panic if a `TensorzeroHttpClient` cannot be constructed
-    /// due to an error when building a `reqwest::Client`
-    /// (e.g. if a TLS backend cannot be initialized)
-    #[cfg(feature = "pyo3")]
-    pub fn build_dummy() -> Client {
-        let handle = GatewayHandle::new_dummy(
-            // NOTE - we previously called `reqwest::Client::new()`, which panics
-            // if a TLS backend cannot be initialized.
-            // This explicit `expect` does not actually increase the risk of panics,
-            #[expect(clippy::expect_used)]
-            TensorzeroHttpClient::new(crate::http::DEFAULT_HTTP_CLIENT_TIMEOUT)
-                .expect("Failed to construct TensorzeroHttpClient"),
-        );
-        Client {
-            mode: Arc::new(ClientMode::EmbeddedGateway {
-                gateway: EmbeddedGateway { handle },
-                timeout: None,
-            }),
-            verbose_errors: false,
-            #[cfg(feature = "e2e_tests")]
-            last_body: Default::default(),
         }
     }
 
@@ -495,6 +484,20 @@ impl ClientBuilder {
         let ClientBuilderMode::HTTPGateway { mut url } = self.mode else {
             return Err(ClientBuilderError::NotHTTPGateway);
         };
+        // This is only used when dropping a `GatewayHandle` in embedded gateway mode,
+        // and does not currently make sense in HTTPGateway mode.
+        if self.drop_wrapper.is_some() {
+            return Err(ClientBuilderError::HTTPClientBuild(
+                TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InternalError {
+                        message:
+                            "ClientBuilder.with_drop_wrapper is not allowed in HTTPGateway mode"
+                                .to_string(),
+                    })
+                    .into(),
+                },
+            ));
+        }
         // Enforce that the URL has a trailing slash, so that joining endpoints works correctly
         // This means that passing in a url that looks like 'http://example.com/some/prefix'
         // will result in inference requests being sent to 'http://example.com/some/prefix/inference'

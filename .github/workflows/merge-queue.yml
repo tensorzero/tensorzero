@@ -146,7 +146,7 @@ jobs:
 
   client-tests:
     name: "client-tests (batch_writes: ${{ matrix.batch_writes }})"
-    runs-on: namespace-profile-tensorzero-16x32
+    runs-on: namespace-profile-tensorzero-8x16
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
       # Permission to checkout the repository

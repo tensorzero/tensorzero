@@ -490,7 +490,7 @@ async fn test_config_invalid_metric() {
   type = "track_and_stop"
   metric = "nonexistent_metric"  # References a metric that doesn't exist
   candidate_variants = ["variant_a"]
-  fallback_variants = ["variant_a"]
+  fallback_variants = []
   min_samples_per_variant = 10
   delta = 0.05
   epsilon = 0.1
@@ -531,7 +531,7 @@ model = "test_model"
 type = "track_and_stop"
 metric = "accuracy"
 candidate_variants = ["variant_a", "nonexistent_variant"]
-fallback_variants = ["variant_a"]
+fallback_variants = []
 min_samples_per_variant = 10
 delta = 0.05
 epsilon = 0.1
@@ -593,7 +593,7 @@ async fn test_config_invalid_min_samples() {
         metric_type: "float",
         optimize: "min",
         candidate_variants: &["variant_a"],
-        fallback_variants: &["variant_a"],
+        fallback_variants: &[],
         min_samples_per_variant: 0, // Invalid: must be >= 1
         ..Default::default()
     });
@@ -612,7 +612,7 @@ async fn test_config_invalid_delta() {
         metric_type: "float",
         optimize: "max",
         candidate_variants: &["variant_a"],
-        fallback_variants: &["variant_a"],
+        fallback_variants: &[],
         delta: 1.5, // Invalid: must be in (0, 1)
         ..Default::default()
     });
@@ -631,7 +631,7 @@ async fn test_config_invalid_epsilon() {
         metric_type: "float",
         optimize: "min",
         candidate_variants: &["variant_a"],
-        fallback_variants: &["variant_a"],
+        fallback_variants: &[],
         epsilon: -0.1, // Invalid: must be >= 0
         ..Default::default()
     });
@@ -651,7 +651,7 @@ async fn test_config_valid() {
         metric_type: "float",
         optimize: "max",
         candidate_variants: &["variant_a", "variant_b", "variant_c"],
-        fallback_variants: &["variant_a", "variant_b"],
+        fallback_variants: &["variant_d"],
         min_samples_per_variant: 10,
         delta: 0.05,
         epsilon: 0.1,

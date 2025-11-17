@@ -79,6 +79,7 @@ async fn get_providers() -> E2ETestProviders {
 
     let embedding_providers = vec![EmbeddingTestProvider {
         model_name: "azure-text-embedding-3-small".into(),
+        dimensions: 1536,
     }];
 
     // azure requires deployment_id and endpoint parameters, so it can't be tested with just default credentials
