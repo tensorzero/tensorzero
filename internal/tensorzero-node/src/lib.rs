@@ -211,15 +211,16 @@ pub async fn run_evaluation_streaming(
         concurrency,
     };
 
-    let result = match run_evaluation_core_streaming(core_args, max_datapoints, precision_limits).await {
-        Ok(result) => result,
-        Err(error) => {
-            let _ = callback.abort();
-            return Err(napi::Error::from_reason(format!(
-                "Failed to start evaluation run: {error}"
-            )));
-        }
-    };
+    let result =
+        match run_evaluation_core_streaming(core_args, max_datapoints, precision_limits).await {
+            Ok(result) => result,
+            Err(error) => {
+                let _ = callback.abort();
+                return Err(napi::Error::from_reason(format!(
+                    "Failed to start evaluation run: {error}"
+                )));
+            }
+        };
 
     let start_event = EvaluationRunEvent::Start(EvaluationRunStartEvent {
         evaluation_run_id,
