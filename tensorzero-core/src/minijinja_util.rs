@@ -21,17 +21,18 @@ impl TemplateConfig<'_> {
     }
 
     /// Initializes the TemplateConfig with the given templates, given as a map from template names
-    /// to template paths.
-    /// If `filesystem_path` is provided, we'll walk the templates explicitly configured,
+    /// to template content.
+    /// If `template_base_directory` is provided, we'll walk the templates explicitly configured,
     /// find all files that we can tell would be loaded, and eagerly load them.
     pub fn initialize(
         &mut self,
-        template_paths: HashMap<String, String>,
-        filesystem_path: Option<&Path>,
+        configured_templates: HashMap<String, String>,
+        template_base_directory: Option<&Path>,
     ) -> Result<(), Error> {
         self.env.set_undefined_behavior(UndefinedBehavior::Strict);
 
-        for (template_name, template_content) in &template_paths {
+        // Phase 1: Load explicitly configured templates
+        for (template_name, template_content) in &configured_templates {
             self.env
                 .add_template_owned(template_name.clone(), template_content.clone())
                 .map_err(|e| {
@@ -41,50 +42,60 @@ impl TemplateConfig<'_> {
                     })
                 })?;
         }
+
+        // Phase 2: Load hardcoded templates
         self.add_hardcoded_templates()?;
-        if let Some(base_path) = filesystem_path {
+
+        // Phase 3: If filesystem access is enabled, eagerly load all referenced templates
+        if let Some(base_path) = template_base_directory {
+            // Cache for storing loaded templates - will be used in future PR
             let mut all_template_load_data = HashMap::new();
-            for template_name in template_paths.keys() {
+
+            for template_name in configured_templates.keys() {
                 let referenced_templates = collect_all_template_paths(&self.env, template_name)?;
-                for template in referenced_templates {
-                    // Convert PathBuf to string for safe_join
-                    let template_str = template.to_string_lossy();
+                for referenced_template_path in referenced_templates {
+                    // Convert PathBuf to string for safe_join and use as template name
+                    let referenced_template_name = referenced_template_path.to_string_lossy();
 
-                    // First, join base_path + template
-                    let template_path = match safe_join(base_path, &template_str) {
-                        Some(path) => path,
-                        None => {
-                            tracing::warn!(
-                                "Could not safely join base path with template '{}'",
-                                template.display()
-                            );
-                            continue;
-                        }
-                    };
+                    // Safely join the base directory with the referenced template path
+                    let absolute_template_path =
+                        match safe_join(base_path, &referenced_template_name) {
+                            Some(path) => path,
+                            None => {
+                                tracing::warn!(
+                                    "Could not safely join base path with template '{}'",
+                                    referenced_template_path.display()
+                                );
+                                continue;
+                            }
+                        };
 
-                    // Then, read all data. Skip if read fails (missing, directory) and warn.
-                    let data = match std::fs::read_to_string(&template_path) {
+                    // Read template content from filesystem. Skip if read fails (missing, directory).
+                    let template_content = match std::fs::read_to_string(&absolute_template_path) {
                         Ok(content) => content,
                         Err(e) => {
                             tracing::warn!(
                                 "Failed to read template at {}: {}. Skipping.",
-                                template_path.display(),
+                                absolute_template_path.display(),
                                 e
                             );
                             continue;
                         }
                     };
 
-                    let template_name = template_str.to_string();
+                    // Add the referenced template to the environment
                     self.env
-                        .add_template_owned(template_name.clone(), data.clone())
+                        .add_template_owned(
+                            referenced_template_name.to_string(),
+                            template_content.clone(),
+                        )
                         .map_err(|e| {
                             Error::new(ErrorDetails::MiniJinjaTemplate {
-                                template_name: template_name.clone(),
+                                template_name: referenced_template_name.to_string(),
                                 message: format!("Failed to add template: {e}"),
                             })
                         })?;
-                    all_template_load_data.insert(template, data);
+                    all_template_load_data.insert(referenced_template_path, template_content);
                 }
             }
 
