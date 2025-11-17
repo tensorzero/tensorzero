@@ -409,9 +409,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         tags,
       });
       fetcher.submit(formData, { method: "post", action: "." });
-      if (!updateError) {
-        setIsEditing(false);
-      }
+      // Note: Edit mode will be exited by the useEffect when the datapoint updates on success
     } catch (error) {
       logger.error("Error preparing update request:", error);
     }
@@ -436,19 +434,16 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     args: Parameters<typeof prepareInferenceActionRequest>[0],
     { bypassCache }: { bypassCache?: boolean } = {},
   ) => {
-    try {
-      const request = prepareInferenceActionRequest(args);
-      if (bypassCache) {
-        request.cache_options = {
-          ...request.cache_options,
-          enabled: "write_only",
-        };
-      }
-      setLastRequestArgs(args);
-      void submit({ data: JSON.stringify(request) });
-    } catch (error) {
-      logger.error("Failed to prepare datapoint inference request:", error);
+    // TODO: error handling
+    const request = prepareInferenceActionRequest(args);
+    if (bypassCache) {
+      request.cache_options = {
+        ...request.cache_options,
+        enabled: "write_only",
+      };
     }
+    setLastRequestArgs(args);
+    submit({ data: JSON.stringify(request) });
   };
 
   const onVariantSelect = (variant: string) => {
@@ -475,14 +470,16 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   const handleRenameDatapoint = async (newName: string) => {
-    // TODO: error handling
-    const formData = serializeRenameDatapointToFormData({
-      dataset_name: t0Datapoint.dataset_name,
-      id: t0Datapoint.id,
-      name: newName,
-    });
-
-    await fetcher.submit(formData, { method: "post", action: "." });
+    try {
+      const formData = serializeRenameDatapointToFormData({
+        dataset_name: t0Datapoint.dataset_name,
+        id: t0Datapoint.id,
+        name: newName,
+      });
+      await fetcher.submit(formData, { method: "post", action: "." });
+    } catch (error) {
+      logger.error("Error preparing rename request:", error);
+    }
   };
 
   return (

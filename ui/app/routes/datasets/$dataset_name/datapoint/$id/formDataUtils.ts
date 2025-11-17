@@ -5,6 +5,28 @@ import type {
   Input,
 } from "~/types/tensorzero";
 
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/**
+ * Safely parses a JSON string with proper error handling.
+ * Throws a `ZodError` if JSON parsing fails for consistency with Zod validation.
+ */
+function safeJsonParse(value: string, fieldName: string) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new z.ZodError([
+      {
+        code: "custom",
+        message: `Invalid JSON in ${fieldName} field`,
+        path: [fieldName],
+      },
+    ]);
+  }
+}
+
 /**
  * Schema for `"delete"` form action.
  */
@@ -90,22 +112,34 @@ export function parseDeleteDatapointFormData(
 export function parseUpdateDatapointFormData(
   formData: FormData,
 ): UpdateDatapointFormData {
-  const rawData = {
+  const inputStr = formData.get("input") as string | null;
+  const outputStr = formData.get("output") as string | null;
+  const tagsStr = formData.get("tags") as string | null;
+
+  const rawData: Record<string, unknown> = {
     dataset_name: formData.get("dataset_name"),
     function_name: formData.get("function_name"),
     id: formData.get("id"),
-    episode_id: formData.get("episode_id") || undefined,
-    input: formData.get("input")
-      ? JSON.parse(formData.get("input") as string)
-      : undefined,
-    output: formData.get("output")
-      ? JSON.parse(formData.get("output") as string)
-      : undefined,
-    tags: formData.get("tags")
-      ? JSON.parse(formData.get("tags") as string)
-      : undefined,
     action: formData.get("action"),
   };
+
+  // Only add optional fields if they have values
+  const episodeId = formData.get("episode_id");
+  if (episodeId) {
+    rawData.episode_id = episodeId;
+  }
+
+  if (inputStr) {
+    rawData.input = safeJsonParse(inputStr, "input");
+  }
+
+  if (outputStr) {
+    rawData.output = safeJsonParse(outputStr, "output");
+  }
+
+  if (tagsStr) {
+    rawData.tags = safeJsonParse(tagsStr, "tags");
+  }
 
   return UpdateDatapointFormDataSchema.parse(rawData);
 }
@@ -135,30 +169,42 @@ export function parseDatapointAction(formData: FormData): DatapointAction {
   const action = formData.get("action");
 
   // Build raw data object based on common and action-specific fields
-  const baseData = {
+  const baseData: Record<string, unknown> = {
     dataset_name: formData.get("dataset_name"),
     id: formData.get("id"),
     action,
   };
 
-  let rawData;
+  let rawData: Record<string, unknown>;
   if (action === "delete") {
     rawData = baseData;
   } else if (action === "update") {
+    const inputStr = formData.get("input") as string | null;
+    const outputStr = formData.get("output") as string | null;
+    const tagsStr = formData.get("tags") as string | null;
+
     rawData = {
       ...baseData,
       function_name: formData.get("function_name"),
-      episode_id: formData.get("episode_id") || undefined,
-      input: formData.get("input")
-        ? JSON.parse(formData.get("input") as string)
-        : undefined,
-      output: formData.get("output")
-        ? JSON.parse(formData.get("output") as string)
-        : undefined,
-      tags: formData.get("tags")
-        ? JSON.parse(formData.get("tags") as string)
-        : undefined,
     };
+
+    // Only add optional fields if they have values
+    const episodeId = formData.get("episode_id");
+    if (episodeId) {
+      rawData.episode_id = episodeId;
+    }
+
+    if (inputStr) {
+      rawData.input = safeJsonParse(inputStr, "input");
+    }
+
+    if (outputStr) {
+      rawData.output = safeJsonParse(outputStr, "output");
+    }
+
+    if (tagsStr) {
+      rawData.tags = safeJsonParse(tagsStr, "tags");
+    }
   } else if (action === "rename") {
     rawData = {
       ...baseData,
