@@ -18,8 +18,8 @@ impl StoppingManager {
     /// Create a new StoppingManager with precision limits and cancellation tokens
     ///
     /// If precision_limits are provided, this creates evaluator stats for tracking.
-    /// The cancellation tokens are used to check and cancel evaluators when precision
-    /// limits are met.
+    /// The cancellation tokens are cloned (they're Arc-based) and used to check
+    /// and cancel evaluators when precision limits are met.
     pub fn new(
         precision_limits: Option<HashMap<String, f32>>,
         cancellation_tokens: Option<HashMap<String, CancellationToken>>,
@@ -40,7 +40,7 @@ impl StoppingManager {
         }
     }
 
-    /// Update per-evaluator statistics with new evaluation results
+    /// Update statistics with new evaluation results
     pub fn update_stats<E>(
         &mut self,
         evaluation_result: &HashMap<String, Result<Option<serde_json::Value>, E>>,
@@ -70,9 +70,9 @@ impl StoppingManager {
     /// Checks each evaluator's CI half-width against its precision limit and cancels
     /// the token if the evaluator has converged. Only checks after min_datapoints
     /// have been completed.
-    pub fn cancel_converged_evaluators(&self, completed_datapoints: usize) {
-        // Only check after inferences have been completed for min_datapoints
-        if completed_datapoints < self.min_datapoints {
+    pub fn cancel_converged_evaluators(&self, completed_inferences: usize) {
+        // Only check after min_datapoints have been completed
+        if completed_inferences < self.min_datapoints {
             return;
         }
 
@@ -114,5 +114,160 @@ impl StoppingManager {
         self.cancellation_tokens
             .as_ref()
             .is_some_and(|tokens| tokens.values().all(|token| token.is_cancelled()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stopping_manager_no_precision_limits() {
+        let manager = StoppingManager::new(None, None);
+
+        // With no precision limits, all_evaluators_stopped should always return false
+        assert!(!manager.all_evaluators_stopped());
+
+        // Cancel should be a no-op
+        manager.cancel_converged_evaluators(100);
+        assert!(!manager.all_evaluators_stopped());
+    }
+
+    #[test]
+    fn test_stopping_manager_with_precision_limits() {
+        let mut precision_limits = HashMap::new();
+        precision_limits.insert("evaluator1".to_string(), 0.1);
+
+        let mut tokens = HashMap::new();
+        tokens.insert("evaluator1".to_string(), CancellationToken::new());
+
+        let manager = StoppingManager::new(Some(precision_limits), Some(tokens));
+
+        // Initially no evaluators should be stopped
+        assert!(!manager.all_evaluators_stopped());
+    }
+
+    #[test]
+    fn test_update_stats() {
+        let mut precision_limits = HashMap::new();
+        precision_limits.insert("evaluator1".to_string(), 0.1);
+
+        let tokens = HashMap::new();
+
+        let mut manager = StoppingManager::new(Some(precision_limits), Some(tokens));
+
+        // Add some evaluation results
+        let mut results: HashMap<String, Result<Option<serde_json::Value>, String>> =
+            HashMap::new();
+        results.insert(
+            "evaluator1".to_string(),
+            Ok(Some(serde_json::Value::Number(
+                serde_json::Number::from_f64(0.8).unwrap(),
+            ))),
+        );
+
+        manager.update_stats(&results);
+
+        // Stats should be updated (we can't directly check but at least verify no panic)
+        // In a real scenario, we'd need to expose stats for testing or test indirectly
+    }
+
+    #[test]
+    fn test_cancel_converged_evaluators_before_min_datapoints() {
+        let mut precision_limits = HashMap::new();
+        precision_limits.insert("evaluator1".to_string(), 0.1);
+
+        let mut tokens = HashMap::new();
+        let token = CancellationToken::new();
+        tokens.insert("evaluator1".to_string(), token.clone());
+
+        let manager = StoppingManager::new(Some(precision_limits), Some(tokens));
+
+        // Should not cancel before min_datapoints (20)
+        manager.cancel_converged_evaluators(10);
+        assert!(!token.is_cancelled());
+    }
+
+    #[test]
+    fn test_cancel_converged_evaluators_after_convergence() {
+        let mut precision_limits = HashMap::new();
+        // Set a very high precision limit so it converges easily
+        precision_limits.insert("evaluator1".to_string(), 100.0);
+
+        let mut tokens = HashMap::new();
+        let token = CancellationToken::new();
+        tokens.insert("evaluator1".to_string(), token.clone());
+
+        let mut manager = StoppingManager::new(Some(precision_limits), Some(tokens));
+
+        // Add enough consistent values to converge
+        for _ in 0..25 {
+            let mut results: HashMap<String, Result<Option<serde_json::Value>, String>> =
+                HashMap::new();
+            results.insert(
+                "evaluator1".to_string(),
+                Ok(Some(serde_json::Value::Bool(true))),
+            );
+            manager.update_stats(&results);
+        }
+
+        // Should not cancel before calling cancel_converged_evaluators
+        assert!(!token.is_cancelled());
+
+        // Now check stopping after min_datapoints
+        manager.cancel_converged_evaluators(25);
+
+        // Should be cancelled now due to convergence with very high precision limit
+        assert!(token.is_cancelled());
+        assert!(manager.all_evaluators_stopped());
+    }
+
+    #[test]
+    fn test_all_evaluators_stopped_with_multiple_evaluators() {
+        let mut precision_limits = HashMap::new();
+        precision_limits.insert("evaluator1".to_string(), 0.1);
+        precision_limits.insert("evaluator2".to_string(), 0.1);
+
+        let mut tokens = HashMap::new();
+        let token1 = CancellationToken::new();
+        let token2 = CancellationToken::new();
+        tokens.insert("evaluator1".to_string(), token1.clone());
+        tokens.insert("evaluator2".to_string(), token2.clone());
+
+        let manager = StoppingManager::new(Some(precision_limits), Some(tokens));
+
+        // Initially none stopped
+        assert!(!manager.all_evaluators_stopped());
+
+        // Cancel one
+        token1.cancel();
+        assert!(!manager.all_evaluators_stopped());
+
+        // Cancel both
+        token2.cancel();
+        assert!(manager.all_evaluators_stopped());
+    }
+
+    #[test]
+    fn test_evaluator_not_in_precision_limits() {
+        let mut precision_limits = HashMap::new();
+        precision_limits.insert("evaluator1".to_string(), 0.1);
+
+        let mut tokens = HashMap::new();
+        tokens.insert("evaluator1".to_string(), CancellationToken::new());
+        tokens.insert("evaluator2".to_string(), CancellationToken::new());
+
+        let mut manager = StoppingManager::new(Some(precision_limits), Some(tokens));
+
+        // Add results for evaluator2 (not in precision_limits)
+        let mut results: HashMap<String, Result<Option<serde_json::Value>, String>> =
+            HashMap::new();
+        results.insert(
+            "evaluator2".to_string(),
+            Ok(Some(serde_json::Value::Bool(true))),
+        );
+
+        // Should not panic even though evaluator2 is not being tracked
+        manager.update_stats(&results);
     }
 }
