@@ -11,8 +11,6 @@ import uuid_utils
 from typing_extensions import NotRequired, TypedDict, deprecated
 
 from tensorzero.generated_types import (
-    InferenceExtraBody,
-    InferenceExtraHeader,
     InferenceFilter,
     InferenceFilterAnd,
     InferenceFilterBooleanMetric,
@@ -365,12 +363,6 @@ class JsonChunk:
 
 
 InferenceChunk = Union[ChatChunk, JsonChunk]
-
-
-# ExtraBody and ExtraHeader types are now auto-generated from Rust
-# Re-export the generated union types for backward compatibility
-ExtraBody = InferenceExtraBody
-ExtraHeader = InferenceExtraHeader
 
 
 def parse_inference_chunk(chunk: Dict[str, Any]) -> InferenceChunk:
