@@ -174,11 +174,18 @@ class InferenceResponseToolCall:
 
 
 @dataclass(kw_only=True)
-class Tool:
+class ClientSideFunctionTool:
     description: str
     parameters: Any
     name: str
     strict: bool | None = False
+    """
+    `strict` here specifies that TensorZero should attempt to use any facilities
+    available from the model provider to force the model to generate an accurate tool call,
+    notably OpenAI's strict tool call mode (https://platform.openai.com/docs/guides/function-calling#strict-mode).
+    This imposes additional restrictions on the JSON schema that may vary across providers
+    so we allow it to be configurable.
+    """
 
 
 @dataclass(kw_only=True)
@@ -330,6 +337,9 @@ class JsonInferenceOutput:
     """
 
 
+InferenceOutputSource = str
+
+
 @dataclass(kw_only=True)
 class TagDatapointFilter(TagFilter):
     type: Literal["tag"] = "tag"
@@ -338,6 +348,9 @@ class TagDatapointFilter(TagFilter):
 @dataclass(kw_only=True)
 class TimeDatapointFilter(TimeFilter):
     type: Literal["time"] = "time"
+
+
+OrderDirection = Literal["ascending", "descending"]
 
 
 @dataclass(kw_only=True)
@@ -401,6 +414,26 @@ class GetDatapointsRequest:
     ids: list[str]
     """
     The IDs of the datapoints to retrieve. Required.
+    """
+
+
+@dataclass(kw_only=True)
+class GetInferencesRequest:
+    ids: list[str]
+    """
+    The IDs of the inferences to retrieve. Required.
+    """
+    output_source: InferenceOutputSource
+    """
+    Source of the inference output.
+    Determines whether to return the original inference output or demonstration feedback
+    (manually-curated output) if available.
+    """
+    function_name: str | None = None
+    """
+    Optional function name to filter by.
+    Including this improves query performance since `function_name` is the first column
+    in the ClickHouse primary key.
     """
 
 
@@ -565,13 +598,38 @@ class InferenceFilterTime(TimeFilter):
 
 
 @dataclass(kw_only=True)
+class OrderByTimestamp:
+    direction: OrderDirection
+    """
+    The ordering direction.
+    """
+    by: Literal["timestamp"] = "timestamp"
+
+
+@dataclass(kw_only=True)
+class OrderByMetric:
+    direction: OrderDirection
+    """
+    The ordering direction.
+    """
+    name: str
+    """
+    The name of the metric to order by.
+    """
+    by: Literal["metric"] = "metric"
+
+
+OrderBy = OrderByTimestamp | OrderByMetric
+
+
+@dataclass(kw_only=True)
 class DynamicToolParams:
     allowed_tools: list[str] | None = None
     """
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[Tool] | None = None
+    additional_tools: list[ClientSideFunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -586,9 +644,9 @@ class DynamicToolParams:
     Whether to use parallel tool calls in the inference. Optional.
     If provided during inference, it will override the function-configured parallel tool calls.
     """
-    provider_tools: list[ProviderTool] | None = None
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
     """
-    Provider-specific tool configurations (not persisted to database)
+    Provider-specific tool configurations
     """
 
 
@@ -678,7 +736,7 @@ class CreateChatDatapointRequest:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[Tool] | None = None
+    additional_tools: list[ClientSideFunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -693,9 +751,9 @@ class CreateChatDatapointRequest:
     Whether to use parallel tool calls in the inference. Optional.
     If provided during inference, it will override the function-configured parallel tool calls.
     """
-    provider_tools: list[ProviderTool] | None = None
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
     """
-    Provider-specific tool configurations (not persisted to database)
+    Provider-specific tool configurations
     """
     tags: dict[str, Any] | None = None
     """
@@ -770,7 +828,7 @@ class ChatInferenceDatapoint:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[Tool] | None = None
+    additional_tools: list[ClientSideFunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -785,9 +843,9 @@ class ChatInferenceDatapoint:
     Whether to use parallel tool calls in the inference. Optional.
     If provided during inference, it will override the function-configured parallel tool calls.
     """
-    provider_tools: list[ProviderTool] | None = None
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
     """
-    Provider-specific tool configurations (not persisted to database)
+    Provider-specific tool configurations
     """
     tags: dict[str, Any] | None = None
     auxiliary: str | None = None
@@ -827,6 +885,57 @@ class DatapointJson(JsonInferenceDatapoint):
 
 
 Datapoint = DatapointChat | DatapointJson
+
+
+@dataclass(kw_only=True)
+class StoredChatInference:
+    function_name: str
+    variant_name: str
+    input: StoredInput
+    output: list[ContentBlockChatOutput]
+    timestamp: str
+    episode_id: str
+    inference_id: str
+    dispreferred_outputs: list[list[ContentBlockChatOutput]] | None = field(default_factory=lambda: [])
+    allowed_tools: list[str] | None = None
+    """
+    A subset of static tools configured for the function that the inference is allowed to use. Optional.
+    If not provided, all static tools are allowed.
+    """
+    additional_tools: list[ClientSideFunctionTool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured
+    tools, that are also allowed.
+    """
+    tool_choice: ToolChoice | None = None
+    """
+    User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+    Optional.
+    """
+    parallel_tool_calls: bool | None = None
+    """
+    Whether to use parallel tool calls in the inference. Optional.
+    If provided during inference, it will override the function-configured parallel tool calls.
+    """
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
+    """
+    Provider-specific tool configurations
+    """
+    tags: dict[str, str] | None = field(default_factory=lambda: {})
+
+
+@dataclass(kw_only=True)
+class StoredJsonInference:
+    function_name: str
+    variant_name: str
+    input: StoredInput
+    output: JsonInferenceOutput
+    timestamp: str
+    episode_id: str
+    inference_id: str
+    output_schema: Any
+    dispreferred_outputs: list[JsonInferenceOutput] | None = field(default_factory=lambda: [])
+    tags: dict[str, str] | None = field(default_factory=lambda: {})
 
 
 @dataclass(kw_only=True)
@@ -929,6 +1038,27 @@ class UpdateDatapointsRequest:
 
 
 @dataclass(kw_only=True)
+class StoredInferenceChat(StoredChatInference):
+    type: Literal["chat"] = "chat"
+
+
+@dataclass(kw_only=True)
+class StoredInferenceJson(StoredJsonInference):
+    type: Literal["json"] = "json"
+
+
+StoredInference = StoredInferenceChat | StoredInferenceJson
+
+
+@dataclass(kw_only=True)
+class GetInferencesResponse:
+    inferences: list[StoredInference]
+    """
+    The retrieved inferences.
+    """
+
+
+@dataclass(kw_only=True)
 class InferenceFilterAnd:
     children: list[InferenceFilter]
     type: Literal["and"] = "and"
@@ -1026,4 +1156,48 @@ class ListDatapointsRequest:
     """
     Optional filter to apply when querying datapoints.
     Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
+    """
+
+
+@dataclass(kw_only=True)
+class ListInferencesRequest:
+    output_source: InferenceOutputSource
+    """
+    Source of the inference output. Determines whether to return the original
+    inference output or demonstration feedback (manually-curated output) if available.
+    """
+    function_name: str | None = None
+    """
+    Optional function name to filter inferences by.
+    If provided, only inferences from this function will be returned.
+    """
+    variant_name: str | None = None
+    """
+    Optional variant name to filter inferences by.
+    If provided, only inferences from this variant will be returned.
+    """
+    episode_id: str | None = None
+    """
+    Optional episode ID to filter inferences by.
+    If provided, only inferences from this episode will be returned.
+    """
+    limit: int | None = None
+    """
+    The maximum number of inferences to return.
+    Defaults to 20.
+    """
+    offset: int | None = None
+    """
+    The number of inferences to skip before starting to return results.
+    Defaults to 0.
+    """
+    filter: InferenceFilter | None = None
+    """
+    Optional filter to apply when querying inferences.
+    Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
+    """
+    order_by: list[OrderBy] | None = None
+    """
+    Optional ordering criteria for the results.
+    Supports multiple sort criteria (e.g., sort by timestamp then by metric).
     """

@@ -36,7 +36,7 @@ use tensorzero_core::client::{
     ClientBuilder, ClientBuilderMode, FeedbackParams, InferenceResponse, Role,
 };
 use tensorzero_core::config::{
-    path::ResolvedTomlPath, Config, UninitializedVariantConfig, UninitializedVariantInfo,
+    path::ResolvedTomlPathData, Config, UninitializedVariantConfig, UninitializedVariantInfo,
 };
 use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig;
 use tensorzero_core::{
@@ -1298,8 +1298,8 @@ async fn test_run_llm_judge_evaluator_chat() {
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         usage: Usage {
-            input_tokens: 0,
-            output_tokens: 0,
+            input_tokens: Some(0),
+            output_tokens: Some(0),
         },
         variant_name: "test_variant".to_string(),
     });
@@ -1473,8 +1473,8 @@ async fn test_run_llm_judge_evaluator_json() {
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
         usage: Usage {
-            input_tokens: 0,
-            output_tokens: 0,
+            input_tokens: Some(0),
+            output_tokens: Some(0),
         },
         variant_name: "test_variant".to_string(),
     });
@@ -2285,7 +2285,7 @@ async fn test_evaluation_with_dynamic_variant() {
         inner: UninitializedVariantConfig::ChatCompletion(UninitializedChatCompletionConfig {
             model: "gpt-4o-mini".into(),
             weight: None,
-            system_template: Some(ResolvedTomlPath::new_fake_path(
+            system_template: Some(ResolvedTomlPathData::new_fake_path(
                 "test/system.minijinja".to_string(),
                 "You are a helpful test assistant for dynamic variant testing.".to_string(),
             )),

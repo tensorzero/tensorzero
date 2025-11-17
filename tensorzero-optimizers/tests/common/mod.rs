@@ -2,12 +2,11 @@
 use base64::Engine;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tensorzero_core::rate_limiting::ScopeInfo;
+use tensorzero_core::{rate_limiting::ScopeInfo, tool::InferenceResponseToolCall};
 use tokio::time::{sleep, Duration};
+use tracing_subscriber::{self, EnvFilter};
 use url::Url;
 use uuid::Uuid;
-
-use tracing_subscriber::{self, EnvFilter};
 
 use tensorzero::{
     ClientExt, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
@@ -32,7 +31,7 @@ use tensorzero_core::{
     model_table::ProviderTypeDefaultCredentials,
     optimization::{OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerInfo},
     stored_inference::StoredOutput,
-    tool::{DynamicToolParams, InferenceResponseToolCall, Tool, ToolCall, ToolChoice, ToolResult},
+    tool::{ClientSideFunctionTool, DynamicToolParams, ToolCall, ToolChoice, ToolResult},
     variant::JsonMode,
 };
 use tensorzero_optimizers::{JobHandle, Optimizer};
@@ -161,6 +160,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                     "test-fine-tuned-model",
                     &ProviderTypesConfig::default(),
                     &ProviderTypeDefaultCredentials::default(),
+                    TensorzeroHttpClient::new_testing().unwrap(),
                 )
                 .await
                 .unwrap();
@@ -438,7 +438,7 @@ fn generate_tool_call_example() -> RenderedSample {
         stored_output: Some(StoredOutput::Chat(inference_response_tool_call)),
         tool_params: DynamicToolParams {
             allowed_tools: None,
-            additional_tools: Some(vec![Tool {
+            additional_tools: Some(vec![ClientSideFunctionTool {
                 name: "get_weather".to_string(),
                 description: "Get the weather for a location".to_string(),
                 parameters: serde_json::json!({
@@ -455,7 +455,7 @@ fn generate_tool_call_example() -> RenderedSample {
             }]),
             tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
         },
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),

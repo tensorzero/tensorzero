@@ -190,6 +190,7 @@ async fn e2e_test_comment_feedback_validation_disabled() {
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
+        None,
     )
     .await
     .unwrap();
@@ -1224,6 +1225,7 @@ async fn e2e_test_float_feedback_validation_disabled() {
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
+        None,
     )
     .await
     .unwrap();
@@ -1463,6 +1465,7 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         clickhouse.clone(),
         PostgresConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
+        None,
     )
     .await
     .unwrap();

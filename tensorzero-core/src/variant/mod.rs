@@ -1262,8 +1262,8 @@ mod tests {
         assert_eq!(
             inference_result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match inference_result {
@@ -1373,8 +1373,8 @@ mod tests {
         assert_eq!(
             inference_result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match inference_result {
@@ -1586,8 +1586,8 @@ mod tests {
         assert_eq!(
             inference_result.usage_considering_cached(),
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         match inference_result {
@@ -1752,8 +1752,11 @@ mod tests {
                 }
             } else if let Some(usage) = chunk.usage() {
                 // Verify the usage information
-                assert_eq!(usage.input_tokens, 10);
-                assert_eq!(usage.output_tokens, DUMMY_STREAMING_RESPONSE.len() as u32);
+                assert_eq!(usage.input_tokens, Some(10));
+                assert_eq!(
+                    usage.output_tokens,
+                    Some(DUMMY_STREAMING_RESPONSE.len() as u32)
+                );
             } else {
                 panic!("Unexpected inference result chunk.");
             }
@@ -1924,8 +1927,11 @@ mod tests {
                 }
             } else if let Some(usage) = chunk.usage() {
                 // Verify the usage information
-                assert_eq!(usage.input_tokens, 10);
-                assert_eq!(usage.output_tokens, DUMMY_STREAMING_RESPONSE.len() as u32);
+                assert_eq!(usage.input_tokens, Some(10));
+                assert_eq!(
+                    usage.output_tokens,
+                    Some(DUMMY_STREAMING_RESPONSE.len() as u32)
+                );
             } else {
                 panic!("Unexpected inference result chunk.");
             }
