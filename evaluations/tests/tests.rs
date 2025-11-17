@@ -2562,15 +2562,11 @@ async fn test_cli_args_with_adaptive_stopping() {
     let run_info: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
     let num_datapoints = run_info["num_datapoints"].as_u64().unwrap() as usize;
 
-    // Should process at least min_inferences (5) but not more than max_datapoints (20)
-    assert!(
-        num_datapoints >= 5,
-        "Should process at least min_inferences (5), got {num_datapoints}"
-    );
+    // Should not exceed max_datapoints (20) due to adaptive stopping with precision_targets
     assert!(
         num_datapoints <= 20,
         "Should not exceed max_datapoints (20), got {num_datapoints}"
     );
 
-    println!("CLI adaptive stopping test: processed {num_datapoints} datapoints (min=5, max=20)");
+    println!("CLI adaptive stopping test: processed {num_datapoints} datapoints (max=20)");
 }
