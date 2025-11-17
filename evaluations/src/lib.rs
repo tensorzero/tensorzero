@@ -538,12 +538,12 @@ pub async fn run_evaluation_core_streaming(
                 Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
                     completed_inferences += 1;
 
-                    // Update statistics and check stopping conditions
+                    // Update statistics and cancel any evaluators that have hit their precision limit
                     stopping_manager.update_stats(&evaluation_result);
-                    let all_stopped = stopping_manager.check_stopping(completed_inferences);
+                    stopping_manager.cancel_converged_evaluators(completed_inferences);
 
                     // If all evaluators have stopped, abort remaining tasks
-                    if all_stopped {
+                    if stopping_manager.all_evaluators_stopped() {
                         join_set.abort_all();
                     }
 
@@ -560,7 +560,7 @@ pub async fn run_evaluation_core_streaming(
                         message: e.to_string(),
                     }))
                 }
-                // Check if error is due to cancellation: if so, assign None, otherwise wrap Error in Some()
+                // If JoinError, check if error is due to cancellation: if so, assign None, otherwise wrap Error in Some()
                 Err(e) => {
                     if e.is_cancelled() {
                         None

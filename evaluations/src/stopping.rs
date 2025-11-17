@@ -17,8 +17,9 @@ pub struct StoppingManager {
 impl StoppingManager {
     /// Create a new StoppingManager with precision limits and cancellation tokens
     ///
-    /// If precision_limits are provided, this creates evaluator stats for tracking
-    /// and takes ownership of the cancellation tokens for managing stops.
+    /// If precision_limits are provided, this creates evaluator stats for tracking.
+    /// The cancellation tokens are used to check and cancel evaluators when precision
+    /// limits are met.
     pub fn new(
         precision_limits: Option<HashMap<String, f32>>,
         cancellation_tokens: Option<HashMap<String, CancellationToken>>,
@@ -39,7 +40,7 @@ impl StoppingManager {
         }
     }
 
-    /// Update statistics with new evaluation results
+    /// Update per-evaluator statistics with new evaluation results
     pub fn update_stats<E>(
         &mut self,
         evaluation_result: &HashMap<String, Result<Option<serde_json::Value>, E>>,
@@ -64,12 +65,15 @@ impl StoppingManager {
         }
     }
 
-    /// Check stopping conditions and cancel tokens if needed
-    /// Returns true if all evaluators have been stopped
-    pub fn check_stopping(&self, completed_inferences: usize) -> bool {
+    /// Cancel tokens for evaluators that have converged within their precision limits
+    ///
+    /// Checks each evaluator's CI half-width against its precision limit and cancels
+    /// the token if the evaluator has converged. Only checks after min_datapoints
+    /// have been completed.
+    pub fn cancel_converged_evaluators(&self, completed_inferences: usize) {
         // Only check after min_datapoints have been completed
         if completed_inferences < self.min_datapoints {
-            return false;
+            return;
         }
 
         if let (Some(stats), Some(precision_map), Some(tokens)) = (
@@ -99,11 +103,16 @@ impl StoppingManager {
                     }
                 }
             }
-
-            // Check if all evaluators (not just those with specified precision limits) are now cancelled
-            tokens.values().all(|token| token.is_cancelled())
-        } else {
-            false
         }
+    }
+
+    /// Check if all evaluators have been stopped
+    ///
+    /// Returns true if all cancellation tokens are cancelled, false otherwise.
+    /// If no cancellation tokens exist (no adaptive stopping), returns false.
+    pub fn all_evaluators_stopped(&self) -> bool {
+        self.cancellation_tokens
+            .as_ref()
+            .is_some_and(|tokens| tokens.values().all(|token| token.is_cancelled()))
     }
 }
