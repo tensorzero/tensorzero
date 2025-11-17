@@ -2535,7 +2535,7 @@ async fn test_cli_args_with_adaptive_stopping() {
     ));
     let evaluation_run_id = Uuid::now_v7();
 
-    // Test CLI Args with values for the adaptive stopping parameters: min_inferences, max_inference, and precision_targets
+    // Test CLI Args with values for max_datapoints and precision_targets
     let args = Args {
         config_file: config_path,
         gateway_url: None,

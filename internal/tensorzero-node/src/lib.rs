@@ -120,7 +120,7 @@ pub struct RunEvaluationStreamingParams {
     pub max_datapoints: Option<u32>,
     /// JSON string mapping evaluator names to precision limit thresholds.
     /// Example: '{"exact_match": 0.13, "llm_judge": 0.16}'
-    pub precision_limits: Option<String>,
+    pub precision_targets: Option<String>,
 }
 
 #[napi]
@@ -187,11 +187,11 @@ pub async fn run_evaluation_streaming(
     // Convert max_datapoints from u32 to usize
     let max_datapoints = params.max_datapoints.map(|v| v as usize);
 
-    // Parse precision_limits from JSON string to HashMap
-    let precision_limits = if let Some(limits_json_str) = params.precision_limits {
+    // Parse precision_targets from JSON string to HashMap
+    let precision_targets = if let Some(limits_json_str) = params.precision_targets {
         let limits_map: std::collections::HashMap<String, f64> =
             serde_json::from_str(&limits_json_str).map_err(|e| {
-                napi::Error::from_reason(format!("Invalid precision_limits JSON: {e}"))
+                napi::Error::from_reason(format!("Invalid precision_targets JSON: {e}"))
             })?;
         // Convert f64 to f32
         limits_map.into_iter().map(|(k, v)| (k, v as f32)).collect()
@@ -212,7 +212,7 @@ pub async fn run_evaluation_streaming(
     };
 
     let result =
-        match run_evaluation_core_streaming(core_args, max_datapoints, precision_limits).await {
+        match run_evaluation_core_streaming(core_args, max_datapoints, precision_targets).await {
             Ok(result) => result,
             Err(error) => {
                 let _ = callback.abort();

@@ -46,7 +46,7 @@ export async function action({ request }: Route.ActionArgs) {
     concurrency_limit: formData.get("concurrency_limit"),
     inference_cache: formData.get("inference_cache"),
     max_datapoints: formData.get("max_datapoints"),
-    precision_limits: formData.get("precision_limits"),
+    precision_targets: formData.get("precision_targets"),
   });
 
   if (!evaluationFormData) {
@@ -60,7 +60,7 @@ export async function action({ request }: Route.ActionArgs) {
     concurrency_limit,
     inference_cache,
     max_datapoints,
-    precision_limits,
+    precision_targets,
   } = evaluationFormData;
 
   let evaluation_start_info;
@@ -72,7 +72,7 @@ export async function action({ request }: Route.ActionArgs) {
       concurrency_limit,
       inference_cache,
       max_datapoints,
-      precision_limits,
+      precision_targets,
     );
   } catch (error) {
     logger.error("Error starting evaluation:", error);

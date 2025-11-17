@@ -100,15 +100,15 @@ export function AdvancedParametersAccordion({
                       <div key={evaluatorName}>
                         <div className="flex items-center gap-3">
                           <Label
-                            htmlFor={`precision_limit_${evaluatorName}`}
+                            htmlFor={`precision_target_${evaluatorName}`}
                             className="text-muted-foreground min-w-[120px] text-xs font-normal"
                           >
                             {evaluatorName}
                           </Label>
                           <input
                             type="text"
-                            id={`precision_limit_${evaluatorName}`}
-                            name={`precision_limit_${evaluatorName}`}
+                            id={`precision_target_${evaluatorName}`}
+                            name={`precision_target_${evaluatorName}`}
                             value={value}
                             onChange={(e) =>
                               handlePrecisionLimitChange(

@@ -65,7 +65,7 @@ const evaluationFormDataSchema = z.object({
     .refine((val) => val === undefined || (!Number.isNaN(val) && val > 0), {
       message: "Max datapoints must be a positive integer",
     }),
-  precision_limits: z
+  precision_targets: z
     .string()
     .optional()
     .transform((val) => {

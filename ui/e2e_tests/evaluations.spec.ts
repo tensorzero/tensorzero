@@ -174,7 +174,7 @@ test("launch evaluation with adaptive stopping parameters", async ({
   await page.waitForTimeout(500);
 
   // Fill in adaptive stopping parameters
-  await page.locator("#precision_limit_exact_match").fill("0.5");
+  await page.locator("#precision_target_exact_match").fill("0.5");
 
   await page.getByRole("button", { name: "Launch" }).click();
 

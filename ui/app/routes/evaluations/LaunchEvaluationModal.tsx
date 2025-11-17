@@ -58,7 +58,7 @@ function EvaluationForm({
   );
   const [precisionLimits, setPrecisionLimits] = useState<
     Record<string, string>
-  >(initialFormState?.precision_limits ?? {});
+  >(initialFormState?.precision_targets ?? {});
 
   let count = null;
   let isLoading = false;
@@ -150,7 +150,7 @@ function EvaluationForm({
       Number(maxDatapoints) > 0 &&
       !maxDatapoints.includes("."));
 
-  // Validate precision_limits: all values must be non-negative numbers
+  // Validate precision_targets: all values must be non-negative numbers
   const arePrecisionLimitsValid = Object.values(precisionLimits).every(
     (value) => {
       if (value === "") return true;
@@ -342,7 +342,7 @@ function EvaluationForm({
         <input type="hidden" name="inference_cache" value={inferenceCache} />
         <input
           type="hidden"
-          name="precision_limits"
+          name="precision_targets"
           value={
             Object.keys(precisionLimits).length > 0
               ? JSON.stringify(
@@ -411,7 +411,7 @@ interface EvaluationsFormValues {
   concurrency_limit: string;
   inference_cache: InferenceCacheSetting;
   max_datapoints: string;
-  precision_limits: Record<string, string>;
+  precision_targets: Record<string, string>;
 }
 
 interface EvaluationsFormState extends Partial<EvaluationsFormValues> {
@@ -450,23 +450,23 @@ function getFromLocalStorage() {
 
   const data = parsed as Record<string, unknown>;
 
-  // Handle precision_limits: convert old JSON string format to Record<string, string>
-  if (typeof data.precision_limits === "string" && data.precision_limits) {
+  // Handle precision_targets: convert old JSON string format to Record<string, string>
+  if (typeof data.precision_targets === "string" && data.precision_targets) {
     try {
-      const parsedLimits = JSON.parse(data.precision_limits);
+      const parsedLimits = JSON.parse(data.precision_targets);
       if (typeof parsedLimits === "object" && parsedLimits !== null) {
         // Convert numbers to strings for the form
-        data.precision_limits = Object.fromEntries(
+        data.precision_targets = Object.fromEntries(
           Object.entries(parsedLimits).map(([k, v]) => [k, String(v)]),
         );
       } else {
-        data.precision_limits = {};
+        data.precision_targets = {};
       }
     } catch {
-      data.precision_limits = {};
+      data.precision_targets = {};
     }
-  } else if (typeof data.precision_limits !== "object") {
-    data.precision_limits = {};
+  } else if (typeof data.precision_targets !== "object") {
+    data.precision_targets = {};
   }
 
   // TODO: add validation

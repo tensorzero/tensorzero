@@ -452,7 +452,7 @@ def test_sync_run_evaluation_with_adaptive_stopping(
         inference_cache="on",
         min_inferences=5,
         max_inferences=20,
-        precision_limits={"exact_match": 0.2},
+        precision_targets={"exact_match": 0.2},
     )
 
     # Test run_info property
@@ -497,7 +497,7 @@ async def test_async_run_evaluation_with_adaptive_stopping(
         inference_cache="off",
         min_inferences=3,
         max_inferences=8,
-        precision_limits={"topic_starts_with_f": 0.3},
+        precision_targets={"topic_starts_with_f": 0.3},
     )
 
     # Test run_info property
