@@ -1,5 +1,6 @@
 use futures::future::try_join_all;
 use futures::StreamExt;
+use indexmap::IndexMap;
 use secrecy::SecretString;
 use serde_json::Value;
 use std::borrow::Cow;
@@ -399,7 +400,7 @@ impl ModelConfig {
         let span = tracing::Span::current();
         clients.otlp_config.mark_openinference_chain_span(&span);
 
-        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {
                 let provider = self.providers.get(provider_name).ok_or_else(|| {
@@ -504,7 +505,7 @@ impl ModelConfig {
         clients
             .otlp_config
             .mark_openinference_chain_span(&tracing::Span::current());
-        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {
                 let provider = self.providers.get(provider_name).ok_or_else(|| {
@@ -575,7 +576,7 @@ impl ModelConfig {
         client: &'request TensorzeroHttpClient,
         api_keys: &'request InferenceCredentials,
     ) -> Result<StartBatchModelInferenceResponse, Error> {
-        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         for provider_name in &self.routing {
             let provider = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
@@ -2577,7 +2578,7 @@ mod tests {
         assert_eq!(
             response,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider for model 'error'."
@@ -2967,7 +2968,7 @@ mod tests {
         assert_eq!(
             error,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider for model 'error'."
@@ -3185,7 +3186,7 @@ mod tests {
         assert_eq!(
             error,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
                         provider_name: "Dummy".to_string(),
@@ -3226,7 +3227,7 @@ mod tests {
         assert_eq!(
             response,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
@@ -3308,7 +3309,7 @@ mod tests {
         assert_eq!(
             error,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
                         provider_name: "Dummy".to_string(),

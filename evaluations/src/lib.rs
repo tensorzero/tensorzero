@@ -13,19 +13,16 @@ use serde::{Deserialize, Serialize};
 // Public re-exports for external consumers
 pub use stats::{
     mean, std_deviation, EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate,
-    EvaluatorStats,
+    EvaluatorStats, PerEvaluatorStats,
 };
 use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::client::ClientInput;
 use tensorzero_core::client::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
-    ClientInferenceParams, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
-    InferenceResponse,
+    ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
 };
-use tensorzero_core::client::{ClientInput, StoragePath};
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo};
-use tensorzero_core::error::Error;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
-use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 use tensorzero_core::{
     config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::StoredDatapoint,
     function::FunctionConfig,
@@ -42,6 +39,7 @@ pub mod dataset;
 pub mod evaluators;
 pub mod helpers;
 pub mod stats;
+pub mod stopping;
 
 /// Buffer size for the mpsc channel used to stream evaluation updates.
 /// This provides backpressure if the consumer can't keep up with the producer.
@@ -91,7 +89,7 @@ pub struct Args {
 }
 
 pub struct Clients {
-    pub tensorzero_client: ThrottledTensorZeroClient,
+    pub tensorzero_client: Client,
     pub clickhouse_client: ClickHouseConnectionInfo,
 }
 
@@ -239,7 +237,7 @@ pub async fn run_evaluation(
     };
 
     let output_format = args.format.clone();
-    let result = run_evaluation_core_streaming(core_args).await?;
+    let result = run_evaluation_core_streaming(core_args, None, HashMap::new()).await?; // No adaptive stopping
 
     let mut receiver = result.receiver;
     let dataset_len = result.run_info.num_datapoints;
@@ -311,27 +309,53 @@ pub async fn run_evaluation(
     Ok(())
 }
 
-/// Core streaming evaluation function.
+/// Core streaming evaluation function with optional adaptive stopping.
 ///
 /// This function runs an evaluation and streams results as they complete via an mpsc channel.
+/// When `precision_targets` is provided, evaluators can stop independently once confidence
+/// interval half-widths (the max of the distances from the CI endpoints to the point estimate)
+/// are within the precision targets.
 ///
 /// ## How it works
 ///
 /// 1. Creates an mpsc channel for streaming `EvaluationUpdate` messages
 /// 2. Loads the evaluation and function configurations
-/// 3. Queries the dataset to get all datapoints
-/// 4. Sends `RunInfo` as the first message (evaluation_run_id, num_datapoints)
-/// 5. Spawns a concurrent task for each datapoint that:
+/// 3. Queries the dataset (limited by `max_datapoints` if specified)
+/// 4. If `precision_targets` is provided, creates a `StoppingManager` which internally creates cancellation
+///    tokens and tracks evaluator statistics
+/// 5. Sends `RunInfo` as the first message (evaluation_run_id, num_datapoints)
+/// 6. Spawns a concurrent task for each datapoint (up to `max_datapoints`) that:
+///    - Acquires a semaphore permit (controls concurrency)
 ///    - Runs inference for the datapoint
-///    - Evaluates the inference response
+///    - Evaluates the inference response (skipping cancelled evaluators via `StoppingManager::get_tokens()`)
 ///    - Returns (Datapoint, InferenceResponse, EvaluationResult)
-/// 6. Spawns a background collector task that:
+/// 7. Spawns a background collector task that:
 ///    - Collects results from the JoinSet as tasks complete
+///    - If `precision_targets` is provided:
+///      - Updates per-evaluator statistics via `StoppingManager::update_stats()`
+///      - Cancels converged evaluators via `StoppingManager::cancel_converged_evaluators()`
+///      - Checks if all evaluators have stopped via `StoppingManager::all_evaluators_stopped()`
+///      - Aborts remaining tasks when all evaluators have stopped
 ///    - Converts results to `EvaluationUpdate::Success` or `EvaluationUpdate::Error`
 ///    - Sends each update through the channel
-///    - Waits for the ClickHouse batch writer to finish
-///    - Closes the channel when done
-/// 7. Returns immediately with the receiver, run_info, and evaluation_config
+///    - Closes the channel when all tasks complete or are aborted
+/// 8. Returns immediately with the receiver, run_info, and evaluation_config
+///
+/// ## Parameters
+///
+/// **`max_datapoints`**: When `Some(max)`, limits dataset to at most `max` datapoints.
+///
+/// **`precision_targets`**: When non-empty, enables adaptive stopping:
+/// - Per-evaluator CI half-width thresholds (HashMap<String, f32>)
+/// - Evaluator k stops when the larger of the two halves of the CI has width ≤ threshold_k`
+/// - Only checked after min_datapoints (hardcoded to 20) have been completed
+/// - Evaluators not in the map run on all datapoints (up to max_datapoints)
+/// - All datapoint tasks are spawned upfront for maximum concurrency
+/// - When all evaluators have stopped, remaining tasks are aborted
+///
+/// When `precision_targets` is empty:
+/// - All evaluators run on all datapoints (up to max_datapoints)
+/// - Standard evaluation behavior
 ///
 /// ## Return value
 ///
@@ -351,13 +375,15 @@ pub async fn run_evaluation(
 #[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant = ?args.variant, concurrency = %args.concurrency))]
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
+    max_datapoints: Option<usize>,
+    precision_targets: HashMap<String, f32>,
 ) -> Result<EvaluationStreamResult> {
     let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
 
     // Build the semaphore and clients
-    let semaphore = Semaphore::new(args.concurrency);
+    let semaphore = Arc::new(Semaphore::new(args.concurrency));
     let clients = Arc::new(Clients {
-        tensorzero_client: ThrottledTensorZeroClient::new(args.tensorzero_client, semaphore),
+        tensorzero_client: args.tensorzero_client,
         clickhouse_client: args.clickhouse_client,
     });
 
@@ -391,6 +417,7 @@ pub async fn run_evaluation_core_streaming(
         &args.dataset_name,
         &inference_evaluation_config.function_name,
         &function_config,
+        max_datapoints, // Apply max_datapoints limit if provided
     )
     .await?;
     info!(dataset_size = dataset.len(), "Dataset loaded successfully");
@@ -399,6 +426,14 @@ pub async fn run_evaluation_core_streaming(
     let evaluation_name = Arc::new(args.evaluation_name);
     let dataset_len = dataset.len();
     let mut task_id_to_datapoint_id = HashMap::new();
+
+    // Setup stopping manager for adaptive stopping
+    let evaluator_names: Vec<String> = inference_evaluation_config
+        .evaluators
+        .keys()
+        .cloned()
+        .collect();
+    let mut stopping_manager = stopping::StoppingManager::new(precision_targets, &evaluator_names);
 
     let run_info = RunInfo {
         evaluation_run_id: args.evaluation_run_id,
@@ -414,6 +449,9 @@ pub async fn run_evaluation_core_streaming(
         tracing::warn!("Failed to send RunInfo: receiver dropped before evaluation started");
     }
 
+    // Get cancellation tokens from stopping manager and wrap in Arc for cloning into tasks
+    let cancellation_tokens_arc = Arc::new(stopping_manager.get_tokens().clone());
+
     // Spawn concurrent tasks for each datapoint
     for datapoint in dataset {
         let clients_clone = clients.clone();
@@ -427,10 +465,15 @@ pub async fn run_evaluation_core_streaming(
         let datapoint = Arc::new(datapoint);
         let datapoint_id = datapoint.id();
         let inference_cache = args.inference_cache;
+        let tokens_clone = cancellation_tokens_arc.clone();
+        let semaphore_clone = semaphore.clone();
         // Skip feedback for dynamic variants (they're not production-ready)
         // Named variants: send_feedback=true, Dynamic variants: send_feedback=false
         let send_feedback = !matches!(variant.as_ref(), EvaluationVariant::Info(_));
         let abort_handle = join_set.spawn(async move {
+            // Acquire semaphore permit for the entire task (inference + evaluation)
+            let _permit = semaphore_clone.acquire().await?;
+
             let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?)?);
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
@@ -460,7 +503,9 @@ pub async fn run_evaluation_core_streaming(
                     evaluation_run_id: evaluation_run_id_clone,
                     inference_cache,
                     send_feedback,
-                })
+                },
+                tokens_clone.as_ref(),  // Pass cancellation tokens
+            )
                 .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
             debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
 
@@ -478,34 +523,56 @@ pub async fn run_evaluation_core_streaming(
 
     // Spawn a task to collect results and stream them
     let sender_clone = sender.clone();
+    let mut num_completed_datapoints = 0;
     // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
     #[expect(clippy::disallowed_methods)]
     tokio::spawn(async move {
         while let Some(result) = join_set.join_next_with_id().await {
             let update = match result {
                 Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {
-                    EvaluationUpdate::Success(EvaluationInfo::new(
+                    num_completed_datapoints += 1;
+
+                    // Update statistics and cancel any evaluators that have hit their precision target
+                    stopping_manager.update_stats(&evaluation_result);
+                    stopping_manager.cancel_converged_evaluators(num_completed_datapoints);
+
+                    // If all evaluators have stopped, abort remaining tasks
+                    if stopping_manager.all_evaluators_stopped() {
+                        join_set.abort_all();
+                    }
+
+                    Some(EvaluationUpdate::Success(EvaluationInfo::new(
                         datapoint,
                         inference_response,
                         evaluation_result,
-                    ))
+                    )))
                 }
                 Ok((task_id, Err(e))) => {
                     tracing::warn!("Task error: {}", e);
-                    EvaluationUpdate::Error(EvaluationError {
+                    Some(EvaluationUpdate::Error(EvaluationError {
                         datapoint_id: task_id_to_datapoint_id[&task_id],
                         message: e.to_string(),
-                    })
+                    }))
                 }
-                Err(e) => EvaluationUpdate::Error(EvaluationError {
-                    datapoint_id: task_id_to_datapoint_id[&e.id()],
-                    message: e.to_string(),
-                }),
+                // If JoinError, check if error is due to cancellation: if so, assign None, otherwise wrap Error in Some()
+                Err(e) => {
+                    if e.is_cancelled() {
+                        None
+                    } else {
+                        Some(EvaluationUpdate::Error(EvaluationError {
+                            datapoint_id: task_id_to_datapoint_id[&e.id()],
+                            message: e.to_string(),
+                        }))
+                    }
+                }
             };
 
-            if sender_clone.send(update).await.is_err() {
-                // Receiver dropped, stop sending
-                break;
+            // Check if update is Some; if so, unwrap and send inner value
+            if let Some(update_value) = update {
+                if sender_clone.send(update_value).await.is_err() {
+                    // Receiver dropped, stop sending
+                    break;
+                }
             }
         }
     });
@@ -710,34 +777,6 @@ pub struct EvaluationStreamResult {
     pub receiver: mpsc::Receiver<EvaluationUpdate>,
     pub run_info: RunInfo,
     pub evaluation_config: Arc<EvaluationConfig>,
-}
-
-pub struct ThrottledTensorZeroClient {
-    pub client: Client,
-    semaphore: Semaphore,
-}
-
-impl ThrottledTensorZeroClient {
-    pub fn new(client: Client, semaphore: Semaphore) -> Self {
-        Self { client, semaphore }
-    }
-
-    async fn inference(&self, params: ClientInferenceParams) -> Result<InferenceOutput> {
-        let _permit = self.semaphore.acquire().await?;
-        let inference_output = self.client.inference(params).await?;
-        Ok(inference_output)
-    }
-
-    async fn feedback(&self, params: FeedbackParams) -> Result<()> {
-        self.client.feedback(params).await?;
-        Ok(())
-    }
-}
-
-impl StoragePathResolver for ThrottledTensorZeroClient {
-    async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
-        self.client.resolve(storage_path).await
-    }
 }
 
 #[cfg(test)]

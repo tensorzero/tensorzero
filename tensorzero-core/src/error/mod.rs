@@ -1,9 +1,9 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
+use indexmap::IndexMap;
 use minijinja_utils::AnalysisError;
 use opentelemetry::trace::Status;
 use serde::{Serialize, Serializer};
@@ -135,6 +135,10 @@ impl Error {
         self.0.status_code()
     }
 
+    pub fn underlying_status_code(&self) -> Option<StatusCode> {
+        self.0.underlying_status_code()
+    }
+
     pub fn get_details(&self) -> &ErrorDetails {
         &self.0
     }
@@ -198,7 +202,8 @@ impl From<ErrorDetails> for Error {
 #[cfg_attr(any(test, feature = "e2e_tests"), derive(PartialEq))]
 pub enum ErrorDetails {
     AllVariantsFailed {
-        errors: HashMap<String, Error>,
+        // We use an `IndexMap` to preserve the insertion order for `underlying_status_code`
+        errors: IndexMap<String, Error>,
     },
     TensorZeroAuth {
         message: String,
@@ -470,7 +475,8 @@ pub enum ErrorDetails {
         model_name: String,
     },
     ModelProvidersExhausted {
-        provider_errors: HashMap<String, Error>,
+        // We use an `IndexMap` to preserve the insertion order for `underlying_status_code`
+        provider_errors: IndexMap<String, Error>,
     },
     ModelValidation {
         message: String,
@@ -589,7 +595,6 @@ pub enum ErrorDetails {
         method: String,
     },
 }
-
 impl ErrorDetails {
     /// Defines the error level for logging this error
     fn level(&self) -> tracing::Level {
@@ -713,6 +718,26 @@ impl ErrorDetails {
             ErrorDetails::UnsupportedVariantForStreamingInference { .. } => tracing::Level::WARN,
             ErrorDetails::UuidInFuture { .. } => tracing::Level::WARN,
             ErrorDetails::RouteNotFound { .. } => tracing::Level::WARN,
+        }
+    }
+
+    /// Returns the most recent 'underlying' status code for this error.
+    /// For example, if an inference fails due to all models failing, this will
+    /// return the status code of the last model that failed.
+    ///
+    /// Returns `None` if the error doesn't have a concept of a 'last' status code.
+    fn underlying_status_code(&self) -> Option<StatusCode> {
+        match self {
+            ErrorDetails::AllVariantsFailed { errors } => errors
+                .values()
+                .last()
+                .and_then(|error| error.underlying_status_code()),
+            ErrorDetails::InferenceClient { status_code, .. } => *status_code,
+            ErrorDetails::ModelProvidersExhausted { provider_errors } => provider_errors
+                .values()
+                .last()
+                .and_then(|error| error.underlying_status_code()),
+            _ => None,
         }
     }
 

@@ -1,6 +1,9 @@
+use std::collections::HashMap;
 use std::future::Future;
+use std::sync::Arc;
 use std::time::Duration;
-use std::{collections::HashMap, sync::Arc};
+
+use indexmap::IndexMap;
 
 use crate::cache::{
     embedding_cache_lookup, start_cache_write, CacheData, CacheValidationInfo, EmbeddingCacheData,
@@ -178,7 +181,7 @@ impl EmbeddingModelConfig {
         model_name: &str,
         clients: &InferenceClients,
     ) -> Result<EmbeddingModelResponse, Error> {
-        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         let run_all_embedding_models = async {
             for provider_name in &self.routing {
                 let provider_config = self.providers.get(provider_name).ok_or_else(|| {

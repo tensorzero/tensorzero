@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::error::{Error, ErrorDetails};
 use crate::model::UninitializedModelConfig;
@@ -112,6 +113,7 @@ impl std::fmt::Display for OptimizationJobHandle {
 #[serde(tag = "type", content = "content", rename_all = "snake_case")]
 pub enum OptimizerOutput {
     Variant(Box<UninitializedVariantConfig>),
+    Variants(HashMap<String, Box<UninitializedVariantConfig>>),
     Model(UninitializedModelConfig),
 }
 
