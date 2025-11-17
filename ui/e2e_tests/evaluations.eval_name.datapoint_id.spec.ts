@@ -152,8 +152,10 @@ test("should be able to add a datapoint from the evaluation page", async ({
     new RegExp(`/datasets/${datasetName}/datapoint/.*`),
   );
 
-  // Verify we can see the datapoint content
-  await expect(page.getByText("Datapoint", { exact: true })).toBeVisible();
+  // Verify we can see the datapoint metadata by checking the dataset link
+  await expect(
+    page.getByRole("link", { name: datasetName, exact: true }),
+  ).toBeVisible();
 
   // Clean up: delete the dataset by going to the list datasets page
   await page.goto("/datasets");
