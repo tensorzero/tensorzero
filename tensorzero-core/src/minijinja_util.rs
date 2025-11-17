@@ -62,7 +62,9 @@ impl TemplateConfig<'_> {
                     .map_err(|e| {
                         Error::new(ErrorDetails::MiniJinjaTemplate {
                             template_name: name.clone(),
-                            message: format!("Failed to add template to validation environment: {e}"),
+                            message: format!(
+                                "Failed to add template to validation environment: {e}"
+                            ),
                         })
                     })?;
             }
@@ -70,11 +72,8 @@ impl TemplateConfig<'_> {
             // Analyze each configured template to discover all transitive dependencies
             let mut all_discovered_templates = HashSet::new();
             for (template_name, template_source) in &configured_templates {
-                let discovered_templates = collect_all_template_paths(
-                    &validation_env,
-                    template_name,
-                    template_source,
-                )?;
+                let discovered_templates =
+                    collect_all_template_paths(&validation_env, template_name, template_source)?;
 
                 all_discovered_templates.extend(discovered_templates);
             }
@@ -751,15 +750,11 @@ Candidate response #2
         )]);
 
         // Initialize with filesystem access
-        config
-            .initialize(templates, Some(temp_dir.path()))
-            .unwrap();
+        config.initialize(templates, Some(temp_dir.path())).unwrap();
 
         // Assert template renders correctly
-        let result = config.template_message(
-            "main",
-            &json!({"title": "Welcome", "body": "Content"}),
-        );
+        let result =
+            config.template_message("main", &json!({"title": "Welcome", "body": "Content"}));
         assert_eq!(result.unwrap(), "<h1>Welcome</h1>Content");
     }
 
@@ -788,18 +783,17 @@ Candidate response #2
 
         // Configure main template that includes base
         let mut config = TemplateConfig::new();
-        let templates = HashMap::from([(
-            "main".to_string(),
-            "{% include 'base.html' %}".to_string(),
-        )]);
+        let templates =
+            HashMap::from([("main".to_string(), "{% include 'base.html' %}".to_string())]);
 
-        config
-            .initialize(templates, Some(temp_dir.path()))
-            .unwrap();
+        config.initialize(templates, Some(temp_dir.path())).unwrap();
 
         // Assert all nested templates load and render correctly
         let result = config.template_message("main", &json!({"page_title": "My Page"}));
-        assert_eq!(result.unwrap(), "<html><head><title>My Page</title></head></html>");
+        assert_eq!(
+            result.unwrap(),
+            "<html><head><title>My Page</title></head></html>"
+        );
     }
 
     #[test]
@@ -826,9 +820,14 @@ Candidate response #2
                     assert_eq!(locations.len(), 1);
                     assert_eq!(locations[0].reason, "variable");
                 }
-                _ => panic!("Expected DynamicLoadsFound"),
+                minijinja_utils::AnalysisError::ParseError(_) => {
+                    panic!("Expected DynamicLoadsFound")
+                }
             },
-            _ => panic!("Expected DynamicTemplateLoad error, got: {:?}", err.get_details()),
+            _ => panic!(
+                "Expected DynamicTemplateLoad error, got: {:?}",
+                err.get_details()
+            ),
         }
     }
 
@@ -845,9 +844,7 @@ Candidate response #2
         let temp_dir = tempfile::TempDir::new().unwrap();
 
         // Initialize should succeed (file is skipped with warning)
-        config
-            .initialize(templates, Some(temp_dir.path()))
-            .unwrap();
+        config.initialize(templates, Some(temp_dir.path())).unwrap();
 
         // Attempting to render should fail because the included template wasn't loaded
         let result = config.template_message("main", &json!({}));
@@ -856,7 +853,9 @@ Candidate response #2
         // Verify it's a missing template error
         match result.unwrap_err().get_details() {
             ErrorDetails::MiniJinjaTemplateRender { message, .. } => {
-                assert!(message.contains("header.html") || message.contains("the file was missing"));
+                assert!(
+                    message.contains("header.html") || message.contains("the file was missing")
+                );
             }
             _ => panic!("Expected MiniJinjaTemplateRender error"),
         }
@@ -875,9 +874,7 @@ Candidate response #2
         let temp_dir = tempfile::TempDir::new().unwrap();
 
         // Initialize should succeed (unsafe path is skipped with warning)
-        config
-            .initialize(templates, Some(temp_dir.path()))
-            .unwrap();
+        config.initialize(templates, Some(temp_dir.path())).unwrap();
 
         // Attempting to render should fail because the template wasn't loaded
         let result = config.template_message("main", &json!({}));
@@ -903,7 +900,10 @@ Candidate response #2
         // Verify error message mentions enabling filesystem access
         match result.unwrap_err().get_details() {
             ErrorDetails::MiniJinjaTemplateRender { message, .. } => {
-                assert!(message.contains("template_filesystem_access") || message.contains("header.html"));
+                assert!(
+                    message.contains("template_filesystem_access")
+                        || message.contains("header.html")
+                );
             }
             _ => panic!("Expected MiniJinjaTemplateRender error"),
         }
@@ -917,9 +917,7 @@ Candidate response #2
 
         // Initialize with temp directory
         let temp_dir = tempfile::TempDir::new().unwrap();
-        config
-            .initialize(templates, Some(temp_dir.path()))
-            .unwrap();
+        config.initialize(templates, Some(temp_dir.path())).unwrap();
 
         // Assert template renders normally
         let result = config.template_message("simple", &json!({"name": "World"}));
@@ -946,9 +944,7 @@ Candidate response #2
             "{% include 'partials/footer.html' %}".to_string(),
         )]);
 
-        config
-            .initialize(templates, Some(temp_dir.path()))
-            .unwrap();
+        config.initialize(templates, Some(temp_dir.path())).unwrap();
 
         // Assert file loads correctly from subdirectory
         let result = config.template_message("main", &json!({"copyright": "2025"}));
