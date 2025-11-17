@@ -1,8 +1,9 @@
 use minijinja::{Environment, UndefinedBehavior};
+use minijinja_utils::collect_all_template_paths;
 use serde::Serialize;
 use std::{
     collections::{HashMap, HashSet},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use crate::error::{Error, ErrorDetails};
@@ -21,7 +22,8 @@ impl TemplateConfig<'_> {
 
     /// Initializes the TemplateConfig with the given templates, given as a map from template names
     /// to template paths.
-    /// If `filesystem_path` is provided, we'll register a minijinja filesystem loader with the specified path
+    /// If `filesystem_path` is provided, we'll walk the templates explicitly configured,
+    /// find all files that we can tell would be loaded, and eagerly load them.
     pub fn initialize(
         &mut self,
         template_paths: HashMap<String, String>,
@@ -29,20 +31,73 @@ impl TemplateConfig<'_> {
     ) -> Result<(), Error> {
         self.env.set_undefined_behavior(UndefinedBehavior::Strict);
 
-        for (template_name, template_content) in template_paths {
+        for (template_name, template_content) in &template_paths {
             self.env
-                .add_template_owned(template_name.clone(), template_content)
+                .add_template_owned(template_name.clone(), template_content.clone())
                 .map_err(|e| {
                     Error::new(ErrorDetails::MiniJinjaTemplate {
-                        template_name,
+                        template_name: template_name.clone(),
                         message: format!("Failed to add template: {e}"),
                     })
                 })?;
         }
         self.add_hardcoded_templates()?;
-        if let Some(path) = filesystem_path {
-            self.env.set_loader(minijinja::path_loader(path));
+        if let Some(base_path) = filesystem_path {
+            let mut all_template_load_data = HashMap::new();
+            for template_name in template_paths.keys() {
+                let referenced_templates = collect_all_template_paths(&self.env, template_name)?;
+                for template in referenced_templates {
+                    // Convert PathBuf to string for safe_join
+                    let template_str = template.to_string_lossy();
+
+                    // First, join base_path + template
+                    let template_path = match safe_join(base_path, &template_str) {
+                        Some(path) => path,
+                        None => {
+                            tracing::warn!(
+                                "Could not safely join base path with template '{}'",
+                                template.display()
+                            );
+                            continue;
+                        }
+                    };
+
+                    // Then, read all data. Skip if read fails (missing, directory) and warn.
+                    let data = match std::fs::read_to_string(&template_path) {
+                        Ok(content) => content,
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to read template at {}: {}. Skipping.",
+                                template_path.display(),
+                                e
+                            );
+                            continue;
+                        }
+                    };
+
+                    let template_name = template_str.to_string();
+                    self.env
+                        .add_template_owned(template_name.clone(), data.clone())
+                        .map_err(|e| {
+                            Error::new(ErrorDetails::MiniJinjaTemplate {
+                                template_name: template_name.clone(),
+                                message: format!("Failed to add template: {e}"),
+                            })
+                        })?;
+                    all_template_load_data.insert(template, data);
+                }
+            }
+
+            self.env.set_loader(|name| {
+                Err(minijinja::Error::new(
+                    minijinja::ErrorKind::InvalidOperation,
+                    format!("Could not load template '{name}': the file was missing."),
+                    // NOTE: this could also fail if our earlier code for catching dynamic includes failed to catch one
+                ))
+            });
         } else {
+            // If we did not have a filesystem_path, the only templates minijinja could load would have
+            // been explicitly specified in the config.
             self.env.set_loader(|name| {
                 Err(minijinja::Error::new(
                     minijinja::ErrorKind::InvalidOperation,
@@ -157,6 +212,19 @@ impl TemplateConfig<'_> {
             })?;
         Ok(())
     }
+}
+
+/// Safely joins two paths.
+/// Taken from `minijinja`
+pub fn safe_join(base: &Path, template: &str) -> Option<PathBuf> {
+    let mut rv = base.to_path_buf();
+    for segment in template.split('/') {
+        if segment.starts_with('.') || segment.contains('\\') {
+            return None;
+        }
+        rv.push(segment);
+    }
+    Some(rv)
 }
 
 impl Default for TemplateConfig<'_> {

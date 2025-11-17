@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
+use minijinja_utils::AnalysisError;
 use opentelemetry::trace::Status;
 use serde::{Serialize, Serializer};
 use serde_json::{json, Value};
@@ -278,6 +279,9 @@ pub enum ErrorDetails {
     },
     DynamicJsonSchema {
         message: String,
+    },
+    DynamicTemplateLoad {
+        internal: AnalysisError,
     },
     FileRead {
         message: String,
@@ -619,6 +623,7 @@ impl ErrorDetails {
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::DynamicTemplateLoad { .. } => tracing::Level::ERROR,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
@@ -738,6 +743,7 @@ impl ErrorDetails {
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::DynamicTemplateLoad { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1041,6 +1047,37 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::DynamicEndpointNotFound { key_name } => {
                 write!(f, "Dynamic endpoint '{key_name}' not found in credentials")
             }
+            ErrorDetails::DynamicTemplateLoad { internal } => match internal {
+                AnalysisError::ParseError(err) => {
+                    write!(
+                        f,
+                        "Failed to parse template during validation of loads: {err}"
+                    )
+                }
+                AnalysisError::DynamicLoadsFound(loads) => {
+                    writeln!(
+                        f,
+                        "Cannot statically analyze all template dependencies. Found {} dynamic load(s):",
+                        loads.len()
+                    )?;
+                    for (i, load) in loads.iter().enumerate() {
+                        if i > 0 {
+                            writeln!(f)?;
+                        }
+                        write!(
+                            f,
+                            "  {}:{}:{}: dynamic {} - {}:\n    {}",
+                            load.template_name,
+                            load.line,
+                            load.column,
+                            load.load_kind,
+                            load.reason,
+                            load.source_quote
+                        )?;
+                    }
+                    Ok(())
+                }
+            },
 
             ErrorDetails::FileRead { message, file_path } => {
                 write!(f, "Error reading file {file_path}: {message}")
@@ -1521,5 +1558,11 @@ impl From<sqlx::Error> for Error {
             message: err.to_string(),
             function_name: None,
         })
+    }
+}
+
+impl From<AnalysisError> for Error {
+    fn from(err: AnalysisError) -> Self {
+        Self::new(ErrorDetails::DynamicTemplateLoad { internal: err })
     }
 }

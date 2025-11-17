@@ -3364,6 +3364,7 @@ name = "minijinja-utils"
 version = "2025.11.4"
 dependencies = [
  "minijinja",
+ "serde",
 ]
 
 [[package]]
@@ -6119,6 +6120,7 @@ dependencies = [
  "mime 0.4.0-a.0",
  "mime_guess",
  "minijinja",
+ "minijinja-utils",
  "mockall",
  "moka",
  "object_store",
