@@ -15,13 +15,24 @@ import type {
 } from "~/types/tensorzero";
 
 // Zod schemas for ToolCallConfigDatabaseInsert
-export const toolSchema = z.object({
-  type: z.literal("client_side_function"),
-  description: z.string(),
-  parameters: JsonValueSchema,
-  name: z.string(),
-  strict: z.boolean(),
-}) satisfies z.ZodType<Tool>;
+// Note: This schema handles backward compatibility with old database records that don't have
+// the 'type' field. The transform ensures all parsed tools have type: "client_side_function".
+// We use 'as z.ZodType<Tool, z.ZodTypeDef, unknown>' instead of 'satisfies' because:
+// - Input type: accepts data with optional 'type' field (old format)
+// - Output type: guarantees 'type' field is present (new format)
+// This is safe because the transform always adds the 'type' field to the output.
+export const toolSchema = z
+  .object({
+    type: z.literal("client_side_function").optional(),
+    description: z.string(),
+    parameters: JsonValueSchema,
+    name: z.string(),
+    strict: z.boolean(),
+  })
+  .transform((data) => ({
+    ...data,
+    type: "client_side_function" as const,
+  })) as z.ZodType<Tool, z.ZodTypeDef, unknown>;
 
 export const toolChoiceSchema = z.union([
   z.literal("none"),
