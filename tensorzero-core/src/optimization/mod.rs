@@ -21,6 +21,7 @@ use crate::optimization::fireworks_sft::{
 use crate::optimization::gcp_vertex_gemini_sft::{
     GCPVertexGeminiSFTConfig, GCPVertexGeminiSFTJobHandle, UninitializedGCPVertexGeminiSFTConfig,
 };
+use crate::optimization::gepa::{GEPAConfig, GEPAJobHandle, UninitializedGEPAConfig};
 use crate::optimization::openai_rft::{
     OpenAIRFTConfig, OpenAIRFTJobHandle, UninitializedOpenAIRFTConfig,
 };
@@ -34,6 +35,7 @@ use crate::optimization::together_sft::{
 pub mod dicl;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
+pub mod gepa;
 pub mod openai_rft;
 pub mod openai_sft;
 pub mod together_sft;
@@ -52,6 +54,7 @@ pub enum OptimizerConfig {
     OpenAIRFT(Box<OpenAIRFTConfig>),
     FireworksSFT(FireworksSFTConfig),
     GCPVertexGeminiSFT(Box<GCPVertexGeminiSFTConfig>),
+    Gepa(GEPAConfig),
     TogetherSFT(Box<TogetherSFTConfig>),
 }
 
@@ -70,6 +73,8 @@ pub enum OptimizationJobHandle {
     FireworksSFT(FireworksSFTJobHandle),
     #[serde(rename = "gcp_vertex_gemini_sft")]
     GCPVertexGeminiSFT(GCPVertexGeminiSFTJobHandle),
+    #[serde(rename = "gepa")]
+    Gepa(GEPAJobHandle),
     #[serde(rename = "together_sft")]
     TogetherSFT(TogetherSFTJobHandle),
 }
@@ -246,6 +251,8 @@ pub enum UninitializedOptimizerConfig {
     FireworksSFT(UninitializedFireworksSFTConfig),
     #[serde(rename = "gcp_vertex_gemini_sft")]
     GCPVertexGeminiSFT(UninitializedGCPVertexGeminiSFTConfig),
+    #[serde(rename = "gepa")]
+    Gepa(UninitializedGEPAConfig),
     #[serde(rename = "together_sft")]
     TogetherSFT(Box<UninitializedTogetherSFTConfig>),
 }
@@ -272,6 +279,9 @@ impl UninitializedOptimizerConfig {
                 OptimizerConfig::GCPVertexGeminiSFT(Box::new(
                     config.load(default_credentials).await?,
                 ))
+            }
+            UninitializedOptimizerConfig::Gepa(config) => {
+                OptimizerConfig::Gepa(config.load(default_credentials).await?)
             }
             UninitializedOptimizerConfig::TogetherSFT(config) => {
                 OptimizerConfig::TogetherSFT(Box::new(config.load(default_credentials).await?))
