@@ -92,7 +92,7 @@ impl UninitializedGatewayConfig {
                     tracing::info!("Object store is enabled but `gateway.fetch_and_encode_input_files_before_inference` is unset (defaults to `false`). In rare cases, the files we fetch for object storage may differ from the image the inference provider fetched if this setting is disabled.");
                 }
             }
-            default_fetch_and_encode_input_files_before_inference()
+            false
         };
         Ok(GatewayConfig {
             bind_address: self.bind_address,
@@ -130,7 +130,7 @@ pub struct GatewayConfig {
     pub unstable_disable_feedback_target_validation: bool,
     #[serde(default)]
     pub disable_pseudonymous_usage_analytics: bool,
-    #[serde(default = "default_fetch_and_encode_input_files_before_inference")]
+    #[serde(default)]
     pub fetch_and_encode_input_files_before_inference: bool,
     pub auth: AuthConfig,
     pub global_outbound_http_timeout: Duration,
@@ -148,16 +148,11 @@ impl Default for GatewayConfig {
             unstable_error_json: Default::default(),
             unstable_disable_feedback_target_validation: Default::default(),
             disable_pseudonymous_usage_analytics: Default::default(),
-            fetch_and_encode_input_files_before_inference:
-                default_fetch_and_encode_input_files_before_inference(),
+            fetch_and_encode_input_files_before_inference: Default::default(),
             auth: Default::default(),
             global_outbound_http_timeout: DEFAULT_HTTP_CLIENT_TIMEOUT,
         }
     }
-}
-
-fn default_fetch_and_encode_input_files_before_inference() -> bool {
-    false
 }
 
 fn serialize_optional_socket_addr<S>(
