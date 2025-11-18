@@ -1,24 +1,25 @@
 # pyright: reportDeprecated=false
 from datetime import datetime, timezone
-from uuid import UUID
 
 import pytest
 from tensorzero import (
     AndFilter,
     AsyncTensorZeroGateway,
     BooleanMetricFilter,
+    ContentBlockChatOutputText,
+    ContentBlockChatOutputToolCall,
     FloatMetricFilter,
     NotFilter,
     OrderBy,
     OrFilter,
+    StoredInferenceJson,
+    StoredInputMessageContentText,
+    StoredInputMessageContentToolCall,
+    StoredInputMessageContentToolResult,
     TagFilter,
     TensorZeroGateway,
-    Text,
     TimeFilter,
-    ToolCall,
-    ToolResult,
 )
-from tensorzero.tensorzero import StoredInference
 
 
 def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
@@ -40,7 +41,7 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
 
     for inference in inferences:
         assert inference.function_name == "extract_entities"
-        assert isinstance(inference, StoredInference.Json)
+        assert isinstance(inference, StoredInferenceJson)
         assert isinstance(inference.variant_name, str)
         input = inference.input
         messages = input.messages
@@ -53,11 +54,12 @@ def test_simple_list_json_inferences(embedded_sync_client: TensorZeroGateway):
         assert output.raw is not None
         assert output.parsed is not None
         inference_id = inference.inference_id
-        assert isinstance(inference_id, UUID)
+        assert isinstance(inference_id, str)
         episode_id = inference.episode_id
-        assert isinstance(episode_id, UUID)
+        assert isinstance(episode_id, str)
         output_schema = inference.output_schema
         assert output_schema is not None
+        assert inference.dispreferred_outputs is not None
         assert len(inference.dispreferred_outputs) == 0
 
     # ORDER BY timestamp DESC is applied - verify timestamps are in descending order
@@ -88,6 +90,7 @@ def test_simple_query_with_float_filter(embedded_sync_client: TensorZeroGateway)
 
     for inference in inferences:
         assert inference.function_name == "extract_entities"
+        assert inference.dispreferred_outputs is not None
         assert len(inference.dispreferred_outputs) == 0
 
     # Since we aren't yet grabbing metric values from the DB we can't verify ordering by metric
@@ -125,18 +128,19 @@ def test_simple_query_chat_function(embedded_sync_client: TensorZeroGateway):
         output_0 = output[0]
         assert output_0.type == "text"
         # Type narrowing: we know it's a Text block
-        assert isinstance(output_0, Text)
+        assert isinstance(output_0, ContentBlockChatOutputText)
         assert output_0.text is not None
         inference_id = inference.inference_id
-        assert isinstance(inference_id, UUID)
+        assert isinstance(inference_id, str)
         episode_id = inference.episode_id
-        assert isinstance(episode_id, UUID)
+        assert isinstance(episode_id, str)
         # Test individual tool param fields
         assert inference.allowed_tools is None or len(inference.allowed_tools) == 0
         assert inference.additional_tools is None or len(inference.additional_tools) == 0
         assert inference.parallel_tool_calls is None
         assert isinstance(inference.provider_tools, list)
         assert len(inference.provider_tools) == 0
+        assert inference.dispreferred_outputs is not None
         assert len(inference.dispreferred_outputs) == 0
 
     # ORDER BY timestamp ASC is applied - verify timestamps are in ascending order
@@ -171,20 +175,18 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
             for content in message.content:
                 assert content.type in ["text", "tool_call", "tool_result"]
                 if content.type == "tool_call":
-                    assert isinstance(content, ToolCall)
+                    assert isinstance(content, StoredInputMessageContentToolCall)
                     assert content.id is not None
                     assert content.name is not None
                     assert content.arguments is not None
-                    assert content.raw_name is not None
-                    assert content.raw_arguments is not None
                 elif content.type == "tool_result":
-                    assert isinstance(content, ToolResult)
+                    assert isinstance(content, StoredInputMessageContentToolResult)
                     assert content.id is not None
                     assert content.name is not None
                     assert content.result is not None
                 elif content.type == "text":
-                    assert isinstance(content, Text)
-                    assert (content.text is not None) ^ (content.arguments is not None)
+                    assert isinstance(content, StoredInputMessageContentText)
+                    assert content.text is not None
                 else:
                     assert False
 
@@ -194,26 +196,19 @@ def test_simple_query_chat_function_with_tools(embedded_sync_client: TensorZeroG
         assert len(output) >= 1
         for output_item in output:
             if output_item.type == "text":
-                assert isinstance(output_item, Text)
+                assert isinstance(output_item, ContentBlockChatOutputText)
                 assert output_item.text is not None
             elif output_item.type == "tool_call":
-                assert isinstance(output_item, ToolCall)
+                assert isinstance(output_item, ContentBlockChatOutputToolCall)
                 assert output_item.id is not None
                 assert output_item.name is not None
                 assert output_item.arguments is not None
                 assert output_item.raw_name is not None
                 assert output_item.raw_arguments is not None
-            elif output_item.type == "tool_result":
-                assert isinstance(output_item, ToolResult)
-                assert output_item.id is not None
-                assert output_item.name is not None
-                assert output_item.result is not None
-                print(output_item)
-                assert False
         inference_id = inference.inference_id
-        assert isinstance(inference_id, UUID)
+        assert isinstance(inference_id, str)
         episode_id = inference.episode_id
-        assert isinstance(episode_id, UUID)
+        assert isinstance(episode_id, str)
         # Test individual tool param fields
         # Changed behavior: None when using function defaults
         assert inference.allowed_tools is None
@@ -234,6 +229,7 @@ def test_demonstration_output_source(embedded_sync_client: TensorZeroGateway):
     assert len(inferences) == 5
     for inference in inferences:
         assert inference.function_name == "extract_entities"
+        assert inference.dispreferred_outputs is not None
         assert len(inference.dispreferred_outputs) == 1
 
 
@@ -395,6 +391,7 @@ def test_simple_tag_filter(embedded_sync_client: TensorZeroGateway):
     assert len(inferences) == 49
     for inference in inferences:
         assert inference.function_name == "extract_entities"
+        assert inference.tags is not None
         assert inference.tags["tensorzero::evaluation_name"] == "entity_extraction"
 
 
@@ -424,6 +421,7 @@ def test_combined_time_and_tag_filter(embedded_sync_client: TensorZeroGateway):
     assert len(inferences) == 23
     for inference in inferences:
         assert inference.function_name == "write_haiku"
+        assert inference.tags is not None
         assert inference.tags["tensorzero::evaluation_name"] == "haiku"
 
 
@@ -490,14 +488,15 @@ async def test_simple_list_json_inferences_async(
         assert isinstance(messages, list)
         assert len(messages) == 1
         # Type narrowing: we know these are JSON inferences
+        assert isinstance(inference, StoredInferenceJson)
         assert inference.type == "json"
         output = inference.output
         assert output.raw is not None
         assert output.parsed is not None
         inference_id = inference.inference_id
-        assert isinstance(inference_id, UUID)
+        assert isinstance(inference_id, str)
         episode_id = inference.episode_id
-        assert isinstance(episode_id, UUID)
+        assert isinstance(episode_id, str)
         # StoredJsonInference has output_schema, StoredChatInference doesn't
         assert hasattr(inference, "output_schema") and inference.output_schema is not None
 
@@ -532,6 +531,7 @@ async def test_simple_query_with_float_filter_async(
 
     for inference in inferences:
         assert inference.function_name == "extract_entities"
+        assert inference.dispreferred_outputs is not None
         assert len(inference.dispreferred_outputs) == 0
 
     # ORDER BY metric jaccard_similarity DESC is applied with filter > 0.5
@@ -572,10 +572,10 @@ async def test_simple_query_chat_function_async(
         output_0 = output[0]
         assert output_0.type == "text"
         # Type narrowing: we know it's a Text block
-        assert isinstance(output_0, Text)
+        assert isinstance(output_0, ContentBlockChatOutputText)
         assert output_0.text is not None
-        assert isinstance(inference.inference_id, UUID)
-        assert isinstance(inference.episode_id, UUID)
+        assert isinstance(inference.inference_id, str)
+        assert isinstance(inference.episode_id, str)
         # Test individual tool param fields
         assert inference.allowed_tools is None or len(inference.allowed_tools) == 0
         assert inference.additional_tools is None or len(inference.additional_tools) == 0
@@ -605,6 +605,7 @@ async def test_demonstration_output_source_async(
     assert len(inferences) == 5
     for inference in inferences:
         assert inference.function_name == "extract_entities"
+        assert inference.dispreferred_outputs is not None
         assert len(inference.dispreferred_outputs) == 1
 
 
@@ -782,6 +783,7 @@ async def test_simple_tag_filter_async(
     assert len(inferences) == 100
     for inference in inferences:
         assert inference.function_name == "extract_entities"
+        assert inference.tags is not None
         assert inference.tags["tensorzero::evaluation_name"] == "entity_extraction"
 
 
@@ -814,6 +816,7 @@ async def test_combined_time_and_tag_filter_async(
     assert len(inferences) == 15
     for inference in inferences:
         assert inference.function_name == "write_haiku"
+        assert inference.tags is not None
         assert inference.tags["tensorzero::evaluation_name"] == "haiku"
 
 
@@ -854,4 +857,5 @@ async def test_list_render_chat_inferences_async(
     )
     assert len(rendered_inferences) == 2
     for inference in rendered_inferences:
+        assert inference.dispreferred_outputs is not None
         assert len(inference.dispreferred_outputs) == 1
