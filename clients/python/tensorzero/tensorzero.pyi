@@ -1028,6 +1028,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         concurrency: int = 1,
         inference_cache: str = "on",
         dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        max_datapoints: Optional[int] = None,
+        adaptive_stopping: Optional[dict] = None,
     ) -> EvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -1039,6 +1041,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
         :param dynamic_variant_config: Optional dynamic variant configuration to use instead of config file lookup
+        :param max_datapoints: Maximum number of datapoints to evaluate from the dataset
+        :param adaptive_stopping: Optional dict configuring adaptive stopping behavior. Example: {"precision": {"exact_match": 0.2, "llm_judge": 0.15}}. The "precision" field maps evaluator names to CI half-width thresholds.
         :return: An EvaluationJobHandler for iterating over evaluation results
         """
         ...
@@ -1565,6 +1569,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         concurrency: int = 1,
         inference_cache: str = "on",
         dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        max_datapoints: Optional[int] = None,
+        adaptive_stopping: Optional[dict] = None,
     ) -> AsyncEvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -1576,6 +1582,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
         :param dynamic_variant_config: Optional dynamic variant configuration to use instead of config file lookup. If provided, `variant_name` should be omitted or set to None.
+        :param max_datapoints: Maximum number of datapoints to evaluate from the dataset
+        :param adaptive_stopping: Optional dict configuring adaptive stopping behavior. Example: {"precision": {"exact_match": 0.2, "llm_judge": 0.15}}. The "precision" field maps evaluator names to CI half-width thresholds.
         :return: An AsyncEvaluationJobHandler for iterating over evaluation results
         """
         ...
