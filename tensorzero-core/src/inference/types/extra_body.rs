@@ -104,7 +104,7 @@ pub mod dynamic {
         ProviderDelete {
             /// A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
             model_provider_name: String,
-            /// The value to set the field to
+            /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
             #[serde(
                 serialize_with = "super::super::serialize_delete_field",
