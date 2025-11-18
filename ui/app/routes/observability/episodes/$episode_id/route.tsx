@@ -157,9 +157,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 type ActionData =
-  | { redirectTo: string; error?: never; inference?: never }
-  | { error: string; redirectTo?: never; inference?: never }
-  | { inference: ParsedInferenceRow; error?: never; redirectTo?: never };
+  | { redirectTo: string; error?: never; inference?: never; inferenceId?: never }
+  | { error: string; redirectTo?: never; inference?: never; inferenceId?: string }
+  | { inference: ParsedInferenceRow; error?: never; redirectTo?: never; inferenceId: string };
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();

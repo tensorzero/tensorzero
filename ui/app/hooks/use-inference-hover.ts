@@ -61,7 +61,7 @@ export function useInferenceHover(episodeRoute: string): {
       method: "POST",
       action: episodeRoute
     });
-  }, [fetcher, episodeRoute]);
+  }, [episodeRoute]);
 
   const handleInferenceHover = useCallback((inferenceId: string) => {
     const timeout = timeoutsRef.current[inferenceId];
