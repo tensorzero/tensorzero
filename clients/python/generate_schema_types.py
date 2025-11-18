@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# /// script
+# dependencies = [
+#   "datamodel-code-generator[http]>=0.26.0",
+# ]
+# ///
 """
 Generate Python dataclasses from JSON schemas derived from Rust types.
 
