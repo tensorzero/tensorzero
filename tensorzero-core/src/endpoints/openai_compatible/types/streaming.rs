@@ -7,7 +7,10 @@ use tokio_stream::StreamExt;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{current_timestamp, ContentBlockChunk, FinishReason};
 
-use super::super::{InferenceResponseChunk, InferenceStream, OpenAICompatibleFinishReason, OpenAICompatibleStreamOptions};
+use super::super::{
+    InferenceResponseChunk, InferenceStream, OpenAICompatibleFinishReason,
+    OpenAICompatibleStreamOptions,
+};
 use super::tool::{OpenAICompatibleToolCallChunk, OpenAICompatibleToolCallDelta};
 use super::usage::OpenAICompatibleUsage;
 
