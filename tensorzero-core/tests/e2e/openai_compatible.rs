@@ -10,6 +10,8 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
+
+use tensorzero_core::endpoints::openai_compatible::chat_completions::chat_completions_handler;
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
@@ -31,34 +33,33 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
     let state = client.get_app_state_data().unwrap().clone();
     let episode_id = Uuid::now_v7();
 
-    let response =
-        tensorzero_core::endpoints::openai_compatible::chat_completions::chat_completions_handler(
-            State(state),
-            None,
-            StructuredJson(
-                serde_json::from_value(serde_json::json!({
-                    "model": model,
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "TensorBot"
-                        },
-                        {
-                            "role": "user",
-                            "content": "What is the capital of Japan?"
-                        }
-                    ],
-                    "stream": false,
-                    "tensorzero::tags": {
-                        "foo": "bar"
+    let response = chat_completions_handler(
+        State(state),
+        None,
+        StructuredJson(
+            serde_json::from_value(serde_json::json!({
+                "model": model,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "TensorBot"
                     },
-                    "tensorzero::episode_id": episode_id.to_string(),
-                }))
-                .unwrap(),
-            ),
-        )
-        .await
-        .unwrap();
+                    {
+                        "role": "user",
+                        "content": "What is the capital of Japan?"
+                    }
+                ],
+                "stream": false,
+                "tensorzero::tags": {
+                    "foo": "bar"
+                },
+                "tensorzero::episode_id": episode_id.to_string(),
+            }))
+            .unwrap(),
+        ),
+    )
+    .await
+    .unwrap();
 
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
@@ -872,7 +873,7 @@ async fn test_openai_compatible_warn_unknown_fields() {
     let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let state = client.get_app_state_data().unwrap().clone();
-    tensorzero_core::endpoints::openai_compatible::chat_completions::chat_completions_handler(
+    chat_completions_handler(
         State(state),
         None,
         StructuredJson(
@@ -896,23 +897,22 @@ async fn test_openai_compatible_warn_unknown_fields() {
 async fn test_openai_compatible_deny_unknown_fields() {
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let state = client.get_app_state_data().unwrap().clone();
-    let err =
-        tensorzero_core::endpoints::openai_compatible::chat_completions::chat_completions_handler(
-            State(state),
-            None,
-            StructuredJson(
-                serde_json::from_value(serde_json::json!({
-                    "messages": [],
-                    "model": "tensorzero::model_name::dummy::good",
-                    "tensorzero::deny_unknown_fields": true,
-                    "my_fake_param": "fake_value",
-                    "my_other_fake_param": "fake_value_2"
-                }))
-                .unwrap(),
-            ),
-        )
-        .await
-        .unwrap_err();
+    let err = chat_completions_handler(
+        State(state),
+        None,
+        StructuredJson(
+            serde_json::from_value(serde_json::json!({
+                "messages": [],
+                "model": "tensorzero::model_name::dummy::good",
+                "tensorzero::deny_unknown_fields": true,
+                "my_fake_param": "fake_value",
+                "my_other_fake_param": "fake_value_2"
+            }))
+            .unwrap(),
+        ),
+    )
+    .await
+    .unwrap_err();
     assert_eq!(
         err.to_string(),
         "Invalid request to OpenAI-compatible endpoint: `tensorzero::deny_unknown_fields` is set to true, but found unknown fields in the request: [my_fake_param, my_other_fake_param]"
@@ -1047,39 +1047,38 @@ async fn test_openai_compatible_file_with_custom_filename() {
     let state = client.get_app_state_data().unwrap().clone();
     let episode_id = Uuid::now_v7();
 
-    let response =
-        tensorzero_core::endpoints::openai_compatible::chat_completions::chat_completions_handler(
-            State(state),
-            None,
-            StructuredJson(
-                serde_json::from_value(serde_json::json!({
-                    "model": "tensorzero::function_name::basic_test_no_system_schema",
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": "What is in this file?"
-                                },
-                                {
-                                    "type": "file",
-                                    "file": {
-                                        "file_data": "data:application/pdf;base64,JVBERi0xLjQK",
-                                        "filename": "myfile.pdf"
-                                    }
+    let response = chat_completions_handler(
+        State(state),
+        None,
+        StructuredJson(
+            serde_json::from_value(serde_json::json!({
+                "model": "tensorzero::function_name::basic_test_no_system_schema",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "What is in this file?"
+                            },
+                            {
+                                "type": "file",
+                                "file": {
+                                    "file_data": "data:application/pdf;base64,JVBERi0xLjQK",
+                                    "filename": "myfile.pdf"
                                 }
-                            ]
-                        }
-                    ],
-                    "stream": false,
-                    "tensorzero::episode_id": episode_id.to_string(),
-                }))
-                .unwrap(),
-            ),
-        )
-        .await
-        .unwrap();
+                            }
+                        ]
+                    }
+                ],
+                "stream": false,
+                "tensorzero::episode_id": episode_id.to_string(),
+            }))
+            .unwrap(),
+        ),
+    )
+    .await
+    .unwrap();
 
     // Check Response is OK
     assert_eq!(response.status(), StatusCode::OK);
