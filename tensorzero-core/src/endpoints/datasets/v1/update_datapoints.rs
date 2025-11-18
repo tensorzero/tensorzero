@@ -20,6 +20,7 @@ use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{FetchContext, Input};
 use crate::jsonschema_util::{DynamicJSONSchema, JsonSchemaRef};
+use crate::tool::apply_dynamic_tool_params_update_to_tool_call_config;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
@@ -233,13 +234,15 @@ async fn prepare_chat_update(
     if let Some(new_output) = update.output {
         updated_datapoint.output = Some(new_output);
     }
-    if let Some(new_tool_params) = update.tool_params {
-        updated_datapoint.tool_params = match new_tool_params {
-            Some(dynamic_params) => function_config
-                .dynamic_tool_params_to_database_insert(dynamic_params, &app_state.config.tools)?,
-            None => None,
-        };
-    }
+
+    // Apply the dynamic tool params update to the tool call config.
+    updated_datapoint.tool_params = apply_dynamic_tool_params_update_to_tool_call_config(
+        updated_datapoint.tool_params,
+        update.tool_params,
+        function_config.as_ref(),
+        &app_state.config.tools,
+    )?;
+
     if let Some(new_tags) = update.tags {
         updated_datapoint.tags = Some(new_tags);
     }
@@ -528,10 +531,7 @@ mod tests {
         StoredInputMessageContent, Text,
     };
     use crate::jsonschema_util::StaticJSONSchema;
-    use crate::tool::{
-        AllowedTools, AllowedToolsChoice, DynamicToolParams, ToolCallConfigDatabaseInsert,
-        ToolChoice,
-    };
+    use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert, ToolChoice};
     use crate::utils::gateway::{AppStateData, GatewayHandle, GatewayHandleTestOptions};
     use object_store::path::Path as ObjectStorePath;
     use serde_json::json;
@@ -788,6 +788,11 @@ mod tests {
     }
 
     mod prepare_update_tests {
+        use crate::{
+            endpoints::datasets::v1::types::UpdateDynamicToolParamsRequest,
+            tool::{ClientSideFunctionTool, Tool},
+        };
+
         use super::*;
 
         /// Helper to create a minimal AppStateData for testing
@@ -946,7 +951,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: None,
                 metadata: Default::default(),
             };
@@ -1005,7 +1010,7 @@ mod tests {
                 id: existing.id,
                 input: Some(new_input),
                 output: None,
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: None,
                 metadata: Default::default(),
             };
@@ -1056,7 +1061,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(new_output.clone()),
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: None,
                 metadata: Default::default(),
             };
@@ -1092,7 +1097,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None, // Omitted - should remain unchanged
+                tool_params: Default::default(), // Omitted - should remain unchanged
                 tags: None,
                 metadata: Default::default(),
             };
@@ -1116,40 +1121,6 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn test_prepare_chat_update_tool_params_set_to_null() {
-            let app_state = create_test_app_state();
-            let fetch_context = create_fetch_context(&app_state.http_client);
-            let dataset_name = "test_dataset";
-            let existing = create_sample_chat_datapoint(dataset_name);
-
-            let update = UpdateChatDatapointRequest {
-                id: existing.id,
-                input: None,
-                output: None,
-                tool_params: Some(None), // Explicitly set to null
-                tags: None,
-                metadata: Default::default(),
-            };
-
-            let result = prepare_chat_update(
-                &app_state,
-                &fetch_context,
-                dataset_name,
-                update,
-                existing,
-                "2025-01-01 00:00:00",
-            )
-            .await
-            .unwrap();
-
-            let DatapointInsert::Chat(updated) = result.updated else {
-                panic!("Expected Chat insert");
-            };
-
-            assert_eq!(updated.tool_params, None);
-        }
-
-        #[tokio::test]
         async fn test_prepare_chat_update_tool_params_set_to_value() {
             let app_state = create_test_app_state();
             let fetch_context = create_fetch_context(&app_state.http_client);
@@ -1159,19 +1130,23 @@ mod tests {
             // Create DynamicToolParams directly instead of round-tripping through database_insert_to_dynamic_tool_params
             // This represents a user setting allowed_tools to an empty list with tool_choice None
             // When there are no tools available, the result should be None (tools disabled)
-            let dynamic_tool_params = DynamicToolParams {
-                allowed_tools: Some(vec![]),
-                additional_tools: None,
-                tool_choice: Some(ToolChoice::None),
-                parallel_tool_calls: Some(false),
-                provider_tools: vec![],
+            let new_client_side_function_tool = ClientSideFunctionTool {
+                name: "test_tool".to_string(),
+                description: "Test tool".to_string(),
+                parameters: json!({}),
+                strict: false,
             };
-
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: Some(Some(dynamic_tool_params)),
+                tool_params: UpdateDynamicToolParamsRequest {
+                    allowed_tools: Some(Some(vec!["test_tool".to_string()])),
+                    additional_tools: Some(vec![new_client_side_function_tool.clone()]),
+                    tool_choice: Some(Some(ToolChoice::None)),
+                    parallel_tool_calls: Some(Some(false)),
+                    provider_tools: Some(vec![]),
+                },
                 tags: None,
                 metadata: Default::default(),
             };
@@ -1190,9 +1165,41 @@ mod tests {
             let DatapointInsert::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
+            let Some(tool_params) = updated.tool_params else {
+                panic!("Expected tool params in prepared update");
+            };
 
-            // When tools are disabled (empty allowed_tools), tool_params should be None
-            assert_eq!(updated.tool_params, None);
+            // Verify that tool params are transformed correctly into database type
+            assert_eq!(
+                tool_params.dynamic_tools,
+                vec![Tool::ClientSideFunction(new_client_side_function_tool)],
+                "Dynamic tools should be transformed correctly"
+            );
+            assert_eq!(
+                tool_params.dynamic_provider_tools,
+                vec![],
+                "Dynamic provider tools should be transformed correctly"
+            );
+            assert_eq!(
+                tool_params.allowed_tools,
+                AllowedTools {
+                    tools: vec!["test_tool".to_string()],
+                    choice: AllowedToolsChoice::Explicit,
+                },
+                "Allowed tools should be transformed correctly"
+            );
+            assert_eq!(
+                tool_params.tool_choice,
+                ToolChoice::None,
+                "Tool choice should be transformed correctly"
+            );
+            assert_eq!(
+                tool_params.parallel_tool_calls,
+                Some(false),
+                "Parallel tool calls should be transformed correctly"
+            );
+
+            // Don't check the legacy tool params field.
         }
 
         #[tokio::test]
@@ -1208,7 +1215,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: None,
                 metadata: Default::default(),
             };
@@ -1233,7 +1240,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: Some(HashMap::new()),
                 metadata: Default::default(),
             };
@@ -1259,7 +1266,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: Some(new_tags.clone()),
                 metadata: Default::default(),
             };
@@ -1292,7 +1299,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: None,
                 metadata: Default::default(),
             };
@@ -1317,7 +1324,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: None,
                 metadata: DatapointMetadataUpdate { name: Some(None) },
             };
@@ -1342,7 +1349,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: None,
                 metadata: DatapointMetadataUpdate {
                     name: Some(Some("new_name".to_string())),
@@ -1387,19 +1394,17 @@ mod tests {
 
             // Create DynamicToolParams directly instead of round-tripping
             // Setting allowed_tools to empty list means "no tools" which results in None
-            let dynamic_tool_params = DynamicToolParams {
-                allowed_tools: Some(vec![]),
-                additional_tools: None,
-                tool_choice: Some(ToolChoice::None),
-                parallel_tool_calls: Some(false),
-                provider_tools: vec![],
-            };
-
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
                 input: Some(new_input),
                 output: Some(new_output.clone()),
-                tool_params: Some(Some(dynamic_tool_params)),
+                tool_params: UpdateDynamicToolParamsRequest {
+                    allowed_tools: Some(Some(vec![])),
+                    additional_tools: None,
+                    tool_choice: Some(Some(ToolChoice::None)),
+                    parallel_tool_calls: Some(Some(false)),
+                    provider_tools: Some(vec![]),
+                },
                 tags: Some(new_tags.clone()),
                 metadata: DatapointMetadataUpdate {
                     name: Some(Some("updated_name".to_string())),

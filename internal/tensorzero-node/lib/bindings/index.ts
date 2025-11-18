@@ -341,6 +341,7 @@ export * from "./UpdateDatapointRequest";
 export * from "./UpdateDatapointsMetadataRequest";
 export * from "./UpdateDatapointsRequest";
 export * from "./UpdateDatapointsResponse";
+export * from "./UpdateDynamicToolParamsRequest";
 export * from "./UpdateJsonDatapointRequest";
 export * from "./UrlFile";
 export * from "./Usage";
