@@ -26,20 +26,8 @@ fn default_timeout() -> u64 {
     300
 }
 
-fn default_analysis_model() -> String {
-    "anthropic::claude-sonnet-4-5-20250929".to_string()
-}
-
-fn default_mutation_model() -> String {
-    "anthropic::claude-sonnet-4-5-20250929".to_string()
-}
-
 fn default_include_inference_input_for_mutation() -> bool {
     true
-}
-
-fn default_max_tokens() -> u32 {
-    16_384
 }
 
 /// GEPA (Genetic Evolution with Pareto Analysis) optimization configuration
@@ -101,8 +89,7 @@ pub struct GEPAConfig {
     pub retries: RetryConfig,
 
     /// Maximum number of tokens to generate for analysis and mutation model calls
-    /// Default: 16_384
-    pub max_tokens: u32,
+    pub max_tokens: Option<u32>,
 }
 
 /// Uninitialized GEPA configuration (deserializable from TOML)
@@ -124,10 +111,8 @@ pub struct UninitializedGEPAConfig {
     #[serde(default = "default_max_concurrency")]
     pub max_concurrency: u32,
 
-    #[serde(default = "default_analysis_model")]
     pub analysis_model: String,
 
-    #[serde(default = "default_mutation_model")]
     pub mutation_model: String,
 
     pub seed: Option<u32>,
@@ -141,29 +126,7 @@ pub struct UninitializedGEPAConfig {
     #[serde(default)]
     pub retries: RetryConfig,
 
-    #[serde(default = "default_max_tokens")]
-    pub max_tokens: u32,
-}
-
-impl Default for UninitializedGEPAConfig {
-    fn default() -> Self {
-        Self {
-            function_name: String::new(),
-            evaluation_name: String::new(),
-            initial_variants: None,
-            variant_prefix: None,
-            batch_size: default_batch_size(),
-            max_iterations: default_max_iterations(),
-            max_concurrency: default_max_concurrency(),
-            analysis_model: default_analysis_model(),
-            mutation_model: default_mutation_model(),
-            seed: None,
-            timeout: default_timeout(),
-            include_inference_input_for_mutation: default_include_inference_input_for_mutation(),
-            retries: RetryConfig::default(),
-            max_tokens: default_max_tokens(),
-        }
-    }
+    pub max_tokens: Option<u32>,
 }
 
 impl std::fmt::Display for UninitializedGEPAConfig {
@@ -180,13 +143,13 @@ impl UninitializedGEPAConfig {
     #[pyo3(signature = (
         function_name,
         evaluation_name,
+        analysis_model,
+        mutation_model,
         initial_variants=None,
         variant_prefix=None,
         batch_size=None,
         max_iterations=None,
         max_concurrency=None,
-        analysis_model=None,
-        mutation_model=None,
         seed=None,
         timeout=None,
         include_inference_input_for_mutation=None,
@@ -197,13 +160,13 @@ impl UninitializedGEPAConfig {
     fn py_new(
         function_name: String,
         evaluation_name: String,
+        analysis_model: String,
+        mutation_model: String,
         initial_variants: Option<Vec<String>>,
         variant_prefix: Option<String>,
         batch_size: Option<usize>,
         max_iterations: Option<u32>,
         max_concurrency: Option<u32>,
-        analysis_model: Option<String>,
-        mutation_model: Option<String>,
         seed: Option<u32>,
         timeout: Option<u64>,
         include_inference_input_for_mutation: Option<bool>,
@@ -218,46 +181,48 @@ impl UninitializedGEPAConfig {
             batch_size: batch_size.unwrap_or_else(default_batch_size),
             max_iterations: max_iterations.unwrap_or_else(default_max_iterations),
             max_concurrency: max_concurrency.unwrap_or_else(default_max_concurrency),
-            analysis_model: analysis_model.unwrap_or_else(default_analysis_model),
-            mutation_model: mutation_model.unwrap_or_else(default_mutation_model),
+            analysis_model,
+            mutation_model,
             seed,
             timeout: timeout.unwrap_or_else(default_timeout),
             include_inference_input_for_mutation: include_inference_input_for_mutation
                 .unwrap_or_else(default_include_inference_input_for_mutation),
             retries: retries.unwrap_or_default(),
-            max_tokens: max_tokens.unwrap_or_else(default_max_tokens),
+            max_tokens,
         }
     }
 
-    /// Initialize the GEPAConfig. All parameters are optional except for `function_name` and `evaluation_name`.
+    /// Initialize the GEPAConfig.
+    ///
+    /// Required parameters: `function_name`, `evaluation_name`, `analysis_model`, `mutation_model`.
     ///
     /// :param function_name: Name of the function being optimized.
     /// :param evaluation_name: Name of the evaluation used to score candidate variants.
+    /// :param analysis_model: Model for analyzing inference results (e.g., "anthropic::claude-sonnet-4-5-20250929").
+    /// :param mutation_model: Model for generating prompt mutations (e.g., "anthropic::claude-sonnet-4-5-20250929").
     /// :param initial_variants: Optional list of variant names to initialize GEPA with. If None, uses all variants defined for the function.
     /// :param variant_prefix: Prefix for the name of the new optimized variants.
     /// :param batch_size: Number of training samples to analyze per iteration. Default: 5.
     /// :param max_iterations: Maximum number of training iterations. Default: 1.
     /// :param max_concurrency: Maximum number of concurrent inference calls. Default: 10.
-    /// :param analysis_model: Model for analysis. Default: "anthropic::claude-sonnet-4-5-20250929".
-    /// :param mutation_model: Model for mutation. Default: "anthropic::claude-sonnet-4-5-20250929".
     /// :param seed: Optional random seed for reproducibility.
     /// :param timeout: Client timeout in seconds for TensorZero gateway operations. Default: 300.
-    /// :param include_inference_input_for_mutation: Whether to include inference input in InferenceWithAnalysis for mutation. If True, the mutate function will see the inference input in addition to the output and analysis for each example in the batch. Use with caution for multi-turn conversations or large batch sizes. Default: True.
+    /// :param include_inference_input_for_mutation: Whether to include inference input for mutation context. Use with caution for multi-turn conversations or large batch sizes. Default: True.
     /// :param retries: Retry configuration for inference calls during GEPA optimization.
-    /// :param max_tokens: Maximum number of tokens to generate for analysis and mutation model calls. Default: 16_384.
+    /// :param max_tokens: Optional maximum tokens for analysis and mutation model calls.
     #[expect(unused_variables, clippy::too_many_arguments)]
-    #[pyo3(signature = (*, function_name, evaluation_name, initial_variants=None, variant_prefix=None, batch_size=None, max_iterations=None, max_concurrency=None, analysis_model=None, mutation_model=None, seed=None, timeout=None, include_inference_input_for_mutation=None, retries=None, max_tokens=None))]
+    #[pyo3(signature = (*, function_name, evaluation_name, analysis_model, mutation_model, initial_variants=None, variant_prefix=None, batch_size=None, max_iterations=None, max_concurrency=None, seed=None, timeout=None, include_inference_input_for_mutation=None, retries=None, max_tokens=None))]
     fn __init__(
         this: Py<Self>,
         function_name: String,
         evaluation_name: String,
+        analysis_model: String,
+        mutation_model: String,
         initial_variants: Option<Vec<String>>,
         variant_prefix: Option<String>,
         batch_size: Option<usize>,
         max_iterations: Option<u32>,
         max_concurrency: Option<u32>,
-        analysis_model: Option<String>,
-        mutation_model: Option<String>,
         seed: Option<u32>,
         timeout: Option<u64>,
         include_inference_input_for_mutation: Option<bool>,

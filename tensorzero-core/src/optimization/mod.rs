@@ -54,7 +54,7 @@ pub enum OptimizerConfig {
     OpenAIRFT(Box<OpenAIRFTConfig>),
     FireworksSFT(FireworksSFTConfig),
     GCPVertexGeminiSFT(Box<GCPVertexGeminiSFTConfig>),
-    Gepa(GEPAConfig),
+    GEPA(GEPAConfig),
     TogetherSFT(Box<TogetherSFTConfig>),
 }
 
@@ -74,7 +74,7 @@ pub enum OptimizationJobHandle {
     #[serde(rename = "gcp_vertex_gemini_sft")]
     GCPVertexGeminiSFT(GCPVertexGeminiSFTJobHandle),
     #[serde(rename = "gepa")]
-    Gepa(GEPAJobHandle),
+    GEPA(GEPAJobHandle),
     #[serde(rename = "together_sft")]
     TogetherSFT(TogetherSFTJobHandle),
 }
@@ -252,7 +252,7 @@ pub enum UninitializedOptimizerConfig {
     #[serde(rename = "gcp_vertex_gemini_sft")]
     GCPVertexGeminiSFT(UninitializedGCPVertexGeminiSFTConfig),
     #[serde(rename = "gepa")]
-    Gepa(UninitializedGEPAConfig),
+    GEPA(UninitializedGEPAConfig),
     #[serde(rename = "together_sft")]
     TogetherSFT(Box<UninitializedTogetherSFTConfig>),
 }
@@ -280,8 +280,8 @@ impl UninitializedOptimizerConfig {
                     config.load(default_credentials).await?,
                 ))
             }
-            UninitializedOptimizerConfig::Gepa(config) => {
-                OptimizerConfig::Gepa(config.load(default_credentials).await?)
+            UninitializedOptimizerConfig::GEPA(config) => {
+                OptimizerConfig::GEPA(config.load(default_credentials).await?)
             }
             UninitializedOptimizerConfig::TogetherSFT(config) => {
                 OptimizerConfig::TogetherSFT(Box::new(config.load(default_credentials).await?))

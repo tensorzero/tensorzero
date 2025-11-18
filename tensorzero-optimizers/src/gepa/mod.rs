@@ -1,7 +1,7 @@
 //! GEPA optimizer implementation
 //!
 //! This module provides the trait implementations for the GEPA optimizer.
-//! The actual GEPA algorithm logic is in the `lib` submodule.
+//! The actual GEPA algorithm will be implemented here.
 
 use async_trait::async_trait;
 use std::{collections::HashMap, time::Duration};
@@ -65,15 +65,9 @@ impl Optimizer for GEPAConfig {
             UninitializedChatCompletionConfig::default(),
         );
 
-        // Convert the result to store either success or failure
         // For synchronous optimizers, we store the result in the handle
         // rather than returning an error from launch()
-        let handle_result = Ok(result);
-
-        // Return a job handle containing the result (success or failure)
-        Ok(GEPAJobHandle {
-            result: handle_result,
-        })
+        Ok(GEPAJobHandle { result: Ok(result) })
     }
 }
 
