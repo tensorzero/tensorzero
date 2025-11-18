@@ -230,7 +230,7 @@ services:
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
     volumes:
       - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
-      - ./config/:/app/tensorzero-core/tests/e2e/config/:ro
+      - ./config:/app/tensorzero-core/tests/e2e/config:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
       - ../../../target/nextest:/app/target/nextest
