@@ -105,6 +105,7 @@ pub mod dynamic {
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
+            #[schemars(schema_with = "super::super::schema_for_delete_field")]
             /// Set to true to remove the header from the model provider request
             delete: (),
         },
@@ -127,6 +128,7 @@ pub mod dynamic {
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
+            #[schemars(schema_with = "super::super::schema_for_delete_field")]
             /// Set to true to remove the header from the model provider request
             delete: (),
         },
@@ -153,6 +155,7 @@ pub mod dynamic {
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
+            #[schemars(schema_with = "super::super::schema_for_delete_field")]
             /// Set to true to remove the header from the model provider request
             delete: (),
         },
@@ -171,6 +174,7 @@ pub mod dynamic {
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
+            #[schemars(schema_with = "super::super::schema_for_delete_field")]
             /// Set to true to remove the header from the model provider request
             delete: (),
         },

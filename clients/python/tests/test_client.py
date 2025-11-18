@@ -37,6 +37,8 @@ from clickhouse_connect import get_client  # type: ignore
 from openai import AsyncOpenAI, OpenAI
 from pytest import CaptureFixture
 from tensorzero import (
+    AlwaysExtraBody,
+    AlwaysExtraBodyDelete,
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
     DynamicEvaluationRunResponse,
@@ -48,6 +50,8 @@ from tensorzero import (
     ImageUrl,
     InferenceChunk,
     JsonInferenceResponse,
+    ModelProviderExtraBody,
+    ModelProviderExtraBodyDelete,
     RawText,
     TensorZeroError,
     TensorZeroGateway,
@@ -57,16 +61,15 @@ from tensorzero import (
     ThoughtChunk,
     ToolCall,
     ToolResult,
+    VariantExtraBody,
+    VariantExtraBodyDelete,
 )
 from tensorzero.types import (
-    AlwaysExtraBody,
     ChatChunk,
     JsonChunk,
-    ModelProviderExtraBody,
     Template,
     Thought,
     ToolCallChunk,
-    VariantExtraBody,
 )
 from uuid_utils import uuid7
 
@@ -2439,21 +2442,19 @@ def test_extra_body_types(sync_client: TensorZeroGateway):
                 pointer="/should_be_deleted_provider",
                 value=2,
             ),
-            ModelProviderExtraBody(
+            ModelProviderExtraBodyDelete(
                 model_name="gpt-4o-mini-2024-07-18",
                 provider_name="openai",
                 pointer="/should_be_deleted_provider",
-                delete=True,
             ),
             VariantExtraBody(
                 variant_name="openai",
                 pointer="/should_be_deleted_variant",
                 value=2,
             ),
-            VariantExtraBody(
+            VariantExtraBodyDelete(
                 variant_name="openai",
                 pointer="/should_be_deleted_variant",
-                delete=True,
             ),
         ],
     )
@@ -2510,9 +2511,8 @@ def test_all_extra_body_with_delete(sync_client: TensorZeroGateway):
                 pointer="/should_be_deleted_all",
                 value=2,
             ),
-            AlwaysExtraBody(
+            AlwaysExtraBodyDelete(
                 pointer="/should_be_deleted_all",
-                delete=True,
             ),
             AlwaysExtraBody(
                 pointer="/max_completion_tokens",

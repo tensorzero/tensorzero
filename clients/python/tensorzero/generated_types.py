@@ -433,9 +433,9 @@ class ProviderExtraBodyDelete:
     """
     pointer: str
     """
-    The value to set the field to
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
     """
-    delete: None
+    delete: Literal[True] = True
     """
     Set to true to remove the field from the model provider request's body
     """
@@ -467,7 +467,7 @@ class VariantExtraBodyDelete:
     """
     A JSON Pointer to the field to update (e.g. `/enable_agi`)
     """
-    delete: None
+    delete: Literal[True] = True
     """
     Set to true to remove the field from the model provider request's body
     """
@@ -503,7 +503,7 @@ class ModelProviderExtraBodyDelete:
     """
     A JSON Pointer to the field to update (e.g. `/enable_agi`)
     """
-    delete: None
+    delete: Literal[True] = True
     """
     Set to true to remove the field from the model provider request's body
     """
@@ -531,7 +531,7 @@ class AlwaysExtraBodyDelete:
     """
     A JSON Pointer to the field to update (e.g. `/enable_agi`)
     """
-    delete: None
+    delete: Literal[True] = True
     """
     Set to true to remove the field from the model provider request's body
     """
@@ -583,7 +583,7 @@ class ProviderExtraHeaderDelete:
     """
     The name of the HTTP header (e.g. `anthropic-beta`)
     """
-    delete: None
+    delete: Literal[True] = True
     """
     Set to true to remove the header from the model provider request
     """
@@ -615,7 +615,7 @@ class VariantExtraHeaderDelete:
     """
     The name of the HTTP header (e.g. `anthropic-beta`)
     """
-    delete: None
+    delete: Literal[True] = True
     """
     Set to true to remove the header from the model provider request
     """
@@ -651,7 +651,7 @@ class ModelProviderExtraHeaderDelete:
     """
     The name of the HTTP header (e.g. `anthropic-beta`)
     """
-    delete: None
+    delete: Literal[True] = True
     """
     Set to true to remove the header from the model provider request
     """
@@ -679,7 +679,7 @@ class AlwaysExtraHeaderDelete:
     """
     The name of the HTTP header (e.g. `anthropic-beta`)
     """
-    delete: None
+    delete: Literal[True] = True
     """
     Set to true to remove the header from the model provider request
     """

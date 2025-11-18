@@ -2252,6 +2252,13 @@ where
     Ok(())
 }
 
+pub(super) fn schema_for_delete_field(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    let mut map = Map::new();
+    map.insert("type".to_owned(), Value::String("boolean".to_owned()));
+    map.insert("const".to_owned(), Value::Bool(true));
+    schemars::Schema::from(map)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
