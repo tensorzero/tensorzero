@@ -78,10 +78,9 @@ pub struct GEPAConfig {
     /// Client timeout in seconds for TensorZero gateway operations
     pub timeout: u64,
 
-    /// Whether to include inference input and output in InferenceWithAnalysis for mutation
+    /// Whether to include inference input and output in Analysis for mutation
     ///
-    /// If true, the mutate function will see the inference input and output in addition to the analysis for each example in the batch.
-    /// This provides additional context but increases token usage significantly.
+    /// Inclusion can be helpful for adding few-shot examples.
     ///
     /// **Warning:** Use with caution, especially with:
     /// - Multi-turn conversations (many input messages)
@@ -224,7 +223,7 @@ impl UninitializedGEPAConfig {
     /// :param max_concurrency: Maximum number of concurrent inference calls. Default: 10.
     /// :param seed: Optional random seed for reproducibility.
     /// :param timeout: Client timeout in seconds for TensorZero gateway operations. Default: 300.
-    /// :param include_inference_for_mutation: Whether to include inference input and output for mutation context. Use with caution for multi-turn conversations, long outputs, or large batch sizes. Default: True.
+    /// :param include_inference_for_mutation: Whether to include inference input and output in Analysis for mutation. Inclusion can be helpful for adding few-shot examples. Use with caution for multi-turn conversations, long outputs, or large batch sizes. Default: True.
     /// :param retries: Retry configuration for inference calls during GEPA optimization.
     /// :param max_tokens: Optional maximum tokens for analysis and mutation model calls. (required for Anthropic models)
     #[expect(unused_variables, clippy::too_many_arguments)]

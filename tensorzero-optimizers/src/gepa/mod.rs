@@ -26,7 +26,7 @@ use crate::{JobHandle, Optimizer};
 
 mod analyze;
 
-pub use analyze::{analyze_inferences, InferenceWithAnalysis};
+pub use analyze::{analyze_inferences, Analysis};
 
 #[async_trait]
 impl Optimizer for GEPAConfig {

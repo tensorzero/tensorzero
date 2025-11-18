@@ -23,7 +23,7 @@ use tensorzero_core::{
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
     function::FunctionConfig,
-    inference::types::{Arguments, ContentBlockChatOutput, Role, Template},
+    inference::types::{Arguments, ContentBlockChatOutput, Role, StoredInput, Template},
     optimization::gepa::GEPAConfig,
     tool::StaticToolConfig,
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
@@ -31,17 +31,21 @@ use tensorzero_core::{
 
 use evaluations::stats::EvaluationInfo;
 
-/// Represents an inference output paired with its analysis feedback
+/// Represents an inference input and output pair
 #[derive(Debug, Clone, Serialize)]
-pub struct InferenceWithAnalysis {
-    /// Optional inference input (only included if include_inference_for_mutation is true)
+pub struct Inference {
+    pub input: StoredInput,
+    pub output: InferenceResponse,
+}
+
+/// Represents an analysis result with optional inference context
+#[derive(Debug, Clone, Serialize)]
+pub struct Analysis {
+    /// Optional inference context (only included if include_inference_for_mutation is true)
+    /// Flattened during serialization so input/output appear at top level
     /// Skipped during serialization if None to avoid bloating the mutate function input
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub inference_input: Option<serde_json::Value>,
-    /// Optional inference output (only included if include_inference_for_mutation is true)
-    /// Skipped during serialization if None to avoid bloating the mutate function input
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub inference_output: Option<InferenceResponse>,
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    pub inference: Option<Inference>,
     pub analysis: Vec<ContentBlockChatOutput>,
 }
 
@@ -132,7 +136,7 @@ pub fn build_analyze_input(
 /// * `evaluation_config` - Evaluation config enriched with loaded system templates
 ///
 /// # Returns
-/// * Vector of [`InferenceWithAnalysis`] containing each inference paired with its XML analysis feedback
+/// * Vector of [`Analysis`] containing each inference paired with its XML analysis feedback
 pub async fn analyze_inferences(
     gateway_client: &Client,
     evaluation_infos: &[EvaluationInfo],
@@ -141,7 +145,7 @@ pub async fn analyze_inferences(
     variant_config: &UninitializedChatCompletionConfig,
     gepa_config: &GEPAConfig,
     evaluation_config: &EvaluationConfig,
-) -> Result<Vec<InferenceWithAnalysis>, Error> {
+) -> Result<Vec<Analysis>, Error> {
     // Early return for empty input - nothing to analyze
     if evaluation_infos.is_empty() {
         return Ok(Vec::new());
@@ -310,22 +314,18 @@ pub async fn analyze_inferences(
                     );
                 }
 
-                // Conditionally include inference input and output based on config flag
-                let (inference_input, inference_output) = if gepa_config.include_inference_for_mutation {
-                    (
-                        Some(serialize_to_value(
-                            eval_info.datapoint.input(),
-                            "inference input",
-                        )?),
-                        Some(eval_info.response.clone()),
-                    )
+                // Conditionally include inference context based on config flag
+                let inference = if gepa_config.include_inference_for_mutation {
+                    Some(Inference {
+                        input: eval_info.datapoint.input().clone(),
+                        output: eval_info.response.clone(),
+                    })
                 } else {
-                    (None, None)
+                    None
                 };
 
-                Ok(InferenceWithAnalysis {
-                    inference_input,
-                    inference_output,
+                Ok(Analysis {
+                    inference,
                     analysis,
                 })
             }
