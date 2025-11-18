@@ -108,9 +108,9 @@ pub async fn inference_handler(
 ) -> Result<Response<Body>, Error> {
     // Validate `n` parameter
     if let Some(n) = openai_compatible_params.n {
-        if n > 1 {
+        if n != 1 {
             return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
-                message: "TensorZero does not support `n` greater than 1. Please omit this parameter or set it to 1.".to_string(),
+                message: "TensorZero does not support `n` other than 1. Please omit this parameter or set it to 1.".to_string(),
             }));
         }
     }
