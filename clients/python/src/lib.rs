@@ -1328,7 +1328,13 @@ impl TensorZeroGateway {
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
     /// * `max_datapoints` - Optional maximum number of datapoints to evaluate from the dataset
-    /// * `precision_targets` - Optional dict mapping evaluator names to precision limit thresholds (CI half-width)
+    /// * `adaptive_stopping` - Optional dict configuring adaptive stopping behavior for evals.
+    ///                         Example for two evaluators named "exact_match" and "llm_judge":
+    ///                           `{"precision": {"exact_match": 0.2, "llm_judge": 0.15}}`
+    ///                         The "precision" field maps evaluator names to confidence interval half-widths.
+    ///                         Evaluation for a given evaluator stops when it achieves its precision target,
+    ///                         i.e. the width of the larger of the two halves of its confidence interval
+    ///                         is <= the precision target.
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
@@ -1337,9 +1343,9 @@ impl TensorZeroGateway {
                         inference_cache="on".to_string(),
                         dynamic_variant_config=None,
                         max_datapoints=None,
-                        precision_targets=None
+                        adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, max_datapoints=None, precision_targets=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
@@ -1351,7 +1357,7 @@ impl TensorZeroGateway {
         inference_cache: String,
         dynamic_variant_config: Option<&Bound<'_, PyDict>>,
         max_datapoints: Option<usize>,
-        precision_targets: Option<&Bound<'_, PyDict>>,
+        adaptive_stopping: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
 
@@ -1371,15 +1377,26 @@ impl TensorZeroGateway {
         let variant =
             construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
 
-        // Parse precision_targets from Python dict to Rust HashMap
-        let precision_targets_map = if let Some(precision_targets_dict) = precision_targets {
-            let mut map = std::collections::HashMap::new();
-            for (key, value) in precision_targets_dict.iter() {
-                let key_str: String = key.extract()?;
-                let value_f64: f64 = value.extract()?;
-                map.insert(key_str, value_f64 as f32);
+        // Parse adaptive_stopping config from Python dict
+        let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
+            // Extract the "precision" field from adaptive_stopping dict
+            if let Ok(Some(precision_bound)) = adaptive_stopping_dict.get_item("precision") {
+                let precision_dict_bound = precision_bound.downcast::<PyDict>().map_err(|_| {
+                    PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                        "adaptive_stopping['precision'] must be a dictionary",
+                    )
+                })?;
+
+                let mut map = std::collections::HashMap::new();
+                for (key, value) in precision_dict_bound.iter() {
+                    let key_str: String = key.extract()?;
+                    let value_f64: f64 = value.extract()?;
+                    map.insert(key_str, value_f64 as f32);
+                }
+                map
+            } else {
+                HashMap::new()
             }
-            map
         } else {
             HashMap::new()
         };
@@ -2473,7 +2490,13 @@ impl AsyncTensorZeroGateway {
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
     /// * `max_datapoints` - Optional maximum number of datapoints to evaluate from the dataset
-    /// * `precision_targets` - Optional dict mapping evaluator names to precision limit thresholds (CI half-width)
+    /// * `adaptive_stopping` - Optional dict configuring adaptive stopping behavior for evals.
+    ///                         Example for two evaluators named "exact_match" and "llm_judge":
+    ///                           `{"precision": {"exact_match": 0.2, "llm_judge": 0.15}}`
+    ///                         The "precision" field maps evaluator names to confidence interval half-widths.
+    ///                         Evaluation for a given evaluator stops when it achieves its precision target,
+    ///                         i.e. the width of the larger of the two halves of its confidence interval
+    ///                         is <= the precision target.
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
@@ -2482,9 +2505,9 @@ impl AsyncTensorZeroGateway {
                         inference_cache="on".to_string(),
                         dynamic_variant_config=None,
                         max_datapoints=None,
-                        precision_targets=None
+                        adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, max_datapoints=None, precision_targets=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
@@ -2496,7 +2519,7 @@ impl AsyncTensorZeroGateway {
         inference_cache: String,
         dynamic_variant_config: Option<&Bound<'py, PyDict>>,
         max_datapoints: Option<usize>,
-        precision_targets: Option<&Bound<'py, PyDict>>,
+        adaptive_stopping: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();
 
@@ -2509,15 +2532,26 @@ impl AsyncTensorZeroGateway {
         let variant =
             construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
 
-        // Parse precision_targets from Python dict to Rust HashMap
-        let precision_targets_map = if let Some(precision_targets_dict) = precision_targets {
-            let mut map = std::collections::HashMap::new();
-            for (key, value) in precision_targets_dict.iter() {
-                let key_str: String = key.extract()?;
-                let value_f64: f64 = value.extract()?;
-                map.insert(key_str, value_f64 as f32);
+        // Parse adaptive_stopping config from Python dict
+        let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
+            // Extract the "precision" field from adaptive_stopping dict
+            if let Ok(Some(precision_bound)) = adaptive_stopping_dict.get_item("precision") {
+                let precision_dict_bound = precision_bound.downcast::<PyDict>().map_err(|_| {
+                    PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                        "adaptive_stopping['precision'] must be a dictionary",
+                    )
+                })?;
+
+                let mut map = std::collections::HashMap::new();
+                for (key, value) in precision_dict_bound.iter() {
+                    let key_str: String = key.extract()?;
+                    let value_f64: f64 = value.extract()?;
+                    map.insert(key_str, value_f64 as f32);
+                }
+                map
+            } else {
+                HashMap::new()
             }
-            map
         } else {
             HashMap::new()
         };
