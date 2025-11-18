@@ -12,12 +12,16 @@ mod embeddings;
 mod types;
 
 use embeddings::embeddings_handler;
+use types::tool::*;
+use types::usage::OpenAICompatibleUsage;
 
 use axum::body::Body;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
+use axum::routing::post;
 use axum::Json;
+use axum::Router;
 use axum::{debug_handler, Extension};
 use futures::Stream;
 use mime::MediaType;
@@ -43,13 +47,11 @@ use crate::inference::types::file::Detail;
 use crate::inference::types::{
     current_timestamp, Arguments, Base64File, ContentBlockChatOutput, ContentBlockChunk, File,
     FinishReason, Input, InputMessage, InputMessageContent, RawText, Role, System, Template, Text,
-    UrlFile, Usage,
+    UrlFile,
 };
 
-use crate::tool::{
-    ClientSideFunctionTool, DynamicToolParams, InferenceResponseToolCall, ProviderTool,
-    ToolCallWrapper, ToolChoice, ToolResult,
-};
+use crate::endpoints::{RequestApiKeyExtension, RouteHandlers};
+use crate::tool::{DynamicToolParams, ProviderTool, ToolResult};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::JsonMode;
 use serde::Deserializer;
@@ -58,9 +60,6 @@ use super::inference::{
     InferenceCredentials, InferenceOutput, InferenceResponse, InferenceResponseChunk,
     InferenceStream,
 };
-use crate::endpoints::{RequestApiKeyExtension, RouteHandlers};
-use axum::routing::post;
-use axum::Router;
 
 /// Constructs (but does not register) all of our OpenAI-compatible endpoints.
 /// The `RouterExt::register_openai_compatible_routes` is a convenience method
@@ -189,40 +188,6 @@ pub async fn inference_handler(
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct OpenAICompatibleFunctionCall {
-    pub name: String,
-    pub arguments: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct OpenAICompatibleToolCallDelta {
-    pub name: String,
-    pub arguments: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct OpenAICompatibleToolCall {
-    /// The ID of the tool call.
-    pub id: String,
-    /// The type of the tool. Currently, only `function` is supported.
-    pub r#type: String,
-    /// The function that the model called.
-    pub function: OpenAICompatibleFunctionCall,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct OpenAICompatibleToolCallChunk {
-    /// The ID of the tool call.
-    pub id: Option<String>,
-    /// The index of the tool call.
-    pub index: usize,
-    /// The type of the tool. Currently, only `function` is supported.
-    pub r#type: String,
-    /// The function that the model called.
-    pub function: OpenAICompatibleToolCallDelta,
-}
-
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 struct OpenAICompatibleSystemMessage {
     content: Value,
@@ -237,12 +202,6 @@ struct OpenAICompatibleUserMessage {
 struct OpenAICompatibleAssistantMessage {
     content: Option<Value>,
     tool_calls: Option<Vec<OpenAICompatibleToolCall>>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct OpenAICompatibleToolMessage {
-    content: Option<Value>,
-    tool_call_id: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -280,172 +239,6 @@ impl std::fmt::Display for JsonSchemaInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")
     }
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-#[serde(tag = "type", content = "function")]
-#[serde(rename_all = "snake_case")]
-enum OpenAICompatibleTool {
-    Function {
-        description: Option<String>,
-        name: String,
-        parameters: Value,
-        #[serde(default)]
-        strict: bool,
-    },
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct FunctionName {
-    name: String,
-}
-
-/// Specifies a tool the model should use. Use to force the model to call a specific function.
-#[derive(Clone, Debug, Deserialize, PartialEq)]
-struct OpenAICompatibleNamedToolChoice {
-    /// The type of the tool. Currently, only `function` is supported.
-    r#type: String,
-    function: FunctionName,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-enum OpenAICompatibleAllowedToolsMode {
-    Auto,
-    Required,
-}
-
-impl From<OpenAICompatibleAllowedToolsMode> for ToolChoice {
-    fn from(mode: OpenAICompatibleAllowedToolsMode) -> Self {
-        match mode {
-            OpenAICompatibleAllowedToolsMode::Auto => ToolChoice::Auto,
-            OpenAICompatibleAllowedToolsMode::Required => ToolChoice::Required,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, PartialEq)]
-struct OpenAICompatibleAllowedTools {
-    tools: Vec<OpenAICompatibleNamedToolChoice>,
-    mode: OpenAICompatibleAllowedToolsMode,
-}
-
-/// Controls which (if any) tool is called by the model.
-/// `none` means the model will not call any tool and instead generates a message.
-/// `auto` means the model can pick between generating a message or calling one or more tools.
-/// `required` means the model must call one or more tools.
-/// Specifying a particular tool via `{"type": "function", "function": {"name": "my_function"}}` forces the model to call that tool.
-///
-/// `none` is the default when no tools are present. `auto` is the default if tools are present.
-#[derive(Clone, Debug, Default, PartialEq)]
-enum ChatCompletionToolChoiceOption {
-    #[default]
-    None,
-    Auto,
-    Required,
-    AllowedTools(OpenAICompatibleAllowedTools),
-    Named(OpenAICompatibleNamedToolChoice),
-}
-
-impl<'de> Deserialize<'de> for ChatCompletionToolChoiceOption {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::Error;
-        use serde_json::Value;
-
-        let value = Value::deserialize(deserializer)?;
-
-        match &value {
-            Value::String(s) => match s.as_str() {
-                "none" => Ok(ChatCompletionToolChoiceOption::None),
-                "auto" => Ok(ChatCompletionToolChoiceOption::Auto),
-                "required" => Ok(ChatCompletionToolChoiceOption::Required),
-                _ => Err(D::Error::custom(format!("Invalid tool choice string: {s}"))),
-            },
-            Value::Object(obj) => {
-                if let Some(type_value) = obj.get("type") {
-                    if let Some(type_str) = type_value.as_str() {
-                        match type_str {
-                            "function" => {
-                                // This is a named tool choice
-                                let named: OpenAICompatibleNamedToolChoice =
-                                    serde_json::from_value(value).map_err(D::Error::custom)?;
-                                Ok(ChatCompletionToolChoiceOption::Named(named))
-                            }
-                            "allowed_tools" => {
-                                // This is an allowed tools choice - extract the allowed_tools field
-                                if let Some(allowed_tools_value) = obj.get("allowed_tools") {
-                                    let allowed_tools: OpenAICompatibleAllowedTools =
-                                        serde_json::from_value(allowed_tools_value.clone())
-                                            .map_err(D::Error::custom)?;
-                                    Ok(ChatCompletionToolChoiceOption::AllowedTools(allowed_tools))
-                                } else {
-                                    Err(D::Error::custom(
-                                        "Missing 'allowed_tools' field in allowed_tools type",
-                                    ))
-                                }
-                            }
-                            _ => Err(D::Error::custom(format!(
-                                "Invalid tool choice type: {type_str}",
-                            ))),
-                        }
-                    } else {
-                        Err(D::Error::custom(
-                            "Tool choice 'type' field must be a string",
-                        ))
-                    }
-                } else {
-                    Err(D::Error::custom(
-                        "Tool choice field must have a 'type' field if it is an object",
-                    ))
-                }
-            }
-            _ => Err(D::Error::custom("Tool choice must be a string or object")),
-        }
-    }
-}
-
-impl ChatCompletionToolChoiceOption {
-    fn into_tool_params(self) -> OpenAICompatibleToolChoiceParams {
-        match self {
-            ChatCompletionToolChoiceOption::None => OpenAICompatibleToolChoiceParams {
-                allowed_tools: None,
-                tool_choice: Some(ToolChoice::None),
-            },
-            ChatCompletionToolChoiceOption::Auto => OpenAICompatibleToolChoiceParams {
-                allowed_tools: None,
-                tool_choice: Some(ToolChoice::Auto),
-            },
-            ChatCompletionToolChoiceOption::Required => OpenAICompatibleToolChoiceParams {
-                allowed_tools: None,
-                tool_choice: Some(ToolChoice::Required),
-            },
-            ChatCompletionToolChoiceOption::AllowedTools(allowed_tool_info) => {
-                OpenAICompatibleToolChoiceParams {
-                    allowed_tools: Some(
-                        allowed_tool_info
-                            .tools
-                            .into_iter()
-                            .map(|tool| tool.function.name)
-                            .collect(),
-                    ),
-                    tool_choice: Some(allowed_tool_info.mode.into()),
-                }
-            }
-            ChatCompletionToolChoiceOption::Named(named_tool) => OpenAICompatibleToolChoiceParams {
-                allowed_tools: None,
-                tool_choice: Some(ToolChoice::Specific(named_tool.function.name)),
-            },
-        }
-    }
-}
-
-#[derive(Default)]
-struct OpenAICompatibleToolChoiceParams {
-    pub allowed_tools: Option<Vec<String>>,
-    pub tool_choice: Option<ToolChoice>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
@@ -502,45 +295,6 @@ pub struct OpenAICompatibleParams {
     tensorzero_params: Option<InferenceParams>,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
-struct OpenAICompatibleUsage {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    prompt_tokens: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    completion_tokens: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    total_tokens: Option<u32>,
-}
-
-impl OpenAICompatibleUsage {
-    fn zero() -> Self {
-        Self {
-            prompt_tokens: Some(0),
-            completion_tokens: Some(0),
-            total_tokens: Some(0),
-        }
-    }
-
-    /// Sum `OpenAICompatibleUsage` and `Usage` instances.
-    /// `None` contaminates on both sides.
-    fn sum_usage_strict(&mut self, other: &Usage) {
-        self.prompt_tokens = match (self.prompt_tokens, other.input_tokens) {
-            (Some(a), Some(b)) => Some(a + b),
-            _ => None,
-        };
-
-        self.completion_tokens = match (self.completion_tokens, other.output_tokens) {
-            (Some(a), Some(b)) => Some(a + b),
-            _ => None,
-        };
-
-        self.total_tokens = match (self.total_tokens, other.total_tokens()) {
-            (Some(a), Some(b)) => Some(a + b),
-            _ => None,
-        };
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1107,36 +861,6 @@ fn convert_openai_message_content(
     }
 }
 
-impl From<OpenAICompatibleTool> for ClientSideFunctionTool {
-    fn from(tool: OpenAICompatibleTool) -> Self {
-        match tool {
-            OpenAICompatibleTool::Function {
-                description,
-                name,
-                parameters,
-                strict,
-            } => ClientSideFunctionTool {
-                description: description.unwrap_or_default(),
-                parameters,
-                name,
-                strict,
-            },
-        }
-    }
-}
-
-impl From<OpenAICompatibleToolCall> for ToolCallWrapper {
-    fn from(tool_call: OpenAICompatibleToolCall) -> Self {
-        ToolCallWrapper::InferenceResponseToolCall(InferenceResponseToolCall {
-            id: tool_call.id,
-            raw_name: tool_call.function.name,
-            raw_arguments: tool_call.function.arguments,
-            name: None,
-            arguments: None,
-        })
-    }
-}
-
 impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
     fn from((inference_response, response_model_prefix): (InferenceResponse, String)) -> Self {
         match inference_response {
@@ -1224,29 +948,6 @@ fn process_chat_content(
         }
     }
     (content_str, tool_calls)
-}
-
-impl From<InferenceResponseToolCall> for OpenAICompatibleToolCall {
-    fn from(tool_call: InferenceResponseToolCall) -> Self {
-        OpenAICompatibleToolCall {
-            id: tool_call.id,
-            r#type: "function".to_string(),
-            function: OpenAICompatibleFunctionCall {
-                name: tool_call.raw_name,
-                arguments: tool_call.raw_arguments,
-            },
-        }
-    }
-}
-
-impl From<Usage> for OpenAICompatibleUsage {
-    fn from(usage: Usage) -> Self {
-        OpenAICompatibleUsage {
-            prompt_tokens: usage.input_tokens,
-            completion_tokens: usage.output_tokens,
-            total_tokens: usage.total_tokens(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1498,7 +1199,7 @@ mod tests {
     use crate::cache::CacheEnabledMode;
     use crate::inference::types::file::Detail;
     use crate::inference::types::{System, Text, TextChunk};
-    use crate::tool::ToolCallChunk;
+    use crate::tool::{InferenceResponseToolCall, ToolCallChunk, ToolCallWrapper};
     use crate::utils::testing::capture_logs;
 
     #[test]
@@ -1515,28 +1216,12 @@ mod tests {
             max_tokens: Some(100),
             max_completion_tokens: Some(50),
             presence_penalty: Some(0.5),
-            response_format: None,
             seed: Some(23),
-            stream: None,
             temperature: Some(0.5),
-            tools: None,
-            tool_choice: None,
             top_p: Some(0.5),
-            parallel_tool_calls: None,
             tensorzero_episode_id: Some(episode_id),
             tensorzero_variant_name: Some("test_variant".to_string()),
-            tensorzero_dryrun: None,
-            tensorzero_cache_options: None,
-            tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-            tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
             tensorzero_tags: tensorzero_tags.clone(),
-            tensorzero_deny_unknown_fields: false,
-            tensorzero_credentials: InferenceCredentials::default(),
-            unknown_fields: Default::default(),
-            stream_options: None,
-            stop: None,
-            tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2427,32 +2112,6 @@ mod tests {
                 content: Value::String("test".to_string()),
             })],
             model: "tensorzero::function_name::test_function".into(),
-            frequency_penalty: None,
-            max_tokens: None,
-            max_completion_tokens: None,
-            presence_penalty: None,
-            response_format: None,
-            seed: None,
-            stream: None,
-            temperature: None,
-            tools: None,
-            tool_choice: None,
-            top_p: None,
-            parallel_tool_calls: None,
-            tensorzero_variant_name: None,
-            tensorzero_dryrun: None,
-            tensorzero_episode_id: None,
-            tensorzero_cache_options: None,
-            tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-            tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-            tensorzero_tags: HashMap::new(),
-            tensorzero_credentials: InferenceCredentials::default(),
-            unknown_fields: Default::default(),
-            stream_options: None,
-            stop: None,
-            tensorzero_deny_unknown_fields: false,
-            tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2464,35 +2123,10 @@ mod tests {
                 content: Value::String("test".to_string()),
             })],
             model: "tensorzero::function_name::test_function".into(),
-            frequency_penalty: None,
-            max_tokens: None,
-            max_completion_tokens: None,
-            presence_penalty: None,
-            response_format: None,
-            seed: None,
-            stream: None,
-            temperature: None,
-            tools: None,
-            tool_choice: None,
-            top_p: None,
-            parallel_tool_calls: None,
-            tensorzero_variant_name: None,
-            tensorzero_dryrun: None,
-            tensorzero_episode_id: None,
             tensorzero_cache_options: Some(CacheParamsOptions {
                 max_age_s: Some(3600),
                 enabled: CacheEnabledMode::On,
             }),
-            tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-            tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-            tensorzero_tags: HashMap::new(),
-            tensorzero_credentials: InferenceCredentials::default(),
-            unknown_fields: Default::default(),
-            stream_options: None,
-            stop: None,
-            tensorzero_deny_unknown_fields: false,
-            tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2510,35 +2144,11 @@ mod tests {
                 content: Value::String("test".to_string()),
             })],
             model: "tensorzero::function_name::test_function".into(),
-            frequency_penalty: None,
-            max_tokens: None,
-            max_completion_tokens: None,
-            presence_penalty: None,
-            response_format: None,
-            seed: None,
-            stream: None,
-            temperature: None,
-            tools: None,
-            tool_choice: None,
-            top_p: None,
-            parallel_tool_calls: None,
-            tensorzero_variant_name: None,
             tensorzero_dryrun: Some(true),
-            tensorzero_episode_id: None,
             tensorzero_cache_options: Some(CacheParamsOptions {
                 max_age_s: Some(3600),
                 enabled: CacheEnabledMode::On,
             }),
-            tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-            tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-            tensorzero_tags: HashMap::new(),
-            tensorzero_credentials: InferenceCredentials::default(),
-            unknown_fields: Default::default(),
-            stream_options: None,
-            stop: None,
-            tensorzero_deny_unknown_fields: false,
-            tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2556,35 +2166,11 @@ mod tests {
                 content: Value::String("test".to_string()),
             })],
             model: "tensorzero::function_name::test_function".into(),
-            frequency_penalty: None,
-            max_tokens: None,
-            max_completion_tokens: None,
-            presence_penalty: None,
-            response_format: None,
-            seed: None,
-            stream: None,
-            temperature: None,
-            tools: None,
-            tool_choice: None,
-            top_p: None,
-            parallel_tool_calls: None,
-            tensorzero_variant_name: None,
             tensorzero_dryrun: Some(true),
-            tensorzero_episode_id: None,
             tensorzero_cache_options: Some(CacheParamsOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             }),
-            tensorzero_extra_body: UnfilteredInferenceExtraBody::default(),
-            tensorzero_extra_headers: UnfilteredInferenceExtraHeaders::default(),
-            tensorzero_tags: HashMap::new(),
-            tensorzero_credentials: InferenceCredentials::default(),
-            unknown_fields: Default::default(),
-            stream_options: None,
-            stop: None,
-            tensorzero_deny_unknown_fields: false,
-            tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: vec![],
             ..Default::default()
         })
         .unwrap();
@@ -2595,253 +2181,6 @@ mod tests {
                 enabled: CacheEnabledMode::WriteOnly
             }
         );
-    }
-
-    #[test]
-    fn test_chat_completion_tool_choice_option_deserialization_and_conversion() {
-        // Test deserialization from JSON and conversion to OpenAICompatibleToolChoiceParams
-
-        // Test None variant
-        let json_none = json!("none");
-        let tool_choice: ChatCompletionToolChoiceOption =
-            serde_json::from_value(json_none).unwrap();
-        assert_eq!(tool_choice, ChatCompletionToolChoiceOption::None);
-        let params = tool_choice.into_tool_params();
-        assert_eq!(params.allowed_tools, None);
-        assert_eq!(params.tool_choice, Some(ToolChoice::None));
-
-        // Test Auto variant
-        let json_auto = json!("auto");
-        let tool_choice: ChatCompletionToolChoiceOption =
-            serde_json::from_value(json_auto).unwrap();
-        assert_eq!(tool_choice, ChatCompletionToolChoiceOption::Auto);
-        let params = tool_choice.into_tool_params();
-        assert_eq!(params.allowed_tools, None);
-        assert_eq!(params.tool_choice, Some(ToolChoice::Auto));
-
-        // Test Required variant
-        let json_required = json!("required");
-        let tool_choice: ChatCompletionToolChoiceOption =
-            serde_json::from_value(json_required).unwrap();
-        assert_eq!(tool_choice, ChatCompletionToolChoiceOption::Required);
-        let params = tool_choice.into_tool_params();
-        assert_eq!(params.allowed_tools, None);
-        assert_eq!(params.tool_choice, Some(ToolChoice::Required));
-
-        // Test Named variant (specific tool)
-        let json_named = json!({
-            "type": "function",
-            "function": {
-                "name": "get_weather"
-            }
-        });
-        let tool_choice: ChatCompletionToolChoiceOption =
-            serde_json::from_value(json_named).unwrap();
-        assert_eq!(
-            tool_choice,
-            ChatCompletionToolChoiceOption::Named(OpenAICompatibleNamedToolChoice {
-                r#type: "function".to_string(),
-                function: FunctionName {
-                    name: "get_weather".to_string()
-                }
-            })
-        );
-        let params = tool_choice.into_tool_params();
-        assert_eq!(params.allowed_tools, None);
-        assert_eq!(
-            params.tool_choice,
-            Some(ToolChoice::Specific("get_weather".to_string()))
-        );
-
-        // Test AllowedTools variant with auto mode
-        let json_allowed_auto = json!({
-            "type": "allowed_tools",
-            "allowed_tools": {
-            "tools": [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_weather"
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "send_email"
-                    }
-                }
-            ],
-            "mode": "auto"
-        }});
-        let tool_choice: ChatCompletionToolChoiceOption =
-            serde_json::from_value(json_allowed_auto).unwrap();
-        assert_eq!(
-            tool_choice,
-            ChatCompletionToolChoiceOption::AllowedTools(OpenAICompatibleAllowedTools {
-                tools: vec![
-                    OpenAICompatibleNamedToolChoice {
-                        r#type: "function".to_string(),
-                        function: FunctionName {
-                            name: "get_weather".to_string()
-                        }
-                    },
-                    OpenAICompatibleNamedToolChoice {
-                        r#type: "function".to_string(),
-                        function: FunctionName {
-                            name: "send_email".to_string()
-                        }
-                    }
-                ],
-                mode: OpenAICompatibleAllowedToolsMode::Auto
-            })
-        );
-        let params = tool_choice.into_tool_params();
-        assert_eq!(
-            params.allowed_tools,
-            Some(vec!["get_weather".to_string(), "send_email".to_string()])
-        );
-        assert_eq!(params.tool_choice, Some(ToolChoice::Auto));
-
-        // Test AllowedTools variant with required mode
-        let json_allowed_required = json!({
-            "type": "allowed_tools",
-            "allowed_tools": {
-            "tools": [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_weather"
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "send_email"
-                    }
-                }
-            ],
-            "mode": "required"
-        }});
-        let tool_choice: ChatCompletionToolChoiceOption =
-            serde_json::from_value(json_allowed_required).unwrap();
-        assert_eq!(
-            tool_choice,
-            ChatCompletionToolChoiceOption::AllowedTools(OpenAICompatibleAllowedTools {
-                tools: vec![
-                    OpenAICompatibleNamedToolChoice {
-                        r#type: "function".to_string(),
-                        function: FunctionName {
-                            name: "get_weather".to_string()
-                        }
-                    },
-                    OpenAICompatibleNamedToolChoice {
-                        r#type: "function".to_string(),
-                        function: FunctionName {
-                            name: "send_email".to_string()
-                        }
-                    }
-                ],
-                mode: OpenAICompatibleAllowedToolsMode::Required
-            })
-        );
-        let params = tool_choice.into_tool_params();
-        assert_eq!(
-            params.allowed_tools,
-            Some(vec!["get_weather".to_string(), "send_email".to_string()])
-        );
-        assert_eq!(params.tool_choice, Some(ToolChoice::Required));
-
-        // Test default value (should be None)
-        let tool_choice_default = ChatCompletionToolChoiceOption::default();
-        assert_eq!(tool_choice_default, ChatCompletionToolChoiceOption::None);
-        let params_default = tool_choice_default.into_tool_params();
-        assert_eq!(params_default.allowed_tools, None);
-        assert_eq!(params_default.tool_choice, Some(ToolChoice::None));
-    }
-
-    #[test]
-    fn test_chat_completion_tool_choice_option_invalid_deserialization() {
-        // Test invalid JSON values that should fail to deserialize
-
-        // Invalid string value
-        let json_invalid = json!("invalid_choice");
-        let result: Result<ChatCompletionToolChoiceOption, _> =
-            serde_json::from_value(json_invalid);
-        assert!(result.is_err());
-
-        // Invalid object structure for named tool choice
-        let json_invalid_named = json!({
-            "type": "invalid_type",
-            "function": {
-                "name": "test"
-            }
-        });
-        let result: Result<ChatCompletionToolChoiceOption, _> =
-            serde_json::from_value(json_invalid_named);
-        assert!(result.is_err());
-
-        // Missing function name in named tool choice
-        let json_missing_name = json!({
-            "type": "function",
-            "function": {}
-        });
-        let result: Result<ChatCompletionToolChoiceOption, _> =
-            serde_json::from_value(json_missing_name);
-        assert!(result.is_err());
-
-        // Invalid mode in allowed tools
-        let json_invalid_mode = json!({
-            "tools": [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "test"
-                    }
-                }
-            ],
-            "mode": "invalid_mode"
-        });
-        let result: Result<ChatCompletionToolChoiceOption, _> =
-            serde_json::from_value(json_invalid_mode);
-        assert!(result.is_err());
-
-        // Test AllowedTools variant with no type
-        let json_allowed_required = json!({
-            "allowed_tools": {
-            "tools": [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_weather"
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "send_email"
-                    }
-                }
-            ],
-            "mode": "required"
-        }});
-        let err = serde_json::from_value::<ChatCompletionToolChoiceOption>(json_allowed_required)
-            .unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "Tool choice field must have a 'type' field if it is an object"
-        );
-    }
-
-    #[test]
-    fn test_openai_compatible_allowed_tools_mode_conversion() {
-        // Test conversion from OpenAICompatibleAllowedToolsMode to ToolChoice
-        let auto_mode = OpenAICompatibleAllowedToolsMode::Auto;
-        let tool_choice: ToolChoice = auto_mode.into();
-        assert_eq!(tool_choice, ToolChoice::Auto);
-
-        let required_mode = OpenAICompatibleAllowedToolsMode::Required;
-        let tool_choice: ToolChoice = required_mode.into();
-        assert_eq!(tool_choice, ToolChoice::Required);
     }
 
     #[test]
