@@ -9,7 +9,6 @@ use crate::{
     },
     providers::common::FERRIS_PNG,
 };
-use axum::http::HeaderValue;
 use base64::prelude::*;
 use futures::StreamExt;
 use opentelemetry_sdk::trace::SpanData;
@@ -17,8 +16,8 @@ use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use tensorzero::{
-    ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput,
-    ClientInputMessage, ClientInputMessageContent, InferenceOutput, InferenceResponse,
+    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::inference::types::{Arguments, StoredInput, System};
 use tensorzero_core::observability::enter_fake_http_request_otel;
