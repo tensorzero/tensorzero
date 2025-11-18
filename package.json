@@ -1,7 +1,7 @@
 {
   "scripts": {
     "build-bindings": "pnpm --filter=tensorzero-node build-bindings",
-    "generate-python-schemas": "cd clients/python && uv run --no-project python generate_schema_types.py",
+    "generate-python-schemas": "cd clients/python && uv run --no-project ./generate_schema_types.py",
     "ui:dev": "pnpm --filter=tensorzero-ui dev",
     "ui:storybook": "pnpm --filter=tensorzero-ui storybook",
     "ui:test": "pnpm --filter=tensorzero-ui test",
