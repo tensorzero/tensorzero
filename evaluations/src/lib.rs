@@ -473,12 +473,8 @@ pub async fn run_evaluation_core_streaming(
     let mut task_id_to_datapoint_id = HashMap::new();
 
     // Setup stopping manager for adaptive stopping
-    let evaluator_names: Vec<String> = inference_evaluation_config
-        .evaluators
-        .keys()
-        .cloned()
-        .collect();
-    let mut stopping_manager = stopping::StoppingManager::new(precision_targets, &evaluator_names);
+    let mut stopping_manager =
+        stopping::StoppingManager::new(&inference_evaluation_config.evaluators, precision_targets);
 
     let run_info = RunInfo {
         evaluation_run_id: args.evaluation_run_id,
@@ -699,8 +695,8 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         inference_cache,
     } = params;
 
-    // Extract variant_name, dynamic_variant_config, and dryrun from the variant enum
-    let (variant_name, dynamic_variant_config, dryrun) = match variant {
+    // Extract variant_name, internal_dynamic_variant_config, and dryrun from the variant enum
+    let (variant_name, internal_dynamic_variant_config, dryrun) = match variant {
         EvaluationVariant::Name(name) => (Some(name.clone()), None, false),
         EvaluationVariant::Info(info) => {
             // When using dynamic variant config, we must set dryrun=true to bypass
@@ -777,7 +773,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         internal: true,
         extra_body: Default::default(),
         extra_headers: Default::default(),
-        internal_dynamic_variant_config: dynamic_variant_config.clone(),
+        internal_dynamic_variant_config: internal_dynamic_variant_config.clone(),
         otlp_traces_extra_headers: HashMap::new(),
     };
     debug!("Making inference request");

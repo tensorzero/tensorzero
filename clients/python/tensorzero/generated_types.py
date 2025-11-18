@@ -354,22 +354,14 @@ OrderDirection = Literal["ascending", "descending"]
 
 
 @dataclass(kw_only=True)
-class DatapointMetadataUpdate:
-    name: str | None | UnsetType = UNSET
-    """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    """
-
-
-@dataclass(kw_only=True)
 class UpdateDatapointMetadataRequest:
     id: str
     """
     The ID of the datapoint to update. Required.
     """
-    metadata: DatapointMetadataUpdate
+    name: str | None | UnsetType = UNSET
     """
-    Metadata fields to update.
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     """
 
 
@@ -390,6 +382,14 @@ class CreateDatapointsResponse:
     ids: list[str]
     """
     The IDs of the newly-generated datapoints.
+    """
+
+
+@dataclass(kw_only=True)
+class DatapointMetadataUpdate:
+    name: str | None | UnsetType = UNSET
+    """
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     """
 
 
@@ -962,9 +962,9 @@ class UpdateChatDatapointRequestInternal:
     Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     it will be overwrite the existing tags.
     """
-    metadata: DatapointMetadataUpdate | None = None
+    name: str | None | UnsetType = UNSET
     """
-    Metadata fields. If omitted, it will be left unchanged.
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     """
 
 
@@ -994,9 +994,9 @@ class UpdateJsonDatapointRequestInternal:
     Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     it will be overwrite the existing tags.
     """
-    metadata: DatapointMetadataUpdate | None = None
+    name: str | None | UnsetType = UNSET
     """
-    Metadata fields. If omitted, it will be left unchanged.
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     """
 
 
