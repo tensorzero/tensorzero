@@ -1,6 +1,5 @@
 use chrono::Duration;
 use once_cell::sync::OnceCell;
-use std::fmt::Debug;
 use std::{
     pin::Pin,
     sync::{
@@ -104,7 +103,7 @@ const CONCURRENCY_LIMIT: u8 = 100;
 
 /// A wrapper for `reqwest::Client` that adds extra features:
 /// * Improved connection pooling support for HTTP/2
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct TensorzeroHttpClient {
     // A 'waterfall' of clients for connecting pooling.
     // When we try to obtain a client with `take_ticket`, we iterate over
@@ -132,22 +131,7 @@ pub struct TensorzeroHttpClient {
     clients: Arc<[OnceCell<LimitedClient>]>,
     fallback_client: Arc<LimitedClient>,
     global_outbound_http_timeout: Duration,
-    customize_builder: CustomizeBuilderFn,
 }
-
-impl Debug for TensorzeroHttpClient {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TensorzeroHttpClient")
-            .field(
-                "global_outbound_http_timeout",
-                &self.global_outbound_http_timeout,
-            )
-            .finish()
-    }
-}
-
-type CustomizeBuilderFn =
-    Arc<dyn Fn(reqwest::ClientBuilder) -> Result<reqwest::ClientBuilder, Error> + Send + Sync>;
 
 #[cfg(any(test, feature = "e2e_tests", feature = "pyo3"))]
 impl Default for TensorzeroHttpClient {
@@ -164,12 +148,6 @@ impl TensorzeroHttpClient {
         Self::new(DEFAULT_HTTP_CLIENT_TIMEOUT)
     }
     pub fn new(global_outbound_http_timeout: Duration) -> Result<Self, Error> {
-        Self::new_with_customizer(global_outbound_http_timeout, Arc::new(Ok))
-    }
-    pub fn new_with_customizer(
-        global_outbound_http_timeout: Duration,
-        customize_builder: CustomizeBuilderFn,
-    ) -> Result<Self, Error> {
         let clients = (0..MAX_NUM_CLIENTS)
             .map(|_| OnceCell::new())
             .collect::<Vec<_>>();
@@ -177,10 +155,9 @@ impl TensorzeroHttpClient {
             clients: clients.into(),
             fallback_client: Arc::new(LimitedClient {
                 concurrent_requests: Arc::new(AtomicU8::new(0)),
-                client: build_client(global_outbound_http_timeout, &customize_builder)?,
+                client: build_client(global_outbound_http_timeout)?,
             }),
             global_outbound_http_timeout,
-            customize_builder,
         };
         // Eagerly initialize the first `OnceCell` in the array
         client.take_ticket();
@@ -192,10 +169,7 @@ impl TensorzeroHttpClient {
             let client = match client_cell.get_or_try_init(|| {
                 Ok::<_, Error>(LimitedClient {
                     concurrent_requests: Arc::new(AtomicU8::new(0)),
-                    client: build_client(
-                        self.global_outbound_http_timeout,
-                        &self.customize_builder,
-                    )?,
+                    client: build_client(self.global_outbound_http_timeout)?,
                 })
             }) {
                 Ok(client) => client,
@@ -380,16 +354,16 @@ impl<'a> TensorzeroRequestBuilder<'a> {
         }
     }
 
-    pub fn query<T: Serialize + ?Sized>(self, query: &T) -> TensorzeroRequestBuilder<'a> {
+    pub fn timeout(self, timeout: std::time::Duration) -> TensorzeroRequestBuilder<'a> {
         Self {
-            builder: self.builder.query(query),
+            builder: self.builder.timeout(timeout),
             ticket: self.ticket,
         }
     }
 
-    pub fn timeout(self, timeout: std::time::Duration) -> TensorzeroRequestBuilder<'a> {
+    pub fn query<T: Serialize + ?Sized>(self, query: &T) -> TensorzeroRequestBuilder<'a> {
         Self {
-            builder: self.builder.timeout(timeout),
+            builder: self.builder.query(query),
             ticket: self.ticket,
         }
     }
@@ -525,10 +499,7 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 // Users can customize it via `gateway.global_outbound_http_timeout_ms` in the config file.
 pub const DEFAULT_HTTP_CLIENT_TIMEOUT: Duration = Duration::seconds(5 * 60);
 
-fn build_client(
-    global_outbound_http_timeout: Duration,
-    customize_builder: &CustomizeBuilderFn,
-) -> Result<Client, Error> {
+fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error> {
     let mut http_client_builder = Client::builder()
         .timeout(global_outbound_http_timeout.to_std().map_err(|e| {
             Error::new(ErrorDetails::InternalError {
@@ -555,13 +526,12 @@ fn build_client(
                 .danger_accept_invalid_certs(true);
         }
     }
-    customize_builder(http_client_builder)?
-        .build()
-        .map_err(|e| {
-            Error::new(ErrorDetails::AppState {
-                message: format!("Failed to build HTTP client: {e}"),
-            })
+
+    http_client_builder.build().map_err(|e| {
+        Error::new(ErrorDetails::AppState {
+            message: format!("Failed to build HTTP client: {e}"),
         })
+    })
 }
 
 #[cfg(test)]

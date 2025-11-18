@@ -16,6 +16,7 @@ use crate::{
 };
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::Event;
+use secrecy::{ExposeSecret, SecretString};
 use std::fmt::Debug;
 use thiserror::Error;
 use tokio::{sync::Mutex, time::error::Elapsed};
@@ -69,16 +70,16 @@ impl Debug for ClientMode {
 pub struct HTTPGateway {
     pub base_url: Url,
     pub http_client: TensorzeroHttpClient,
+    headers: HeaderMap,
+    timeout: Option<Duration>,
+    verbose_errors: bool,
     pub gateway_version: Mutex<Option<String>>, // Needs interior mutability so it can be set on every request
 }
 
 impl HTTPGateway {
     /// Sets the gateway version on the HTTPGateway struct.
     /// This should be called if the HTTPGateway is constructed within an async context.
-    pub async fn discover_initialize_gateway_version(
-        &self,
-        client: &Client,
-    ) -> Result<(), ClientBuilderError> {
+    pub async fn discover_initialize_gateway_version(&self) -> Result<(), ClientBuilderError> {
         let status_url = self.base_url.join("status").map_err(|_| {
             ClientBuilderError::GatewayVersion("Failed to construct /status URL".to_string())
         })?;
@@ -88,11 +89,104 @@ impl HTTPGateway {
             Err(_) => return Ok(()),
         };
 
-        client
-            .update_gateway_version_from_headers(status_response.headers())
+        self.update_gateway_version_from_headers(status_response.headers())
             .await;
 
         Ok(())
+    }
+
+    async fn update_gateway_version_from_headers(&self, headers: &HeaderMap) {
+        let mut version = headers
+            .get("x-tensorzero-gateway-version")
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
+        if cfg!(feature = "e2e_tests") {
+            if let Ok(version_override) = env::var("TENSORZERO_E2E_GATEWAY_VERSION_OVERRIDE") {
+                version = Some(version_override);
+            }
+        };
+        if let Some(version) = version {
+            // Acquire the lock on the gateway version
+            let mut gateway_version = self.gateway_version.lock().await;
+            *gateway_version = Some(version);
+        }
+    }
+
+    pub async fn check_http_response(
+        &self,
+        resp: Result<reqwest::Response, reqwest::Error>,
+    ) -> Result<reqwest::Response, TensorZeroError> {
+        let resp = resp.map_err(|e| {
+            if e.is_timeout() {
+                TensorZeroError::RequestTimeout
+            } else {
+                TensorZeroError::Other {
+                    source: crate::error::Error::new(ErrorDetails::JsonRequest {
+                        message: format!(
+                            "Error from server: {}",
+                            DisplayOrDebug {
+                                val: e,
+                                debug: self.verbose_errors,
+                            }
+                        ),
+                    })
+                    .into(),
+                }
+            }
+        })?;
+
+        self.update_gateway_version_from_headers(resp.headers())
+            .await;
+
+        if let Err(e) = resp.error_for_status_ref() {
+            let status_code = resp.status().as_u16();
+            let text = resp.text().await.ok();
+            return Err(TensorZeroError::Http {
+                status_code,
+                text,
+                source: crate::error::Error::new(ErrorDetails::JsonRequest {
+                    message: format!(
+                        "Request failed: {}",
+                        DisplayOrDebug {
+                            val: e,
+                            debug: self.verbose_errors,
+                        }
+                    ),
+                })
+                .into(),
+            });
+        }
+        Ok(resp)
+    }
+
+    pub async fn send_and_parse_http_response<T: serde::de::DeserializeOwned>(
+        &self,
+        mut builder: TensorzeroRequestBuilder<'_>,
+    ) -> Result<T, TensorZeroError> {
+        // Apply timeout if provided
+        if let Some(timeout) = self.timeout {
+            builder = builder.timeout(timeout);
+        }
+
+        // Apply API key as default Authorization header if provided
+        builder = builder.headers(self.headers.clone());
+        let resp = builder.send().await;
+        self.check_http_response(resp)
+            .await?
+            .json()
+            .await
+            .map_err(|e| TensorZeroError::Other {
+                source: crate::error::Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error deserializing response: {}",
+                        DisplayOrDebug {
+                            val: e,
+                            debug: self.verbose_errors,
+                        }
+                    ),
+                })
+                .into(),
+            })
     }
 }
 
@@ -105,9 +199,9 @@ pub struct EmbeddedGateway {
 /// in either `HTTPGateway` or `EmbeddedGateway` mode
 pub struct ClientBuilder {
     mode: ClientBuilderMode,
-    http_client: Option<reqwest::Client>,
+    http_client: Option<TensorzeroHttpClient>,
     verbose_errors: bool,
-    api_key: Option<String>,
+    api_key: Option<SecretString>,
     timeout: Option<Duration>,
     drop_wrapper: Option<DropWrapper>,
 }
@@ -242,11 +336,11 @@ impl ClientBuilder {
         }
     }
 
-    /// Sets the `reqwest::Client` to be used when making any HTTP requests.
+    /// Sets the `TensorzeroHttpClient` to be used when making any HTTP requests.
     /// In `EmbeddedGateway` mode, this is used for making requests to model endpoints,
     /// as well as ClickHouse.
     /// In `HTTPGateway` mode, this is used for making requests to the gateway.
-    pub fn with_http_client(mut self, client: reqwest::Client) -> Self {
+    pub fn with_http_client(mut self, client: TensorzeroHttpClient) -> Self {
         self.http_client = Some(client);
         self
     }
@@ -265,7 +359,7 @@ impl ClientBuilder {
     /// This is only used in `HTTPGateway` mode.
     /// If not set, the client will attempt to read from the `TENSORZERO_API_KEY` environment variable.
     pub fn with_api_key(mut self, api_key: String) -> Self {
-        self.api_key = Some(api_key);
+        self.api_key = Some(api_key.into());
         self
     }
 
@@ -294,7 +388,7 @@ impl ClientBuilder {
             ClientBuilderMode::HTTPGateway { .. } => {
                 let client = self.build_http()?;
                 if let ClientMode::HTTPGateway(mode) = &*client.mode {
-                    mode.discover_initialize_gateway_version(&client).await?;
+                    mode.discover_initialize_gateway_version().await?;
                 }
                 Ok(client)
             }
@@ -509,53 +603,17 @@ impl ClientBuilder {
         }
 
         // Try to get API key from constructor parameter, otherwise try environment variable
-        let api_key = self.api_key.or_else(|| env::var("TENSORZERO_API_KEY").ok());
+        let api_key = self
+            .api_key
+            .or_else(|| env::var("TENSORZERO_API_KEY").ok().map(|s| s.into()));
 
         // Build the HTTP client, applying timeout and/or API key
-        let http_client = if self.http_client.is_some() {
-            // Making this work with `TensorzeroHttpClient` is tricky,
-            // so we don't support it for now.
-            return Err(ClientBuilderError::HTTPClientBuild(
-                TensorZeroError::Other {
-                    source: TensorZeroInternalError(crate::error::Error::new(
-                        ErrorDetails::AppState {
-                            message: "HTTP client cannot currently be provided in HTTPGateway mode"
-                                .to_string(),
-                        },
-                    )),
-                },
-            ));
+        let http_client = if let Some(http_client) = self.http_client {
+            http_client
         } else {
-            let customize_builder = Arc::new(
-                move |mut builder: reqwest::ClientBuilder| -> Result<reqwest::ClientBuilder, Error> {
-                    // Apply timeout if provided
-                    if let Some(timeout) = self.timeout {
-                        builder = builder.timeout(timeout);
-                    }
-
-                    // Apply API key as default Authorization header if provided
-                    if let Some(ref key) = api_key {
-                        let mut headers = HeaderMap::new();
-                        headers.insert(
-                            reqwest::header::AUTHORIZATION,
-                            reqwest::header::HeaderValue::from_str(&format!("Bearer {key}"))
-                                .map_err(|e| {
-                                    Error::new(ErrorDetails::InternalError {
-                                            message: format!(
-                                                "Failed to create authorization header: {e}"
-                                            ),
-                                        })
-                                })?,
-                        );
-                        builder = builder.default_headers(headers);
-                    }
-                    Ok(builder)
-                },
-            );
-            TensorzeroHttpClient::new_with_customizer(
-                // The timeout may be overridden by `customize_builder`
+            TensorzeroHttpClient::new(
+                // The timeout may be overridden in `send_and_parse_http_response`
                 DEFAULT_HTTP_CLIENT_TIMEOUT,
-                customize_builder,
             )
             .map_err(|e| {
                 ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
@@ -566,11 +624,41 @@ impl ClientBuilder {
                 })
             })?
         };
+
+        let mut headers = HeaderMap::new();
+        if let Some(key) = api_key {
+            headers.insert(
+                reqwest::header::AUTHORIZATION,
+                reqwest::header::HeaderValue::from_str(&format!("Bearer {}", key.expose_secret()))
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InternalError {
+                            message: format!("Failed to create authorization header: {e}"),
+                        })
+                    })
+                    .map_err(|e| TensorZeroError::Other {
+                        source: crate::error::Error::new(ErrorDetails::InternalError {
+                            message: format!("Failed to create authorization header: {e}"),
+                        })
+                        .into(),
+                    })
+                    .map_err(|e| {
+                        ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
+                            source: Error::new(ErrorDetails::InternalError {
+                                message: format!("Failed to create authorization header: {e}"),
+                            })
+                            .into(),
+                        })
+                    })?,
+            );
+        }
         Ok(Client {
             mode: Arc::new(ClientMode::HTTPGateway(HTTPGateway {
                 base_url: url,
                 http_client,
                 gateway_version: Mutex::new(None),
+                headers,
+                timeout: self.timeout,
+                verbose_errors: self.verbose_errors,
             })),
             verbose_errors: self.verbose_errors,
             #[cfg(feature = "e2e_tests")]
@@ -628,8 +716,7 @@ impl Client {
                         .into(),
                     })?;
                 let builder = client.http_client.post(url).json(&params);
-                self.send_and_parse_http_response(builder)
-                    .await
+                client.send_and_parse_http_response(builder).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 // We currently ban auth-enabled configs in embedded gateway mode,
@@ -709,8 +796,7 @@ impl Client {
                     ))
                 } else {
                     Ok(InferenceOutput::NonStreaming(
-                        self.send_and_parse_http_response(builder)
-                            .await?,
+                        client.send_and_parse_http_response(builder).await?,
                     ))
                 }
             }
@@ -773,8 +859,7 @@ impl Client {
                     .http_client
                     .get(url)
                     .query(&[("storage_path", storage_path_json)]);
-                self.send_and_parse_http_response(builder)
-                    .await
+                client.send_and_parse_http_response(builder).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
@@ -788,76 +873,6 @@ impl Client {
                 .await?)
             }
         }
-    }
-
-    pub async fn check_http_response(
-        &self,
-        resp: Result<reqwest::Response, reqwest::Error>,
-    ) -> Result<reqwest::Response, TensorZeroError> {
-        let resp = resp.map_err(|e| {
-            if e.is_timeout() {
-                TensorZeroError::RequestTimeout
-            } else {
-                TensorZeroError::Other {
-                    source: crate::error::Error::new(ErrorDetails::JsonRequest {
-                        message: format!(
-                            "Error from server: {}",
-                            DisplayOrDebug {
-                                val: e,
-                                debug: self.verbose_errors,
-                            }
-                        ),
-                    })
-                    .into(),
-                }
-            }
-        })?;
-
-        self.update_gateway_version_from_headers(resp.headers())
-            .await;
-
-        if let Err(e) = resp.error_for_status_ref() {
-            let status_code = resp.status().as_u16();
-            let text = resp.text().await.ok();
-            return Err(TensorZeroError::Http {
-                status_code,
-                text,
-                source: crate::error::Error::new(ErrorDetails::JsonRequest {
-                    message: format!(
-                        "Request failed: {}",
-                        DisplayOrDebug {
-                            val: e,
-                            debug: self.verbose_errors,
-                        }
-                    ),
-                })
-                .into(),
-            });
-        }
-        Ok(resp)
-    }
-
-    pub async fn send_and_parse_http_response<T: serde::de::DeserializeOwned>(
-        &self,
-        builder: TensorzeroRequestBuilder<'_>,
-    ) -> Result<T, TensorZeroError> {
-        let resp = builder.send().await;
-        self.check_http_response(resp)
-            .await?
-            .json()
-            .await
-            .map_err(|e| TensorZeroError::Other {
-                source: crate::error::Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error deserializing response: {}",
-                        DisplayOrDebug {
-                            val: e,
-                            debug: self.verbose_errors,
-                        }
-                    ),
-                })
-                .into(),
-            })
     }
 
     async fn http_inference_stream(
@@ -952,38 +967,6 @@ impl Client {
                 }
             }
         }))
-    }
-
-    async fn update_gateway_version_from_headers(&self, headers: &HeaderMap) {
-        let mut version = headers
-            .get("x-tensorzero-gateway-version")
-            .and_then(|v| v.to_str().ok())
-            .map(str::to_string);
-        if cfg!(feature = "e2e_tests") {
-            if let Ok(version_override) = env::var("TENSORZERO_E2E_GATEWAY_VERSION_OVERRIDE") {
-                version = Some(version_override);
-            }
-        };
-        if let Some(version) = version {
-            self.update_gateway_version(version).await;
-        }
-    }
-
-    async fn update_gateway_version(&self, version: String) {
-        match &*self.mode {
-            ClientMode::HTTPGateway(client) => {
-                // Acquire the lock on the gateway version
-                let mut gateway_version = client.gateway_version.lock().await;
-                *gateway_version = Some(version);
-            }
-            // Should never be called
-            ClientMode::EmbeddedGateway { .. } => {}
-        }
-    }
-
-    #[cfg(feature = "e2e_tests")]
-    pub async fn e2e_update_gateway_version(&self, version: String) {
-        self.update_gateway_version(version).await;
     }
 
     #[cfg(feature = "e2e_tests")]

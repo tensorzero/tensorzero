@@ -3420,58 +3420,6 @@ async fn test_tool_call_input_no_warning() {
     assert!(!logs_contain("deprecated"));
 }
 
-#[tokio::test]
-async fn test_client_no_version() {
-    let mut version_remove_headers = reqwest::header::HeaderMap::new();
-    version_remove_headers.append(
-        "x-tensorzero-e2e-version-remove",
-        HeaderValue::from_static("true"),
-    );
-
-    let http_remove_version = reqwest::ClientBuilder::new()
-        .default_headers(version_remove_headers)
-        .build()
-        .unwrap();
-
-    let remove_version_gateway = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
-        url: get_gateway_endpoint("/"),
-    })
-    .with_http_client(http_remove_version)
-    .build()
-    .await
-    .unwrap();
-
-    // The discovery query should not give a version, due to 'x-tensorzero-e2e-version-remove'
-    let version = remove_version_gateway.get_gateway_version().await;
-    assert_eq!(version, None);
-}
-
-#[tokio::test]
-async fn test_client_detect_version() {
-    let mut version_override_headers = reqwest::header::HeaderMap::new();
-    version_override_headers.append(
-        "x-tensorzero-e2e-version-override",
-        HeaderValue::from_static("3025.01.12"),
-    );
-
-    let http_client = reqwest::ClientBuilder::new()
-        .default_headers(version_override_headers)
-        .build()
-        .unwrap();
-
-    let gateway = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
-        url: get_gateway_endpoint("/"),
-    })
-    .with_http_client(http_client)
-    .build()
-    .await
-    .unwrap();
-
-    // The client should have used the version header (overridden by 'x-tensorzero-e2e-version-override')
-    let version = gateway.get_gateway_version().await;
-    assert_eq!(version, Some("3025.01.12".to_string()));
-}
-
 /// Test that a json inference with null response (i.e. no generated content blocks) works as expected.
 #[tokio::test]
 async fn test_chat_function_null_response() {
