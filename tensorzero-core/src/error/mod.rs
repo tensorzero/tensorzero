@@ -1082,7 +1082,7 @@ impl std::fmt::Display for ErrorDetails {
                 AnalysisError::DynamicLoadsFound(loads) => {
                     writeln!(
                         f,
-                        "Cannot statically analyze all template dependencies. Found {} dynamic load(s):",
+                        "TensorZero does not allow templates with dynamic paths to be loaded. Found {} dynamic load(s):",
                         loads.len()
                     )?;
                     for (i, load) in loads.iter().enumerate() {
@@ -1100,6 +1100,7 @@ impl std::fmt::Display for ErrorDetails {
                             load.source_quote
                         )?;
                     }
+                    writeln!(f, "Please use explicit paths to templates instead of variables. You may be able to use if / else statements to achieve the desired behavior.")?;
                     Ok(())
                 }
             },

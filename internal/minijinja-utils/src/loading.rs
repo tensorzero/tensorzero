@@ -574,7 +574,7 @@ pub fn collect_all_template_paths(
                 // Template doesn't exist in environment - skip analysis of this template
                 // The missing template will be handled later (e.g., at render time)
                 tracing::warn!(
-                    "Could not load referenced template '{}' from environment: {}. Skipping recursive analysis.",
+                    "Could not load referenced template `{}` from environment: {}. Skipping recursive analysis.",
                     current_template,
                     e
                 );
