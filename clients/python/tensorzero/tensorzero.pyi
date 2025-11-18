@@ -1038,7 +1038,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param variant_name: The name of the variant to evaluate
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
-        :param internal_dynamic_variant_config: Optional dynamic variant configuration to use instead of config file lookup [INTERNAL: This field is unstable and may change without notice.]
+        :param internal_dynamic_variant_config: Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
         :return: An EvaluationJobHandler for iterating over evaluation results
         """
         ...
