@@ -24,7 +24,7 @@ impl TemplateConfig<'_> {
     /// to template content.
     /// If `template_base_directory` is provided, we'll walk the templates explicitly configured,
     /// find all files that we can tell would be loaded, and eagerly load them.
-    pub fn initialize(
+    pub async fn initialize(
         &mut self,
         configured_templates: HashMap<String, String>,
         template_base_directory: Option<&Path>,
@@ -83,13 +83,8 @@ impl TemplateConfig<'_> {
             for template_path in all_discovered_templates {
                 let template_name = template_path.to_string_lossy();
 
-                // Skip configured templates (already in production environment)
-                if configured_templates.contains_key(template_name.as_ref()) {
-                    continue;
-                }
-
-                // Skip hardcoded templates
-                if template_name.starts_with("t0:") {
+                // Skip any template that is already in the environment
+                if self.env.get_template(&template_name).is_ok() {
                     continue;
                 }
 
@@ -106,17 +101,18 @@ impl TemplateConfig<'_> {
                 };
 
                 // Read template content from filesystem
-                let template_content = match std::fs::read_to_string(&absolute_template_path) {
-                    Ok(content) => content,
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to read template at {}: {}. Skipping.",
-                            absolute_template_path.display(),
-                            e
-                        );
-                        continue;
-                    }
-                };
+                let template_content =
+                    match tokio::fs::read_to_string(&absolute_template_path).await {
+                        Ok(content) => content,
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to read template at {}: {}. Skipping.",
+                                absolute_template_path.display(),
+                                e
+                            );
+                            continue;
+                        }
+                    };
 
                 // Add to production environment
                 self.env
@@ -328,9 +324,9 @@ pub(crate) mod tests {
     use super::*;
     use serde_json::json;
 
-    #[test]
-    fn test_template_good() {
-        let templates = get_test_template_config();
+    #[tokio::test]
+    async fn test_template_good() {
+        let templates = get_test_template_config().await;
         let template_name = "greeting";
 
         let context = serde_json::json!({"name": "world"});
@@ -375,33 +371,33 @@ pub(crate) mod tests {
         assert_eq!(result.unwrap(), "Hello, Charlie! You are thirty years old.");
     }
 
-    #[test]
-    fn test_template_malformed_template() {
+    #[tokio::test]
+    async fn test_template_malformed_template() {
         let malformed_template = "{{ unclosed_bracket";
         let mut template_config = TemplateConfig::new();
         let template_paths = HashMap::from([(
             "malformed_template".to_string(),
             malformed_template.to_string(),
         )]);
-        let result = template_config.initialize(template_paths, None);
+        let result = template_config.initialize(template_paths, None).await;
         assert!(result
             .unwrap_err()
             .to_string()
             .contains("Failed to add template"));
     }
 
-    #[test]
-    fn test_to_json_filter() {
-        let templates = get_test_template_config();
+    #[tokio::test]
+    async fn test_to_json_filter() {
+        let templates = get_test_template_config().await;
         let context = serde_json::json!({"input": ["hello", "world"]});
         let result = templates.template_message("user_with_tojson", &context);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello, [\"hello\",\"world\"]");
     }
 
-    #[test]
-    fn test_join_filter() {
-        let templates = get_test_template_config();
+    #[tokio::test]
+    async fn test_join_filter() {
+        let templates = get_test_template_config().await;
         let context = serde_json::json!({"input": ["hello", "hello", "world"]});
         let result = templates.template_message("user_with_join", &context);
         assert!(result.is_ok());
@@ -496,7 +492,7 @@ pub(crate) mod tests {
         )
     }
 
-    pub fn get_test_template_config<'a>() -> TemplateConfig<'a> {
+    pub async fn get_test_template_config<'a>() -> TemplateConfig<'a> {
         let mut templates = HashMap::new();
 
         // Template 1
@@ -552,14 +548,14 @@ pub(crate) mod tests {
 
         // Initialize templates
         let mut template_config = TemplateConfig::new();
-        let _ = template_config.initialize(templates, None);
+        let _ = template_config.initialize(templates, None).await;
         template_config
     }
 
-    #[test]
-    fn test_hardcoded_best_of_n_evaluator_system() {
+    #[tokio::test]
+    async fn test_hardcoded_best_of_n_evaluator_system() {
         let mut config = TemplateConfig::new();
-        config.initialize(HashMap::new(), None).unwrap();
+        config.initialize(HashMap::new(), None).await.unwrap();
 
         // 1. Test with inner_system_message and max_index = 3
         let context_with_message = json!({
@@ -620,10 +616,10 @@ In the "answer_choice" block: you should output the index of the best response."
         );
     }
 
-    #[test]
-    fn test_hardcoded_best_of_n_evaluator_candidates() {
+    #[tokio::test]
+    async fn test_hardcoded_best_of_n_evaluator_candidates() {
         let mut config = TemplateConfig::new();
-        config.initialize(HashMap::new(), None).unwrap();
+        config.initialize(HashMap::new(), None).await.unwrap();
 
         // Provide a list of candidates.
         let context = json!({
@@ -659,10 +655,10 @@ Please evaluate these candidates and provide the index of the best one.";
         );
     }
 
-    #[test]
-    fn test_hardcoded_mixture_of_n_fuser_system() {
+    #[tokio::test]
+    async fn test_hardcoded_mixture_of_n_fuser_system() {
         let mut config = TemplateConfig::new();
-        config.initialize(HashMap::new(), None).unwrap();
+        config.initialize(HashMap::new(), None).await.unwrap();
 
         // 1. With inner_system_message
         let context_with_message = json!({ "inner_system_message": "some system message" });
@@ -697,10 +693,10 @@ Your task is to synthesize these responses into a single, high-quality response.
         );
     }
 
-    #[test]
-    fn test_hardcoded_mixture_of_n_fuser_candidates() {
+    #[tokio::test]
+    async fn test_hardcoded_mixture_of_n_fuser_candidates() {
         let mut config = TemplateConfig::new();
-        config.initialize(HashMap::new(), None).unwrap();
+        config.initialize(HashMap::new(), None).await.unwrap();
 
         let context = json!({
             "candidates": [
@@ -736,8 +732,8 @@ Candidate response #2
 
     // Tests for filesystem template loading feature
 
-    #[test]
-    fn test_filesystem_template_loading_with_include() {
+    #[tokio::test]
+    async fn test_filesystem_template_loading_with_include() {
         // Setup: Create temp directory with template files
         let temp_dir = tempfile::TempDir::new().unwrap();
         let header_path = temp_dir.path().join("header.html");
@@ -751,7 +747,10 @@ Candidate response #2
         )]);
 
         // Initialize with filesystem access
-        config.initialize(templates, Some(temp_dir.path())).unwrap();
+        config
+            .initialize(templates, Some(temp_dir.path()))
+            .await
+            .unwrap();
 
         // Assert template renders correctly
         let result =
@@ -759,8 +758,8 @@ Candidate response #2
         assert_eq!(result.unwrap(), "<h1>Welcome</h1>Content");
     }
 
-    #[test]
-    fn test_filesystem_template_loading_nested_includes() {
+    #[tokio::test]
+    async fn test_filesystem_template_loading_nested_includes() {
         // Create temp directory with multiple template files
         let temp_dir = tempfile::TempDir::new().unwrap();
 
@@ -787,7 +786,10 @@ Candidate response #2
         let templates =
             HashMap::from([("main".to_string(), "{% include 'base.html' %}".to_string())]);
 
-        config.initialize(templates, Some(temp_dir.path())).unwrap();
+        config
+            .initialize(templates, Some(temp_dir.path()))
+            .await
+            .unwrap();
 
         // Assert all nested templates load and render correctly
         let result = config.template_message("main", &json!({"page_title": "My Page"}));
@@ -797,8 +799,8 @@ Candidate response #2
         );
     }
 
-    #[test]
-    fn test_filesystem_template_loading_dynamic_include_error() {
+    #[tokio::test]
+    async fn test_filesystem_template_loading_dynamic_include_error() {
         // Configure template with dynamic include (variable)
         let mut config = TemplateConfig::new();
         let templates = HashMap::from([(
@@ -810,7 +812,7 @@ Candidate response #2
         let temp_dir = tempfile::TempDir::new().unwrap();
 
         // Initialize should FAIL because collect_all_template_paths detects dynamic load
-        let result = config.initialize(templates, Some(temp_dir.path()));
+        let result = config.initialize(templates, Some(temp_dir.path())).await;
         assert!(result.is_err());
 
         // Verify error is DynamicTemplateLoad
@@ -832,8 +834,8 @@ Candidate response #2
         }
     }
 
-    #[test]
-    fn test_filesystem_template_loading_missing_file() {
+    #[tokio::test]
+    async fn test_filesystem_template_loading_missing_file() {
         // Configure template with static include
         let mut config = TemplateConfig::new();
         let templates = HashMap::from([(
@@ -845,7 +847,10 @@ Candidate response #2
         let temp_dir = tempfile::TempDir::new().unwrap();
 
         // Initialize should succeed (file is skipped with warning)
-        config.initialize(templates, Some(temp_dir.path())).unwrap();
+        config
+            .initialize(templates, Some(temp_dir.path()))
+            .await
+            .unwrap();
 
         // Attempting to render should fail because the included template wasn't loaded
         let result = config.template_message("main", &json!({}));
@@ -862,8 +867,8 @@ Candidate response #2
         }
     }
 
-    #[test]
-    fn test_filesystem_template_loading_unsafe_path() {
+    #[tokio::test]
+    async fn test_filesystem_template_loading_unsafe_path() {
         // Configure template with path traversal attempt
         let mut config = TemplateConfig::new();
         let templates = HashMap::from([(
@@ -875,15 +880,18 @@ Candidate response #2
         let temp_dir = tempfile::TempDir::new().unwrap();
 
         // Initialize should succeed (unsafe path is skipped with warning)
-        config.initialize(templates, Some(temp_dir.path())).unwrap();
+        config
+            .initialize(templates, Some(temp_dir.path()))
+            .await
+            .unwrap();
 
         // Attempting to render should fail because the template wasn't loaded
         let result = config.template_message("main", &json!({}));
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_filesystem_template_loading_without_base_directory() {
+    #[tokio::test]
+    async fn test_filesystem_template_loading_without_base_directory() {
         // Configure template with include
         let mut config = TemplateConfig::new();
         let templates = HashMap::from([(
@@ -892,7 +900,7 @@ Candidate response #2
         )]);
 
         // Initialize WITHOUT filesystem access
-        config.initialize(templates, None).unwrap();
+        config.initialize(templates, None).await.unwrap();
 
         // Attempting to render should fail with helpful error message
         let result = config.template_message("main", &json!({}));
@@ -910,23 +918,26 @@ Candidate response #2
         }
     }
 
-    #[test]
-    fn test_filesystem_template_loading_no_references() {
+    #[tokio::test]
+    async fn test_filesystem_template_loading_no_references() {
         // Configure simple template with no includes
         let mut config = TemplateConfig::new();
         let templates = HashMap::from([("simple".to_string(), "Hello {{ name }}".to_string())]);
 
         // Initialize with temp directory
         let temp_dir = tempfile::TempDir::new().unwrap();
-        config.initialize(templates, Some(temp_dir.path())).unwrap();
+        config
+            .initialize(templates, Some(temp_dir.path()))
+            .await
+            .unwrap();
 
         // Assert template renders normally
         let result = config.template_message("simple", &json!({"name": "World"}));
         assert_eq!(result.unwrap(), "Hello World");
     }
 
-    #[test]
-    fn test_filesystem_template_loading_subdirectories() {
+    #[tokio::test]
+    async fn test_filesystem_template_loading_subdirectories() {
         // Create temp directory with subdirectory structure
         let temp_dir = tempfile::TempDir::new().unwrap();
         let partials_dir = temp_dir.path().join("partials");
@@ -945,7 +956,10 @@ Candidate response #2
             "{% include 'partials/footer.html' %}".to_string(),
         )]);
 
-        config.initialize(templates, Some(temp_dir.path())).unwrap();
+        config
+            .initialize(templates, Some(temp_dir.path()))
+            .await
+            .unwrap();
 
         // Assert file loads correctly from subdirectory
         let result = config.template_message("main", &json!({"copyright": "2025"}));

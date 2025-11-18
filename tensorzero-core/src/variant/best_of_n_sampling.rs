@@ -866,9 +866,9 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_prepare_system_message() {
-        let templates = get_test_template_config();
+    #[tokio::test]
+    async fn test_prepare_system_message() {
+        let templates = get_test_template_config().await;
 
         let system_schema = StaticJSONSchema::from_value(serde_json::json!({
             "type": "object",
@@ -1052,7 +1052,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_candidate_message() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Create an EvaluatorConfig
         // Prepare some candidate InferenceResults
@@ -1144,7 +1144,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_candidate_message_json() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
@@ -1256,7 +1256,7 @@ mod tests {
             evaluator: evaluator_config,
         };
 
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),

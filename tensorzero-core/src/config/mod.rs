@@ -916,7 +916,9 @@ impl Config {
         } else {
             None
         };
-        templates.initialize(template_paths, template_fs_base_path.as_deref())?;
+        templates
+            .initialize(template_paths, template_fs_base_path.as_deref())
+            .await?;
         config.templates = Arc::new(templates.clone());
 
         // Validate the config
