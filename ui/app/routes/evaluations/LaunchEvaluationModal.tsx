@@ -1,8 +1,11 @@
 import { useLayoutEffect, useState, useEffect } from "react";
 import { useFetcher, Link } from "react-router";
+import { CircleHelp } from "lucide-react";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -16,6 +19,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import { useDatasetCountFetcher } from "~/routes/api/datasets/count_dataset_function.route";
 import { useConfig, useFunctionConfig } from "~/context/config";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -121,7 +130,7 @@ function EvaluationForm({
     functionConfig,
   ]);
 
-  // Initialize precision targets with 0.0 for all evaluators when evaluation changes
+  // Initialize precision targets with empty string for all evaluators when evaluation changes
   useEffect(() => {
     if (selectedEvaluationName) {
       const currentEvaluatorNames = Object.keys(
@@ -129,9 +138,9 @@ function EvaluationForm({
       );
       const newLimits: Record<string, string> = {};
 
-      // Always initialize all evaluators with 0.0 (reset when evaluation changes)
+      // Always initialize all evaluators with empty string (reset when evaluation changes)
       for (const evaluatorName of currentEvaluatorNames) {
-        newLimits[evaluatorName] = "0.0";
+        newLimits[evaluatorName] = "";
       }
 
       // Only update if the structure changed
@@ -282,12 +291,27 @@ function EvaluationForm({
         </SelectContent>
       </Select>
       <div className="mt-4">
-        <label
-          htmlFor="concurrency_limit"
-          className="mb-1 block text-sm font-medium"
-        >
-          Concurrency
-        </label>
+        <div className="mb-1 flex items-center gap-1.5">
+          <label htmlFor="concurrency_limit" className="text-sm font-medium">
+            Concurrency
+          </label>
+          <TooltipProvider>
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <span className="inline-flex cursor-help">
+                  <CircleHelp className="text-muted-foreground h-3.5 w-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p className="text-xs">
+                  The number of datapoints to evaluate in parallel. Increasing
+                  this value can speed up the evaluation run, but may trigger
+                  rate limiting from model providers.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
         <input
           type="number"
           id="concurrency_limit"
@@ -301,27 +325,35 @@ function EvaluationForm({
         />
       </div>
       <div className="mt-4">
-        <label
-          htmlFor="max_datapoints"
-          className="mb-1 block text-sm font-medium"
-        >
-          Max Datapoints
-        </label>
-        <p className="text-muted-foreground mb-2 text-xs">
-          Maximum number of datapoints to evaluate (optional)
-        </p>
-        <input
+        <div className="mb-2 flex items-center gap-1.5">
+          <label htmlFor="max_datapoints" className="text-sm font-medium">
+            Max Datapoints
+          </label>
+          <TooltipProvider>
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <span className="inline-flex cursor-help">
+                  <CircleHelp className="text-muted-foreground h-3.5 w-3.5" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                Maximum number of datapoints to evaluate (optional)
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+        <Input
           type="text"
           id="max_datapoints"
           name="max_datapoints"
           value={maxDatapoints}
           onChange={(e) => setMaxDatapoints(e.target.value)}
           placeholder="No limit"
-          className={`border-input bg-background w-full rounded-md border px-3 py-2 text-sm ${
+          className={
             !isMaxDatapointsValid && maxDatapoints !== ""
               ? "border-red-500 focus:ring-red-500"
               : ""
-          }`}
+          }
         />
         {!isMaxDatapointsValid && maxDatapoints !== "" && (
           <p className="mt-1 text-xs text-red-500">
@@ -388,17 +420,19 @@ export default function LaunchEvaluationModal({
   }, []);
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>Launch Evaluation</DialogTitle>
           <DialogDescription>
             Run an evaluation on a dataset to measure variant performance.
           </DialogDescription>
         </DialogHeader>
-        <EvaluationForm
-          key={initialFormState?.renderKey}
-          initialFormState={initialFormState}
-        />
+        <DialogBody>
+          <EvaluationForm
+            key={initialFormState?.renderKey}
+            initialFormState={initialFormState}
+          />
+        </DialogBody>
       </DialogContent>
     </Dialog>
   );

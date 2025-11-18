@@ -1,12 +1,20 @@
 import { useState } from "react";
+import { CircleHelp } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "~/components/ui/accordion";
+import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import type { InferenceCacheSetting } from "~/utils/evaluations.server";
 
 export interface AdvancedParametersAccordionProps {
@@ -89,15 +97,27 @@ export function AdvancedParametersAccordion({
             </div>
             {evaluatorNames.length > 0 && (
               <div>
-                <Label>Adaptive Stopping Precision</Label>
-                <p className="text-muted-foreground mb-3 text-xs">
-                  Stop running an evaluator when both sides of its 95%
-                  confidence interval are within the specified threshold of the
-                  mean value. (Set to 0 to disable early stopping)
-                </p>
+                <div className="mb-3 flex items-center gap-1.5">
+                  <Label>Adaptive Stopping Precision</Label>
+                  <TooltipProvider>
+                    <Tooltip delayDuration={300}>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex cursor-help">
+                          <CircleHelp className="text-muted-foreground h-3.5 w-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        Stop running an evaluator when both sides of its 95%
+                        confidence interval are within the specified threshold
+                        of the mean value. Set to 0 to disable adaptive
+                        stopping.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                 <div className="space-y-3">
                   {evaluatorNames.map((evaluatorName) => {
-                    const value = precisionTargets[evaluatorName] ?? "0.0";
+                    const value = precisionTargets[evaluatorName];
                     const isValid = isprecisionTargetValid(value);
                     return (
                       <div key={evaluatorName}>
@@ -108,7 +128,7 @@ export function AdvancedParametersAccordion({
                           >
                             {evaluatorName}
                           </Label>
-                          <input
+                          <Input
                             type="text"
                             id={`precision_target_${evaluatorName}`}
                             name={`precision_target_${evaluatorName}`}
@@ -120,7 +140,7 @@ export function AdvancedParametersAccordion({
                               )
                             }
                             placeholder="0.0"
-                            className={`border-input bg-background flex-1 rounded-md border px-3 py-2 text-sm ${
+                            className={`flex-1 ${
                               !isValid
                                 ? "border-red-500 focus:ring-red-500"
                                 : ""
