@@ -31,6 +31,17 @@ Role = Literal["user", "assistant"]
 
 @dataclass(kw_only=True)
 class StoredInputMessageContentText:
+    """
+    InputMessages are validated against the input schema of the Function
+    and then templated and transformed into RequestMessages for a particular Variant.
+    They might contain tool calls or tool results along with text.
+    The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
+    ContentBlocks are collected into RequestMessages.
+    These RequestMessages are collected into a ModelInferenceRequest,
+    which should contain all information needed by a ModelProvider to perform the
+    inference that is called for.
+    """
+
     text: str
     type: Literal["text"] = "text"
 
@@ -44,6 +55,10 @@ class StoredInputMessageContentTemplate:
 
 @dataclass(kw_only=True)
 class StoredInputMessageContentToolResult:
+    """
+    A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
+    """
+
     name: str
     result: str
     id: str
@@ -52,12 +67,22 @@ class StoredInputMessageContentToolResult:
 
 @dataclass(kw_only=True)
 class StoredInputMessageContentRawText:
+    """
+    Struct that represents raw text content that should be passed directly to the model
+    without any template processing or validation
+    """
+
     value: str
     type: Literal["raw_text"] = "raw_text"
 
 
 @dataclass(kw_only=True)
 class StoredInputMessageContentUnknown:
+    """
+    Struct that represents an unknown provider-specific content block.
+    We pass this along as-is without any validation or transformation.
+    """
+
     data: Any
     """
     The underlying content block to be passed to the model provider.
@@ -88,6 +113,10 @@ ThoughtSummaryBlock = ThoughtSummaryBlockSummaryText
 
 @dataclass(kw_only=True)
 class Thought:
+    """
+    Struct that represents a model's reasoning
+    """
+
     text: str | None = None
     signature: str | None = None
     """
@@ -105,6 +134,12 @@ class Thought:
 
 @dataclass(kw_only=True)
 class StorageKindS3Compatible:
+    """
+    Configuration for the object storage backend
+    Currently, we only support S3-compatible object storage and local filesystem storage
+    We test against Amazon S3, GCS, Cloudflare R2, and Minio
+    """
+
     type: Literal["s3_compatible"] = "s3_compatible"
     bucket_name: str | None = None
     region: str | None = None
@@ -119,12 +154,24 @@ class StorageKindS3Compatible:
 
 @dataclass(kw_only=True)
 class StorageKindFilesystem:
+    """
+    Configuration for the object storage backend
+    Currently, we only support S3-compatible object storage and local filesystem storage
+    We test against Amazon S3, GCS, Cloudflare R2, and Minio
+    """
+
     path: str
     type: Literal["filesystem"] = "filesystem"
 
 
 @dataclass(kw_only=True)
 class StorageKindDisabled:
+    """
+    Configuration for the object storage backend
+    Currently, we only support S3-compatible object storage and local filesystem storage
+    We test against Amazon S3, GCS, Cloudflare R2, and Minio
+    """
+
     type: Literal["disabled"] = "disabled"
 
 
@@ -133,17 +180,36 @@ StorageKind = StorageKindS3Compatible | StorageKindFilesystem | StorageKindDisab
 
 @dataclass(kw_only=True)
 class ContentBlockChatOutputText:
+    """
+    InputMessages are validated against the input schema of the Function
+    and then templated and transformed into RequestMessages for a particular Variant.
+    They might contain tool calls or tool results along with text.
+    The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
+    ContentBlocks are collected into RequestMessages.
+    These RequestMessages are collected into a ModelInferenceRequest,
+    which should contain all information needed by a ModelProvider to perform the
+    inference that is called for.
+    """
+
     text: str
     type: Literal["text"] = "text"
 
 
 @dataclass(kw_only=True)
 class ContentBlockChatOutputThought(Thought):
+    """
+    Defines the types of content block that can come from a `chat` function
+    """
+
     type: Literal["thought"] = "thought"
 
 
 @dataclass(kw_only=True)
 class ContentBlockChatOutputUnknown:
+    """
+    Defines the types of content block that can come from a `chat` function
+    """
+
     data: Any
     type: Literal["unknown"] = "unknown"
     model_provider_name: str | None = None
@@ -151,6 +217,14 @@ class ContentBlockChatOutputUnknown:
 
 @dataclass(kw_only=True)
 class InferenceResponseToolCall:
+    """
+    An InferenceResponseToolCall is a request by a model to call a Tool
+    in the form that we return to the client / ClickHouse
+    This includes some synactic sugar (parsing / validation of the tool arguments)
+    in the `arguments` field and the name in the `name` field.
+    We support looping this back through the TensorZero inference API via the ToolCallWrapper
+    """
+
     id: str
     """
     A Tool Call ID to match up with tool call responses. See #4058.
@@ -175,6 +249,14 @@ class InferenceResponseToolCall:
 
 @dataclass(kw_only=True)
 class FunctionTool:
+    """
+    `FunctionTool` is a particular kind of tool that relies
+    on the client to execute a function on their side (a ToolCall content block)
+    and return the result on the next turn (a ToolCallResult).
+    Notably, we assume there is a JSON schema `parameters` that specifies the
+    set of arguments that the tool will accept.
+    """
+
     description: str
     parameters: Any
     name: str
@@ -199,6 +281,10 @@ OpenAIGrammarSyntax = Literal["lark", "regex"]
 
 @dataclass(kw_only=True)
 class ToolChoiceSpecific:
+    """
+    Forces the LLM to call a specific tool. The String is the name of the tool.
+    """
+
     specific: str
 
 
@@ -216,6 +302,17 @@ ProviderToolScope = ProviderToolScopeModelProvider | None
 
 @dataclass(kw_only=True)
 class InputMessageContentText:
+    """
+    InputMessages are validated against the input schema of the Function
+    and then templated and transformed into RequestMessages for a particular Variant.
+    They might contain tool calls or tool results along with text.
+    The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
+    ContentBlocks are collected into RequestMessages.
+    These RequestMessages are collected into a ModelInferenceRequest,
+    which should contain all information needed by a ModelProvider to perform the
+    inference that is called for.
+    """
+
     text: str
     type: Literal["text"] = "text"
 
@@ -229,6 +326,10 @@ class InputMessageContentTemplate:
 
 @dataclass(kw_only=True)
 class InputMessageContentToolResult:
+    """
+    A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
+    """
+
     name: str
     result: str
     id: str
@@ -237,6 +338,11 @@ class InputMessageContentToolResult:
 
 @dataclass(kw_only=True)
 class InputMessageContentRawText:
+    """
+    Struct that represents raw text content that should be passed directly to the model
+    without any template processing or validation
+    """
+
     value: str
     type: Literal["raw_text"] = "raw_text"
 
@@ -248,6 +354,14 @@ class InputMessageContentThought(Thought):
 
 @dataclass(kw_only=True)
 class InputMessageContentUnknown:
+    """
+    An unknown content block type, used to allow passing provider-specific
+    content blocks (e.g. Anthropic's `redacted_thinking`) in and out
+    of TensorZero.
+    The `data` field holds the original content block from the provider,
+    without any validation or transformation by TensorZero.
+    """
+
     data: Any
     """
     The underlying content block to be passed to the model provider.
@@ -265,6 +379,10 @@ ToolCallWrapper = ToolCall | InferenceResponseToolCall
 
 @dataclass(kw_only=True)
 class UrlFile:
+    """
+    A file that can be located at a URL
+    """
+
     url: str
     mime_type: str | None = None
     detail: Detail | None = None
@@ -273,6 +391,10 @@ class UrlFile:
 
 @dataclass(kw_only=True)
 class Base64File:
+    """
+    A file already encoded as base64
+    """
+
     mime_type: str
     data: str
     source_url: str | None = None
@@ -282,16 +404,35 @@ class Base64File:
 
 @dataclass(kw_only=True)
 class FileUrlFile(UrlFile):
+    """
+    A file for an inference or a datapoint.
+    """
+
     file_type: Literal["url"] = "url"
 
 
 @dataclass(kw_only=True)
 class FileBase64(Base64File):
+    """
+    A file for an inference or a datapoint.
+    """
+
     file_type: Literal["base64"] = "base64"
 
 
 @dataclass(kw_only=True)
 class JsonDatapointOutputUpdate:
+    """
+    A request to update the output of a JSON datapoint.
+    We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
+    for users to run evals against them.
+
+    The possible values for `output` are:
+    - `None`: don't update `output`
+    - `Some(None)`: set output to `None` (represents edge case where inference succeeded but model didn't output relevant content blocks)
+    - `Some(String)`: set the output to the string (= JSON-serialized string)
+    """
+
     raw: str | None = None
     """
     The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
@@ -319,6 +460,10 @@ TagComparisonOperator = Literal["=", "!="]
 
 @dataclass(kw_only=True)
 class TagFilter:
+    """
+    Filter by tag key-value pair.
+    """
+
     key: str
     value: str
     comparison_operator: TagComparisonOperator
@@ -329,6 +474,10 @@ TimeComparisonOperator = Literal["<", "<=", "=", ">", ">=", "!="]
 
 @dataclass(kw_only=True)
 class TimeFilter:
+    """
+    Filter by timestamp.
+    """
+
     time: str
     comparison_operator: TimeComparisonOperator
 
@@ -351,11 +500,19 @@ InferenceOutputSource = str
 
 @dataclass(kw_only=True)
 class TagDatapointFilter(TagFilter):
+    """
+    Filter by tag key-value pair
+    """
+
     type: Literal["tag"] = "tag"
 
 
 @dataclass(kw_only=True)
 class TimeDatapointFilter(TimeFilter):
+    """
+    Filter by datapoint update time
+    """
+
     type: Literal["time"] = "time"
 
 
@@ -364,6 +521,10 @@ OrderDirection = Literal["ascending", "descending"]
 
 @dataclass(kw_only=True)
 class DatapointMetadataUpdate:
+    """
+    A request to update the metadata of a datapoint.
+    """
+
     name: str | None | UnsetType = UNSET
     """
     Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
@@ -372,6 +533,10 @@ class DatapointMetadataUpdate:
 
 @dataclass(kw_only=True)
 class UpdateDatapointMetadataRequest:
+    """
+    A request to update the metadata of a single datapoint.
+    """
+
     id: str
     """
     The ID of the datapoint to update. Required.
@@ -387,6 +552,10 @@ CreateDatapointsFromInferenceOutputSource = str
 
 @dataclass(kw_only=True)
 class CreateDatapointsFromInferenceRequestParamsInferenceIds:
+    """
+    Create datapoints from specific inference IDs.
+    """
+
     inference_ids: list[str]
     """
     The inference IDs to create datapoints from.
@@ -396,6 +565,10 @@ class CreateDatapointsFromInferenceRequestParamsInferenceIds:
 
 @dataclass(kw_only=True)
 class CreateDatapointsResponse:
+    """
+    Response from creating datapoints.
+    """
+
     ids: list[str]
     """
     The IDs of the newly-generated datapoints.
@@ -404,6 +577,10 @@ class CreateDatapointsResponse:
 
 @dataclass(kw_only=True)
 class DeleteDatapointsRequest:
+    """
+    Request to delete datapoints from a dataset.
+    """
+
     ids: list[str]
     """
     The IDs of the datapoints to delete.
@@ -412,6 +589,10 @@ class DeleteDatapointsRequest:
 
 @dataclass(kw_only=True)
 class DeleteDatapointsResponse:
+    """
+    Response containing the number of deleted datapoints.
+    """
+
     num_deleted_datapoints: int
     """
     The number of deleted datapoints.
@@ -420,6 +601,10 @@ class DeleteDatapointsResponse:
 
 @dataclass(kw_only=True)
 class ProviderExtraBody:
+    """
+    DEPRECATED: Use `ModelProvider` instead.
+    """
+
     model_provider_name: str
     """
     A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
@@ -436,6 +621,10 @@ class ProviderExtraBody:
 
 @dataclass(kw_only=True)
 class ProviderExtraBodyDelete:
+    """
+    DEPRECATED: Use `ModelProviderDelete` instead.
+    """
+
     model_provider_name: str
     """
     A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
@@ -568,6 +757,10 @@ ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKind1
 
 @dataclass(kw_only=True)
 class ProviderExtraHeader:
+    """
+    DEPRECATED: Use `ModelProvider` instead.
+    """
+
     model_provider_name: str
     """
     A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
@@ -584,6 +777,10 @@ class ProviderExtraHeader:
 
 @dataclass(kw_only=True)
 class ProviderExtraHeaderDelete:
+    """
+    DEPRECATED: Use `ModelProviderDelete` instead.
+    """
+
     model_provider_name: str
     """
     A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
@@ -708,6 +905,11 @@ ExtraHeader = (
 
 @dataclass(kw_only=True)
 class GetDatapointsRequest:
+    """
+    Request to get specific datapoints by their IDs.
+    Used by the `POST /v1/datasets/get_datapoints` endpoint.
+    """
+
     ids: list[str]
     """
     The IDs of the datapoints to retrieve. Required.
@@ -716,6 +918,11 @@ class GetDatapointsRequest:
 
 @dataclass(kw_only=True)
 class GetInferencesRequest:
+    """
+    Request to get specific inferences by their IDs.
+    Used by the `POST /v1/inferences/get_inferences` endpoint.
+    """
+
     ids: list[str]
     """
     The IDs of the inferences to retrieve. Required.
@@ -736,6 +943,11 @@ class GetInferencesRequest:
 
 @dataclass(kw_only=True)
 class RawText:
+    """
+    Struct that represents raw text content that should be passed directly to the model
+    without any template processing or validation
+    """
+
     value: str
 
 
@@ -747,11 +959,26 @@ class Template:
 
 @dataclass(kw_only=True)
 class Text:
+    """
+    InputMessages are validated against the input schema of the Function
+    and then templated and transformed into RequestMessages for a particular Variant.
+    They might contain tool calls or tool results along with text.
+    The abstraction we use to represent this is ContentBlock, which is a union of Text, ToolCall, and ToolResult.
+    ContentBlocks are collected into RequestMessages.
+    These RequestMessages are collected into a ModelInferenceRequest,
+    which should contain all information needed by a ModelProvider to perform the
+    inference that is called for.
+    """
+
     text: str
 
 
 @dataclass(kw_only=True)
 class ToolResult:
+    """
+    A ToolResult is the outcome of a ToolCall, which we may want to present back to the model
+    """
+
     name: str
     result: str
     id: str
@@ -759,6 +986,11 @@ class ToolResult:
 
 @dataclass(kw_only=True)
 class Unknown:
+    """
+    Struct that represents an unknown provider-specific content block.
+    We pass this along as-is without any validation or transformation.
+    """
+
     data: Any
     """
     The underlying content block to be passed to the model provider.
@@ -772,6 +1004,11 @@ class Unknown:
 
 @dataclass(kw_only=True)
 class UpdateDatapointsMetadataRequest:
+    """
+    Request to update metadata for one or more datapoints in a dataset.
+    Used by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.
+    """
+
     datapoints: list[UpdateDatapointMetadataRequest]
     """
     The datapoints to update metadata for.
@@ -780,6 +1017,10 @@ class UpdateDatapointsMetadataRequest:
 
 @dataclass(kw_only=True)
 class UpdateDatapointsResponse:
+    """
+    A response to a request to update one or more datapoints in a dataset.
+    """
+
     ids: list[str]
     """
     The IDs of the datapoints that were updated.
@@ -799,12 +1040,23 @@ class StoredInputMessageContentThought(Thought):
 
 @dataclass(kw_only=True)
 class StoragePath:
+    """
+    Path to a file in an object storage backend.
+    This is part of the public API for `File`s. In particular, this is useful for roundtripping
+    unresolved inputs from stored inferences or datapoints, without requiring clients to fetch
+    file data first.
+    """
+
     kind: StorageKind
     path: str
 
 
 @dataclass(kw_only=True)
 class ContentBlockChatOutputToolCall(InferenceResponseToolCall):
+    """
+    Defines the types of content block that can come from a `chat` function
+    """
+
     type: Literal["tool_call"] = "tool_call"
 
 
@@ -835,6 +1087,12 @@ class InputMessageContentToolCall:
 
 @dataclass(kw_only=True)
 class ObjectStoragePointer:
+    """
+    A file stored in an object storage backend, without data.
+    This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
+    Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
+    """
+
     mime_type: str
     storage_path: StoragePath
     source_url: str | None = None
@@ -844,6 +1102,12 @@ class ObjectStoragePointer:
 
 @dataclass(kw_only=True)
 class ObjectStorageFile:
+    """
+    A file stored in an object storage backend, with data.
+    This struct can NOT be stored in the database.
+    Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
+    """
+
     mime_type: str
     storage_path: StoragePath
     data: str
@@ -854,6 +1118,11 @@ class ObjectStorageFile:
 
 @dataclass(kw_only=True)
 class ObjectStorageError:
+    """
+    A file that we failed to read from object storage.
+    This struct can NOT be stored in the database.
+    """
+
     mime_type: str
     storage_path: StoragePath
     source_url: str | None = None
@@ -864,16 +1133,28 @@ class ObjectStorageError:
 
 @dataclass(kw_only=True)
 class FileObjectStoragePointer(ObjectStoragePointer):
+    """
+    A file for an inference or a datapoint.
+    """
+
     file_type: Literal["object_storage_pointer"] = "object_storage_pointer"
 
 
 @dataclass(kw_only=True)
 class FileObjectStorage(ObjectStorageFile):
+    """
+    A file for an inference or a datapoint.
+    """
+
     file_type: Literal["object_storage"] = "object_storage"
 
 
 @dataclass(kw_only=True)
 class FileObjectStorageError(ObjectStorageError):
+    """
+    A file for an inference or a datapoint.
+    """
+
     file_type: Literal["object_storage_error"] = "object_storage_error"
 
 
@@ -882,26 +1163,46 @@ File = FileUrlFile | FileBase64 | FileObjectStoragePointer | FileObjectStorage |
 
 @dataclass(kw_only=True)
 class InferenceFilterFloatMetric(FloatMetricFilter):
+    """
+    Filter by the value of a float metric
+    """
+
     type: Literal["float_metric"] = "float_metric"
 
 
 @dataclass(kw_only=True)
 class InferenceFilterBooleanMetric(BooleanMetricFilter):
+    """
+    Filter by the value of a boolean metric
+    """
+
     type: Literal["boolean_metric"] = "boolean_metric"
 
 
 @dataclass(kw_only=True)
 class InferenceFilterTag(TagFilter):
+    """
+    Filter by tag key-value pair
+    """
+
     type: Literal["tag"] = "tag"
 
 
 @dataclass(kw_only=True)
 class InferenceFilterTime(TimeFilter):
+    """
+    Filter by the timestamp of an inference.
+    """
+
     type: Literal["time"] = "time"
 
 
 @dataclass(kw_only=True)
 class OrderByTimestamp:
+    """
+    Creation timestamp of the item.
+    """
+
     direction: OrderDirection
     """
     The ordering direction.
@@ -911,6 +1212,10 @@ class OrderByTimestamp:
 
 @dataclass(kw_only=True)
 class OrderByMetric:
+    """
+    Value of a metric.
+    """
+
     direction: OrderDirection
     """
     The ordering direction.
@@ -924,6 +1229,14 @@ class OrderByMetric:
 
 @dataclass(kw_only=True)
 class OrderBySearchRelevance:
+    """
+    Relevance score of the search query in the input and output of the item.
+    Requires a search query (experimental). If it's not provided, we return an error.
+
+    Current relevance metric is very rudimentary (just term frequency), but we plan
+    to improve it in the future.
+    """
+
     direction: OrderDirection
     """
     The ordering direction.
@@ -936,6 +1249,12 @@ OrderBy = OrderByTimestamp | OrderByMetric | OrderBySearchRelevance
 
 @dataclass(kw_only=True)
 class StoredInputMessageContentFile:
+    """
+    A file stored in an object storage backend, without data.
+    This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
+    Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
+    """
+
     mime_type: str
     storage_path: StoragePath
     type: Literal["file"] = "file"
@@ -984,12 +1303,24 @@ InputMessageContent = (
 
 @dataclass(kw_only=True)
 class StoredInputMessage:
+    """
+    `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
+    """
+
     role: Role
     content: list[StoredInputMessageContent]
 
 
 @dataclass(kw_only=True)
 class OpenAICustomTool:
+    """
+    `OpenAICustomTool` represents OpenAI's custom tool format, which allows
+    for text or grammar-based tool definitions beyond standard function calling.
+    Currently, this type is a wire + outbound + storage type so it forces a consistent format.
+    This only applies to the Chat Completions API. The Responses API has a slightly different request
+    shape so we implement a conversion in `responses.rs`.
+    """
+
     name: str
     type: Literal["openai_custom"] = "openai_custom"
     description: str | None = None
@@ -1001,12 +1332,22 @@ Tool = FunctionTool | OpenAICustomTool
 
 @dataclass(kw_only=True)
 class InputMessage:
+    """
+    InputMessage and Role are our representation of the input sent by the client
+    prior to any processing into LLM representations below.
+    `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
+    """
+
     role: Role
     content: list[InputMessageContent]
 
 
 @dataclass(kw_only=True)
 class UpdateDynamicToolParamsRequest:
+    """
+    A request to update the dynamic tool parameters of a datapoint.
+    """
+
     allowed_tools: list[str] | None | UnsetType = UNSET
     """
     A subset of static tools configured for the function that the inference is explicitly allowed to use.
@@ -1039,6 +1380,74 @@ class UpdateDynamicToolParamsRequest:
 
 @dataclass(kw_only=True)
 class DynamicToolParams:
+    """
+    Wire/API representation of dynamic tool parameters for inference requests.
+
+    This type is the **wire format** for tool configurations used in API requests and responses.
+    It distinguishes between static tools (configured in the function) and dynamic tools
+    (provided at runtime), allowing clients to reference pre-configured tools by name or
+    provide new tools on-the-fly.
+
+    # Purpose
+    - Accept tool parameters in inference API requests (e.g., `/inference/{function_name}`)
+    - Expose tool configurations in API responses for stored inferences
+    - Support Python and TypeScript client bindings
+    - Allow runtime customization of tool behavior
+
+    # Fields
+    - `allowed_tools`: Names of static tools from function config to use (subset selection)
+    - `additional_tools`: New tools defined at runtime (not in static config)
+    - `tool_choice`: Override the function's default tool choice strategy
+    - `parallel_tool_calls`: Override whether parallel tool calls are enabled
+    - `provider_tools`: Provider-specific tool configurations (not persisted to database)
+
+    # Key Differences from ToolCallConfigDatabaseInsert
+    - **Separate lists**: Maintains distinction between static (`allowed_tools`) and dynamic (`additional_tools`) tools
+    - **By reference**: Static tools referenced by name, not duplicated
+    - **Has provider_tools**: Can specify provider-specific tool configurations
+    - **Has bindings**: Exposed to Python/TypeScript via `pyo3` and `ts_rs`
+
+    # Conversion to Storage Format
+    Converting from `DynamicToolParams` to `ToolCallConfigDatabaseInsert` is a **lossy** operation:
+    1. Static tools (from `allowed_tools` names) are resolved from function config
+    2. Dynamic tools (from `additional_tools`) are included as-is
+    3. Both lists are merged into a single `tools_available` list
+    4. The distinction between static and dynamic tools is lost
+    5. `provider_tools` are dropped (not stored)
+
+    Use `FunctionConfig::dynamic_tool_params_to_database_insert()` for this conversion.
+
+    # Conversion from Storage Format
+    Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` reconstructs the original:
+    1. `dynamic_tools` → `additional_tools`
+    2. `allowed_tools` → `allowed_tools` (based on choice enum)
+    3. Other fields copied directly
+
+    Use `From<ToolCallConfigDatabaseInsert> for DynamicToolParams` for this conversion.
+
+    # Example
+    ```rust,ignore
+    // API request with dynamic tool params
+    let params = DynamicToolParams {
+        allowed_tools: Some(vec!["calculator".to_string()]),  // Use only the calculator tool from config
+        additional_tools: Some(vec![Tool {  runtime tool  }]),  // Add a new tool
+        tool_choice: Some(ToolChoice::Required),
+        parallel_tool_calls: Some(true),
+        provider_tools: vec![],
+    };
+
+    // Convert to storage format
+    let db_insert = function_config
+        .dynamic_tool_params_to_database_insert(params, &static_tools)?
+        .unwrap_or_default();
+
+    // db_insert.tools_available now contains both the calculator tool (from config)
+    // and the runtime tool (from additional_tools), merged together
+    ```
+
+    See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
+    """
+
     allowed_tools: list[str] | None = None
     """
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
@@ -1067,18 +1476,35 @@ class DynamicToolParams:
 
 @dataclass(kw_only=True)
 class StoredInput:
+    """
+    The input type that we directly store in ClickHouse.
+    This is almost identical to `ResolvedInput`, but without `File` data.
+    Only the object-storage path is actually stored in clickhouse
+    (which can be used to re-fetch the file and produce a `ResolvedInput`).
+
+    `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
+    """
+
     system: System | None = None
     messages: list[StoredInputMessage] | None = field(default_factory=lambda: [])
 
 
 @dataclass(kw_only=True)
 class Input:
+    """
+    A request is made that contains an Input
+    """
+
     system: System | None = None
     messages: list[InputMessage] | None = field(default_factory=lambda: [])
 
 
 @dataclass(kw_only=True)
 class CreateChatDatapointRequest:
+    """
+    A request to create a chat datapoint.
+    """
+
     function_name: str
     """
     The function name for this datapoint. Required.
@@ -1131,6 +1557,10 @@ class CreateChatDatapointRequest:
 
 @dataclass(kw_only=True)
 class CreateJsonDatapointRequest:
+    """
+    A request to create a JSON datapoint.
+    """
+
     function_name: str
     """
     The function name for this datapoint. Required.
@@ -1166,11 +1596,19 @@ class CreateJsonDatapointRequest:
 
 @dataclass(kw_only=True)
 class CreateDatapointRequestChat(CreateChatDatapointRequest):
+    """
+    Request to create a chat datapoint.
+    """
+
     type: Literal["chat"] = "chat"
 
 
 @dataclass(kw_only=True)
 class CreateDatapointRequestJson(CreateJsonDatapointRequest):
+    """
+    Request to create a JSON datapoint.
+    """
+
     type: Literal["json"] = "json"
 
 
@@ -1179,6 +1617,11 @@ CreateDatapointRequest = CreateDatapointRequestChat | CreateDatapointRequestJson
 
 @dataclass(kw_only=True)
 class ChatInferenceDatapoint:
+    """
+    Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
+    This one should be used in all public interfaces.
+    """
+
     dataset_name: str
     function_name: str
     id: str
@@ -1240,11 +1683,21 @@ class JsonInferenceDatapoint:
 
 @dataclass(kw_only=True)
 class DatapointChat(ChatInferenceDatapoint):
+    """
+    Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
+    This one should be used in all public interfaces.
+    """
+
     type: Literal["chat"] = "chat"
 
 
 @dataclass(kw_only=True)
 class DatapointJson(JsonInferenceDatapoint):
+    """
+    Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
+    This one should be used in all public interfaces.
+    """
+
     type: Literal["json"] = "json"
 
 
@@ -1253,6 +1706,10 @@ Datapoint = DatapointChat | DatapointJson
 
 @dataclass(kw_only=True)
 class StoredChatInference:
+    """
+    Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
+    """
+
     function_name: str
     variant_name: str
     input: StoredInput
@@ -1304,6 +1761,16 @@ class StoredJsonInference:
 
 @dataclass(kw_only=True)
 class UpdateChatDatapointRequestInternal:
+    """
+    An update request for a chat datapoint.
+    For any fields that are optional in ChatInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:
+    - If the field is omitted, it will be left unchanged.
+    - If the field is specified as `null`, it will be set to `null`.
+    - If the field has a value, it will be set to the provided value.
+
+    In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
+    """
+
     id: str
     """
     The ID of the datapoint to update. Required.
@@ -1368,6 +1835,16 @@ class UpdateChatDatapointRequestInternal:
 
 @dataclass(kw_only=True)
 class UpdateJsonDatapointRequestInternal:
+    """
+    An update request for a JSON datapoint.
+    For any fields that are optional in JsonInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:
+    - If the field is omitted, it will be left unchanged.
+    - If the field is specified as `null`, it will be set to `null`.
+    - If the field has a value, it will be set to the provided value.
+
+    In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
+    """
+
     id: str
     """
     The ID of the datapoint to update. Required.
@@ -1405,11 +1882,19 @@ class UpdateJsonDatapointRequestInternal:
 
 @dataclass(kw_only=True)
 class UpdateChatDatapointRequest(UpdateChatDatapointRequestInternal):
+    """
+    Request to update a chat datapoint.
+    """
+
     type: Literal["chat"] = "chat"
 
 
 @dataclass(kw_only=True)
 class UpdateJsonDatapointRequest(UpdateJsonDatapointRequestInternal):
+    """
+    Request to update a JSON datapoint.
+    """
+
     type: Literal["json"] = "json"
 
 
@@ -1418,6 +1903,11 @@ UpdateDatapointRequest = UpdateChatDatapointRequest | UpdateJsonDatapointRequest
 
 @dataclass(kw_only=True)
 class CreateDatapointsRequest:
+    """
+    Request to create datapoints manually.
+    Used by the `POST /v1/datasets/{dataset_id}/datapoints` endpoint.
+    """
+
     datapoints: list[CreateDatapointRequest]
     """
     The datapoints to create.
@@ -1426,6 +1916,10 @@ class CreateDatapointsRequest:
 
 @dataclass(kw_only=True)
 class GetDatapointsResponse:
+    """
+    Response containing the requested datapoints.
+    """
+
     datapoints: list[Datapoint]
     """
     The retrieved datapoints.
@@ -1434,6 +1928,10 @@ class GetDatapointsResponse:
 
 @dataclass(kw_only=True)
 class UpdateDatapointsRequest:
+    """
+    Request to update one or more datapoints in a dataset.
+    """
+
     datapoints: list[UpdateDatapointRequest]
     """
     The datapoints to update.
@@ -1442,11 +1940,21 @@ class UpdateDatapointsRequest:
 
 @dataclass(kw_only=True)
 class StoredInferenceChat(StoredChatInference):
+    """
+    Wire variant of StoredInference for API responses with Python/TypeScript bindings
+    This one should be used in all public interfaces
+    """
+
     type: Literal["chat"] = "chat"
 
 
 @dataclass(kw_only=True)
 class StoredInferenceJson(StoredJsonInference):
+    """
+    Wire variant of StoredInference for API responses with Python/TypeScript bindings
+    This one should be used in all public interfaces
+    """
+
     type: Literal["json"] = "json"
 
 
@@ -1455,6 +1963,10 @@ StoredInference = StoredInferenceChat | StoredInferenceJson
 
 @dataclass(kw_only=True)
 class GetInferencesResponse:
+    """
+    Response containing the requested inferences.
+    """
+
     inferences: list[StoredInference]
     """
     The retrieved inferences.
@@ -1463,18 +1975,30 @@ class GetInferencesResponse:
 
 @dataclass(kw_only=True)
 class InferenceFilterAnd:
+    """
+    Logical AND of multiple filters
+    """
+
     children: list[InferenceFilter]
     type: Literal["and"] = "and"
 
 
 @dataclass(kw_only=True)
 class InferenceFilterOr:
+    """
+    Logical OR of multiple filters
+    """
+
     children: list[InferenceFilter]
     type: Literal["or"] = "or"
 
 
 @dataclass(kw_only=True)
 class InferenceFilterNot:
+    """
+    Logical NOT of a filter
+    """
+
     child: InferenceFilter
     type: Literal["not"] = "not"
 
@@ -1492,18 +2016,30 @@ InferenceFilter = (
 
 @dataclass(kw_only=True)
 class AndDatapointFilter:
+    """
+    Logical AND of multiple filters
+    """
+
     children: list[DatapointFilter]
     type: Literal["and"] = "and"
 
 
 @dataclass(kw_only=True)
 class OrDatapointFilter:
+    """
+    Logical OR of multiple filters
+    """
+
     children: list[DatapointFilter]
     type: Literal["or"] = "or"
 
 
 @dataclass(kw_only=True)
 class NotDatapointFilter:
+    """
+    Logical NOT of a filter
+    """
+
     child: DatapointFilter
     type: Literal["not"] = "not"
 
@@ -1513,6 +2049,10 @@ DatapointFilter = TagDatapointFilter | TimeDatapointFilter | AndDatapointFilter 
 
 @dataclass(kw_only=True)
 class CreateDatapointsFromInferenceRequestParamsInferenceQuery:
+    """
+    Create datapoints from an inference query.
+    """
+
     function_name: str
     """
     The function name to filter inferences by.
@@ -1535,6 +2075,11 @@ CreateDatapointsFromInferenceRequestParams = (
 
 @dataclass(kw_only=True)
 class ListDatapointsRequest:
+    """
+    Request to list datapoints from a dataset with pagination and filters.
+    Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
+    """
+
     function_name: str | None = None
     """
     Optional function name to filter datapoints by.
@@ -1564,6 +2109,11 @@ class ListDatapointsRequest:
 
 @dataclass(kw_only=True)
 class ListInferencesRequest:
+    """
+    Request to list inferences with pagination and filters.
+    Used by the `POST /v1/inferences/list_inferences` endpoint.
+    """
+
     output_source: InferenceOutputSource
     """
     Source of the inference output. Determines whether to return the original
