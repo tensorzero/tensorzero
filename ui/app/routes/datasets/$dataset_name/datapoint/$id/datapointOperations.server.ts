@@ -190,9 +190,7 @@ export async function renameDatapoint(params: {
     datapoints: [
       {
         id: datapointId,
-        metadata: {
-          name,
-        },
+        name,
       },
     ],
   };

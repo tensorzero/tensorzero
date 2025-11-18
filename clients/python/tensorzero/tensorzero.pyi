@@ -1028,7 +1028,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         variant_name: Optional[str] = None,
         concurrency: int = 1,
         inference_cache: str = "on",
-        dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
     ) -> EvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -1036,10 +1036,10 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
         :param evaluation_name: The name of the evaluation to run
         :param dataset_name: The name of the dataset to use for evaluation
-        :param variant_name: The name of the variant to evaluate (omit or set to None when using dynamic_variant_config)
+        :param variant_name: The name of the variant to evaluate
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
-        :param dynamic_variant_config: Optional dynamic variant configuration to use instead of config file lookup
+        :param internal_dynamic_variant_config: Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
         :return: An EvaluationJobHandler for iterating over evaluation results
         """
         ...
@@ -1565,7 +1565,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         variant_name: Optional[str] = None,
         concurrency: int = 1,
         inference_cache: str = "on",
-        dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
     ) -> AsyncEvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -1573,10 +1573,10 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param evaluation_name: The name of the evaluation to run
         :param dataset_name: The name of the dataset to use for evaluation
-        :param variant_name: The name of the variant to evaluate. Should be omitted or set to None when using `dynamic_variant_config`.
+        :param variant_name: The name of the variant to evaluate
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
-        :param dynamic_variant_config: Optional dynamic variant configuration to use instead of config file lookup. If provided, `variant_name` should be omitted or set to None.
+        :param internal_dynamic_variant_config: Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
         :return: An AsyncEvaluationJobHandler for iterating over evaluation results
         """
         ...

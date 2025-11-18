@@ -315,7 +315,7 @@ async fn test_update_datapoints(client: Client) {
         output: Some(updated_output),
         tool_params: None,
         tags: None,
-        metadata: None,
+        metadata: Default::default(),
     });
 
     let response = client
