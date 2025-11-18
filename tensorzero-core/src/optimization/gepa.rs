@@ -209,7 +209,7 @@ impl UninitializedGEPAConfig {
     /// :param timeout: Client timeout in seconds for TensorZero gateway operations. Default: 300.
     /// :param include_inference_input_for_mutation: Whether to include inference input for mutation context. Use with caution for multi-turn conversations or large batch sizes. Default: True.
     /// :param retries: Retry configuration for inference calls during GEPA optimization.
-    /// :param max_tokens: Optional maximum tokens for analysis and mutation model calls.
+    /// :param max_tokens: Optional maximum tokens for analysis and mutation model calls. (required for Anthropic models)
     #[expect(unused_variables, clippy::too_many_arguments)]
     #[pyo3(signature = (*, function_name, evaluation_name, analysis_model, mutation_model, initial_variants=None, variant_prefix=None, batch_size=None, max_iterations=None, max_concurrency=None, seed=None, timeout=None, include_inference_input_for_mutation=None, retries=None, max_tokens=None))]
     fn __init__(
