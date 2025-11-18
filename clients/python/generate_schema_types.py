@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # /// script
 # dependencies = [
 #   "datamodel-code-generator[http]>=0.26.0",
