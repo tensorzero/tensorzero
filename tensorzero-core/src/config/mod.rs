@@ -1,6 +1,7 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
+use crate::utils::deprecation_warning;
 use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
 ///            IT IS MEANT FOR INTERNAL USE ONLY.
@@ -906,18 +907,17 @@ impl Config {
 
         // Initialize the templates
         let template_paths = config.get_templates();
-        let template_fs_base_path = if config.gateway.template_filesystem_access.enabled {
-            let base_path = config.gateway.template_filesystem_access.base_path
-                .as_ref()
-                .ok_or_else(|| Error::new(ErrorDetails::Config {
-                    message: "`gateway.template_filesystem_access.enabled` is true but `base_path` is not specified. Please set `gateway.template_filesystem_access.base_path` to the directory containing your template files.".to_string()
-                }))?;
-            Some(base_path.get_real_path().to_owned())
-        } else {
-            None
-        };
+        if config.gateway.template_filesystem_access.enabled {
+            deprecation_warning("The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.");
+        }
+        let template_fs_path = config
+            .gateway
+            .template_filesystem_access
+            .base_path
+            .as_ref()
+            .map(|x| x.get_real_path());
         templates
-            .initialize(template_paths, template_fs_base_path.as_deref())
+            .initialize(template_paths, template_fs_path)
             .await?;
         config.templates = Arc::new(templates.clone());
 
