@@ -266,7 +266,7 @@ def test_sync_run_evaluation_with_dynamic_variant(
     job = embedded_sync_client.experimental_run_evaluation(
         evaluation_name="haiku_without_outputs",
         dataset_name=evaluation_datasets["good-haikus-no-output"],
-        dynamic_variant_config=dynamic_variant,
+        internal_dynamic_variant_config=dynamic_variant,
         concurrency=10,
         inference_cache="off",
     )
@@ -336,7 +336,7 @@ async def test_async_run_evaluation_with_dynamic_variant(
     job = await embedded_async_client.experimental_run_evaluation(
         evaluation_name="entity_extraction",
         dataset_name=evaluation_datasets["extract_entities_0.8"],
-        dynamic_variant_config=dynamic_variant,
+        internal_dynamic_variant_config=dynamic_variant,
         concurrency=10,
         inference_cache="off",
     )
@@ -390,7 +390,7 @@ def test_sync_run_evaluation_both_variant_params_error(
     evaluation_datasets: Dict[str, str],
     embedded_sync_client: TensorZeroGateway,
 ):
-    """Test sync client experimental_run_evaluation rejects both variant_name and dynamic_variant_config."""
+    """Test sync client experimental_run_evaluation rejects both variant_name and internal_dynamic_variant_config."""
     dynamic_variant = {
         "type": "chat_completion",
         "model": "gpt-4o-mini-2024-07-18",
@@ -400,13 +400,13 @@ def test_sync_run_evaluation_both_variant_params_error(
         },
     }
 
-    # Providing both variant_name and dynamic_variant_config should raise ValueError
-    with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*dynamic_variant_config"):
+    # Providing both variant_name and internal_dynamic_variant_config should raise ValueError
+    with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*internal_dynamic_variant_config"):
         embedded_sync_client.experimental_run_evaluation(
             evaluation_name="haiku_without_outputs",
             dataset_name=evaluation_datasets["good-haikus-no-output"],
             variant_name="gpt_4o_mini",
-            dynamic_variant_config=dynamic_variant,
+            internal_dynamic_variant_config=dynamic_variant,
             concurrency=1,
             inference_cache="off",
         )
@@ -417,7 +417,7 @@ async def test_async_run_evaluation_both_variant_params_error(
     evaluation_datasets: Dict[str, str],
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    """Test async client experimental_run_evaluation rejects both variant_name and dynamic_variant_config."""
+    """Test async client experimental_run_evaluation rejects both variant_name and internal_dynamic_variant_config."""
     dynamic_variant = {
         "type": "chat_completion",
         "model": "gpt-4o-mini-2024-07-18",
@@ -427,13 +427,13 @@ async def test_async_run_evaluation_both_variant_params_error(
         },
     }
 
-    # Providing both variant_name and dynamic_variant_config should raise ValueError
-    with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*dynamic_variant_config"):
+    # Providing both variant_name and internal_dynamic_variant_config should raise ValueError
+    with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*internal_dynamic_variant_config"):
         await embedded_async_client.experimental_run_evaluation(
             evaluation_name="haiku_without_outputs",
             dataset_name=evaluation_datasets["good-haikus-no-output"],
             variant_name="gpt_4o_mini",
-            dynamic_variant_config=dynamic_variant,
+            internal_dynamic_variant_config=dynamic_variant,
             concurrency=1,
             inference_cache="off",
         )

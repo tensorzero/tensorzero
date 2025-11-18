@@ -71,9 +71,9 @@ pub struct UpdateChatDatapointRequest {
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
 
-    /// Metadata fields. If omitted, it will be left unchanged.
-    #[serde(default)]
-    pub metadata: Option<DatapointMetadataUpdate>,
+    /// Metadata fields to update.
+    #[serde(flatten)]
+    pub metadata: DatapointMetadataUpdate,
 }
 
 /// An update request for a JSON datapoint.
@@ -112,9 +112,9 @@ pub struct UpdateJsonDatapointRequest {
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
 
-    /// Metadata fields. If omitted, it will be left unchanged.
-    #[serde(default)]
-    pub metadata: Option<DatapointMetadataUpdate>,
+    /// Metadata fields to update.
+    #[serde(flatten)]
+    pub metadata: DatapointMetadataUpdate,
 }
 
 /// A request to update the output of a JSON datapoint.
@@ -129,7 +129,7 @@ pub struct JsonDatapointOutputUpdate {
 }
 
 /// A request to update the metadata of a datapoint.
-#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
+#[derive(Debug, Serialize, Default, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[export_schema]
 pub struct DatapointMetadataUpdate {
@@ -168,6 +168,7 @@ pub struct UpdateDatapointMetadataRequest {
     pub id: Uuid,
 
     /// Metadata fields to update.
+    #[serde(flatten)]
     pub metadata: DatapointMetadataUpdate,
 }
 

@@ -542,30 +542,30 @@ impl BaseTensorZeroGateway {
     }
 }
 
-/// Helper function to construct an EvaluationVariant from the optional variant_name and dynamic_variant_config parameters.
-/// Deserializes the dynamic_variant_config if provided and validates that exactly one of the two is provided.
+/// Helper function to construct an EvaluationVariant from the optional variant_name and internal_dynamic_variant_config parameters.
+/// Deserializes the internal_dynamic_variant_config if provided and validates that exactly one of the two is provided.
 fn construct_evaluation_variant(
     py: Python<'_>,
-    dynamic_variant_config: Option<&Bound<'_, PyDict>>,
+    internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     variant_name: Option<String>,
 ) -> PyResult<EvaluationVariant> {
-    // Deserialize dynamic_variant_config if provided
-    let dynamic_variant_config: Option<UninitializedVariantInfo> =
-        if let Some(config) = dynamic_variant_config {
+    // Deserialize internal_dynamic_variant_config if provided
+    let internal_dynamic_variant_config: Option<UninitializedVariantInfo> =
+        if let Some(config) = internal_dynamic_variant_config {
             Some(deserialize_from_pyobj(py, config)?)
         } else {
             None
         };
 
-    match (dynamic_variant_config, variant_name) {
+    match (internal_dynamic_variant_config, variant_name) {
         (Some(info), None) => Ok(EvaluationVariant::Info(Box::new(info))),
         (None, Some(name)) => Ok(EvaluationVariant::Name(name)),
         (None, None) => Err(PyValueError::new_err(
-            "Either 'variant_name' or 'dynamic_variant_config' must be provided.",
+            "Either `variant_name` or `internal_dynamic_variant_config` must be provided.",
         )),
         (Some(_), Some(_)) => Err(PyValueError::new_err(
-            "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
-            When using a dynamic variant, provide only 'dynamic_variant_config'.",
+            "Cannot specify both `variant_name` and `internal_dynamic_variant_config`. \
+            When using a dynamic variant, provide only `internal_dynamic_variant_config`.",
         )),
     }
 }
@@ -1323,10 +1323,10 @@ impl TensorZeroGateway {
     ///
     /// * `evaluation_name` - User chosen name of the evaluation.
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
-    /// * `variant_name` - Optional name of the variant to evaluate (omit when using dynamic_variant_config)
+    /// * `variant_name` - Optional name of the variant to evaluate
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
-    /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
+    /// * `internal_dynamic_variant_config` - Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
     /// * `max_datapoints` - Optional maximum number of datapoints to evaluate from the dataset
     /// * `adaptive_stopping` - Optional dict configuring adaptive stopping behavior for evals.
     ///                         Example for two evaluators named "exact_match" and "llm_judge":
@@ -1341,11 +1341,11 @@ impl TensorZeroGateway {
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
-                        dynamic_variant_config=None,
+                        internal_dynamic_variant_config=None,
                         max_datapoints=None,
                         adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
@@ -1355,7 +1355,7 @@ impl TensorZeroGateway {
         variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
-        dynamic_variant_config: Option<&Bound<'_, PyDict>>,
+        internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
         max_datapoints: Option<usize>,
         adaptive_stopping: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<EvaluationJobHandler> {
@@ -1375,7 +1375,7 @@ impl TensorZeroGateway {
             )?;
 
         let variant =
-            construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
+            construct_evaluation_variant(this.py(), internal_dynamic_variant_config, variant_name)?;
 
         // Parse adaptive_stopping config from Python dict
         let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
@@ -2485,10 +2485,10 @@ impl AsyncTensorZeroGateway {
     ///
     /// * `evaluation_name` - User chosen name of the evaluation.
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
-    /// * `variant_name` - Optional name of the variant to evaluate (omit when using dynamic_variant_config)
+    /// * `variant_name` - Optional name of the variant to evaluate
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
-    /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
+    /// * `internal_dynamic_variant_config` - Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
     /// * `max_datapoints` - Optional maximum number of datapoints to evaluate from the dataset
     /// * `adaptive_stopping` - Optional dict configuring adaptive stopping behavior for evals.
     ///                         Example for two evaluators named "exact_match" and "llm_judge":
@@ -2503,11 +2503,11 @@ impl AsyncTensorZeroGateway {
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
-                        dynamic_variant_config=None,
+                        internal_dynamic_variant_config=None,
                         max_datapoints=None,
                         adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
@@ -2517,7 +2517,7 @@ impl AsyncTensorZeroGateway {
         variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
-        dynamic_variant_config: Option<&Bound<'py, PyDict>>,
+        internal_dynamic_variant_config: Option<&Bound<'py, PyDict>>,
         max_datapoints: Option<usize>,
         adaptive_stopping: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Bound<'py, PyAny>> {
@@ -2530,7 +2530,7 @@ impl AsyncTensorZeroGateway {
             )?;
 
         let variant =
-            construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
+            construct_evaluation_variant(this.py(), internal_dynamic_variant_config, variant_name)?;
 
         // Parse adaptive_stopping config from Python dict
         let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
