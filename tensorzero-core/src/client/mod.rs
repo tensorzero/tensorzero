@@ -321,16 +321,22 @@ impl ClientBuilder {
                                 error: TensorZeroError::Other { source: e.into() },
                                 glob,
                             }
-                        })?,
+                        })?
+                        .config,
                     )
                 } else {
                     tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
-                    Arc::new(Config::new_empty().await.map_err(|e| {
-                        ClientBuilderError::ConfigParsing {
-                            error: TensorZeroError::Other { source: e.into() },
-                            glob: ConfigFileGlob::new_empty(),
-                        }
-                    })?)
+                    Arc::new(
+                        Config::new_empty()
+                            .await
+                            .map_err(|e| {
+                                ClientBuilderError::ConfigParsing {
+                                    error: TensorZeroError::Other { source: e.into() },
+                                    glob: ConfigFileGlob::new_empty(),
+                                }
+                            })?
+                            .config,
+                    )
                 };
                 Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let clickhouse_connection_info =
@@ -1015,10 +1021,12 @@ pub async fn get_config_no_verify_credentials(
             false,
         )
         .await
+        .map(|load_info| load_info.config)
         .map_err(|e| TensorZeroError::Other { source: e.into() }),
         None => Ok(Config::new_empty()
             .await
-            .map_err(|e| TensorZeroError::Other { source: e.into() })?),
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?
+            .config),
     }
 }
 

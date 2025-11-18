@@ -14,7 +14,7 @@ use tokio_stream::wrappers::IntervalStream;
 use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
 use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
-use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::config::{Config, ConfigFileGlob, ConfigLoadInfo};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
@@ -129,7 +129,7 @@ async fn main() {
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
     // Handle `--config-file` or `--default-config`
-    let (config, glob) = match (args.default_config, args.config_file) {
+    let (config_load_info, glob) = match (args.default_config, args.config_file) {
         (true, Some(_)) => {
             tracing::error!("You must not specify both `--config-file` and `--default-config`.");
             std::process::exit(1);
@@ -141,11 +141,9 @@ async fn main() {
         (true, None) => {
             tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
             (
-                Arc::new(
-                    Config::new_empty()
-                        .await
-                        .expect_pretty("Failed to load default config"),
-                ),
+                Config::new_empty()
+                    .await
+                    .expect_pretty("Failed to load default config"),
                 None,
             )
         }
@@ -153,7 +151,7 @@ async fn main() {
             let glob = ConfigFileGlob::new_from_path(&path)
                 .expect_pretty("Failed to process config file glob");
             (
-                Arc::new(
+
                     Config::load_and_verify_from_path(&glob)
                         .await
                         .ok() // Don't print the error here, since it was already printed when it was constructed
@@ -162,11 +160,15 @@ async fn main() {
                             glob.glob,
                             glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
                         )),
-                ),
                 Some(glob),
             )
         }
     };
+    let ConfigLoadInfo {
+        config,
+        snapshot: _, // TODO: write the snapshot
+    } = config_load_info;
+    let config = Arc::new(config);
 
     if config.gateway.debug {
         delayed_log_config
