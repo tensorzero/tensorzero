@@ -1,7 +1,7 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use crate::config::ConfigFileGlob;
-use crate::http::TensorzeroHttpClient;
+use crate::http::{TensorZeroEventSource, TensorzeroHttpClient, DEFAULT_HTTP_CLIENT_TIMEOUT};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
     utils::gateway::{setup_clickhouse, setup_postgres, GatewayHandle},
 };
 use reqwest::header::HeaderMap;
-use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
+use reqwest_eventsource::Event;
 use std::fmt::Debug;
 use thiserror::Error;
 use tokio::{sync::Mutex, time::error::Elapsed};
@@ -65,7 +65,7 @@ impl Debug for ClientMode {
 
 pub struct HTTPGateway {
     pub base_url: Url,
-    pub http_client: reqwest::Client,
+    pub http_client: TensorzeroHttpClient,
     pub gateway_version: Mutex<Option<String>>, // Needs interior mutability so it can be set on every request
 }
 
@@ -509,49 +509,52 @@ impl ClientBuilder {
         let api_key = self.api_key.or_else(|| env::var("TENSORZERO_API_KEY").ok());
 
         // Build the HTTP client, applying timeout and/or API key
-        let http_client = if let Some(client) = self.http_client {
-            // Use custom client provided by advanced users
-
-            // TODO: Later we can decide if we want to override the custom HTTP clients.
-
-            if self.timeout.is_some() {
-                tracing::warn!("A timeout is set but a custom HTTP client is being used. The TensorZero SDK will not automatically apply the timeout to the custom client.");
-            }
-
-            if api_key.is_some() {
-                tracing::warn!("A TensorZero API key is available but a custom HTTP client is being used. The TensorZero SDK will not automatically apply the authentication header to the custom client.");
-            }
-
-            client
-        } else {
-            // Build client from scratch, composing timeout and api_key
-            let mut builder = reqwest::Client::builder();
-
-            // Apply timeout if provided
-            if let Some(timeout) = self.timeout {
-                builder = builder.timeout(timeout);
-            }
-
-            // Apply API key as default Authorization header if provided
-            if let Some(ref key) = api_key {
-                let mut headers = HeaderMap::new();
-                headers.insert(
-                    reqwest::header::AUTHORIZATION,
-                    reqwest::header::HeaderValue::from_str(&format!("Bearer {key}")).map_err(
-                        |e| {
-                            ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
-                                source: Error::new(ErrorDetails::InternalError {
-                                    message: format!("Failed to create authorization header: {e}"),
-                                })
-                                .into(),
-                            })
+        let http_client = if self.http_client.is_some() {
+            // Making this work with `TensorzeroHttpClient` is tricky,
+            // so we don't support it for now.
+            return Err(ClientBuilderError::HTTPClientBuild(
+                TensorZeroError::Other {
+                    source: TensorZeroInternalError(crate::error::Error::new(
+                        ErrorDetails::AppState {
+                            message: "HTTP client cannot currently be provided in HTTPGateway mode"
+                                .to_string(),
                         },
-                    )?,
-                );
-                builder = builder.default_headers(headers);
-            }
+                    )),
+                },
+            ));
+        } else {
+            let customize_builder = Arc::new(
+                move |mut builder: reqwest::ClientBuilder| -> Result<reqwest::ClientBuilder, Error> {
+                    // Apply timeout if provided
+                    if let Some(timeout) = self.timeout {
+                        builder = builder.timeout(timeout);
+                    }
 
-            builder.build().map_err(|e| {
+                    // Apply API key as default Authorization header if provided
+                    if let Some(ref key) = api_key {
+                        let mut headers = HeaderMap::new();
+                        headers.insert(
+                            reqwest::header::AUTHORIZATION,
+                            reqwest::header::HeaderValue::from_str(&format!("Bearer {key}"))
+                                .map_err(|e| {
+                                    Error::new(ErrorDetails::InternalError {
+                                            message: format!(
+                                                "Failed to create authorization header: {e}"
+                                            ),
+                                        })
+                                })?,
+                        );
+                        builder = builder.default_headers(headers);
+                    }
+                    Ok(builder)
+                },
+            );
+            TensorzeroHttpClient::new_with_customizer(
+                // The timeout may be overridden by `customize_builder`
+                DEFAULT_HTTP_CLIENT_TIMEOUT,
+                customize_builder,
+            )
+            .map_err(|e| {
                 ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
                     source: Error::new(ErrorDetails::InternalError {
                         message: format!("Failed to build HTTP client: {e}"),
@@ -560,7 +563,6 @@ impl ClientBuilder {
                 })
             })?
         };
-
         Ok(Client {
             mode: Arc::new(ClientMode::HTTPGateway(HTTPGateway {
                 base_url: url,
@@ -853,7 +855,7 @@ impl Client {
 
     async fn http_inference_stream(
         &self,
-        event_source: EventSource,
+        event_source: TensorZeroEventSource,
     ) -> Result<InferenceStream, TensorZeroError> {
         let mut event_source = event_source.peekable();
         let first = event_source.peek().await;
