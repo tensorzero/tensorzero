@@ -27,7 +27,7 @@ from tensorzero.util import uuid7
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../tensorzero-core/tests/e2e/tensorzero.toml",
+    "../../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
 )
 
 CLICKHOUSE_URL = "http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"

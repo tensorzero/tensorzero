@@ -268,10 +268,10 @@ jobs:
       - name: Configure batch writes in tensorzero.toml
         if: matrix.batch_writes == true
         run: |
-          echo "[gateway.observability.batch_writes]" >> tensorzero-core/tests/e2e/tensorzero.toml
-          echo "enabled = true" >> tensorzero-core/tests/e2e/tensorzero.toml
-          echo "flush_interval_ms = 80" >> tensorzero-core/tests/e2e/tensorzero.toml
-          echo "__force_allow_embedded_batch_writes = true" >> tensorzero-core/tests/e2e/tensorzero.toml
+          echo "[gateway.observability.batch_writes]" >> tensorzero-core/tests/e2e/config/tensorzero.*.toml
+          echo "enabled = true" >> tensorzero-core/tests/e2e/config/tensorzero.*.toml
+          echo "flush_interval_ms = 80" >> tensorzero-core/tests/e2e/config/tensorzero.*.toml
+          echo "__force_allow_embedded_batch_writes = true" >> tensorzero-core/tests/e2e/config/tensorzero.*.toml
 
       - name: Launch dependency services for E2E tests
         run: |
