@@ -102,7 +102,6 @@ active = true
 system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
 json_mode = "on"
 
-
 [evaluations.entity_extraction]
 type = "inference"
 function_name = "extract_entities"

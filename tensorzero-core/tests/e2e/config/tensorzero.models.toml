@@ -64,7 +64,6 @@ type = "azure"
 deployment_id = "gpt4o-mini-20240718"
 endpoint = "https://t0-azure-openai-east.openai.azure.com"
 
-
 [models."gpt-4o-mini-azure-dynamic"]
 routing = ["azure"]
 
@@ -100,7 +99,6 @@ routing = ["groq"]
 [models."groq-qwen".providers.groq]
 type = "groq"
 model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
-
 
 [models."groq-qwen-dynamic"]
 routing = ["groq"]
@@ -266,7 +264,6 @@ project_id = "tensorzero-public"
 extra_body = [
     { pointer = "/generationConfig/thinkingConfig/thinkingBudget", value = 128 },
 ]
-
 
 [models."gemini-2.0-flash-lite"]
 routing = ["google_ai_studio_gemini"]
@@ -603,7 +600,6 @@ timeouts = { streaming = { ttft_ms = 500 } }
 [models.slow_second_chunk_timeout.providers.slow]
 type = "dummy"
 model_name = "slow_second_chunk"
-
 
 [models.slow]
 routing = ["slow"]
