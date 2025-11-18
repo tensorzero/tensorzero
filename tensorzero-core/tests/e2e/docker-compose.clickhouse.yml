@@ -99,7 +99,7 @@ services:
       TENSORZERO_S3_FIXTURES_PATH: /app/ui/fixtures/s3-fixtures
       TENSORZERO_CI: 1
     volumes:
-      - ./tensorzero.toml:/app/tensorzero-core/tests/e2e/config/tensorzero.*.toml:ro
+      - ./config/:/app/tensorzero-core/tests/e2e/config/:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
       - ../../../target:/app/target
