@@ -53,8 +53,9 @@ jobs:
         helm repo update
         kubectl create namespace clickhouse
         helm install clickhouse altinity/clickhouse -n clickhouse -f clickhouse-values.yaml
-        # TODO - get this working
-        # kubectl wait --for=condition=ready pod chi-clickhouse-clickhouse-0-0-0 -n clickhouse --timeout=60s
+        kubectl wait --for=condition=available deployment/clickhouse-operator -n clickhouse --timeout=120s
+        kubectl wait --for=jsonpath='{.status.status}'=Completed clickhouseinstallation/clickhouse -n clickhouse --timeout=180s
+        kubectl wait --for=condition=ready pod -l clickhouse.altinity.com/chi=clickhouse -n clickhouse --timeout=120s
 
     - name: Install TensorZero on minikube
       run: |
@@ -101,3 +102,8 @@ jobs:
       if: always()
       run: |
         kubectl logs -n tensorzero --timestamps=true --all-pods=true --all-containers=true -l app.kubernetes.io/instance=tensorzero
+
+    - name: Print logs from stopped pods
+      if: always()
+      run: |
+        kubectl logs -n tensorzero --timestamps=true --all-pods=true --all-containers=true -l app.kubernetes.io/instance=tensorzero -p || true

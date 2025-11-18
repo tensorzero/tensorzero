@@ -13,6 +13,7 @@ use crate::inference::types::{
 use crate::model::StreamResponse;
 use crate::serde_util::{deserialize_json_string, serialize_json_string};
 use crate::tool::{InferenceResponseToolCall, ToolCallConfig};
+use crate::utils::spawn_ignoring_shutdown;
 use blake3::Hash;
 use clap::ValueEnum;
 use serde::de::{DeserializeOwned, IgnoredAny};
@@ -306,9 +307,7 @@ fn spawn_maybe_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     clickhouse_client: ClickHouseConnectionInfo,
     cache_validation_info: CacheValidationInfo,
 ) {
-    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-    #[expect(clippy::disallowed_methods)]
-    tokio::spawn(async move {
+    spawn_ignoring_shutdown(async move {
         if row
             .data
             .output

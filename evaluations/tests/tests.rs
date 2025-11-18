@@ -2461,20 +2461,20 @@ async fn test_precision_targets_parameter() {
 
     // Consume results and track evaluations, computing statistics as we go
     let mut receiver = result.receiver;
-    let mut exact_match_stats = PerEvaluatorStats::new();
-    let mut topic_stats = PerEvaluatorStats::new();
+    let mut exact_match_stats = PerEvaluatorStats::new(true); // Bernoulli evaluator (uses Wilson CI)
+    let mut topic_stats = PerEvaluatorStats::new(false); // Treated as float evaluator (uses Wald CI)
     let mut total_datapoints = 0;
 
     while let Some(update) = receiver.recv().await {
         if let EvaluationUpdate::Success(info) = update {
             total_datapoints += 1;
 
-            // Track exact_match values
+            // Track exact_match values (boolean)
             if let Some(Some(serde_json::Value::Bool(b))) = info.evaluations.get("exact_match") {
                 exact_match_stats.push(if *b { 1.0 } else { 0.0 });
             }
 
-            // Track topic_starts_with_f values
+            // Track topic_starts_with_f values (boolean, but treated as float for testing Wald CI)
             if let Some(Some(serde_json::Value::Bool(b))) =
                 info.evaluations.get("topic_starts_with_f")
             {

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::ops::Deref;
+use tensorzero_core::evaluations::EvaluatorConfig;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
@@ -47,7 +48,7 @@ pub struct StoppingManager {
 }
 
 impl StoppingManager {
-    /// Create a new StoppingManager with precision targets and evaluator names
+    /// Create a new StoppingManager with precision targets and evaluator configs
     ///
     /// If precision_targets is non-empty, this creates:
     /// - Cancellation tokens for all evaluators
@@ -56,18 +57,26 @@ impl StoppingManager {
     /// If precision_targets is empty (no adaptive stopping):
     /// - No cancellation tokens are created
     /// - No statistics are tracked
-    pub fn new(precision_targets: HashMap<String, f32>, evaluator_names: &[String]) -> Self {
+    pub fn new(
+        evaluators: &HashMap<String, EvaluatorConfig>,
+        precision_targets: HashMap<String, f32>,
+    ) -> Self {
         // Create cancellation tokens and stats only if precision targets are enabled
         let (cancellation_tokens, evaluator_stats) = if precision_targets.is_empty() {
             (CancellationTokens::default(), HashMap::new())
         } else {
             // Create tokens for all evaluators
-            let tokens = CancellationTokens::new(evaluator_names);
+            let evaluator_names: Vec<String> = evaluators.keys().cloned().collect();
+            let tokens = CancellationTokens::new(&evaluator_names);
 
             // Create stats only for evaluators with precision targets
             let stats: HashMap<String, PerEvaluatorStats> = precision_targets
                 .keys()
-                .map(|name| (name.clone(), PerEvaluatorStats::default()))
+                .filter_map(|name| {
+                    evaluators
+                        .get(name)
+                        .map(|config| (name.clone(), PerEvaluatorStats::new(config.is_bernoulli())))
+                })
                 .collect();
 
             (tokens, stats)
@@ -163,11 +172,21 @@ impl StoppingManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tensorzero_core::evaluations::{EvaluatorConfig::ExactMatch, ExactMatchConfig};
 
     #[test]
     fn test_stopping_manager_no_precision_targets() {
-        let evaluator_names = vec!["evaluator1".to_string(), "evaluator2".to_string()];
-        let manager = StoppingManager::new(HashMap::new(), &evaluator_names);
+        let mut evaluators = HashMap::new();
+        evaluators.insert(
+            "evaluator1".to_string(),
+            ExactMatch(ExactMatchConfig { cutoff: None }),
+        );
+        evaluators.insert(
+            "evaluator2".to_string(),
+            ExactMatch(ExactMatchConfig { cutoff: None }),
+        );
+
+        let manager = StoppingManager::new(&evaluators, HashMap::new());
 
         // With no precision targets, all_evaluators_stopped should always return false
         assert!(!manager.all_evaluators_stopped());
@@ -185,8 +204,13 @@ mod tests {
         let mut precision_targets = HashMap::new();
         precision_targets.insert("evaluator1".to_string(), 0.1);
 
-        let evaluator_names = vec!["evaluator1".to_string()];
-        let manager = StoppingManager::new(precision_targets, &evaluator_names);
+        let mut evaluators = HashMap::new();
+        evaluators.insert(
+            "evaluator1".to_string(),
+            ExactMatch(ExactMatchConfig { cutoff: None }),
+        );
+
+        let manager = StoppingManager::new(&evaluators, precision_targets);
 
         // Initially no evaluators should be stopped
         assert!(!manager.all_evaluators_stopped());
@@ -201,8 +225,13 @@ mod tests {
         let mut precision_targets = HashMap::new();
         precision_targets.insert("evaluator1".to_string(), 0.1);
 
-        let evaluator_names = vec!["evaluator1".to_string()];
-        let manager = StoppingManager::new(precision_targets, &evaluator_names);
+        let mut evaluators = HashMap::new();
+        evaluators.insert(
+            "evaluator1".to_string(),
+            ExactMatch(ExactMatchConfig { cutoff: None }),
+        );
+
+        let manager = StoppingManager::new(&evaluators, precision_targets);
 
         // Should not cancel before min_datapoints (20)
         manager.cancel_converged_evaluators(10);
@@ -219,8 +248,13 @@ mod tests {
         // Set a very liberal precision limit so it converges easily
         precision_targets.insert("evaluator1".to_string(), 100.0);
 
-        let evaluator_names = vec!["evaluator1".to_string()];
-        let mut manager = StoppingManager::new(precision_targets, &evaluator_names);
+        let mut evaluators = HashMap::new();
+        evaluators.insert(
+            "evaluator1".to_string(),
+            ExactMatch(ExactMatchConfig { cutoff: None }),
+        );
+
+        let mut manager = StoppingManager::new(&evaluators, precision_targets);
 
         // Add enough consistent values to converge
         for _ in 0..25 {
@@ -254,8 +288,17 @@ mod tests {
         precision_targets.insert("evaluator1".to_string(), 0.1);
         precision_targets.insert("evaluator2".to_string(), 0.1);
 
-        let evaluator_names = vec!["evaluator1".to_string(), "evaluator2".to_string()];
-        let manager = StoppingManager::new(precision_targets, &evaluator_names);
+        let mut evaluators = HashMap::new();
+        evaluators.insert(
+            "evaluator1".to_string(),
+            ExactMatch(ExactMatchConfig { cutoff: None }),
+        );
+        evaluators.insert(
+            "evaluator2".to_string(),
+            ExactMatch(ExactMatchConfig { cutoff: None }),
+        );
+
+        let manager = StoppingManager::new(&evaluators, precision_targets);
 
         // Initially none stopped
         assert!(!manager.all_evaluators_stopped());
@@ -279,8 +322,17 @@ mod tests {
         let mut precision_targets = HashMap::new();
         precision_targets.insert("evaluator1".to_string(), 0.1);
 
-        let evaluator_names = vec!["evaluator1".to_string(), "evaluator2".to_string()];
-        let mut manager = StoppingManager::new(precision_targets, &evaluator_names);
+        let mut evaluators = HashMap::new();
+        evaluators.insert(
+            "evaluator1".to_string(),
+            ExactMatch(ExactMatchConfig { cutoff: None }),
+        );
+        evaluators.insert(
+            "evaluator2".to_string(),
+            ExactMatch(ExactMatchConfig { cutoff: None }),
+        );
+
+        let mut manager = StoppingManager::new(&evaluators, precision_targets);
 
         // Verify that tokens exist for both evaluators (even though only evaluator1 has precision limit)
         let tokens = manager.get_tokens();
