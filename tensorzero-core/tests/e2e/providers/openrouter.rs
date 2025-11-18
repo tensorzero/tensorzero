@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
 use crate::common::get_gateway_endpoint;
-use crate::providers::common::{E2ETestProvider, E2ETestProviders, ModelTestProvider};
+use crate::providers::common::{
+    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, ModelTestProvider,
+};
 use reqwest::{Client, StatusCode};
 use serde_json::json;
 use uuid::Uuid;
@@ -117,12 +119,17 @@ async fn get_providers() -> E2ETestProviders {
         use_modal_headers: false,
     }];
 
+    let embedding_providers = vec![EmbeddingTestProvider {
+        model_name: "gemini_embedding_001_openrouter".to_string(),
+        dimensions: 3072,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
         reasoning_inference: vec![],
-        embeddings: vec![],
+        embeddings: embedding_providers,
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
         provider_type_default_credentials: provider_type_default_credentials_providers,

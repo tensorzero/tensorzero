@@ -85,8 +85,8 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
         (
             first_inference_id.unwrap(),
             Usage {
-                input_tokens,
-                output_tokens,
+                input_tokens: Some(input_tokens),
+                output_tokens: Some(output_tokens),
             },
         )
     } else {
@@ -104,8 +104,8 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
         (
             Uuid::parse_str(inference_id).unwrap(),
             Usage {
-                input_tokens,
-                output_tokens,
+                input_tokens: Some(input_tokens),
+                output_tokens: Some(output_tokens),
             },
         )
     };
@@ -151,8 +151,8 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
     let mut dummy_uuids = vec![];
 
     let mut usage_sum = Usage {
-        input_tokens: 0,
-        output_tokens: 0,
+        input_tokens: Some(0),
+        output_tokens: Some(0),
     };
 
     for result in results {
@@ -177,8 +177,8 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
 
         let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap() as u32;
         let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap() as u32;
-        usage_sum.input_tokens += input_tokens;
-        usage_sum.output_tokens += output_tokens;
+        usage_sum.input_tokens = Some(usage_sum.input_tokens.unwrap() + input_tokens);
+        usage_sum.output_tokens = Some(usage_sum.output_tokens.unwrap() + output_tokens);
 
         // We just check the output here, since we already have several tests covering the other fields
         // for mixture_of_n
@@ -207,8 +207,8 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
         assert_eq!(
             usage_sum,
             Usage {
-                input_tokens: 40,
-                output_tokens: 8,
+                input_tokens: Some(40),
+                output_tokens: Some(8),
             }
         );
     } else {
@@ -216,8 +216,8 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
         assert_eq!(
             usage_sum,
             Usage {
-                input_tokens: 40,
-                output_tokens: 4,
+                input_tokens: Some(40),
+                output_tokens: Some(4),
             }
         );
     }
@@ -228,8 +228,8 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
         assert_eq!(
             output_usage,
             Usage {
-                input_tokens: 0,
-                output_tokens: 0,
+                input_tokens: Some(0),
+                output_tokens: Some(0),
             }
         );
     } else {

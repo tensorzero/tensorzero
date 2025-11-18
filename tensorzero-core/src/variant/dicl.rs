@@ -6,7 +6,7 @@ use futures::future::try_join_all;
 use serde::Deserialize;
 use serde::Serialize;
 
-use crate::config::path::ResolvedTomlPath;
+use crate::config::path::ResolvedTomlPathData;
 use crate::config::LoadableConfig;
 use crate::config::PathWithContents;
 use crate::embeddings::EmbeddingEncodingFormat;
@@ -168,7 +168,7 @@ pub struct UninitializedDiclConfig {
     pub embedding_model: String,
     pub k: u32, // k as in k-nearest neighbors
     pub model: String,
-    pub system_instructions: Option<ResolvedTomlPath>,
+    pub system_instructions: Option<ResolvedTomlPathData>,
     pub temperature: Option<f32>,
     pub top_p: Option<f32>,
     pub stop_sequences: Option<Vec<String>>,
@@ -900,7 +900,7 @@ pub fn default_system_instructions() -> String {
 impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
     fn load(self) -> Result<DiclConfig, Error> {
         let system_instructions = match self.system_instructions {
-            Some(path) => path.read()?,
+            Some(path) => path.data().to_string(),
             None => default_system_instructions(),
         };
 

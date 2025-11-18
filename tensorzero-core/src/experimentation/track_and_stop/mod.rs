@@ -68,10 +68,11 @@ use crate::{
         ExperimentationQueries, HealthCheckable,
     },
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    utils::spawn_ignoring_shutdown,
     variant::VariantInfo,
 };
 
-use super::VariantSampler;
+use super::{check_duplicates_across, check_duplicates_within, VariantSampler};
 
 mod check_stopping;
 mod error;
@@ -312,6 +313,9 @@ impl UninitializedTrackAndStopConfig {
             }));
         }
 
+        // Check for duplicates within candidate_variants
+        check_duplicates_within(&self.candidate_variants, "candidate_variants")?;
+
         // Validate candidate_variants are a subset of available variants
         for variant in &self.candidate_variants {
             if !variants.contains_key(variant) {
@@ -325,6 +329,9 @@ impl UninitializedTrackAndStopConfig {
             }
         }
 
+        // Check for duplicates within fallback_variants
+        check_duplicates_within(&self.fallback_variants, "fallback_variants")?;
+
         // Validate fallback_variants are a subset of available variants
         for variant in &self.fallback_variants {
             if !variants.contains_key(variant) {
@@ -337,6 +344,9 @@ impl UninitializedTrackAndStopConfig {
                 }));
             }
         }
+
+        // Check for duplicates across both lists
+        check_duplicates_across(&self.candidate_variants, &self.fallback_variants)?;
 
         // Validate min_samples_per_variant >= 1
         if self.min_samples_per_variant < 1 {
@@ -483,9 +493,7 @@ impl VariantSampler for TrackAndStopConfig {
         // 3. Computes new optimal sampling probabilities based on observed performance
         // 4. Updates the shared `self.state` via ArcSwap (lock-free concurrent updates)
         // 5. Concurrent `sample()` calls read the latest state without blocking
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-        #[expect(clippy::disallowed_methods)]
-        tokio::spawn(probability_update_task(ProbabilityUpdateTaskArgs {
+        spawn_ignoring_shutdown(probability_update_task(ProbabilityUpdateTaskArgs {
             db,
             candidate_variants: self.candidate_variants.clone().into(),
             metric_name: self.metric.clone(),
@@ -2788,5 +2796,142 @@ mod tests {
         assert!(err
             .to_string()
             .contains("candidate_variants cannot be empty"));
+    }
+
+    #[test]
+    fn test_load_error_duplicate_candidates() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string(), "A".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C"]).into_iter().collect();
+
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+            },
+        );
+
+        let result = config.load(&variants, &metrics);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("candidate_variants"));
+        assert!(err_msg.contains("duplicate entries"));
+        assert!(err_msg.contains("A"));
+    }
+
+    #[test]
+    fn test_load_error_duplicate_fallbacks() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string()],
+            fallback_variants: vec!["B".to_string(), "C".to_string(), "B".to_string()],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C"]).into_iter().collect();
+
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+            },
+        );
+
+        let result = config.load(&variants, &metrics);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("fallback_variants"));
+        assert!(err_msg.contains("duplicate entries"));
+        assert!(err_msg.contains("B"));
+    }
+
+    #[test]
+    fn test_load_error_duplicate_across_lists() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string()],
+            fallback_variants: vec!["B".to_string(), "C".to_string()],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C"]).into_iter().collect();
+
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+            },
+        );
+
+        let result = config.load(&variants, &metrics);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("cannot appear in both `candidate_variants` and `fallback_variants`")
+        );
+        assert!(err_msg.contains("B"));
+    }
+
+    #[test]
+    fn test_load_error_multiple_duplicates_across_lists() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
+            fallback_variants: vec!["B".to_string(), "C".to_string(), "D".to_string()],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+        };
+
+        let variants: HashMap<_, _> = create_test_variants(&["A", "B", "C", "D"])
+            .into_iter()
+            .collect();
+
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+            },
+        );
+
+        let result = config.load(&variants, &metrics);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("cannot appear in both `candidate_variants` and `fallback_variants`")
+        );
+        assert!(err_msg.contains("B"));
+        assert!(err_msg.contains("C"));
     }
 }

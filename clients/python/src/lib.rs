@@ -1376,11 +1376,13 @@ impl TensorZeroGateway {
             inference_cache: inference_cache_enum,
         };
 
-        let result =
-            tokio_block_on_without_gil(this.py(), run_evaluation_core_streaming(core_args))
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
-                })?;
+        let result = tokio_block_on_without_gil(
+            this.py(),
+            run_evaluation_core_streaming(core_args, None, HashMap::new()),
+        )
+        .map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
+        })?;
 
         Ok(EvaluationJobHandler {
             receiver: Mutex::new(result.receiver),
@@ -1515,46 +1517,6 @@ impl TensorZeroGateway {
             "tensorzero",
             "GetInferencesResponse",
         )
-    }
-
-    /// DEPRECATED: use `experimental_render_samples` instead.
-    /// Render a list of stored inferences into a list of rendered stored inferences.
-    /// There are two things that need to happen in this function:
-    /// 1. We need to resolve all network resources (e.g. images) in the stored inferences.
-    /// 2. We need to prepare all messages into "simple" messages that have been templated for a particular variant.
-    ///    To do this, we need to know what variant to use for each function that might appear in the data.
-    ///
-    /// IMPORTANT: For now, this function drops datapoints which are bad, e.g. ones where templating fails, the function
-    ///            has no variant specified, or where the process of downloading resources fails.
-    ///            In future we will make this behavior configurable by the caller.
-    ///
-    /// :param stored_inferences: A list of stored inferences to render.
-    /// :param variants: A map from function name to variant name.
-    /// :return: A list of rendered stored inferences.
-    #[pyo3(signature = (*, stored_inferences, variants))]
-    fn experimental_render_inferences(
-        this: PyRef<'_, Self>,
-        stored_inferences: Vec<Bound<'_, PyAny>>,
-        variants: HashMap<String, String>,
-    ) -> PyResult<Vec<RenderedSample>> {
-        tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
-        let client = this.as_super().client.clone();
-        let config = client.config().ok_or_else(|| {
-            PyValueError::new_err(
-                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
-            )
-        })?;
-        // Enter the Tokio runtime context while still holding the GIL
-        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
-        // for JSON schema compilation
-        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
-        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
-        let stored_inferences = stored_inferences
-            .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
-            .collect::<Result<Vec<_>, _>>()?;
-        let fut = client.experimental_render_samples(stored_inferences, variants);
-        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
     }
 
     /// Render a list of stored samples (datapoints or inferences) into a list of rendered stored samples.
@@ -2540,7 +2502,7 @@ impl AsyncTensorZeroGateway {
                 inference_cache: inference_cache_enum,
             };
 
-            let result = run_evaluation_core_streaming(core_args)
+            let result = run_evaluation_core_streaming(core_args, None, HashMap::new())
                 .await
                 .map_err(|e| {
                     pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
@@ -2723,40 +2685,6 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param stored_inferences: A list of stored inferences to render.
     /// :param variants: A map from function name to variant name.
-    /// :return: A list of rendered stored inferences.
-    #[pyo3(signature = (*, stored_inferences, variants))]
-    fn experimental_render_inferences<'a>(
-        this: PyRef<'a, Self>,
-        stored_inferences: Vec<Bound<'a, PyAny>>,
-        variants: HashMap<String, String>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
-        let client = this.as_super().client.clone();
-        let config = client.config().ok_or_else(|| {
-            PyValueError::new_err(
-                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
-            )
-        })?;
-        // Enter the Tokio runtime context while still holding the GIL
-        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
-        // for JSON schema compilation
-        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
-        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
-        let stored_inferences = stored_inferences
-            .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
-            .collect::<Result<Vec<_>, _>>()?;
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client
-                .experimental_render_samples(stored_inferences, variants)
-                .await;
-            Python::attach(|py| match res {
-                Ok(inferences) => Ok(PyList::new(py, inferences)?.unbind()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
     /// Render a list of stored samples into a list of rendered stored samples.
     ///
     /// This function performs two main tasks:

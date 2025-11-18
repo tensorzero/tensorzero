@@ -1,5 +1,6 @@
 use futures::future::try_join_all;
 use futures::StreamExt;
+use indexmap::IndexMap;
 use secrecy::SecretString;
 use serde_json::Value;
 use std::borrow::Cow;
@@ -399,7 +400,7 @@ impl ModelConfig {
         let span = tracing::Span::current();
         clients.otlp_config.mark_openinference_chain_span(&span);
 
-        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {
                 let provider = self.providers.get(provider_name).ok_or_else(|| {
@@ -504,7 +505,7 @@ impl ModelConfig {
         clients
             .otlp_config
             .mark_openinference_chain_span(&tracing::Span::current());
-        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {
                 let provider = self.providers.get(provider_name).ok_or_else(|| {
@@ -575,7 +576,7 @@ impl ModelConfig {
         client: &'request TensorzeroHttpClient,
         api_keys: &'request InferenceCredentials,
     ) -> Result<StartBatchModelInferenceResponse, Error> {
-        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         for provider_name in &self.routing {
             let provider = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
@@ -639,14 +640,18 @@ async fn wrap_provider_stream(
     let base_stream = async_stream::stream! {
         let mut buffer = vec![];
         let mut errored = false;
-        let mut total_usage = Usage {
-            input_tokens: 0,
-            output_tokens: 0,
-        };
+        // `total_usage` is `None` until we receive a chunk with usage information
+        let mut total_usage: Option<Usage> = None;
         while let Some(chunk) = stream.next().await {
             if let Ok(chunk) = chunk.as_ref() {
                 if let Some(chunk_usage) = &chunk.usage {
-                    total_usage = total_usage + *chunk_usage;
+                    // `total_usage` will be `None` if this is the first chunk with usage information....
+                    if total_usage.is_none() {
+                        // ... so initialize it to zero ...
+                        total_usage = Some(Usage::zero());
+                    }
+                    // ...and then add the chunk usage to it (handling `None` fields)
+                    if let Some(ref mut u) = total_usage { u.sum_strict(chunk_usage); }
                 }
             }
             // We can skip cloning the chunk if we know we're not going to write to the cache
@@ -670,18 +675,25 @@ async fn wrap_provider_stream(
             }
             yield chunk;
         }
+
+        // If we don't see a chunk with usage information, set `total_usage` to the default value (fields as `None`)
+        let total_usage = total_usage.unwrap_or_default();
+
         otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
-            let usage = if errored {
-                RateLimitResourceUsage::UnderEstimate {
-                    model_inferences: 1,
-                    tokens: total_usage.total_tokens() as u64,
+            let usage = match (total_usage.total_tokens(), errored) {
+                (Some(tokens), false) => {
+                    RateLimitResourceUsage::Exact {
+                        model_inferences: 1,
+                        tokens: tokens as u64,
+                    }
                 }
-             } else {
-                RateLimitResourceUsage::Exact {
-                    model_inferences: 1,
-                    tokens: total_usage.total_tokens() as u64,
+                _ => {
+                    RateLimitResourceUsage::UnderEstimate {
+                        model_inferences: 1,
+                        tokens: total_usage.total_tokens().unwrap_or(0) as u64,
+                    }
                 }
             };
 
@@ -2537,8 +2549,8 @@ mod tests {
         assert_eq!(
             usage,
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -2566,7 +2578,7 @@ mod tests {
         assert_eq!(
             response,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider for model 'error'."
@@ -2789,8 +2801,8 @@ mod tests {
         assert_eq!(
             usage,
             Usage {
-                input_tokens: 10,
-                output_tokens: 1,
+                input_tokens: Some(10),
+                output_tokens: Some(1),
             }
         );
         assert_eq!(&*response.model_provider_name, "good_provider");
@@ -2956,7 +2968,7 @@ mod tests {
         assert_eq!(
             error,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider for model 'error'."
@@ -3174,7 +3186,7 @@ mod tests {
         assert_eq!(
             error,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
                         provider_name: "Dummy".to_string(),
@@ -3215,7 +3227,7 @@ mod tests {
         assert_eq!(
             response,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
@@ -3297,7 +3309,7 @@ mod tests {
         assert_eq!(
             error,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
                         provider_name: "Dummy".to_string(),
