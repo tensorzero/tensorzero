@@ -1029,7 +1029,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         inference_cache: str = "on",
         dynamic_variant_config: Optional[Dict[str, Any]] = None,
         max_datapoints: Optional[int] = None,
-        adaptive_stopping: Optional[dict] = None,
+        adaptive_stopping: Optional[Dict[str, Dict[str, float]]] = None,
     ) -> EvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -1570,7 +1570,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         inference_cache: str = "on",
         dynamic_variant_config: Optional[Dict[str, Any]] = None,
         max_datapoints: Optional[int] = None,
-        adaptive_stopping: Optional[dict] = None,
+        adaptive_stopping: Optional[Dict[str, Dict[str, float]]] = None,
     ) -> AsyncEvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
