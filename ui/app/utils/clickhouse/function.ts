@@ -6,7 +6,6 @@ import type {
   TimeWindow,
 } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
-import { waldConfidenceInterval, wilsonConfidenceInterval } from "./helpers";
 
 function getTimeWindowInMs(timeWindow: TimeWindow): number {
   switch (timeWindow) {
@@ -66,7 +65,6 @@ export async function getVariantPerformances(params: {
         inference_table_name,
         metric_name,
         metric_table_name,
-        metric_type: metric_config.type,
         time_window_unit,
         variant_name,
       });
@@ -76,7 +74,6 @@ export async function getVariantPerformances(params: {
         inference_table_name,
         metric_name,
         metric_table_name,
-        metric_type: metric_config.type,
         time_window_unit,
         variant_name,
       });
@@ -98,7 +95,6 @@ async function getEpisodePerformances(params: {
   inference_table_name: string;
   metric_name: string;
   metric_table_name: string;
-  metric_type: "float" | "boolean";
   time_window_unit: TimeWindow;
   variant_name?: string;
 }): Promise<VariantPerformanceRow[] | undefined> {
@@ -107,15 +103,9 @@ async function getEpisodePerformances(params: {
     inference_table_name,
     metric_name,
     metric_table_name,
-    metric_type,
     time_window_unit,
     variant_name,
   } = params;
-
-  const ciFunction =
-    metric_type === "boolean"
-      ? wilsonConfidenceInterval
-      : waldConfidenceInterval;
 
   const variantFilter = variant_name
     ? " AND i.variant_name = {variant_name:String}"
@@ -151,7 +141,7 @@ SELECT
     toUInt32(count()) AS count,
     avg(value_per_episode) AS avg_metric,
     stddevSamp(value_per_episode) AS stdev,
-    ${ciFunction("value_per_episode")} AS ci_error
+    1.96 * (stddevSamp(value_per_episode) / sqrt(count())) AS ci_error
 FROM sub
 GROUP BY
     variant_name
@@ -213,7 +203,7 @@ SELECT
     toUInt32(count()) AS count,
     avg(value_per_episode) AS avg_metric,
     stddevSamp(value_per_episode) AS stdev,
-    ${ciFunction("value_per_episode")} AS ci_error
+    1.96 * (stddevSamp(value_per_episode) / sqrt(count())) AS ci_error
 
 FROM sub
 /*
@@ -249,7 +239,6 @@ async function getInferencePerformances(params: {
   inference_table_name: string;
   metric_name: string;
   metric_table_name: string;
-  metric_type: "float" | "boolean";
   time_window_unit: TimeWindow;
   variant_name?: string;
 }): Promise<VariantPerformanceRow[] | undefined> {
@@ -258,15 +247,9 @@ async function getInferencePerformances(params: {
     inference_table_name,
     metric_name,
     metric_table_name,
-    metric_type,
     time_window_unit,
     variant_name,
   } = params;
-
-  const ciFunction =
-    metric_type === "boolean"
-      ? wilsonConfidenceInterval
-      : waldConfidenceInterval;
 
   const variantFilter = variant_name
     ? " AND i.variant_name = {variant_name:String}"
@@ -282,7 +265,7 @@ SELECT
     toUInt32(count()) AS count,
     avg(f.value) AS avg_metric,
     stddevSamp(f.value) AS stdev,
-    ${ciFunction("f.value")} AS ci_error
+    1.96 * (stddevSamp(f.value) / sqrt(count())) AS ci_error
 FROM ${inference_table_name} i
 JOIN (
     SELECT
@@ -306,7 +289,7 @@ SELECT
     toUInt32(count()) AS count,
     avg(f.value) AS avg_metric,
     stddevSamp(f.value) AS stdev,
-    ${ciFunction("f.value")} AS ci_error
+    1.96 * (stddevSamp(f.value) / sqrt(count())) AS ci_error
 FROM ${inference_table_name} i
 JOIN (
     SELECT
