@@ -1,7 +1,10 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use crate::config::ConfigFileGlob;
-use crate::http::{TensorZeroEventSource, TensorzeroHttpClient, DEFAULT_HTTP_CLIENT_TIMEOUT};
+use crate::http::{
+    TensorZeroEventSource, TensorzeroHttpClient, TensorzeroRequestBuilder,
+    DEFAULT_HTTP_CLIENT_TIMEOUT,
+};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
 use crate::{
@@ -625,7 +628,8 @@ impl Client {
                         .into(),
                     })?;
                 let builder = client.http_client.post(url).json(&params);
-                self.parse_http_response(builder.send().await).await
+                self.send_and_parse_http_response(builder)
+                    .await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 // We currently ban auth-enabled configs in embedded gateway mode,
@@ -705,7 +709,8 @@ impl Client {
                     ))
                 } else {
                     Ok(InferenceOutput::NonStreaming(
-                        self.parse_http_response(builder.send().await).await?,
+                        self.send_and_parse_http_response(builder)
+                            .await?,
                     ))
                 }
             }
@@ -768,7 +773,8 @@ impl Client {
                     .http_client
                     .get(url)
                     .query(&[("storage_path", storage_path_json)]);
-                self.parse_http_response(builder.send().await).await
+                self.send_and_parse_http_response(builder)
+                    .await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
@@ -831,10 +837,11 @@ impl Client {
         Ok(resp)
     }
 
-    pub async fn parse_http_response<T: serde::de::DeserializeOwned>(
+    pub async fn send_and_parse_http_response<T: serde::de::DeserializeOwned>(
         &self,
-        resp: Result<reqwest::Response, reqwest::Error>,
+        builder: TensorzeroRequestBuilder<'_>,
     ) -> Result<T, TensorZeroError> {
+        let resp = builder.send().await;
         self.check_http_response(resp)
             .await?
             .json()
