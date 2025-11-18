@@ -15,7 +15,7 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use std::fmt::Debug;
 use thiserror::Error;
-use tokio::{sync::Mutex, time::error::Elapsed};
+use tokio::time::error::Elapsed;
 use tokio_stream::StreamExt;
 use url::Url;
 
@@ -551,7 +551,7 @@ pub struct Client {
     mode: Arc<ClientMode>,
     pub verbose_errors: bool,
     #[cfg(feature = "e2e_tests")]
-    pub last_body: Arc<Mutex<Option<String>>>,
+    pub last_body: Arc<tokio::sync::Mutex<Option<String>>>,
 }
 
 impl StoragePathResolver for Client {
