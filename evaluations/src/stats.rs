@@ -251,6 +251,31 @@ pub fn std_deviation(data: &[f32]) -> Option<f32> {
     }
 }
 
+/// Compute 95% Wilson confidence interval for Bernoulli data
+pub fn wilson_confint(data: &[f32]) -> Option<(f64, f64)> {
+    match (mean(data), data.len()) {
+        (Some(data_mean), count) if count > 0 => {
+            let data_mean = data_mean as f64;
+            let count_f64 = count as f64;
+            let z: f64 = 1.96; // Std normal quantile for 95% CI
+            let z_squared: f64 = z.powi(2);
+            let scale: f64 = 1.0 / (1.0 + z_squared / count_f64);
+            let center: f64 = data_mean + z_squared / (2.0 * count_f64);
+            let margin = z / (2.0 * count_f64)
+                * (4.0 * count_f64 * data_mean * (1.0 - data_mean) + z_squared).sqrt();
+            let ci_lower = (center - margin) * scale;
+            let ci_upper = (center + margin) * scale;
+
+            // Clamp to [0, 1] to handle floating-point precision errors
+            let ci_lower = ci_lower.max(0.0);
+            let ci_upper = ci_upper.min(1.0);
+
+            Some((ci_lower, ci_upper))
+        }
+        _ => None,
+    }
+}
+
 /// Tracks statistics for a single evaluator during adaptive evaluation
 /// Used for computing stopping conditions based on confidence intervals
 #[derive(Default)]
@@ -283,10 +308,18 @@ impl PerEvaluatorStats {
         std_deviation(&self.values).map(|std_dev| std_dev / (self.values.len() as f32).sqrt())
     }
 
+    pub fn wilson_confint(&self) -> Option<(f64, f64)> {
+        wilson_confint(&self.values)
+    }
+
     /// Returns the 95% confidence interval half-width (1.96 * stderr)
     /// The full CI width is 2 * ci_half_width()
     pub fn ci_half_width(&self) -> Option<f32> {
         self.stderr().map(|se| 1.96 * se)
+        // For Wilson intervals on Bernoulli data, use:
+        // let mean = self.mean()?;
+        // self.wilson_confint()
+        //     .map(|(ci_lower, ci_upper)| (mean as f64 - ci_lower).max(ci_upper - mean as f64) as f32)
     }
 
     /// Converts to an EvaluatorStats snapshot for output/serialization
@@ -301,7 +334,170 @@ impl PerEvaluatorStats {
 
 #[cfg(test)]
 mod tests {
-    use super::PerEvaluatorStats;
+    use super::{wilson_confint, PerEvaluatorStats};
+
+    #[test]
+    fn test_wilson_confint_all_zeros() {
+        // All 0s should still produce non-zero width interval
+        let data = vec![0.0; 10];
+        let result = wilson_confint(&data);
+        assert!(result.is_some());
+        let (lower, upper) = result.unwrap();
+
+        // Should be bounded in [0, 1]
+        assert!(lower == 0.0, "Lower bound should be = 0, got {lower}");
+        assert!(upper < 1.0, "Upper bound should be < 1, got {upper}");
+
+        // Should have non-zero width
+        assert!(
+            upper > lower,
+            "Interval should have non-zero width, got [{lower}, {upper}]"
+        );
+        assert!(
+            upper > 0.0,
+            "Upper bound should be > 0 even with all zeros, got {upper}"
+        );
+    }
+
+    #[test]
+    fn test_wilson_confint_all_ones() {
+        // All 1s should still produce non-zero width interval
+        let data = vec![1.0; 10];
+        let result = wilson_confint(&data);
+        assert!(result.is_some());
+        let (lower, upper) = result.unwrap();
+
+        // Should be bounded in [0, 1]
+        assert!(lower > 0.0, "Lower bound should be > 0, got {lower}");
+        assert!(upper == 1.0, "Upper bound should be = 1, got {upper}");
+
+        // Should have non-zero width
+        assert!(
+            upper > lower,
+            "Interval should have non-zero width, got [{lower}, {upper}]"
+        );
+        assert!(
+            lower < 1.0,
+            "Lower bound should be < 1 even with all ones, got {lower}"
+        );
+    }
+
+    #[test]
+    fn test_wilson_confint_half_half() {
+        // 50/50 split should have symmetric interval around 0.5
+        let data = vec![0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0];
+        let result = wilson_confint(&data);
+        assert!(result.is_some());
+        let (lower, upper) = result.unwrap();
+
+        // Should be bounded in [0, 1]
+        assert!(lower > 0.0, "Lower bound should be > 0, got {lower}");
+        assert!(upper < 1.0, "Upper bound should be < 1, got {upper}");
+
+        // Should be roughly symmetric around 0.5
+        let midpoint = (lower + upper) / 2.0;
+        assert!(
+            (midpoint - 0.5).abs() < 0.01,
+            "Midpoint should be close to 0.5, got {midpoint}"
+        );
+    }
+
+    #[test]
+    fn test_wilson_confint_single_value() {
+        // Single observation should still work
+        let data = vec![1.0];
+        let result = wilson_confint(&data);
+        assert!(result.is_some());
+        let (lower, upper) = result.unwrap();
+
+        // Should be bounded in [0, 1]
+        assert!(lower >= 0.0);
+        assert!(upper <= 1.0);
+        assert!(upper > lower);
+    }
+
+    #[test]
+    fn test_wilson_confint_empty_data() {
+        // Empty data should return None
+        let data: Vec<f32> = vec![];
+        let result = wilson_confint(&data);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_wilson_confint_known_values() {
+        // Test against known values
+        let data = vec![0.0; 10];
+        let mut test_data = data;
+        test_data.extend(vec![1.0; 10]);
+
+        let result = wilson_confint(&test_data);
+        assert!(result.is_some());
+        let (lower, upper) = result.unwrap();
+
+        assert!(
+            (lower - 0.2992949).abs() < 1e-6,
+            "Lower bound should be approximately 0.2992949, got {lower}"
+        );
+        assert!(
+            (upper - 0.7007050).abs() < 1e-6,
+            "Upper bound should be approximately 0.7007050, got {upper}"
+        );
+    }
+
+    #[test]
+    fn test_wilson_vs_wald_large_sample() {
+        // With large samples, Wilson and Wald intervals should converge
+        // Using n=10000, p=0.4 (4000 successes)
+        let mut data = vec![0.0; 6000];
+        data.extend(vec![1.0; 4000]);
+
+        let result = wilson_confint(&data);
+        assert!(result.is_some());
+        let (wilson_lower, wilson_upper) = result.unwrap();
+
+        // Compute Wald interval: p̂ ± 1.96 * sqrt(p̂(1-p̂)/n)
+        let p_hat: f64 = 0.4;
+        let n: f64 = 10000.0;
+        let wald_stderr: f64 = (p_hat * (1.0 - p_hat) / n).sqrt();
+        let wald_margin: f64 = 1.96 * wald_stderr;
+        let wald_lower: f64 = p_hat - wald_margin;
+        let wald_upper: f64 = p_hat + wald_margin;
+
+        // Wilson and Wald should be very close for large n
+        assert!(
+            (wilson_lower - wald_lower).abs() < 1e-4,
+            "Wilson lower ({wilson_lower}) should be close to Wald lower ({wald_lower})"
+        );
+        assert!(
+            (wilson_upper - wald_upper).abs() < 1e-4,
+            "Wilson upper ({wilson_upper}) should be close to Wald upper ({wald_upper})"
+        );
+
+        // Verify both are well within [0, 1]
+        assert!(wilson_lower > 0.0 && wilson_lower < 1.0);
+        assert!(wilson_upper > 0.0 && wilson_upper < 1.0);
+        assert!(wald_lower > 0.0 && wald_lower < 1.0);
+        assert!(wald_upper > 0.0 && wald_upper < 1.0);
+    }
+
+    #[test]
+    fn test_wilson_confint_versus_wald_extreme() {
+        // Wilson should handle extreme proportions better than Wald
+        // With p=0.05 (1 success in 20), Wald can give lower < 0
+        let mut data = vec![0.0; 19];
+        data.push(1.0);
+
+        let result = wilson_confint(&data);
+        assert!(result.is_some());
+        let (lower, _upper) = result.unwrap();
+
+        // Wilson should keep bounds within [0, 1]
+        assert!(
+            lower >= 0.0,
+            "Wilson lower bound should be >= 0, got {lower}",
+        );
+    }
 
     #[test]
     fn test_per_evaluator_stats_basic() {
