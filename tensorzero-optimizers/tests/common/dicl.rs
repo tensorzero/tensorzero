@@ -169,6 +169,9 @@ pub async fn test_dicl_optimization_chat() {
                 _ => panic!("Expected DICL variant config"),
             }
         }
+        OptimizerOutput::Variants(_) => {
+            panic!("Expected variant output from DICL optimizer, got variants output");
+        }
         OptimizerOutput::Model(_) => {
             panic!("Expected variant output from DICL optimizer, got model output");
         }
@@ -449,6 +452,9 @@ pub async fn test_dicl_optimization_json() {
                 UninitializedVariantConfig::Dicl(dicl_config) => dicl_config.clone(),
                 _ => panic!("Expected DICL variant config"),
             }
+        }
+        OptimizerOutput::Variants(_) => {
+            panic!("Expected variant output from DICL optimizer, got variants output");
         }
         OptimizerOutput::Model(_) => {
             panic!("Expected variant output from DICL optimizer, got model output");
@@ -764,8 +770,8 @@ fn validate_pinocchio_pattern(text: &str) {
 /// Validates usage metrics and DICL token count expectations
 #[allow(clippy::allow_attributes, dead_code)] // False positive
 fn validate_usage_metrics(usage: Usage) {
-    assert!(usage.input_tokens > 0);
-    assert!(usage.output_tokens > 0);
+    assert!(usage.input_tokens.unwrap() > 0);
+    assert!(usage.output_tokens.unwrap() > 0);
 }
 
 /// Validates ClickHouse inference data for both chat and JSON responses

@@ -282,10 +282,34 @@ fn build_otel_enabled_routes() -> (OtelEnabledRoutes, Router<AppStateData>) {
 // or uninteresting routes like /health
 fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<AppStateData> {
     Router::new()
+        .merge(build_observability_routes())
+        .merge(build_datasets_routes())
+        .merge(build_optimization_routes())
+        .merge(build_evaluations_routes())
+        .merge(build_internal_routes())
+        .merge(build_meta_observability_routes(metrics_handle))
+}
+
+/// This function builds the public routes for observability.
+///
+/// IMPORTANT: Add internal routes to `build_internal_routes` instead.
+fn build_observability_routes() -> Router<AppStateData> {
+    Router::new()
         .route(
-            "/variant_sampling_probabilities",
-            get(endpoints::variant_probabilities::get_variant_sampling_probabilities_handler),
+            "/v1/inferences/list_inferences",
+            post(endpoints::stored_inferences::v1::list_inferences_handler),
         )
+        .route(
+            "/v1/inferences/get_inferences",
+            post(endpoints::stored_inferences::v1::get_inferences_handler),
+        )
+}
+
+/// This function builds the public routes for datasets.
+///
+/// IMPORTANT: Add internal routes to `build_internal_routes` instead.
+fn build_datasets_routes() -> Router<AppStateData> {
+    Router::new()
         .route(
             "/datasets/{dataset_name}/datapoints",
             #[expect(deprecated)]
@@ -339,26 +363,28 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
             "/v1/datasets/get_datapoints",
             post(endpoints::datasets::v1::get_datapoints_handler),
         )
+}
+
+/// This function builds the public routes for optimization.
+///
+/// IMPORTANT: Add internal routes to `build_internal_routes` instead.
+fn build_optimization_routes() -> Router<AppStateData> {
+    Router::new()
         .route(
-            "/v1/inferences/list_inferences",
-            post(endpoints::stored_inferences::v1::list_inferences_handler),
+            "/experimental_optimization_workflow",
+            post(tensorzero_optimizers::endpoints::launch_optimization_workflow_handler),
         )
         .route(
-            "/v1/inferences/get_inferences",
-            post(endpoints::stored_inferences::v1::get_inferences_handler),
+            "/experimental_optimization/{job_handle}",
+            get(tensorzero_optimizers::endpoints::poll_optimization_handler),
         )
-        .route(
-            "/internal/datasets/{dataset_name}/datapoints",
-            post(endpoints::datasets::insert_from_existing_datapoint_handler),
-        )
-        .route(
-            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
-            put(endpoints::datasets::update_datapoint_handler),
-        )
-        .route(
-            "/internal/object_storage",
-            get(endpoints::object_storage::get_object_handler),
-        )
+}
+
+/// This function builds the public routes for evaluations.
+///
+/// IMPORTANT: Add internal routes to `build_internal_routes` instead.
+fn build_evaluations_routes() -> Router<AppStateData> {
+    Router::new()
         // Workflow evaluation endpoints (new)
         .route(
             "/workflow_evaluation_run",
@@ -377,17 +403,44 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
             "/dynamic_evaluation_run/{run_id}/episode",
             post(endpoints::workflow_evaluation_run::dynamic_evaluation_run_episode_handler),
         )
+}
+
+/// This function builds the internal routes.
+///
+/// IMPORTANT: These routes are for internal use. They are unstable and might change without notice.
+fn build_internal_routes() -> Router<AppStateData> {
+    Router::new()
+        // Deprecated (#4652): Remove the endpoint without the `/internal` prefix.
+        .route(
+            "/variant_sampling_probabilities",
+            get(endpoints::variant_probabilities::get_variant_sampling_probabilities_handler),
+        )
+        .route(
+            "/internal/functions/{function_name}/variant_sampling_probabilities",
+            get(endpoints::variant_probabilities::get_variant_sampling_probabilities_by_function_handler),
+        )
+        .route(
+            "/internal/datasets/{dataset_name}/datapoints",
+            post(endpoints::datasets::insert_from_existing_datapoint_handler),
+        )
+        .route(
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
+            put(endpoints::datasets::update_datapoint_handler),
+        )
+        .route(
+            "/internal/object_storage",
+            get(endpoints::object_storage::get_object_handler),
+        )
+}
+
+/// This function builds the public routes for meta-observability (e.g. gateway health).
+///
+/// IMPORTANT: Add internal routes to `build_internal_routes` instead.
+fn build_meta_observability_routes(metrics_handle: PrometheusHandle) -> Router<AppStateData> {
+    Router::new()
         .route(
             "/metrics",
             get(move || std::future::ready(metrics_handle.render())),
-        )
-        .route(
-            "/experimental_optimization_workflow",
-            post(tensorzero_optimizers::endpoints::launch_optimization_workflow_handler),
-        )
-        .route(
-            "/experimental_optimization/{job_handle}",
-            get(tensorzero_optimizers::endpoints::poll_optimization_handler),
         )
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))

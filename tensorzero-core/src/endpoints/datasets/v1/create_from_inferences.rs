@@ -10,7 +10,7 @@ use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferen
 use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
-use crate::stored_inference::StoredInference;
+use crate::stored_inference::{StoredInference, StoredInferenceDatabase};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
@@ -72,6 +72,7 @@ pub async fn create_from_inferences(
             ListInferencesParams {
                 ids: Some(inference_ids),
                 output_source: inference_output_source,
+                limit: inference_ids.len() as u32,
                 ..Default::default()
             }
         }
@@ -84,6 +85,7 @@ pub async fn create_from_inferences(
             variant_name: variant_name.as_deref(),
             filters: filters.as_ref(),
             output_source: inference_output_source,
+            limit: u32::MAX,
             ..Default::default()
         },
     };
@@ -93,7 +95,7 @@ pub async fn create_from_inferences(
         .list_inferences(config, &list_inferences_params)
         .await?
         .into_iter()
-        .map(|x| x.into_stored_inference(config))
+        .map(StoredInferenceDatabase::into_stored_inference)
         .collect::<Result<Vec<_>, _>>()?;
 
     if let CreateDatapointsFromInferenceRequestParams::InferenceIds {

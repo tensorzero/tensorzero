@@ -89,7 +89,7 @@ The `api_key_location` field in your model provider configuration specifies how 
      ```
      The API key can then be passed in the inference request.
 
-See the [Credential Management](/gateway/guides/credential-management/) guide, the [Configuration Reference](/gateway/configuration-reference/), and the [API reference](/gateway/api-reference/inference/) for more details.
+See the [Credential Management](/operations/manage-credentials/) guide, the [Configuration Reference](/gateway/configuration-reference/), and the [API reference](/gateway/api-reference/inference/) for more details.
 
 In this example, SGLang is running locally without authentication, so we use `api_key_location = "none"`.
 
@@ -99,7 +99,7 @@ Create a minimal Docker Compose configuration:
 
 ```yaml title="docker-compose.yml"
 # This is a simplified example for learning purposes. Do not use this in production.
-# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+# For production-ready deployments, see: https://www.tensorzero.com/docs/deployment/tensorzero-gateway
 
 services:
   gateway:

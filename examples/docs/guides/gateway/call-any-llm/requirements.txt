@@ -130,7 +130,7 @@ jiter==0.10.0 \
 openai==1.101.0 \
     --hash=sha256:29f56df2236069686e64aca0e13c24a4ec310545afb25ef7da2ab1a18523f22d \
     --hash=sha256:6539a446cce154f8d9fb42757acdfd3ed9357ab0d34fcac11096c461da87133b
-    # via tensorzero-examples-docs-gateway-call-an-llm
+    # via tensorzero-examples-docs-guides-gateway-call-an-llm
 pydantic==2.11.7 \
     --hash=sha256:d989c3c6cb79469287b1569f7447a17848c998458d49ebe294e975b9baf0f0db \
     --hash=sha256:dde5df002701f6de26248661f6835bbe296a47bf73990135c7d07ce741b9623b
@@ -251,7 +251,7 @@ tensorzero==2025.8.3 \
     --hash=sha256:79bdc77b1eac8200710f06919574c2d0a0459119073307dda725a8e7298fab2b \
     --hash=sha256:a41f59ec2d2229aaede4546cb4683a71b63d2c6a6d64feed842ed91215ed3176 \
     --hash=sha256:b4e86447b839684172e2fc5c404cfea0eca117d1fac0b91b406f77318da6a541
-    # via tensorzero-examples-docs-gateway-call-an-llm
+    # via tensorzero-examples-docs-guides-gateway-call-an-llm
 tqdm==4.67.1 \
     --hash=sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2 \
     --hash=sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2

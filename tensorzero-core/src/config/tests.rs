@@ -12,7 +12,7 @@ use crate::{embeddings::EmbeddingProviderConfig, inference::types::Role, variant
 async fn test_config_from_toml_table_valid() {
     let config = get_sample_valid_config();
 
-    Config::load_from_toml(config, &SpanMap::new_empty())
+    Config::load_from_toml(config)
         .await
         .expect("Failed to load config");
 
@@ -21,7 +21,7 @@ async fn test_config_from_toml_table_valid() {
     config
         .remove("metrics")
         .expect("Failed to remove `[metrics]` section");
-    let config = Config::load_from_toml(config, &SpanMap::new_empty())
+    let config = Config::load_from_toml(config)
         .await
         .expect("Failed to load config");
 
@@ -140,7 +140,7 @@ async fn test_config_from_toml_table_valid() {
                             PathWithContents {
                                 // We don't use a real path for programmatically generated templates
                                 // Instead we use this handle and then the same in minijinja
-                                path: ResolvedTomlPath::new_for_tests(
+                                path: ResolvedTomlPathData::new_for_tests(
                                     PathBuf::from(
                                         "tensorzero::llm_judge::evaluation1::llm_judge_bool::anthropic_promptA::system"
                                     ),
@@ -265,9 +265,7 @@ async fn test_config_gateway_bind_address() {
     let mut config = get_sample_valid_config();
 
     // Test with a valid bind address
-    let parsed_config = Config::load_from_toml(config.clone(), &SpanMap::new_empty())
-        .await
-        .unwrap();
+    let parsed_config = Config::load_from_toml(config.clone()).await.unwrap();
     assert_eq!(
         parsed_config.gateway.bind_address.unwrap().to_string(),
         "0.0.0.0:3000"
@@ -275,9 +273,7 @@ async fn test_config_gateway_bind_address() {
 
     // Test with missing gateway section
     config.remove("gateway");
-    let parsed_config = Config::load_from_toml(config.clone(), &SpanMap::new_empty())
-        .await
-        .unwrap();
+    let parsed_config = Config::load_from_toml(config.clone()).await.unwrap();
     assert!(parsed_config.gateway.bind_address.is_none());
 
     // Test with missing bind_address
@@ -285,9 +281,7 @@ async fn test_config_gateway_bind_address() {
         "gateway".to_string(),
         toml::Value::Table(toml::Table::new()),
     );
-    let parsed_config = Config::load_from_toml(config.clone(), &SpanMap::new_empty())
-        .await
-        .unwrap();
+    let parsed_config = Config::load_from_toml(config.clone()).await.unwrap();
     assert!(parsed_config.gateway.bind_address.is_none());
 
     // Test with invalid bind address
@@ -295,7 +289,7 @@ async fn test_config_gateway_bind_address() {
         "bind_address".to_string(),
         toml::Value::String("invalid_address".to_string()),
     );
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -320,9 +314,7 @@ async fn test_config_from_toml_table_missing_models() {
         .retain(|k, _| k == "generate_draft");
 
     assert_eq!(
-        Config::load_from_toml(config, &SpanMap::new_empty())
-            .await
-            .unwrap_err(),
+        Config::load_from_toml(config).await.unwrap_err(),
         Error::new(ErrorDetails::Config {
             message: "Model name 'gpt-4.1-mini' not found in model table".to_string()
         })
@@ -339,7 +331,7 @@ async fn test_config_from_toml_table_missing_providers() {
         .remove("providers")
         .expect("Failed to remove `[providers]` section");
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -371,11 +363,19 @@ async fn test_config_from_toml_table_missing_credentials() {
             table.insert("model".into(), "dummy".into());
             table.insert(
                 "system_template".into(),
-                [(
-                    "__tensorzero_remapped_path".into(),
-                    "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-                        .into(),
-                )]
+                [
+                    (
+                        "__tensorzero_remapped_path".into(),
+                        "tensorzero-core/fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
+                            .into(),
+                    ),
+                    (
+                        "__data".into(),
+                        std::fs::read_to_string("tensorzero-core/fixtures/config/functions/generate_draft/promptA/system_template.minijinja")
+                            .unwrap_or_else(|_| "You are a helpful assistant.".to_string())
+                            .into(),
+                    ),
+                ]
                 .into_iter()
                 .collect::<toml::Table>()
                 .into(),
@@ -415,9 +415,7 @@ async fn test_config_from_toml_table_missing_credentials() {
         }),
     );
 
-    let error = Config::load_from_toml(config.clone(), &SpanMap::new_empty())
-        .await
-        .unwrap_err();
+    let error = Config::load_from_toml(config.clone()).await.unwrap_err();
     assert_eq!(
             error,
             Error::new(ErrorDetails::Config {
@@ -435,7 +433,7 @@ async fn test_config_from_toml_table_nonexistent_function() {
         .remove("functions")
         .expect("Failed to remove `[functions]` section");
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert_eq!(
         result.unwrap_err(),
         ErrorDetails::Config {
@@ -457,7 +455,7 @@ async fn test_config_from_toml_table_missing_variants() {
         .remove("variants")
         .expect("Failed to remove `[variants]` section");
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert_eq!(
         result.unwrap_err(),
         ErrorDetails::Config {
@@ -473,7 +471,7 @@ async fn test_config_from_toml_table_extra_variables_root() {
     let mut config = get_sample_valid_config();
     config.insert("enable_agi".into(), true.into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert!(result
         .unwrap_err()
         .to_string()
@@ -489,7 +487,7 @@ async fn test_config_from_toml_table_extra_variables_models() {
         .expect("Failed to get `models.claude-3-haiku-20240307` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert!(result
         .unwrap_err()
         .to_string()
@@ -511,7 +509,7 @@ async fn test_config_from_toml_table_blacklisted_models() {
         .expect("Failed to get `models` section")
         .insert("anthropic::claude-3-haiku-20240307".into(), claude_config);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     let error = result.unwrap_err().to_string();
     assert!(
         error.contains(
@@ -530,7 +528,7 @@ async fn test_config_from_toml_table_extra_variables_providers() {
         .expect("Failed to get `models.claude-3-haiku-20240307.providers.anthropic` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert!(result
         .unwrap_err()
         .to_string()
@@ -546,7 +544,7 @@ async fn test_config_from_toml_table_extra_variables_functions() {
         .expect("Failed to get `functions.generate_draft` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert!(result
         .unwrap_err()
         .to_string()
@@ -562,7 +560,7 @@ async fn test_config_from_toml_table_json_function_no_output_schema() {
         .expect("Failed to get `functions.generate_draft` section")
         .remove("output_schema");
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     let config = result.unwrap();
     // Check that the output schema is set to {}
     let output_schema = match &**config.functions.get("json_with_schemas").unwrap() {
@@ -582,7 +580,7 @@ async fn test_config_from_toml_table_extra_variables_variants() {
         .expect("Failed to get `functions.generate_draft.variants.openai_promptA` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert!(result
         .unwrap_err()
         .to_string()
@@ -598,7 +596,7 @@ async fn test_config_from_toml_table_extra_variables_metrics() {
         .expect("Failed to get `metrics.task_success` section")
         .insert("enable_agi".into(), true.into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert!(result
         .unwrap_err()
         .to_string()
@@ -611,7 +609,7 @@ async fn test_config_validate_model_empty_providers() {
     let mut config = get_sample_valid_config();
     config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec![]);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     let error = result.unwrap_err();
     assert!(error
         .to_string()
@@ -624,7 +622,7 @@ async fn test_config_validate_model_duplicate_routing_entry() {
     let mut config = get_sample_valid_config();
     config["models"]["gpt-4.1-mini"]["routing"] =
         toml::Value::Array(vec!["openai".into(), "openai".into()]);
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     let error = result.unwrap_err().to_string();
     assert!(error.contains("`models.gpt-4.1-mini.routing`: duplicate entry `openai`"));
 }
@@ -634,7 +632,7 @@ async fn test_config_validate_model_duplicate_routing_entry() {
 async fn test_config_validate_model_routing_entry_not_in_providers() {
     let mut config = get_sample_valid_config();
     config["models"]["gpt-4.1-mini"]["routing"] = toml::Value::Array(vec!["closedai".into()]);
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini`: `routing` contains entry `closedai` that does not exist in `providers`"));
 }
 
@@ -642,115 +640,131 @@ async fn test_config_validate_model_routing_entry_not_in_providers() {
 #[tokio::test]
 async fn test_config_system_schema_does_not_exist() {
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_chat"]["system_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_chat"]["system_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let result = Config::load_from_toml(sample_config).await;
+    let error = result.unwrap_err();
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
+    } else {
+        panic!("Expected JsonSchema error, got: {error:?}");
+    }
+
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_json"]["system_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_json"]["system_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let result = Config::load_from_toml(sample_config).await;
+    let error = result.unwrap_err();
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
+    } else {
+        panic!("Expected JsonSchema error, got: {error:?}");
+    }
 }
 
 /// Ensure that the config loading fails when the user schema does not exist
 #[tokio::test]
 async fn test_config_user_schema_does_not_exist() {
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_chat"]["user_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_chat"]["user_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let result = Config::load_from_toml(sample_config).await;
+    let error = result.unwrap_err();
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
+    } else {
+        panic!("Expected JsonSchema error, got: {error:?}");
+    }
+
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_json"]["user_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_json"]["user_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at non_existent_file.json: No such file or directory (os error 2)".to_string()
-            }.into()
-        );
+    let result = Config::load_from_toml(sample_config).await;
+    let error = result.unwrap_err();
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
+    } else {
+        panic!("Expected JsonSchema error, got: {error:?}");
+    }
 }
 
 /// Ensure that the config loading fails when the assistant schema does not exist
 #[tokio::test]
 async fn test_config_assistant_schema_does_not_exist() {
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_chat"]["assistant_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_chat"]["assistant_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(sample_config).await;
     let error = result.unwrap_err();
-    if let ErrorDetails::Config { message } = error.get_details() {
-        assert!(message.contains("Failed to read file at"));
-        assert!(message.contains("non_existent_file.json"));
-        assert!(message.contains("No such file or directory"));
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
     } else {
-        panic!("Expected Config error, got: {error:?}");
+        panic!("Expected JsonSchema error, got: {error:?}");
     }
 
     let mut sample_config = get_sample_valid_config();
-    sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] = [(
-        "__tensorzero_remapped_path".into(),
-        "non_existent_file.json".into(),
-    )]
+    sample_config["functions"]["templates_with_variables_json"]["assistant_schema"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "non_existent_file.json".into(),
+        ),
+        ("__data".into(), "invalid json content".into()),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(sample_config).await;
     let error = result.unwrap_err();
-    if let ErrorDetails::Config { message } = error.get_details() {
-        assert!(message.contains("Failed to read file at"));
-        assert!(message.contains("non_existent_file.json"));
-        assert!(message.contains("No such file or directory"));
+    if let ErrorDetails::JsonSchema { message } = error.get_details() {
+        assert!(message.contains("expected value") || message.contains("invalid type"));
     } else {
-        panic!("Expected Config error, got: {error:?}");
+        panic!("Expected JsonSchema error, got: {error:?}");
     }
 }
 
@@ -768,7 +782,7 @@ async fn test_config_system_schema_is_needed() {
         .unwrap()
         .remove("best_of_n");
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(sample_config).await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -781,7 +795,7 @@ async fn test_config_system_schema_is_needed() {
         .unwrap()
         .remove("system_schema");
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(sample_config).await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -803,7 +817,7 @@ async fn test_config_user_schema_is_needed() {
         .unwrap()
         .remove("best_of_n");
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(sample_config).await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -817,7 +831,7 @@ async fn test_config_user_schema_is_needed() {
         .unwrap()
         .remove("user_schema");
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(sample_config).await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -840,7 +854,7 @@ async fn test_config_assistant_schema_is_needed() {
         .unwrap()
         .remove("best_of_n");
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(sample_config).await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -853,7 +867,7 @@ async fn test_config_assistant_schema_is_needed() {
         .unwrap()
         .remove("assistant_schema");
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(sample_config).await;
     assert_eq!(
             result.unwrap_err(),
             ErrorDetails::Config {
@@ -878,7 +892,7 @@ async fn test_config_best_of_n_candidate_not_found() {
             toml::Value::Array(vec!["non_existent_candidate".into()]),
         );
 
-    let result = Config::load_from_toml(sample_config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(sample_config).await;
     assert_eq!(
         result.unwrap_err(),
         ErrorDetails::UnknownCandidate {
@@ -895,7 +909,7 @@ async fn test_config_validate_function_variant_negative_weight() {
     config["functions"]["generate_draft"]["variants"]["openai_promptA"]["weight"] =
         toml::Value::Float(-1.0);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert_eq!(
         result.unwrap_err(),
         ErrorDetails::Config {
@@ -914,7 +928,7 @@ async fn test_config_validate_variant_model_not_in_models() {
     config["functions"]["generate_draft"]["variants"]["openai_promptA"]["model"] =
         "non_existent_model".into();
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
 
     assert_eq!(
         result.unwrap_err(),
@@ -929,23 +943,33 @@ async fn test_config_validate_variant_model_not_in_models() {
 #[tokio::test]
 async fn test_config_validate_variant_template_nonexistent() {
     let mut config = get_sample_valid_config();
-    config["functions"]["generate_draft"]["variants"]["openai_promptA"]["system_template"] = [(
-        "__tensorzero_remapped_path".into(),
-        "nonexistent_template".into(),
-    )]
+    config["functions"]["generate_draft"]["variants"]["openai_promptA"]["system_template"] = [
+        (
+            "__tensorzero_remapped_path".into(),
+            "nonexistent_template".into(),
+        ),
+        (
+            "__data".into(),
+            "invalid template content with {{ unclosed".into(),
+        ),
+    ]
     .into_iter()
     .collect::<toml::Table>()
     .into();
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
 
-    assert_eq!(
-            result.unwrap_err(),
-            ErrorDetails::Config {
-                message: "Failed to read file at nonexistent_template: No such file or directory (os error 2)".to_string()
-            }
-            .into()
+    // With eager loading, this should now fail during template parsing
+    let error = result.unwrap_err();
+    if let ErrorDetails::MiniJinjaTemplate { message, .. } = error.get_details() {
+        assert!(
+            message.contains("expected")
+                || message.contains("unclosed")
+                || message.contains("invalid")
         );
+    } else {
+        panic!("Expected MiniJinjaTemplate error, got: {error:?}");
+    }
 }
 
 /// Ensure that the config validation fails when an evaluation points at a nonexistent function
@@ -954,7 +978,7 @@ async fn test_config_validate_evaluation_function_nonexistent() {
     let mut config = get_sample_valid_config();
     config["evaluations"]["evaluation1"]["function_name"] = "nonexistent_function".into();
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
 
     assert_eq!(
             result.unwrap_err(),
@@ -979,7 +1003,7 @@ async fn test_config_validate_evaluation_name_contains_double_colon() {
         .unwrap()
         .insert("bad::evaluation".to_string(), evaluation1);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
 
     assert_eq!(
             result.unwrap_err(),
@@ -1003,7 +1027,7 @@ async fn test_config_validate_function_nonexistent_tool() {
     config["functions"]["generate_draft"]["tools"] =
         toml::Value::Array(vec!["non_existent_tool".into()]);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
 
     assert_eq!(
             result.unwrap_err(),
@@ -1029,7 +1053,7 @@ async fn test_config_validate_function_name_tensorzero_prefix() {
         .unwrap()
         .insert("tensorzero::bad_function".to_string(), old_function_entry);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -1055,7 +1079,7 @@ async fn test_config_validate_metric_name_tensorzero_prefix() {
         .unwrap()
         .insert("tensorzero::bad_metric".to_string(), old_metric_entry);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -1081,7 +1105,7 @@ async fn test_config_validate_model_name_tensorzero_prefix() {
         .unwrap()
         .insert("tensorzero::bad_model".to_string(), old_model_entry);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert_eq!(
             result.unwrap_err(),
             Error::new(ErrorDetails::Config {
@@ -1107,7 +1131,7 @@ async fn test_config_validate_embedding_model_name_tensorzero_prefix() {
         old_embedding_model_entry,
     );
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert_eq!(
                 result.unwrap_err(),
                 Error::new(ErrorDetails::Config {
@@ -1135,7 +1159,7 @@ async fn test_config_validate_tool_name_tensorzero_prefix() {
         .unwrap()
         .insert("tensorzero::bad_tool".to_string(), old_tool_entry);
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
@@ -1154,7 +1178,7 @@ async fn test_config_validate_chat_function_json_mode() {
         .unwrap()
         .insert("json_mode".to_string(), "on".into());
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
 
     // Check that the config is rejected, since `generate_draft` is not a json function
     let err_msg = result.unwrap_err().to_string();
@@ -1183,7 +1207,7 @@ async fn test_config_validate_variant_name_tensorzero_prefix() {
 
     // This test will only pass if your code actually rejects variant names with that prefix
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
 
     // Adjust the expected message if your code gives a different error shape for variants
     // Or remove this test if variant names are *not* validated in that manner
@@ -1219,7 +1243,7 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
         }
     }
 
-    let result = Config::load_from_toml(config, &SpanMap::new_empty()).await;
+    let result = Config::load_from_toml(config).await;
 
     assert!(result.unwrap_err().to_string().contains("`models.gpt-4.1-mini.routing`: Provider name cannot start with 'tensorzero::': tensorzero::openai"));
 }
@@ -1228,7 +1252,7 @@ async fn test_config_validate_model_provider_name_tensorzero_prefix() {
 #[tokio::test]
 async fn test_get_all_templates() {
     let config_table = get_sample_valid_config();
-    let config = Config::load_from_toml(config_table, &SpanMap::new_empty())
+    let config = Config::load_from_toml(config_table)
         .await
         .expect("Failed to load config");
 
@@ -1438,7 +1462,7 @@ async fn test_load_bad_extra_body_delete() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(config)
         .await
         .expect_err("Config loading should fail")
         .to_string();
@@ -1462,7 +1486,7 @@ thinking = { type = "enabled", budget_tokens = 1024 }
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(config)
         .await
         .expect_err("Config loading should fail")
         .to_string();
@@ -1508,7 +1532,7 @@ async fn test_config_load_shorthand_models_only() {
     env::set_var("ANTHROPIC_API_KEY", "sk-something");
     env::set_var("AZURE_OPENAI_API_KEY", "sk-something");
 
-    Config::load_from_toml(config.table, &config.span_map)
+    Config::load_from_toml(config.table)
         .await
         .expect("Failed to load config");
 }
@@ -1577,7 +1601,7 @@ async fn test_model_provider_unknown_field() {
 
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(config)
         .await
         .expect_err("Config should fail to load");
     assert!(
@@ -1620,7 +1644,7 @@ async fn test_bedrock_err_no_auto_detect_region() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(config)
         .await
         .expect_err("Failed to load bedrock");
     let err_msg = err.to_string();
@@ -1651,7 +1675,7 @@ async fn test_bedrock_err_auto_detect_region_no_aws_credentials() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(config)
         .await
         .expect_err("Failed to load bedrock");
     let err_msg = err.to_string();
@@ -1686,7 +1710,7 @@ async fn test_bedrock_region_and_allow_auto() {
         "#;
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    Config::load_from_toml(config, &SpanMap::new_empty())
+    Config::load_from_toml(config)
         .await
         .expect("Failed to construct config with valid AWS bedrock provider");
 }
@@ -1954,7 +1978,7 @@ async fn test_missing_json_mode_chat() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let err = SKIP_CREDENTIAL_VALIDATION
-        .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
+        .scope((), Config::load_from_toml(config))
         .await
         .unwrap_err();
 
@@ -1992,7 +2016,7 @@ async fn test_missing_json_mode_dicl() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let err = SKIP_CREDENTIAL_VALIDATION
-        .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
+        .scope((), Config::load_from_toml(config))
         .await
         .unwrap_err();
 
@@ -2031,7 +2055,7 @@ async fn test_missing_json_mode_mixture_of_n() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let err = SKIP_CREDENTIAL_VALIDATION
-        .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
+        .scope((), Config::load_from_toml(config))
         .await
         .unwrap_err();
 
@@ -2072,7 +2096,7 @@ async fn test_missing_json_mode_best_of_n() {
 
     // This should succeed (evaluator's `json_mode` is optional)
     SKIP_CREDENTIAL_VALIDATION
-        .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
+        .scope((), Config::load_from_toml(config))
         .await
         .expect("Config should load successfully with missing evaluator json_mode");
 }
@@ -2132,7 +2156,7 @@ async fn test_gcp_no_endpoint_and_model() {
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
     let err = SKIP_CREDENTIAL_VALIDATION
-        .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
+        .scope((), Config::load_from_toml(config))
         .await
         .unwrap_err();
 
@@ -2174,7 +2198,7 @@ async fn test_config_duplicate_user_schema() {
         false,
     )
     .unwrap();
-    let err = Config::load_from_toml(config.table, &config.span_map)
+    let err = Config::load_from_toml(config.table)
         .await
         .expect_err("Config should fail to load");
 
@@ -2213,7 +2237,7 @@ async fn test_config_named_schema_no_template() {
         false,
     )
     .unwrap();
-    let err = Config::load_from_toml(config.table, &config.span_map)
+    let err = Config::load_from_toml(config.table)
         .await
         .expect_err("Config should fail to load");
 
@@ -2250,7 +2274,7 @@ async fn test_config_duplicate_user_template() {
         false,
     )
     .unwrap();
-    let err = Config::load_from_toml(config.table, &config.span_map)
+    let err = Config::load_from_toml(config.table)
         .await
         .expect_err("Config should fail to load");
 
@@ -2283,7 +2307,7 @@ async fn test_config_invalid_template_no_schema() {
         false,
     )
     .unwrap();
-    let err = Config::load_from_toml(config.table, &config.span_map)
+    let err = Config::load_from_toml(config.table)
         .await
         .expect_err("Config should fail to load");
 
@@ -2303,7 +2327,7 @@ async fn deny_timeout_with_default_global_timeout() {
     "#;
     let config = toml::from_str(config).unwrap();
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(config)
         .await
         .expect_err("Config should fail to load");
 
@@ -2327,7 +2351,7 @@ async fn deny_timeout_with_non_default_global_timeout() {
     "#;
     let config = toml::from_str(config).unwrap();
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(config)
         .await
         .expect_err("Config should fail to load");
 
@@ -2350,7 +2374,7 @@ async fn deny_bad_timeout_fields() {
     "#;
     let config = toml::from_str(config).unwrap();
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(config)
         .await
         .expect_err("Config should fail to load");
 
@@ -2373,7 +2397,7 @@ async fn deny_bad_timeouts_non_streaming_field() {
         "#;
     let config = toml::from_str(config).unwrap();
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(config)
         .await
         .expect_err("Config should fail to load");
 
@@ -2530,7 +2554,7 @@ async fn deny_bad_timeouts_streaming_field() {
         "#;
     let config = toml::from_str(config).unwrap();
 
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(config)
         .await
         .expect_err("Config should fail to load");
 
@@ -2757,7 +2781,7 @@ async fn test_config_schema_missing_template() {
         false,
     )
     .unwrap();
-    let err = Config::load_from_toml(config.table, &config.span_map)
+    let err = Config::load_from_toml(config.table)
         .await
         .expect_err("Config should fail to load");
 
@@ -2792,7 +2816,7 @@ async fn test_experimentation_with_variant_weights_error_uniform() {
         "#;
 
     let config = toml::from_str(config_str).expect("Failed to parse config");
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(config)
         .await
         .expect_err("Config should fail to load");
 
@@ -2838,7 +2862,7 @@ async fn test_experimentation_with_variant_weights_error_static_weights() {
         "#;
 
     let config = toml::from_str(config_str).expect("Failed to parse config");
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(config)
         .await
         .expect_err("Config should fail to load");
 
@@ -2894,7 +2918,7 @@ async fn test_experimentation_with_variant_weights_error_track_and_stop() {
         "#;
 
     let config = toml::from_str(config_str).expect("Failed to parse config");
-    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+    let err = Config::load_from_toml(config)
         .await
         .expect_err("Config should fail to load");
 
@@ -3044,7 +3068,7 @@ async fn test_config_file_glob_recursive() {
 async fn test_built_in_functions_loaded() {
     // Load a minimal config (empty table)
     let config = toml::Table::new();
-    let config = Config::load_from_toml(config, &SpanMap::new_empty())
+    let config = Config::load_from_toml(config)
         .await
         .expect("Failed to load config");
 
@@ -3078,7 +3102,7 @@ async fn test_built_in_functions_loaded() {
 #[tokio::test]
 async fn test_get_built_in_function() {
     let config = toml::Table::new();
-    let config = Config::load_from_toml(config, &SpanMap::new_empty())
+    let config = Config::load_from_toml(config)
         .await
         .expect("Failed to load config");
 
@@ -3092,7 +3116,7 @@ async fn test_get_built_in_function() {
 async fn test_built_in_and_user_functions_coexist() {
     let config = get_sample_valid_config();
 
-    let config = Config::load_from_toml(config, &SpanMap::new_empty())
+    let config = Config::load_from_toml(config)
         .await
         .expect("Failed to load config");
 

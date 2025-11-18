@@ -1809,6 +1809,7 @@ dependencies = [
  "serde_json",
  "tensorzero-core",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -3357,6 +3358,13 @@ dependencies = [
  "self_cell",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "minijinja-utils"
+version = "2025.11.4"
+dependencies = [
+ "minijinja",
 ]
 
 [[package]]

@@ -26,6 +26,7 @@ use chrono::{DateTime, Utc};
 use pyo3::types::PyList;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -60,12 +61,14 @@ pub struct SimpleStoredSampleInfo {
 
 /// Wire variant of StoredInference for API responses with Python/TypeScript bindings
 /// This one should be used in all public interfaces
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "StoredInference"))]
 #[ts(export)]
 pub enum StoredInference {
+    #[schemars(title = "StoredInferenceChat")]
     Chat(StoredChatInference),
+    #[schemars(title = "StoredInferenceJson")]
     Json(StoredJsonInference),
 }
 
@@ -434,13 +437,10 @@ impl StoredInference {
 
 impl StoredInferenceDatabase {
     /// Convert to wire type, properly handling tool params by subtracting static tools
-    pub fn into_stored_inference(self, config: &Config) -> Result<StoredInference, Error> {
+    pub fn into_stored_inference(self) -> Result<StoredInference, Error> {
         match self {
             StoredInferenceDatabase::Chat(chat) => {
-                let function_config = config.get_function(&chat.function_name)?;
-                Ok(StoredInference::Chat(
-                    chat.into_stored_inference(&function_config),
-                ))
+                Ok(StoredInference::Chat(chat.into_stored_inference()))
             }
             StoredInferenceDatabase::Json(json) => Ok(StoredInference::Json(json)),
         }
@@ -448,7 +448,7 @@ impl StoredInferenceDatabase {
 }
 
 impl StoredInference {
-    /// Convert to storage type, properly handling tool params with function config
+    /// Convert to storage type, converting tool params from wire format to storage format
     pub fn to_storage(self, config: &Config) -> Result<StoredInferenceDatabase, Error> {
         match self {
             StoredInference::Chat(chat) => {
@@ -513,7 +513,7 @@ impl StoredInferenceDatabase {
 }
 
 /// Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[ts(export)]
 pub struct StoredChatInference {
@@ -523,6 +523,7 @@ pub struct StoredChatInference {
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
+    #[schemars(with = "String")]
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
@@ -549,10 +550,8 @@ impl StoredChatInference {
 }
 
 impl StoredChatInferenceDatabase {
-    /// Convert to wire type, properly handling tool params by subtracting static tools
-    pub fn into_stored_inference(self, function_config: &FunctionConfig) -> StoredChatInference {
-        let tool_params = function_config.database_insert_to_dynamic_tool_params(self.tool_params);
-
+    /// Convert to wire type, converting tool params from storage format to wire format
+    pub fn into_stored_inference(self) -> StoredChatInference {
         StoredChatInference {
             function_name: self.function_name,
             variant_name: self.variant_name,
@@ -562,7 +561,7 @@ impl StoredChatInferenceDatabase {
             timestamp: self.timestamp,
             episode_id: self.episode_id,
             inference_id: self.inference_id,
-            tool_params,
+            tool_params: self.tool_params.into(),
             tags: self.tags,
         }
     }
@@ -593,7 +592,7 @@ impl std::fmt::Display for StoredChatInferenceDatabase {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[ts(export)]
 pub struct StoredJsonInference {
@@ -603,6 +602,7 @@ pub struct StoredJsonInference {
     pub output: JsonInferenceOutput,
     #[serde(default)]
     pub dispreferred_outputs: Vec<JsonInferenceOutput>,
+    #[schemars(with = "String")]
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
@@ -966,10 +966,9 @@ pub async fn render_stored_sample<T: StoredSample>(
     } = stored_sample.owned_simple_info();
     let model_input = render_model_input(&resolved_input, &function_name, config, variants).await?;
 
-    // Convert tool_params from storage format to wire format, subtracting static tools
-    let function_config = config.get_function(&function_name)?;
+    // Convert tool_params from storage format to wire format
     let dynamic_tool_params = tool_params
-        .map(|tp| function_config.database_insert_to_dynamic_tool_params(tp))
+        .map(|tp| tp.into())
         // should default for JSON functions or functions with no tools to a default DynamicToolParams
         // where everything is empty
         .unwrap_or_default();

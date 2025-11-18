@@ -225,7 +225,7 @@ pub enum OpenAIEmbeddingResponse {
     List {
         data: Vec<OpenAIEmbedding>,
         model: String,
-        usage: OpenAIEmbeddingUsage,
+        usage: Option<OpenAIEmbeddingUsage>,
     },
 }
 
@@ -237,8 +237,8 @@ pub enum OpenAIEmbedding {
 
 #[derive(Debug, Serialize)]
 pub struct OpenAIEmbeddingUsage {
-    prompt_tokens: u32,
-    total_tokens: u32,
+    prompt_tokens: Option<u32>,
+    total_tokens: Option<u32>,
 }
 
 impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
@@ -254,10 +254,10 @@ impl From<EmbeddingResponse> for OpenAIEmbeddingResponse {
                 })
                 .collect(),
             model: format!("{TENSORZERO_EMBEDDING_MODEL_NAME_PREFIX}{}", response.model),
-            usage: OpenAIEmbeddingUsage {
+            usage: Some(OpenAIEmbeddingUsage {
                 prompt_tokens: response.usage.input_tokens,
-                total_tokens: response.usage.input_tokens,
-            },
+                total_tokens: response.usage.input_tokens, // there are no output tokens for embeddings
+            }),
         }
     }
 }
@@ -602,11 +602,43 @@ pub struct OpenAICompatibleParams {
     unknown_fields: HashMap<String, Value>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize)]
 struct OpenAICompatibleUsage {
-    prompt_tokens: u32,
-    completion_tokens: u32,
-    total_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prompt_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completion_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total_tokens: Option<u32>,
+}
+
+impl OpenAICompatibleUsage {
+    fn zero() -> Self {
+        Self {
+            prompt_tokens: Some(0),
+            completion_tokens: Some(0),
+            total_tokens: Some(0),
+        }
+    }
+
+    /// Sum `OpenAICompatibleUsage` and `Usage` instances.
+    /// `None` contaminates on both sides.
+    fn sum_usage_strict(&mut self, other: &Usage) {
+        self.prompt_tokens = match (self.prompt_tokens, other.input_tokens) {
+            (Some(a), Some(b)) => Some(a + b),
+            _ => None,
+        };
+
+        self.completion_tokens = match (self.completion_tokens, other.output_tokens) {
+            (Some(a), Some(b)) => Some(a + b),
+            _ => None,
+        };
+
+        self.total_tokens = match (self.total_tokens, other.total_tokens()) {
+            (Some(a), Some(b)) => Some(a + b),
+            _ => None,
+        };
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1249,7 +1281,7 @@ impl From<(InferenceResponse, String)> for OpenAICompatibleResponse {
                 usage: OpenAICompatibleUsage {
                     prompt_tokens: response.usage.input_tokens,
                     completion_tokens: response.usage.output_tokens,
-                    total_tokens: response.usage.input_tokens + response.usage.output_tokens,
+                    total_tokens: response.usage.total_tokens(),
                 },
                 episode_id: response.episode_id.to_string(),
             },
@@ -1311,7 +1343,7 @@ impl From<Usage> for OpenAICompatibleUsage {
         OpenAICompatibleUsage {
             prompt_tokens: usage.input_tokens,
             completion_tokens: usage.output_tokens,
-            total_tokens: usage.input_tokens + usage.output_tokens,
+            total_tokens: usage.total_tokens(),
         }
     }
 }
@@ -1459,16 +1491,13 @@ fn prepare_serialized_openai_compatible_events(
     async_stream::stream! {
         let mut tool_id_to_index = HashMap::new();
         let mut is_first_chunk = true;
-        let mut total_usage = OpenAICompatibleUsage {
-            prompt_tokens: 0,
-            completion_tokens: 0,
-            total_tokens: 0,
-        };
+        // `total_usage` is `None` until we receive a chunk with usage information
+        let mut total_usage: Option<OpenAICompatibleUsage> = None;
         let mut inference_id = None;
         let mut episode_id = None;
         let mut variant_name = None;
         while let Some(chunk) = stream.next().await {
-            // NOTE - in the future, we may want to end the stream early if we get an error
+            // NOTE: in the future, we may want to end the stream early if we get an error
             // For now, we just ignore the error and try to get more chunks
             let Ok(chunk) = chunk else {
                 continue;
@@ -1485,9 +1514,13 @@ fn prepare_serialized_openai_compatible_events(
                 }
             };
             if let Some(chunk_usage) = chunk_usage {
-                total_usage.prompt_tokens += chunk_usage.input_tokens;
-                total_usage.completion_tokens += chunk_usage.output_tokens;
-                total_usage.total_tokens += chunk_usage.input_tokens + chunk_usage.output_tokens;
+                // `total_usage` will be `None` if this is the first chunk with usage information....
+                if total_usage.is_none() {
+                    // ... so initialize it to zero ...
+                    total_usage = Some(OpenAICompatibleUsage::zero());
+                }
+                // ...and then add the chunk usage to it (handling `None` fields)
+                if let Some(ref mut u) = total_usage { u.sum_usage_strict(chunk_usage); }
             }
             let openai_compatible_chunks = convert_inference_response_chunk_to_openai_compatible(chunk, &mut tool_id_to_index, &response_model_prefix);
             for chunk in openai_compatible_chunks {
@@ -1509,6 +1542,10 @@ fn prepare_serialized_openai_compatible_events(
                 })
             }
         }
+
+        // If we don't see a chunk with usage information, set `total_usage` to the default value (fields as `None`)
+        let total_usage = total_usage.unwrap_or_default();
+
         if stream_options.map(|s| s.include_usage).unwrap_or(false) {
             let episode_id = episode_id.ok_or_else(|| {
                 Error::new(ErrorDetails::Inference {

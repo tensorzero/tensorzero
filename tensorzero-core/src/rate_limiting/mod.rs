@@ -246,9 +246,9 @@ fn align_and_check_limits(
         .into_iter()
         .map(|r| (r.key.clone(), r))
         .collect::<HashMap<_, _>>();
-    // Next, check if any reciept has failed
+    // Next, check if any receipt has failed
     if receipts_map.values().any(|r| !r.success) {
-        return Err(get_failed_rate_limits_err(requests, &receipts_map));
+        return Err(get_failed_rate_limits_err(requests, &receipts_map, limits));
     }
 
     // Next, we build up a vector of ConsumeTicketsReceipts
@@ -274,6 +274,8 @@ pub struct FailedRateLimit {
     pub key: ActiveRateLimitKey,
     pub requested: u64,
     pub available: u64,
+    pub resource: RateLimitResource,
+    pub scope_key: Vec<RateLimitingScopeKey>,
 }
 
 /// Since Postgres will tell us all borrows failed if any failed, we figure out which rate limits
@@ -281,9 +283,10 @@ pub struct FailedRateLimit {
 fn get_failed_rate_limits_err(
     requests: Vec<ConsumeTicketsRequest>,
     receipts_map: &HashMap<ActiveRateLimitKey, ConsumeTicketsReceipt>,
+    limits: &[ActiveRateLimit],
 ) -> Error {
     let mut failed_rate_limits = Vec::new();
-    for request in requests {
+    for (request, limit) in requests.iter().zip(limits) {
         let key = &request.key;
         let Some(receipt) = receipts_map.get(key) else {
             return ErrorDetails::Inference {
@@ -297,6 +300,8 @@ fn get_failed_rate_limits_err(
                 key: key.clone(),
                 requested: request.requested,
                 available: receipt.tickets_remaining,
+                resource: limit.limit.resource,
+                scope_key: limit.scope_key.clone(),
             });
         }
     }
@@ -443,13 +448,23 @@ pub enum RateLimitResource {
     // Cent, // or something more granular?
 }
 
+impl RateLimitResource {
+    /// Returns the snake_case string representation matching the serde serialization
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RateLimitResource::ModelInference => "model_inference",
+            RateLimitResource::Token => "token",
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum RateLimitResourceUsage {
     /// We received an exact usage amount back from the provider, so we can consume extra/release unused
     /// rate limiting resources, depending on whether our initial estimate was too high or too low
     Exact { model_inferences: u64, tokens: u64 },
     /// We were only able to estimate the usage (e.g. if an error occurred in an inference stream,
-    /// and there might have bene additional usage chunks that we missed)
+    /// and there might have been additional usage chunks that we missed; or the provider did not report token usage).
     /// We'll still consume tokens/inferences if we went over the initial estimate, but we will *not*
     /// return tickets if our initial estimate seems to be too high (since the error could have
     /// hidden the actual usage).
@@ -709,7 +724,7 @@ impl Serialize for ApiKeyPublicIdValueScope {
 /// serialized into a key.
 /// We need this struct to have stable serialization behavior because we want rate limits to be stable
 /// across releases.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum RateLimitingScopeKey {
     TagTotal { key: String },
@@ -717,6 +732,29 @@ pub enum RateLimitingScopeKey {
     TagConcrete { key: String, value: String },
     ApiKeyPublicIdEach { api_key_public_id: Arc<str> },
     ApiKeyPublicIdConcrete { api_key_public_id: Arc<str> },
+}
+
+impl RateLimitingScopeKey {
+    /// Returns a representation that matches the config format for easy lookup
+    pub fn to_config_representation(&self) -> String {
+        match self {
+            RateLimitingScopeKey::TagTotal { key } => {
+                format!(r#"tag_key="{key}", tag_value="tensorzero::total""#)
+            }
+            RateLimitingScopeKey::TagEach { key, value } => {
+                format!(r#"tag_key="{key}", tag_value="tensorzero::each" (matched: "{value}")"#)
+            }
+            RateLimitingScopeKey::TagConcrete { key, value } => {
+                format!(r#"tag_key="{key}", tag_value="{value}""#)
+            }
+            RateLimitingScopeKey::ApiKeyPublicIdEach { api_key_public_id } => {
+                format!(r#"api_key_public_id="tensorzero::each" (matched: "{api_key_public_id}")"#)
+            }
+            RateLimitingScopeKey::ApiKeyPublicIdConcrete { api_key_public_id } => {
+                format!(r#"api_key_public_id="{api_key_public_id}""#)
+            }
+        }
+    }
 }
 
 // TODO: is there a way to enforce that this struct is consumed by return_tickets?
@@ -2278,6 +2316,43 @@ mod tests {
                 }
             }
             Ok(_) => panic!("Expected an error, but got Ok"),
+        }
+    }
+
+    #[test]
+    fn test_no_refund_when_usage_is_none() {
+        // This test verifies that when actual usage is reported as None (usage=None or null tokens),
+        // we use RateLimitResourceUsage::UnderEstimate which prevents refunding tickets even if
+        // we over-estimated the initial consumption.
+
+        let token_usage_exact = RateLimitResourceUsage::Exact {
+            model_inferences: 1,
+            tokens: 100, // Actual usage is 100 tokens
+        };
+
+        let token_usage_underestimate = RateLimitResourceUsage::UnderEstimate {
+            model_inferences: 1,
+            tokens: 0, // This is what we use when usage is None
+        };
+
+        // Verify that Exact usage allows refunds (when actual < estimate)
+        match token_usage_exact {
+            RateLimitResourceUsage::Exact { tokens, .. } => {
+                assert_eq!(tokens, 100);
+                // This case would trigger a refund in return_tickets() if estimate was higher
+            }
+            RateLimitResourceUsage::UnderEstimate { .. } => {
+                panic!("Expected Exact variant")
+            }
+        }
+
+        // Verify that UnderEstimate usage prevents refunds
+        match token_usage_underestimate {
+            RateLimitResourceUsage::UnderEstimate { tokens, .. } => {
+                assert_eq!(tokens, 0);
+                // This case will NOT trigger a refund in return_tickets() per line 852-855
+            }
+            RateLimitResourceUsage::Exact { .. } => panic!("Expected UnderEstimate variant"),
         }
     }
 }

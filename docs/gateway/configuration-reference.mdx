@@ -98,19 +98,19 @@ When this field is set to `true`, the gateway will log more verbose errors to as
 - **Type:** boolean
 - **Required:** no (default: `false`)
 
-If set to `true`, TensorZero will not collect or share [pseudonymous usage analytics](/gateway/deployment/#disabling-pseudonymous-usage-analytics).
+If set to `true`, TensorZero will not collect or share [pseudonymous usage analytics](/deployment/tensorzero-gateway/#disabling-pseudonymous-usage-analytics).
 
 ### `export.otlp.traces.enabled`
 
 - **Type:** boolean
 - **Required:** no (default: `false`)
 
-Enable [exporting traces to an external OpenTelemetry-compatible observability
-system](/gateway/guides/opentelemetry-otlp).
+Enable [exporting traces to an external OpenTelemetry-compatible observability system](/operations/export-opentelemetry-traces).
 
 <Warning>
-  Note that you will still need to set the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
-  environment variable. See the above-linked guide for details.
+
+Note that you will still need to set the `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` environment variable. See the above-linked guide for details.
+
 </Warning>
 
 ### `export.otlp.traces.extra_headers`
@@ -153,7 +153,7 @@ If set to `"openinference"`, TensorZero will set attributes based on the [OpenIn
 
 Controls how the gateway handles remote input files (e.g., images, PDFs) during multimodal inference.
 
-If set to `true` (default), the gateway will fetch remote input files and send them as a base64-encoded payload in the prompt.
+If set to `true`, the gateway will fetch remote input files and send them as a base64-encoded payload in the prompt.
 This is recommended to ensure that TensorZero and the model providers see identical inputs, which is important for observability and reproducibility.
 
 If set to `false`, TensorZero will forward the input file URLs directly to the model provider (when supported) and fetch them for observability in parallel with inference.
@@ -2391,6 +2391,12 @@ output_schema = "./functions/extract-customer-info/output_schema.json"
 # ...
 ```
 
+<Tip>
+
+See [Generate structured outputs](/gateway/generate-structured-outputs) for a comprehensive guide with examples.
+
+</Tip>
+
 </Accordion>
 
 ### `user_schema`
@@ -2641,6 +2647,12 @@ The supported modes are:
 json_mode = "strict"
 # ...
 ```
+
+<Tip>
+
+See [Generate structured outputs](/gateway/generate-structured-outputs) for a comprehensive guide with examples.
+
+</Tip>
 
 ##### `max_tokens`
 
@@ -2965,28 +2977,6 @@ user_template = "./functions/draft-email/prompt-v1/user_template.minijinja"
 # ...
 ```
 
-##### `weight`
-
-- **Type:** float
-- **Required:** no (default: 0)
-
-Defines the weight of the variant.
-When you call a function, the weight determines the relative importance of the variant when sampling.
-
-Variants will be sampled with a probability proportional to their weight.
-For example, if variant A has a weight of `1.0` and variant B has a weight of `3.0`, variant A will be sampled with probability `1.0 / (1.0 + 3.0) = 25%` and variant B will be sampled with probability `3.0 / (1.0 + 3.0) = 75%`.
-
-You can disable a variant by setting its weight to `0`.
-The variant will only be used if there are no other variants available for sampling or if the variant is requested explicitly in the request with `variant_name`.
-This is useful for defining fallback variants, which won't be used unless no other variants are available.
-
-```toml title="tensorzero.toml"
-[functions.draft-email.variants.prompt-v1]
-# ...
-weight = 1.0
-# ...
-```
-
 </Accordion>
 
 <Accordion title='type: "experimental_best_of_n"'>
@@ -3077,28 +3067,6 @@ timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
 The specified timeouts apply to the scope of an entire variant inference request, including all inference requests to candidates and the evaluator.
 You can also set timeouts at the model level and provider level.
 Multiple timeouts can be active simultaneously.
-
-##### `weight`
-
-- **Type:** float
-- **Required:** no (default: 0)
-
-Defines the weight of the variant.
-When you call a function, the weight determines the relative importance of the variant when sampling.
-
-Variants will be sampled with a probability proportional to their weight.
-For example, if variant A has a weight of `1.0` and variant B has a weight of `3.0`, variant A will be sampled with probability `1.0 / (1.0 + 3.0) = 25%` and variant B will be sampled with probability `3.0 / (1.0 + 3.0) = 75%`.
-
-You can disable a variant by setting its weight to `0`.
-The variant will only be used if there are no other variants available for sampling or if the variant is requested explicitly in the request with `variant_name`.
-This is useful for defining fallback variants, which won't be used unless no other variants are available.
-
-```toml title="tensorzero.toml"
-[functions.draft-email.variants.prompt-v1]
-# ...
-weight = 1.0
-# ...
-```
 
 </Accordion>
 
@@ -3200,28 +3168,6 @@ timeouts = { non_streaming.total_ms = 15000, streaming.ttft_ms = 3000 }
 The specified timeouts apply to the scope of an entire variant inference request, including all inference requests to candidates and the fuser.
 You can also set timeouts at the model level and provider level.
 Multiple timeouts can be active simultaneously.
-
-##### `weight`
-
-- **Type:** float
-- **Required:** no (default: 0)
-
-Defines the weight of the variant.
-When you call a function, the weight determines the relative importance of the variant when sampling.
-
-Variants will be sampled with a probability proportional to their weight.
-For example, if variant A has a weight of `1.0` and variant B has a weight of `3.0`, variant A will be sampled with probability `1.0 / (1.0 + 3.0) = 25%` and variant B will be sampled with probability `3.0 / (1.0 + 3.0) = 75%`.
-
-You can disable a variant by setting its weight to `0`.
-The variant will only be used if there are no other variants available for sampling or if the variant is requested explicitly in the request with `variant_name`.
-This is useful for defining fallback variants, which won't be used unless no other variants are available.
-
-```toml
-[functions.draft-email.variants.mixture-of-n]
-# ...
-weight = 1.0
-# ...
-```
 
 </Accordion>
 
@@ -3622,28 +3568,6 @@ The specified timeouts apply to the scope of an entire variant inference request
 You can also set timeouts at the model level and provider level.
 Multiple timeouts can be active simultaneously.
 
-##### `weight`
-
-- **Type:** float
-- **Required:** no (default: 0)
-
-Defines the weight of the variant.
-When you call a function, the weight determines the relative importance of the variant when sampling.
-
-Variants will be sampled with a probability proportional to their weight.
-For example, if variant A has a weight of `1.0` and variant B has a weight of `3.0`, variant A will be sampled with probability `1.0 / (1.0 + 3.0) = 25%` and variant B will be sampled with probability `3.0 / (1.0 + 3.0) = 75%`.
-
-You can disable a variant by setting its weight to `0`.
-The variant will only be used if there are no other variants available for sampling or if the variant is requested explicitly in the request with `variant_name`.
-This is useful for defining fallback variants, which won't be used unless no other variants are available.
-
-```toml title="tensorzero.toml"
-[functions.draft-email.variants.prompt-v1]
-# ...
-weight = 1.0
-# ...
-```
-
 </Accordion>
 
 #### `type: "experimental_chain_of_thought"`
@@ -3659,8 +3583,6 @@ At inference time, the gateway will sample a variant from the function to comple
 By default, the gateway will sample a variant uniformly at random (`type = "uniform"`).
 
 TensorZero supports multiple types of experiments that can help you learn about the relative performance of the variants.
-
-Note that if this section is present, it overrides any `weight` values that are specified within individual function variant config blocks.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
@@ -3693,8 +3615,58 @@ type = "track_and_stop"
 
 <Accordion title='type: "uniform"'>
 
-The `uniform` type samples variants uniformly at random from all variants defined in the function.
+The `uniform` type samples variants uniformly at random.
 This is the default behavior when no `[functions.function_name.experimentation]` section is specified.
+
+By default, all variants defined in the function are sampled with equal probability.
+You can optionally specify `candidate_variants` to sample uniformly from a subset of variants, and `fallback_variants` for sequential fallback behavior.
+The behavior depends on which fields are specified:
+
+| Configuration             | Behavior                                                                    |
+| :------------------------ | :-------------------------------------------------------------------------- |
+| No fields specified       | Samples uniformly from all variants in the function                         |
+| Only `candidate_variants` | Samples uniformly from specified candidates                                 |
+| Only `fallback_variants`  | Uses fallback variants sequentially (no uniform sampling)                   |
+| Both specified            | Samples uniformly from candidates; if all fail, uses fallbacks sequentially |
+
+### `candidate_variants`
+
+- **Type:** array of strings
+- **Required:** no
+
+An optional set of variants to sample uniformly from.
+Each variant must be defined via `[functions.function_name.variants.variant_name]` in the `variants` sub-section.
+
+If not specified (and `fallback_variants` is also not specified), all variants are sampled uniformly.
+If `fallback_variants` is specified but `candidate_variants` is not, no candidates are used (fallback-only mode).
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+candidate_variants = ["variant-a", "variant-b"]
+```
+
+### `fallback_variants`
+
+- **Type:** array of strings
+- **Required:** no
+
+An optional set of function variants to use as fallback options.
+Each variant must be defined via `[functions.function_name.variants.variant_name]` in the `variants` sub-section.
+
+If all candidate variants fail during inference, the gateway will select variants sequentially from `fallback_variants` (in order, not uniformly).
+This behaves like a ranked list where the first active fallback variant is always selected.
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+candidate_variants = ["variant-a", "variant-b"]
+fallback_variants = ["fallback-variant"]
+```
+
+### Examples
+
+**Default uniform sampling (all variants):**
 
 ```toml title="tensorzero.toml"
 [functions.draft-email]
@@ -3707,8 +3679,33 @@ type = "chat"
 # ...
 
 [functions.draft-email.variants.variant-c] # 1/3 chance
-type = "chat_completion"
 # ...
+```
+
+**Explicit candidate variants:**
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+candidate_variants = ["variant-a", "variant-b"]  # each has 1/2 probability
+# `variant-c` will not be sampled
+```
+
+**With fallback variants:**
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+candidate_variants = ["variant-a", "variant-b"]  # try these first, uniformly
+fallback_variants = ["variant-c"]  # use if both candidates fail
+```
+
+**Fallback-only mode:**
+
+```toml title="tensorzero.toml"
+[functions.draft-email.experimentation]
+type = "uniform"
+fallback_variants = ["variant-a", "variant-b", "variant-c"]  # sequential
 ```
 
 </Accordion>
