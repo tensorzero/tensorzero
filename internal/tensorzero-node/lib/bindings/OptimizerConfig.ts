@@ -13,5 +13,5 @@ export type OptimizerConfig =
   | { OpenAIRFT: OpenAIRFTConfig }
   | { FireworksSFT: FireworksSFTConfig }
   | { GCPVertexGeminiSFT: GCPVertexGeminiSFTConfig }
-  | { Gepa: GEPAConfig }
+  | { GEPA: GEPAConfig }
   | { TogetherSFT: TogetherSFTConfig };

@@ -36,7 +36,7 @@ fn default_include_inference_input_for_mutation() -> bool {
 /// of high-performing variants. It uses genetic programming techniques to evolve
 /// prompt templates based on evaluation results.
 #[derive(Debug, Clone, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct GEPAConfig {
     /// Name of the function being optimized
     pub function_name: String,
@@ -46,9 +46,13 @@ pub struct GEPAConfig {
 
     /// Optional list of variant_names to initialize GEPA with.
     /// If None, will use all variants defined for the function.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub initial_variants: Option<Vec<String>>,
 
     /// Prefix for the name of the new optimized variants
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub variant_prefix: Option<String>,
 
     /// Number of training samples to analyze per iteration
@@ -67,6 +71,8 @@ pub struct GEPAConfig {
     pub mutation_model: String,
 
     /// Optional random seed for reproducibility
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub seed: Option<u32>,
 
     /// Client timeout in seconds for TensorZero gateway operations
@@ -89,6 +95,8 @@ pub struct GEPAConfig {
     pub retries: RetryConfig,
 
     /// Maximum number of tokens to generate for analysis and mutation model calls
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub max_tokens: Option<u32>,
 }
 

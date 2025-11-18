@@ -21,11 +21,11 @@ export type GEPAConfig = {
    * Optional list of variant_names to initialize GEPA with.
    * If None, will use all variants defined for the function.
    */
-  initial_variants: Array<string> | null;
+  initial_variants?: Array<string>;
   /**
    * Prefix for the name of the new optimized variants
    */
-  variant_prefix: string | null;
+  variant_prefix?: string;
   /**
    * Number of training samples to analyze per iteration
    */
@@ -49,7 +49,7 @@ export type GEPAConfig = {
   /**
    * Optional random seed for reproducibility
    */
-  seed: number | null;
+  seed?: number;
   /**
    * Client timeout in seconds for TensorZero gateway operations
    */
@@ -74,7 +74,6 @@ export type GEPAConfig = {
   retries: RetryConfig;
   /**
    * Maximum number of tokens to generate for analysis and mutation model calls
-   * Default: 16_384
    */
-  max_tokens: number;
+  max_tokens?: number;
 };

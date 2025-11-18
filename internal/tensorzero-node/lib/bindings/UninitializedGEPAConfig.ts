@@ -18,5 +18,5 @@ export type UninitializedGEPAConfig = {
   timeout: bigint;
   include_inference_input_for_mutation: boolean;
   retries: RetryConfig;
-  max_tokens: number;
+  max_tokens: number | null;
 };
