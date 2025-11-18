@@ -82,66 +82,96 @@ pub mod dynamic {
     #[ts(export)]
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraHeader {
-        // Deprecated (#4640): Migrate to `ModelProvider` and remove in 2026.2+
         #[schemars(title = "ProviderExtraHeader")]
+        #[deprecated(note = "Migrate to `ModelProvider` and remove in 2026.2+. (#4640)")]
+        /// DEPRECATED: Use `ModelProvider` instead.
         Provider {
+            /// A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
             model_provider_name: String,
+            /// The name of the HTTP header (e.g. `anthropic-beta`)
             name: String,
+            /// The value of the HTTP header (e.g. `feature1,feature2,feature3`)
             value: String,
         },
         #[schemars(title = "ProviderExtraHeaderDelete")]
+        #[deprecated(note = "Migrate to `ModelProviderDelete` and remove in 2026.2+. (#4640)")]
+        /// DEPRECATED: Use `ModelProviderDelete` instead.
         ProviderDelete {
+            /// A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
             model_provider_name: String,
+            /// The name of the HTTP header (e.g. `anthropic-beta`)
             name: String,
             #[serde(
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
+            /// Set to true to remove the header from the model provider request
             delete: (),
         },
         #[schemars(title = "VariantExtraHeader")]
         Variant {
+            /// A variant name in your configuration (e.g. `my_variant`)
             variant_name: String,
+            /// The name of the HTTP header (e.g. `anthropic-beta`)
             name: String,
+            /// The value of the HTTP header (e.g. `feature1,feature2,feature3`)
             value: String,
         },
         #[schemars(title = "VariantExtraHeaderDelete")]
         VariantDelete {
+            /// A variant name in your configuration (e.g. `my_variant`)
             variant_name: String,
+            /// The name of the HTTP header (e.g. `anthropic-beta`)
             name: String,
             #[serde(
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
+            /// Set to true to remove the header from the model provider request
             delete: (),
         },
         #[schemars(title = "ModelProviderExtraHeader")]
         ModelProvider {
+            /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
             model_name: String,
+            /// A provider name for the model you specified (e.g. `my_openai`).
             provider_name: Option<String>,
+            /// The name of the HTTP header (e.g. `anthropic-beta`)
             name: String,
+            /// The value of the HTTP header (e.g. `feature1,feature2,feature3`)
             value: String,
         },
         #[schemars(title = "ModelProviderExtraHeaderDelete")]
         ModelProviderDelete {
+            /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
             model_name: String,
+            /// A provider name for the model you specified (e.g. `my_openai`)
             provider_name: Option<String>,
+            /// The name of the HTTP header (e.g. `anthropic-beta`)
             name: String,
             #[serde(
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
+            /// Set to true to remove the header from the model provider request
             delete: (),
         },
         #[schemars(title = "AlwaysExtraHeader")]
-        Always { name: String, value: String },
+        Always {
+            /// The name of the HTTP header (e.g. `anthropic-beta`)
+            name: String,
+            /// The value of the HTTP header (e.g. `feature1,feature2,feature3`)
+            value: String,
+        },
         #[schemars(title = "AlwaysExtraHeaderDelete")]
         AlwaysDelete {
+            /// The name of the HTTP header (e.g. `anthropic-beta`)
             name: String,
             #[serde(
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
+            /// Set to true to remove the header from the model provider request
             delete: (),
         },
     }
@@ -149,6 +179,7 @@ pub mod dynamic {
     impl ExtraHeader {
         pub fn should_apply_variant(&self, variant_name: &str) -> bool {
             match self {
+                #[expect(deprecated)]
                 ExtraHeader::Provider { .. } | ExtraHeader::ProviderDelete { .. } => true,
                 ExtraHeader::Variant {
                     variant_name: v, ..
@@ -209,6 +240,7 @@ mod tests {
 
     #[test]
     fn test_should_apply_variant_provider() {
+        #[expect(deprecated)]
         let provider_variant = DynamicExtraHeader::Provider {
             model_provider_name: "openai".to_string(),
             name: "Authorization".to_string(),
@@ -279,6 +311,7 @@ mod tests {
     fn test_filter_mixed_variants() {
         let unfiltered = UnfilteredInferenceExtraHeaders {
             extra_headers: vec![
+                #[expect(deprecated)]
                 DynamicExtraHeader::Provider {
                     model_provider_name: "openai".to_string(),
                     name: "X-Provider".to_string(),
@@ -305,10 +338,13 @@ mod tests {
         // Should include: Provider, Variant(variant1), Always
         assert_eq!(filtered.data.len(), 3);
 
-        assert!(filtered
-            .data
-            .iter()
-            .any(|item| matches!(item, DynamicExtraHeader::Provider { .. })));
+        #[expect(deprecated)]
+        {
+            assert!(filtered
+                .data
+                .iter()
+                .any(|item| matches!(item, DynamicExtraHeader::Provider { .. })));
+        }
         assert!(filtered
             .data
             .iter()

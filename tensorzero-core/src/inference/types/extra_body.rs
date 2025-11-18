@@ -87,69 +87,96 @@ pub mod dynamic {
     #[export_schema]
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraBody {
-        // Deprecated (#4640): Migrate to `ModelProvider` and remove in 2026.2+
         #[schemars(title = "ProviderExtraBody")]
+        #[deprecated(note = "Migrate to `ModelProvider` and remove in 2026.2+. (#4640)")]
+        /// DEPRECATED: Use `ModelProvider` instead.
         Provider {
+            /// A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
             model_provider_name: String,
+            /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
+            /// The value to set the field to
             value: serde_json::Value,
         },
         #[schemars(title = "ProviderExtraBodyDelete")]
+        #[deprecated(note = "Migrate to `ModelProviderDelete` and remove in 2026.2+. (#4640)")]
+        /// DEPRECATED: Use `ModelProviderDelete` instead.
         ProviderDelete {
+            /// A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
             model_provider_name: String,
+            /// The value to set the field to
             pointer: String,
             #[serde(
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
+            /// Set to true to remove the field from the model provider request's body
             delete: (),
         },
         #[schemars(title = "VariantExtraBody")]
         Variant {
+            /// A variant name in your configuration (e.g. `my_variant`)
             variant_name: String,
+            /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
+            /// The value to set the field to
             value: serde_json::Value,
         },
         #[schemars(title = "VariantExtraBodyDelete")]
         VariantDelete {
+            /// A variant name in your configuration (e.g. `my_variant`)
             variant_name: String,
+            /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
             #[serde(
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
+            /// Set to true to remove the field from the model provider request's body
             delete: (),
         },
         #[schemars(title = "ModelProviderExtraBody")]
         ModelProvider {
+            /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
             model_name: String,
+            /// A provider name for the model you specified (e.g. `my_openai`)
             provider_name: Option<String>,
+            /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
+            /// The value to set the field to
             value: serde_json::Value,
         },
         #[schemars(title = "ModelProviderExtraBodyDelete")]
         ModelProviderDelete {
+            /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
             model_name: String,
+            /// A provider name for the model you specified (e.g. `my_openai`)
             provider_name: Option<String>,
+            /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
             #[serde(
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
+            /// Set to true to remove the field from the model provider request's body
             delete: (),
         },
         #[schemars(title = "AlwaysExtraBody")]
         Always {
+            /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
+            /// The value to set the field to
             value: serde_json::Value,
         },
         #[schemars(title = "AlwaysExtraBodyDelete")]
         AlwaysDelete {
+            /// A JSON Pointer to the field to update (e.g. `/enable_agi`)
             pointer: String,
             #[serde(
                 serialize_with = "super::super::serialize_delete_field",
                 deserialize_with = "super::super::deserialize_delete_field"
             )]
+            /// Set to true to remove the field from the model provider request's body
             delete: (),
         },
     }
@@ -157,6 +184,7 @@ pub mod dynamic {
     impl ExtraBody {
         pub fn should_apply_variant(&self, variant_name: &str) -> bool {
             match self {
+                #[expect(deprecated)]
                 ExtraBody::Provider { .. } | ExtraBody::ProviderDelete { .. } => true,
                 ExtraBody::Variant {
                     variant_name: v, ..
@@ -218,6 +246,7 @@ mod tests {
 
     #[test]
     fn test_should_apply_variant_provider() {
+        #[expect(deprecated)]
         let provider_variant = DynamicExtraBody::Provider {
             model_provider_name: "openai".to_string(),
             pointer: "/test".to_string(),
@@ -288,6 +317,7 @@ mod tests {
     fn test_filter_mixed_variants() {
         let unfiltered = UnfilteredInferenceExtraBody {
             extra_body: vec![
+                #[expect(deprecated)]
                 DynamicExtraBody::Provider {
                     model_provider_name: "openai".to_string(),
                     pointer: "/provider".to_string(),
@@ -314,10 +344,13 @@ mod tests {
         // Should include: Provider, Variant(variant1), All
         assert_eq!(filtered.data.len(), 3);
 
-        assert!(filtered
-            .data
-            .iter()
-            .any(|item| matches!(item, DynamicExtraBody::Provider { .. })));
+        #[expect(deprecated)]
+        {
+            assert!(filtered
+                .data
+                .iter()
+                .any(|item| matches!(item, DynamicExtraBody::Provider { .. })));
+        }
         assert!(filtered
             .data
             .iter()

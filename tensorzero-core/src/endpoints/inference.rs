@@ -1594,6 +1594,7 @@ async fn validate_inference_filters(
                     validate_variant_filter(variant_name, func)?;
                 }
             }
+            #[expect(deprecated)]
             DynamicExtraBody::Provider {
                 model_provider_name,
                 ..
@@ -1632,6 +1633,7 @@ async fn validate_inference_filters(
                     validate_variant_filter(variant_name, func)?;
                 }
             }
+            #[expect(deprecated)]
             DynamicExtraHeader::Provider {
                 model_provider_name,
                 ..

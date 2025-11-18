@@ -301,6 +301,7 @@ pub fn inject_extra_request_data(
             DynamicExtraBody::VariantDelete { pointer, .. } => {
                 delete_json_pointer(body, pointer)?;
             }
+            #[expect(deprecated)]
             DynamicExtraBody::Provider {
                 model_provider_name,
                 pointer,
@@ -310,6 +311,7 @@ pub fn inject_extra_request_data(
                     write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
                 }
             }
+            #[expect(deprecated)]
             DynamicExtraBody::ProviderDelete {
                 model_provider_name,
                 pointer,
@@ -433,6 +435,7 @@ pub fn inject_extra_request_data(
                 })?;
                 headers.remove(name);
             }
+            #[expect(deprecated)]
             DynamicExtraHeader::Provider {
                 model_provider_name,
                 name,
@@ -461,6 +464,7 @@ pub fn inject_extra_request_data(
                     );
                 }
             }
+            #[expect(deprecated)]
             DynamicExtraHeader::ProviderDelete {
                 model_provider_name,
                 name,
@@ -948,6 +952,7 @@ mod tests {
             &FullExtraBodyConfig {
                 extra_body: Some(ExtraBodyConfig { data: vec![] }),
                 inference_extra_body: FilteredInferenceExtraBody {
+                    #[expect(deprecated)]
                     data: vec![DynamicExtraBody::Provider {
                         model_provider_name: "wrong_provider".to_string(),
                         pointer: "/my_key".to_string(),
@@ -958,6 +963,7 @@ mod tests {
             &FullExtraHeadersConfig {
                 variant_extra_headers: Some(ExtraHeadersConfig { data: vec![] }),
                 inference_extra_headers: FilteredInferenceExtraHeaders {
+                    #[expect(deprecated)]
                     data: vec![DynamicExtraHeader::Provider {
                         model_provider_name: "wrong_provider".to_string(),
                         name: "X-My-Header".to_string(),
@@ -1029,6 +1035,7 @@ mod tests {
                     ],
                 }),
                 inference_extra_headers: FilteredInferenceExtraHeaders {
+                    #[expect(deprecated)]
                     data: vec![
                         DynamicExtraHeader::Provider {
                             model_provider_name:
@@ -1113,6 +1120,7 @@ mod tests {
                     ],
                 }),
                 inference_extra_body: FilteredInferenceExtraBody {
+                    #[expect(deprecated)]
                     data: vec![DynamicExtraBody::Provider {
                         model_provider_name:
                             "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
@@ -1187,6 +1195,7 @@ mod tests {
                     ],
                 }),
                 inference_extra_body: FilteredInferenceExtraBody {
+                    #[expect(deprecated)]
                     data: vec![DynamicExtraBody::Provider {
                         model_provider_name:
                             "tensorzero::model_name::dummy_model::provider_name::dummy_provider"
