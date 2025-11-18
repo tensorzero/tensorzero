@@ -106,4 +106,4 @@ jobs:
     - name: Print logs from stopped pods
       if: always()
       run: |
-        kubectl logs -n tensorzero --timestamps=true --all-pods=true --all-containers=true -l app.kubernetes.io/instance=tensorzero -p
+        kubectl logs -n tensorzero --timestamps=true --all-pods=true --all-containers=true -l app.kubernetes.io/instance=tensorzero -p || true
