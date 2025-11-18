@@ -206,7 +206,15 @@ export async function action({ request }: Route.ActionArgs) {
       }
     }
 
+    case null:
+      logger.error("No action provided");
+      return data<ActionData>(
+        { error: "No action provided" },
+        { status: 400 }
+      );
+
     default:
+      logger.error(`Unknown action: ${_action}`);
       return data<ActionData>(
         { error: `Unknown action: ${_action}` },
         { status: 400 }
@@ -228,7 +236,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
   const { 
     handleInferenceHover, 
     handleOpenSheet,

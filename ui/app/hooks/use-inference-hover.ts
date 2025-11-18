@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useFetcher } from "react-router";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 
@@ -26,82 +26,106 @@ export function useInferenceHover(episodeRoute: string): {
   const [openSheetInferenceId, setOpenSheetInferenceId] = useState<string | null>(null);
   const [inferenceCache, setInferenceCache] = useState<Record<string, InferenceState>>({});
   const fetcher = useFetcher<ActionData>();
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const activeFetchesRef = useRef<Set<string>>(new Set());
 
-  const handleInferenceHover = (inferenceId: string) => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
+  const submitFetch = useCallback((inferenceId: string) => {
+    // Cancel any active fetches if fetcher is busy
+    if (fetcher.state !== "idle" && activeFetchesRef.current.size > 0) {
+      const cancelledIds = Array.from(activeFetchesRef.current);
+      activeFetchesRef.current.clear();
+      
+      setInferenceCache(prev => {
+        const updated = { ...prev };
+        cancelledIds.forEach(id => {
+          if (updated[id]?.loading) {
+            updated[id] = { ...updated[id], loading: false };
+          }
+        });
+        return updated;
+      });
     }
+    
+    setInferenceCache(prev => ({
+      ...prev,
+      [inferenceId]: { data: null, loading: true, error: null }
+    }));
+    
+    activeFetchesRef.current.add(inferenceId);
+    
+    const formData = new FormData();
+    formData.append("_action", "fetchInference");
+    formData.append("inferenceId", inferenceId);
+    
+    fetcher.submit(formData, { 
+      method: "POST",
+      action: episodeRoute
+    });
+  }, [fetcher, episodeRoute]);
+
+  const handleInferenceHover = useCallback((inferenceId: string) => {
+    const timeout = timeoutsRef.current[inferenceId];
+    if (timeout) clearTimeout(timeout);
 
     const currentState = inferenceCache[inferenceId];
-    if (currentState?.data || currentState?.loading) {
-      return;
-    }
+    if (currentState?.data || currentState?.loading) return;
 
-    timeoutRef.current = setTimeout(() => {
-      setInferenceCache(prev => ({
-        ...prev,
-        [inferenceId]: { data: null, loading: true, error: null }
-      }));
-      
-      const formData = new FormData();
-      formData.append("_action", "fetchInference");
-      formData.append("inferenceId", inferenceId);
-      
-      fetcher.submit(formData, { 
-        method: "POST",
-        action: episodeRoute
-      });
+    timeoutsRef.current[inferenceId] = setTimeout(() => {
+      submitFetch(inferenceId);
+      delete timeoutsRef.current[inferenceId];
     }, 100);
-  };
+  }, [inferenceCache, submitFetch]);
 
-  const handleOpenSheet = (inferenceId: string) => {
+  const handleOpenSheet = useCallback((inferenceId: string) => {
     setOpenSheetInferenceId(inferenceId);
     
-    // Fetch immediately if not in cache
     const currentState = inferenceCache[inferenceId];
     if (!currentState?.data && !currentState?.loading) {
-      setInferenceCache(prev => ({
-        ...prev,
-        [inferenceId]: { data: null, loading: true, error: null }
-      }));
-      
-      const formData = new FormData();
-      formData.append("_action", "fetchInference");
-      formData.append("inferenceId", inferenceId);
-      
-      fetcher.submit(formData, { 
-        method: "POST",
-        action: episodeRoute
-      });
+      submitFetch(inferenceId);
     }
-  };
+  }, [inferenceCache, submitFetch]);
 
-  const handleCloseSheet = () => {
+  const handleCloseSheet = useCallback(() => {
     setOpenSheetInferenceId(null);
-  };
+  }, []);
 
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data) {
-      const inferenceId = fetcher.data.inferenceId;
-      if (inferenceId) {
-        setInferenceCache(prev => ({
-          ...prev,
-          [inferenceId]: {
-            data: fetcher.data?.inference || null,
-            loading: false,
-            error: fetcher.data?.error || null
-          }
-        }));
-      }
+    if (fetcher.state !== "idle" || !fetcher.data) return;
+    
+    const { inferenceId, inference, error } = fetcher.data;
+    
+    if (inferenceId && activeFetchesRef.current.has(inferenceId)) {
+      activeFetchesRef.current.delete(inferenceId);
+      
+      setInferenceCache(prev => ({
+        ...prev,
+        [inferenceId]: {
+          data: inference || null,
+          loading: false,
+          error: error || null
+        }
+      }));
+    } else if (!inferenceId && activeFetchesRef.current.size > 0) {
+      // Clear all loading states for active fetches on unknown error
+      const activeIds = Array.from(activeFetchesRef.current);
+      activeFetchesRef.current.clear();
+      
+      setInferenceCache(prev => {
+        const updated = { ...prev };
+        activeIds.forEach(id => {
+          updated[id] = { ...updated[id], loading: false, error: 'Unknown error' };
+        });
+        return updated;
+      });
     }
   }, [fetcher.state, fetcher.data]);
 
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+      // Clean up all timeouts on unmount
+      Object.values(timeoutsRef.current).forEach(timeout => {
+        clearTimeout(timeout);
+      });
     };
   }, []);
 
