@@ -516,10 +516,9 @@ fn strings_from_value(value: &Value) -> Option<Vec<String>> {
 ///
 /// let mut env = Environment::new();
 /// env.add_template("base.html", "{% block content %}{% endblock %}").unwrap();
-/// let page_source = "{% extends 'base.html' %}{% block content %}Hello{% endblock %}";
-/// env.add_template("page.html", page_source).unwrap();
+/// env.add_template("page.html", "{% extends 'base.html' %}{% block content %}Hello{% endblock %}").unwrap();
 ///
-/// let paths = collect_all_template_paths(&env, "page.html", page_source).unwrap();
+/// let paths = collect_all_template_paths(&env, "page.html").unwrap();
 /// assert_eq!(paths.len(), 2); // page.html and base.html
 /// ```
 ///
@@ -530,10 +529,9 @@ fn strings_from_value(value: &Value) -> Option<Vec<String>> {
 /// use minijinja_utils::{collect_all_template_paths, AnalysisError};
 ///
 /// let mut env = Environment::new();
-/// let dynamic_source = "{% include template_var %}";
-/// env.add_template("dynamic.html", dynamic_source).unwrap();
+/// env.add_template("dynamic.html", "{% include template_var %}").unwrap();
 ///
-/// match collect_all_template_paths(&env, "dynamic.html", dynamic_source) {
+/// match collect_all_template_paths(&env, "dynamic.html") {
 ///     Err(AnalysisError::DynamicLoadsFound(locations)) => {
 ///         assert_eq!(locations[0].reason, "variable");
 ///         println!("Dynamic load at {}:{}", locations[0].line, locations[0].column);
@@ -544,14 +542,13 @@ fn strings_from_value(value: &Value) -> Option<Vec<String>> {
 pub fn collect_all_template_paths(
     env: &Environment<'_>,
     template_name: &str,
-    template_source: &str,
 ) -> Result<HashSet<PathBuf>, AnalysisError> {
     let mut visited = HashSet::new();
     let mut to_visit = VecDeque::new();
     let mut all_paths = HashSet::new();
     let mut dynamic_loads = Vec::new();
 
-    to_visit.push_back((template_name.to_string(), Some(template_source.to_string())));
+    to_visit.push_back(template_name.to_string());
 
     // Extract configuration from environment
     let whitespace_config = WhitespaceConfig {
@@ -560,7 +557,7 @@ pub fn collect_all_template_paths(
         lstrip_blocks: env.lstrip_blocks(),
     };
 
-    while let Some((current_template, source_override)) = to_visit.pop_front() {
+    while let Some(current_template) = to_visit.pop_front() {
         if visited.contains(&current_template) {
             continue;
         }
@@ -569,24 +566,19 @@ pub fn collect_all_template_paths(
         // Add the template name as a path
         all_paths.insert(PathBuf::from(&current_template));
 
-        // Get the source - either from override (for initial template) or from env (for references)
-        let source = if let Some(src) = source_override {
-            src
-        } else {
-            // Try to get the template from the environment
-            // If it doesn't exist, skip it (it may be missing or have an unsafe path)
-            match env.get_template(&current_template) {
-                Ok(template) => template.source().to_string(),
-                Err(e) => {
-                    // Template doesn't exist in environment - skip analysis of this template
-                    // The missing template will be handled later (e.g., at render time)
-                    tracing::warn!(
-                        "Could not load referenced template '{}' from environment: {}. Skipping recursive analysis.",
-                        current_template,
-                        e
-                    );
-                    continue;
-                }
+        // Try to get the template from the environment
+        // If it doesn't exist, skip it (it may be missing or have an unsafe path)
+        let source = match env.get_template(&current_template) {
+            Ok(template) => template.source().to_string(),
+            Err(e) => {
+                // Template doesn't exist in environment - skip analysis of this template
+                // The missing template will be handled later (e.g., at render time)
+                tracing::warn!(
+                    "Could not load referenced template '{}' from environment: {}. Skipping recursive analysis.",
+                    current_template,
+                    e
+                );
+                continue;
             }
         };
 
@@ -622,10 +614,10 @@ pub fn collect_all_template_paths(
                 });
             }
 
-            // Add known templates to visit queue (without source override - they'll be looked up from env)
+            // Add known templates to visit queue
             for known_template in load.value.known {
                 if !visited.contains(&known_template) {
-                    to_visit.push_back((known_template, None));
+                    to_visit.push_back(known_template);
                 }
             }
         }

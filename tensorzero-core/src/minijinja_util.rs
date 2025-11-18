@@ -53,6 +53,7 @@ impl TemplateConfig<'_> {
 
             // Create a validation environment with a path loader to discover transitive dependencies
             let mut validation_env = minijinja::Environment::new();
+            validation_env.set_undefined_behavior(UndefinedBehavior::Strict);
             validation_env.set_loader(minijinja::path_loader(base_path));
 
             // Add configured templates to the validation environment
@@ -71,9 +72,9 @@ impl TemplateConfig<'_> {
 
             // Analyze each configured template to discover all transitive dependencies
             let mut all_discovered_templates = HashSet::new();
-            for (template_name, template_source) in &configured_templates {
+            for template_name in configured_templates.keys() {
                 let discovered_templates =
-                    collect_all_template_paths(&validation_env, template_name, template_source)?;
+                    collect_all_template_paths(&validation_env, template_name)?;
 
                 all_discovered_templates.extend(discovered_templates);
             }

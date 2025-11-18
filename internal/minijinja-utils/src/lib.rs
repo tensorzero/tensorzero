@@ -30,12 +30,11 @@
 //! use minijinja_utils::collect_all_template_paths;
 //!
 //! let mut env = Environment::new();
-//! let main_source = "{% include 'header.html' %}Content";
-//! env.add_template("main.html", main_source).unwrap();
+//! env.add_template("main.html", "{% include 'header.html' %}Content").unwrap();
 //! env.add_template("header.html", "Header").unwrap();
 //!
 //! // Collect all template dependencies
-//! let paths = collect_all_template_paths(&env, "main.html", main_source).unwrap();
+//! let paths = collect_all_template_paths(&env, "main.html").unwrap();
 //! assert_eq!(paths.len(), 2); // main.html and header.html
 //! ```
 //!
