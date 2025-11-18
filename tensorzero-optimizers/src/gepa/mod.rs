@@ -24,6 +24,10 @@ use tensorzero_core::{
 
 use crate::{JobHandle, Optimizer};
 
+mod analyze;
+
+pub use analyze::{analyze_inferences, InferenceWithAnalysis};
+
 #[async_trait]
 impl Optimizer for GEPAConfig {
     type Handle = GEPAJobHandle;
