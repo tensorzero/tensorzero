@@ -192,9 +192,9 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    use crate::endpoints::openai_compatible::OpenAICompatibleContentBlock;
-    use crate::endpoints::openai_compatible::{
-        convert_openai_message_content, OpenAICompatibleMessage, OpenAICompatibleUserMessage,
+    use crate::endpoints::openai_compatible::types::chat_completions::{
+        convert_openai_message_content, OpenAICompatibleContentBlock, OpenAICompatibleMessage,
+        OpenAICompatibleUserMessage,
     };
     use crate::inference::types::{Input, InputMessageContent, Role};
     use crate::utils::testing::capture_logs;

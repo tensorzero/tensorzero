@@ -1,3 +1,9 @@
+//! Streaming response types and logic for OpenAI-compatible API.
+//!
+//! This module provides types and functions for streaming chat completion responses
+//! in Server-Sent Events (SSE) format, compatible with OpenAI's streaming API.
+//! It handles chunk formatting, delta updates, and usage reporting for streaming responses.
+
 use axum::response::sse::Event;
 use futures::Stream;
 use serde::Serialize;
@@ -7,10 +13,9 @@ use tokio_stream::StreamExt;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{current_timestamp, ContentBlockChunk, FinishReason};
 
-use super::super::{
-    InferenceResponseChunk, InferenceStream, OpenAICompatibleFinishReason,
-    OpenAICompatibleStreamOptions,
-};
+use crate::endpoints::inference::{InferenceResponseChunk, InferenceStream};
+
+use super::chat_completions::{OpenAICompatibleFinishReason, OpenAICompatibleStreamOptions};
 use super::tool::{OpenAICompatibleToolCallChunk, OpenAICompatibleToolCallDelta};
 use super::usage::OpenAICompatibleUsage;
 

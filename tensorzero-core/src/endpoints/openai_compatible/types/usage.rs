@@ -1,3 +1,8 @@
+//! Usage tracking types for OpenAI-compatible API.
+//!
+//! This module provides types for token usage reporting in OpenAI-compatible responses,
+//! including prompt tokens, completion tokens, and total token counts.
+
 use serde::Serialize;
 
 use crate::inference::types::Usage;

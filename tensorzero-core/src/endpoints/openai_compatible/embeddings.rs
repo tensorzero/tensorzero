@@ -1,3 +1,9 @@
+//! Embeddings endpoint handler for OpenAI-compatible API.
+//!
+//! This module implements the HTTP handler for the `/openai/v1/embeddings` endpoint,
+//! providing compatibility with the OpenAI Embeddings API format. It converts between
+//! OpenAI's embedding request format and TensorZero's internal embedding system.
+
 use axum::{extract::State, Extension, Json};
 
 use crate::endpoints::embeddings::embeddings;

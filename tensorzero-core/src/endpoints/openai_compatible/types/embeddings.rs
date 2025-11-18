@@ -1,3 +1,9 @@
+//! Embedding types for OpenAI-compatible API.
+//!
+//! This module provides request and response types for the embeddings endpoint,
+//! including parameter structures and conversion logic between OpenAI's embedding
+//! format and TensorZero's internal embedding representations.
+
 use serde::{Deserialize, Serialize};
 
 use crate::cache::CacheParamsOptions;

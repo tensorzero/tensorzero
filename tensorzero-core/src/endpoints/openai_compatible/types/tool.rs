@@ -1,3 +1,9 @@
+//! Tool types and conversions for OpenAI-compatible API.
+//!
+//! This module provides types for tool calling functionality in the OpenAI-compatible API,
+//! including tool definitions, tool calls, tool choice options, and conversion logic
+//! between OpenAI's tool format and TensorZero's internal tool representations.
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -38,15 +44,15 @@ pub struct OpenAICompatibleToolCallChunk {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-pub(crate) struct OpenAICompatibleToolMessage {
-    pub(crate) content: Option<Value>,
-    pub(crate) tool_call_id: String,
+pub struct OpenAICompatibleToolMessage {
+    pub content: Option<Value>,
+    pub tool_call_id: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type", content = "function")]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum OpenAICompatibleTool {
+pub enum OpenAICompatibleTool {
     Function {
         description: Option<String>,
         name: String,
@@ -57,21 +63,21 @@ pub(crate) enum OpenAICompatibleTool {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-pub(crate) struct FunctionName {
-    pub(crate) name: String,
+pub struct FunctionName {
+    pub name: String,
 }
 
 /// Specifies a tool the model should use. Use to force the model to call a specific function.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-pub(crate) struct OpenAICompatibleNamedToolChoice {
+pub struct OpenAICompatibleNamedToolChoice {
     /// The type of the tool. Currently, only `function` is supported.
-    pub(crate) r#type: String,
-    pub(crate) function: FunctionName,
+    pub r#type: String,
+    pub function: FunctionName,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum OpenAICompatibleAllowedToolsMode {
+pub enum OpenAICompatibleAllowedToolsMode {
     Auto,
     Required,
 }
@@ -86,9 +92,9 @@ impl From<OpenAICompatibleAllowedToolsMode> for ToolChoice {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-pub(crate) struct OpenAICompatibleAllowedTools {
-    pub(crate) tools: Vec<OpenAICompatibleNamedToolChoice>,
-    pub(crate) mode: OpenAICompatibleAllowedToolsMode,
+pub struct OpenAICompatibleAllowedTools {
+    pub tools: Vec<OpenAICompatibleNamedToolChoice>,
+    pub mode: OpenAICompatibleAllowedToolsMode,
 }
 
 /// Controls which (if any) tool is called by the model.
@@ -99,7 +105,7 @@ pub(crate) struct OpenAICompatibleAllowedTools {
 ///
 /// `none` is the default when no tools are present. `auto` is the default if tools are present.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) enum ChatCompletionToolChoiceOption {
+pub enum ChatCompletionToolChoiceOption {
     #[default]
     None,
     Auto,
