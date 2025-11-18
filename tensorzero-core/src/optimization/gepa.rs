@@ -103,7 +103,7 @@ pub struct GEPAConfig {
 /// Uninitialized GEPA configuration (deserializable from TOML)
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "GEPAConfig"))]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, str, name = "GEPAConfig"))]
 pub struct UninitializedGEPAConfig {
     pub function_name: String,
     pub evaluation_name: String,

@@ -42,9 +42,9 @@ use tensorzero_core::{
     optimization::{
         dicl::UninitializedDiclOptimizationConfig, fireworks_sft::UninitializedFireworksSFTConfig,
         gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig,
-        openai_rft::UninitializedOpenAIRFTConfig, openai_sft::UninitializedOpenAISFTConfig,
-        together_sft::UninitializedTogetherSFTConfig, OptimizationJobInfoPyClass,
-        OptimizationJobStatus, UninitializedOptimizerInfo,
+        gepa::UninitializedGEPAConfig, openai_rft::UninitializedOpenAIRFTConfig,
+        openai_sft::UninitializedOpenAISFTConfig, together_sft::UninitializedTogetherSFTConfig,
+        OptimizationJobInfoPyClass, OptimizationJobStatus, UninitializedOptimizerInfo,
     },
     tool::ProviderTool,
     variant::{
@@ -108,6 +108,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<UninitializedFireworksSFTConfig>()?;
     m.add_class::<UninitializedDiclOptimizationConfig>()?;
     m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
+    m.add_class::<UninitializedGEPAConfig>()?;
     m.add_class::<UninitializedTogetherSFTConfig>()?;
     m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
