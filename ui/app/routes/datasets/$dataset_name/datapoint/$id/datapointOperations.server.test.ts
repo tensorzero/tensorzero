@@ -375,9 +375,7 @@ describe("datapointOperations", () => {
           datapoints: [
             {
               id: datapointId,
-              metadata: {
-                name: newName,
-              },
+              name: newName,
             },
           ],
         }),
@@ -407,9 +405,7 @@ describe("datapointOperations", () => {
           datapoints: [
             {
               id: datapointId,
-              metadata: {
-                name: newName,
-              },
+              name: newName,
             },
           ],
         }),

@@ -170,6 +170,7 @@ pub fn parse_tool(
 /// ```
 pub fn convert_response_to_python_dataclass<T: serde::Serialize>(
     py: Python<'_>,
+    // TODO(shuyangli): this should be &T.
     response: T,
     python_module: &str,
     python_class: &str,
