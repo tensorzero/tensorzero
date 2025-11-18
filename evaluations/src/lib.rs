@@ -428,12 +428,8 @@ pub async fn run_evaluation_core_streaming(
     let mut task_id_to_datapoint_id = HashMap::new();
 
     // Setup stopping manager for adaptive stopping
-    let evaluator_names: Vec<String> = inference_evaluation_config
-        .evaluators
-        .keys()
-        .cloned()
-        .collect();
-    let mut stopping_manager = stopping::StoppingManager::new(precision_targets, &evaluator_names);
+    let mut stopping_manager =
+        stopping::StoppingManager::new(&inference_evaluation_config.evaluators, precision_targets);
 
     let run_info = RunInfo {
         evaluation_run_id: args.evaluation_run_id,

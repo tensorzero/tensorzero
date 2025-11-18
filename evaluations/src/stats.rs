@@ -85,8 +85,8 @@ impl EvaluationStats {
     ) -> HashMap<String, EvaluatorStats> {
         info!("Computing evaluation statistics");
         let mut per_evaluator_stats: HashMap<String, PerEvaluatorStats> = evaluators
-            .keys()
-            .map(|key| (key.clone(), PerEvaluatorStats::new()))
+            .iter()
+            .map(|(key, config)| (key.clone(), PerEvaluatorStats::new(config.is_bernoulli())))
             .collect();
         debug!(evaluators = ?evaluators.keys().collect::<Vec<_>>(), "Initialized data collectors for evaluators");
 
@@ -281,11 +281,15 @@ pub fn wilson_confint(data: &[f32]) -> Option<(f64, f64)> {
 #[derive(Default)]
 pub struct PerEvaluatorStats {
     values: Vec<f32>,
+    is_bernoulli: bool,
 }
 
 impl PerEvaluatorStats {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(is_bernoulli: bool) -> Self {
+        Self {
+            values: Vec::new(),
+            is_bernoulli,
+        }
     }
 
     pub fn push(&mut self, value: f32) {
@@ -312,14 +316,20 @@ impl PerEvaluatorStats {
         wilson_confint(&self.values)
     }
 
-    /// Returns the 95% confidence interval half-width (1.96 * stderr)
-    /// The full CI width is 2 * ci_half_width()
+    /// Returns the 95% confidence interval half-width
+    /// For Bernoulli evaluators: Uses Wilson confidence interval (max distance from mean to bounds)
+    /// For Float evaluators: Uses Wald confidence interval (1.96 * stderr)
     pub fn ci_half_width(&self) -> Option<f32> {
-        self.stderr().map(|se| 1.96 * se)
-        // For Wilson intervals on Bernoulli data, use:
-        // let mean = self.mean()?;
-        // self.wilson_confint()
-        //     .map(|(ci_lower, ci_upper)| (mean as f64 - ci_lower).max(ci_upper - mean as f64) as f32)
+        if self.is_bernoulli {
+            // Use Wilson confidence interval for Bernoulli data
+            let mean = self.mean()?;
+            self.wilson_confint().map(|(ci_lower, ci_upper)| {
+                (mean as f64 - ci_lower).max(ci_upper - mean as f64) as f32
+            })
+        } else {
+            // Use Wald confidence interval for float data
+            self.stderr().map(|se| 1.96 * se)
+        }
     }
 
     /// Converts to an EvaluatorStats snapshot for output/serialization
@@ -501,7 +511,7 @@ mod tests {
 
     #[test]
     fn test_per_evaluator_stats_basic() {
-        let mut stats = PerEvaluatorStats::new();
+        let mut stats = PerEvaluatorStats::new(false);
         assert_eq!(stats.count(), 0);
         assert_eq!(stats.mean(), None);
         assert_eq!(stats.stderr(), None);
@@ -517,7 +527,7 @@ mod tests {
 
     #[test]
     fn test_per_evaluator_stats_mean_and_stderr() {
-        let mut stats = PerEvaluatorStats::new();
+        let mut stats = PerEvaluatorStats::new(false);
 
         // Add values: [1.0, 2.0, 3.0, 4.0, 5.0]
         // Mean = 3.0
@@ -537,7 +547,7 @@ mod tests {
 
     #[test]
     fn test_per_evaluator_stats_ci_half_width() {
-        let mut stats = PerEvaluatorStats::new();
+        let mut stats = PerEvaluatorStats::new(false);
 
         // Add values with known statistics
         for value in [1.0, 2.0, 3.0, 4.0, 5.0] {
@@ -553,7 +563,7 @@ mod tests {
 
     #[test]
     fn test_per_evaluator_stats_to_evaluator_stats() {
-        let mut stats = PerEvaluatorStats::new();
+        let mut stats = PerEvaluatorStats::new(false);
         for value in [1.0, 2.0, 3.0, 4.0, 5.0] {
             stats.push(value);
         }
@@ -566,7 +576,7 @@ mod tests {
 
     #[test]
     fn test_per_evaluator_stats_empty_conversion() {
-        let stats = PerEvaluatorStats::new();
+        let stats = PerEvaluatorStats::new(false);
         let evaluator_stats = stats.to_evaluator_stats();
 
         // Empty stats should have defaults
