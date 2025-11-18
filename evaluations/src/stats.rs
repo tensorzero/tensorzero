@@ -257,7 +257,7 @@ pub fn wilson_confint(data: &[f32]) -> Option<(f64, f64)> {
         (Some(data_mean), count) if count > 0 => {
             let data_mean = data_mean as f64;
             let count_f64 = count as f64;
-            let z: f64 = 1.96; // Std normal quantile for 95% CI
+            let z: f64 = 1.96; // Standard normal quantile for 95% CI
             let z_squared: f64 = z.powi(2);
             let scale: f64 = 1.0 / (1.0 + z_squared / count_f64);
             let center: f64 = data_mean + z_squared / (2.0 * count_f64);
@@ -312,22 +312,16 @@ impl PerEvaluatorStats {
         std_deviation(&self.values).map(|std_dev| std_dev / (self.values.len() as f32).sqrt())
     }
 
-    pub fn wilson_confint(&self) -> Option<(f64, f64)> {
-        wilson_confint(&self.values)
-    }
-
-    /// Returns the 95% confidence interval half-width
-    /// For Bernoulli evaluators: Uses Wilson confidence interval (max distance from mean to bounds)
-    /// For Float evaluators: Uses Wald confidence interval (1.96 * stderr)
+    /// Returns the 95% confidence interval (CI) half-width
+    /// For Bernoulli evaluators: Uses Wilson CI (max distance from mean to bounds, since CI is asymmetric)
+    /// For Float evaluators: Uses half-width of the Wald CI (1.96 * stderr, since CI is symmetric)
     pub fn ci_half_width(&self) -> Option<f32> {
         if self.is_bernoulli {
-            // Use Wilson confidence interval for Bernoulli data
             let mean = self.mean()?;
-            self.wilson_confint().map(|(ci_lower, ci_upper)| {
+            wilson_confint(&self.values).map(|(ci_lower, ci_upper)| {
                 (mean as f64 - ci_lower).max(ci_upper - mean as f64) as f32
             })
         } else {
-            // Use Wald confidence interval for float data
             self.stderr().map(|se| 1.96 * se)
         }
     }
