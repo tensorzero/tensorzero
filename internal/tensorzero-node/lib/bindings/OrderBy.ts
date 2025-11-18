@@ -18,4 +18,5 @@ export type OrderBy = {
        */
       name: string;
     }
+  | { by: "search_relevance" }
 );

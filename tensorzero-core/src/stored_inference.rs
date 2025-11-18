@@ -1,31 +1,30 @@
 use std::{collections::HashMap, sync::Arc};
 
+use crate::config::Config;
 use crate::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
+use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
 };
 use crate::inference::types::stored_input::StoredInput;
-use crate::inference::types::{RequestMessage, ResolvedRequestMessage, Text};
-use crate::tool::{deserialize_tool_info, DynamicToolParams, StaticToolConfig};
-#[cfg(feature = "pyo3")]
-use crate::tool::{ClientSideFunctionTool, ProviderTool, ToolChoice};
-use crate::{
-    config::Config,
-    error::{Error, ErrorDetails},
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedInput},
-    tool::ToolCallConfigDatabaseInsert,
-    variant::{chat_completion::prepare_model_input, VariantConfig},
+use crate::inference::types::{
+    ContentBlockChatOutput, JsonInferenceOutput, ModelInput, RequestMessage, ResolvedInput,
+    ResolvedRequestMessage, Text,
 };
+use crate::tool::{
+    deserialize_tool_info, DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert,
+};
+use crate::variant::{chat_completion::prepare_model_input, VariantConfig};
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
 use pyo3::types::PyList;
 #[cfg(feature = "pyo3")]
-use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt};
+use pyo3::{prelude::*, IntoPyObjectExt};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -63,7 +62,6 @@ pub struct SimpleStoredSampleInfo {
 /// This one should be used in all public interfaces
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass(str, name = "StoredInference"))]
 #[ts(export)]
 pub enum StoredInference {
     #[schemars(title = "StoredInferenceChat")]
@@ -162,279 +160,6 @@ impl StoredInference {
     }
 }
 
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl StoredInference {
-    #[new]
-    #[pyo3(signature = (r#type, function_name, variant_name, input, output, episode_id, inference_id, timestamp, output_schema=None, dispreferred_outputs=None, tags=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, provider_tools=None))]
-    #[expect(clippy::too_many_arguments)]
-    pub fn new(
-        py: Python<'_>,
-        r#type: String,
-        function_name: String,
-        variant_name: String,
-        input: Bound<'_, PyAny>,
-        output: Bound<'_, PyAny>,
-        episode_id: Bound<'_, PyAny>,
-        inference_id: Bound<'_, PyAny>,
-        timestamp: Bound<'_, PyAny>,
-        output_schema: Option<Bound<'_, PyAny>>,
-        dispreferred_outputs: Option<Bound<'_, PyAny>>,
-        tags: Option<Bound<'_, PyAny>>,
-        // Flattened DynamicToolParams fields
-        allowed_tools: Option<Vec<String>>,
-        additional_tools: Option<Bound<'_, PyAny>>,
-        tool_choice: Option<Bound<'_, PyAny>>,
-        parallel_tool_calls: Option<bool>,
-        provider_tools: Option<Bound<'_, PyAny>>,
-    ) -> PyResult<Self> {
-        use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
-
-        // Deserialize common fields
-        let input: StoredInput = deserialize_from_pyobj(py, &input)?;
-        let episode_id: Uuid = deserialize_from_pyobj(py, &episode_id)?;
-        let inference_id: Uuid = deserialize_from_pyobj(py, &inference_id)?;
-        let timestamp: DateTime<Utc> = deserialize_from_pyobj(py, &timestamp)?;
-        let tags: HashMap<String, String> = tags
-            .as_ref()
-            .map(|x| deserialize_from_pyobj(py, x))
-            .transpose()?
-            .unwrap_or_default();
-
-        match r#type.as_str() {
-            "chat" => {
-                let output: Vec<ContentBlockChatOutput> = deserialize_from_pyobj(py, &output)?;
-                let dispreferred_outputs: Option<Vec<Vec<ContentBlockChatOutput>>> =
-                    dispreferred_outputs
-                        .as_ref()
-                        .map(|x| deserialize_from_pyobj(py, x))
-                        .transpose()?;
-
-                // Build DynamicToolParams from flattened fields
-                let additional_tools: Option<Vec<ClientSideFunctionTool>> = additional_tools
-                    .as_ref()
-                    .map(|x| deserialize_from_pyobj(py, x))
-                    .transpose()?;
-                let tool_choice: Option<ToolChoice> = tool_choice
-                    .as_ref()
-                    .map(|x| deserialize_from_pyobj(py, x))
-                    .transpose()?;
-                let provider_tools: Vec<ProviderTool> = provider_tools
-                    .as_ref()
-                    .map(|x| deserialize_from_pyobj(py, x))
-                    .transpose()?
-                    .unwrap_or_default();
-
-                let tool_params = DynamicToolParams {
-                    allowed_tools,
-                    additional_tools,
-                    tool_choice,
-                    parallel_tool_calls,
-                    provider_tools,
-                };
-
-                Ok(Self::Chat(StoredChatInference {
-                    function_name,
-                    variant_name,
-                    input,
-                    output,
-                    dispreferred_outputs: dispreferred_outputs.unwrap_or_default(),
-                    episode_id,
-                    inference_id,
-                    tool_params,
-                    tags,
-                    timestamp,
-                }))
-            }
-            "json" => {
-                let output: JsonInferenceOutput = deserialize_from_pyobj(py, &output)?;
-                let dispreferred_outputs: Option<Vec<JsonInferenceOutput>> = dispreferred_outputs
-                    .as_ref()
-                    .map(|x| deserialize_from_pyobj(py, x))
-                    .transpose()?;
-                let Some(output_schema) = output_schema
-                    .as_ref()
-                    .map(|x| deserialize_from_pyobj(py, x))
-                else {
-                    return Err(PyValueError::new_err(
-                        "output_schema is required for json inferences",
-                    ));
-                };
-                let output_schema: Value = output_schema?;
-                Ok(Self::Json(StoredJsonInference {
-                    function_name,
-                    variant_name,
-                    input,
-                    output,
-                    dispreferred_outputs: dispreferred_outputs.unwrap_or_default(),
-                    episode_id,
-                    inference_id,
-                    output_schema,
-                    tags,
-                    timestamp,
-                }))
-            }
-            _ => Err(PyValueError::new_err(format!(
-                "Invalid inference type: {type}. Must be 'chat' or 'json'",
-            ))),
-        }
-    }
-
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-
-    #[getter]
-    pub fn get_function_name(&self) -> String {
-        match self {
-            StoredInference::Chat(example) => example.function_name.clone(),
-            StoredInference::Json(example) => example.function_name.clone(),
-        }
-    }
-
-    #[getter]
-    pub fn get_variant_name(&self) -> String {
-        match self {
-            StoredInference::Chat(example) => example.variant_name.clone(),
-            StoredInference::Json(example) => example.variant_name.clone(),
-        }
-    }
-
-    #[getter]
-    pub fn get_input(&self) -> StoredInput {
-        match self {
-            StoredInference::Chat(example) => example.input.clone(),
-            StoredInference::Json(example) => example.input.clone(),
-        }
-    }
-    /// Returns the output of the inference as PyO3 classes.
-    /// This is actually a List of ContentBlockChatOutputs for StoredChatInference
-    /// and a JsonInferenceOutput for StoredJsonInference.
-    #[getter]
-    pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(match self {
-            StoredInference::Chat(example) => example
-                .output
-                .iter()
-                .map(|x| content_block_chat_output_to_python(py, x.clone()))
-                .collect::<PyResult<Vec<_>>>()?
-                .into_bound_py_any(py)?,
-            StoredInference::Json(example) => example.output.clone().into_bound_py_any(py)?,
-        })
-    }
-
-    #[getter]
-    pub fn get_dispreferred_outputs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(match self {
-            StoredInference::Chat(example) => example
-                .dispreferred_outputs
-                .iter()
-                .map(|x| {
-                    x.iter()
-                        .map(|y| content_block_chat_output_to_python(py, y.clone()))
-                        .collect::<PyResult<Vec<_>>>()
-                })
-                .collect::<PyResult<Vec<Vec<_>>>>()?
-                .into_bound_py_any(py)?,
-            StoredInference::Json(example) => {
-                example.dispreferred_outputs.clone().into_bound_py_any(py)?
-            }
-        })
-    }
-
-    #[getter]
-    pub fn get_episode_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match self {
-            StoredInference::Chat(example) => uuid_to_python(py, example.episode_id),
-            StoredInference::Json(example) => uuid_to_python(py, example.episode_id),
-        }
-    }
-
-    #[getter]
-    pub fn get_inference_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match self {
-            StoredInference::Chat(example) => uuid_to_python(py, example.inference_id),
-            StoredInference::Json(example) => uuid_to_python(py, example.inference_id),
-        }
-    }
-
-    #[getter]
-    pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(match self {
-            StoredInference::Chat(_) => py.None().into_bound(py),
-            StoredInference::Json(example) => {
-                serialize_to_dict(py, example.output_schema.clone())?.into_bound(py)
-            }
-        })
-    }
-
-    #[getter]
-    pub fn get_type(&self) -> String {
-        match self {
-            StoredInference::Chat(_) => "chat".to_string(),
-            StoredInference::Json(_) => "json".to_string(),
-        }
-    }
-
-    #[getter]
-    pub fn get_tags(&self) -> HashMap<String, String> {
-        match self {
-            StoredInference::Chat(example) => example.tags.clone(),
-            StoredInference::Json(example) => example.tags.clone(),
-        }
-    }
-
-    #[getter]
-    pub fn get_timestamp(&self) -> String {
-        match self {
-            StoredInference::Chat(example) => example.timestamp.to_rfc3339(),
-            StoredInference::Json(example) => example.timestamp.to_rfc3339(),
-        }
-    }
-
-    #[getter]
-    pub fn get_allowed_tools(&self) -> Option<Vec<String>> {
-        match self {
-            StoredInference::Chat(example) => example.tool_params.allowed_tools.clone(),
-            StoredInference::Json(_) => None,
-        }
-    }
-
-    #[getter]
-    pub fn get_additional_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match self {
-            StoredInference::Chat(example) => example
-                .tool_params
-                .additional_tools
-                .clone()
-                .into_bound_py_any(py),
-            StoredInference::Json(_) => Ok(py.None().into_bound(py)),
-        }
-    }
-
-    // Note: We're intentionally skipping tool_choice as it's not exposed in the Python API
-
-    #[getter]
-    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
-        match self {
-            StoredInference::Chat(example) => example.tool_params.parallel_tool_calls,
-            StoredInference::Json(_) => None,
-        }
-    }
-
-    #[getter]
-    pub fn get_provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match self {
-            StoredInference::Chat(example) => example
-                .tool_params
-                .provider_tools
-                .clone()
-                .into_bound_py_any(py),
-            StoredInference::Json(_) => Ok(py.None().into_bound(py)),
-        }
-    }
-}
-
 impl StoredInferenceDatabase {
     /// Convert to wire type, properly handling tool params by subtracting static tools
     pub fn into_stored_inference(self) -> Result<StoredInference, Error> {
@@ -514,7 +239,6 @@ impl StoredInferenceDatabase {
 
 /// Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
 #[ts(export)]
 pub struct StoredChatInference {
     pub function_name: String,
@@ -538,14 +262,6 @@ impl std::fmt::Display for StoredChatInference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl StoredChatInference {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
     }
 }
 
@@ -593,7 +309,6 @@ impl std::fmt::Display for StoredChatInferenceDatabase {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema, ts_rs::TS)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
 #[ts(export)]
 pub struct StoredJsonInference {
     pub function_name: String,
@@ -615,14 +330,6 @@ impl std::fmt::Display for StoredJsonInference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl StoredJsonInference {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
     }
 }
 
