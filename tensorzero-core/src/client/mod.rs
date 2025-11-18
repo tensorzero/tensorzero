@@ -631,17 +631,6 @@ impl ClientBuilder {
                 reqwest::header::AUTHORIZATION,
                 reqwest::header::HeaderValue::from_str(&format!("Bearer {}", key.expose_secret()))
                     .map_err(|e| {
-                        Error::new(ErrorDetails::InternalError {
-                            message: format!("Failed to create authorization header: {e}"),
-                        })
-                    })
-                    .map_err(|e| TensorZeroError::Other {
-                        source: crate::error::Error::new(ErrorDetails::InternalError {
-                            message: format!("Failed to create authorization header: {e}"),
-                        })
-                        .into(),
-                    })
-                    .map_err(|e| {
                         ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
                             source: Error::new(ErrorDetails::InternalError {
                                 message: format!("Failed to create authorization header: {e}"),
