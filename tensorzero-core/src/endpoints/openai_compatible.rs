@@ -44,8 +44,8 @@ use crate::inference::types::{
 };
 
 use crate::tool::{
-    ClientSideFunctionTool, DynamicToolParams, InferenceResponseToolCall, ProviderTool,
-    ToolCallWrapper, ToolChoice, ToolResult,
+    DynamicToolParams, FunctionTool, InferenceResponseToolCall, ProviderTool, ToolCallWrapper,
+    ToolChoice, ToolResult,
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::JsonMode;
@@ -106,6 +106,15 @@ pub async fn inference_handler(
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
+    // Validate `n` parameter
+    if let Some(n) = openai_compatible_params.n {
+        if n != 1 {
+            return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "TensorZero does not support `n` other than 1. Please omit this parameter or set it to 1.".to_string(),
+            }));
+        }
+    }
+
     if !openai_compatible_params.unknown_fields.is_empty() {
         if openai_compatible_params.tensorzero_deny_unknown_fields {
             let mut unknown_field_names = openai_compatible_params
@@ -574,6 +583,7 @@ pub struct OpenAICompatibleParams {
     reasoning_effort: Option<String>,
     service_tier: Option<ServiceTier>,
     verbosity: Option<String>,
+    n: Option<u32>,
     #[serde(rename = "tensorzero::variant_name")]
     tensorzero_variant_name: Option<String>,
     #[serde(rename = "tensorzero::dryrun")]
@@ -1206,7 +1216,7 @@ fn convert_openai_message_content(
     }
 }
 
-impl From<OpenAICompatibleTool> for ClientSideFunctionTool {
+impl From<OpenAICompatibleTool> for FunctionTool {
     fn from(tool: OpenAICompatibleTool) -> Self {
         match tool {
             OpenAICompatibleTool::Function {
@@ -1214,7 +1224,7 @@ impl From<OpenAICompatibleTool> for ClientSideFunctionTool {
                 name,
                 parameters,
                 strict,
-            } => ClientSideFunctionTool {
+            } => FunctionTool {
                 description: description.unwrap_or_default(),
                 parameters,
                 name,

@@ -12,4 +12,5 @@ export type OrderByTerm =
        * The name of the metric to order by.
        */
       name: string;
-    };
+    }
+  | { by: "search_relevance" };
