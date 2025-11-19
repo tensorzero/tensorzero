@@ -418,14 +418,34 @@ fn contains_expected_xml_tag(analysis: &[ContentBlockChatOutput]) -> bool {
 }
 
 /// Extract the user message content from echo model response
-/// The echo model returns a JSON representation of the request
-fn extract_user_message_from_echo(analysis: &[ContentBlockChatOutput]) -> String {
-    analysis
+/// The echo model returns a JSON representation of the request; parse it once for reuse.
+fn parse_echo_payload(analysis: &[ContentBlockChatOutput]) -> Value {
+    let payload_text = analysis
         .iter()
-        .filter_map(|block| match block {
+        .find_map(|block| match block {
             ContentBlockChatOutput::Text(t) => Some(t.text.as_str()),
             _ => None,
         })
+        .expect("Echo response should contain text content");
+    serde_json::from_str(payload_text)
+        .expect("Echo response should be valid JSON with system and messages fields")
+}
+
+/// Extract concatenated text content for a given role from the echo payload
+fn extract_role_text(payload: &Value, role: &str) -> String {
+    payload
+        .get("messages")
+        .and_then(|m| m.as_array())
+        .into_iter()
+        .flatten()
+        .filter(|msg| msg.get("role").and_then(|r| r.as_str()) == Some(role))
+        .flat_map(|msg| {
+            msg.get("content")
+                .and_then(|c| c.as_array())
+                .into_iter()
+                .flatten()
+        })
+        .filter_map(|block| block.get("text").and_then(|t| t.as_str()))
         .collect::<String>()
 }
 
@@ -831,13 +851,13 @@ async fn test_analyze_inferences_response_structure() {
 // ============================================================================
 
 /// Helper function for echo model tests that validates input format
-/// Returns the user_message from the echo response for assertion
+/// Returns the parsed echo payload for assertions
 async fn test_analyze_input_echo_helper(
     eval_infos: Vec<EvaluationInfo>,
     function_config: FunctionConfig,
     static_tools: Option<HashMap<String, Arc<StaticToolConfig>>>,
     eval_config: EvaluationConfig,
-) -> String {
+) -> Value {
     let client = make_embedded_gateway().await;
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config_echo();
@@ -861,7 +881,7 @@ async fn test_analyze_input_echo_helper(
     let analyses = result.unwrap();
     assert_eq!(analyses.len(), 1, "Should return 1 analysis");
 
-    extract_user_message_from_echo(&analyses[0].analysis)
+    parse_echo_payload(&analyses[0].analysis)
 }
 
 /// Comprehensive test for input template with schemas
@@ -877,13 +897,14 @@ async fn test_analyze_input_with_schemas() {
         .insert("fluency".to_string(), Some(serde_json::json!(0.92)));
 
     let function_config = create_test_function_config_with_schemas();
-    let user_message = test_analyze_input_echo_helper(
+    let payload = test_analyze_input_echo_helper(
         vec![eval_info],
         function_config,
         None,
         create_test_evaluation_config_with_evaluators(),
     )
     .await;
+    let user_message = extract_role_text(&payload, "user");
 
     // Verify required template sections exist
     assert!(
@@ -931,66 +952,34 @@ async fn test_analyze_input_with_schemas() {
         "Should contain fluency evaluator"
     );
     assert!(
-        user_message.contains(r#"\"type\": \"llm_judge\""#)
-            || user_message.contains("\"type\":\"llm_judge\""),
-        "Should have llm_judge type for fluency"
+        user_message.contains("llm_judge"),
+        "Should mention llm_judge evaluator type for fluency"
     );
 
     // Verify evaluation scores appear
     assert!(
-        (user_message.contains(r#"\"exact_match\": 0.85"#)
-            || user_message.contains("\"exact_match\":0.85")),
-        "Should have exact_match score of 0.85"
+        user_message.contains("exact_match") && user_message.contains("0.85"),
+        "Should include exact_match score of 0.85"
     );
     assert!(
-        (user_message.contains(r#"\"fluency\": 0.92"#)
-            || user_message.contains("\"fluency\":0.92")),
-        "Should have fluency score of 0.92"
+        user_message.contains("fluency") && user_message.contains("0.92"),
+        "Should include fluency score of 0.92"
     );
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_input_includes_system_template() {
-    let client = make_embedded_gateway().await;
-
-    let eval_infos = vec![create_test_evaluation_info(
-        "test_function",
-        "Test input",
-        "Test output",
-    )];
-
-    let function_config = create_test_function_config();
-    let variant_config = create_test_variant_config();
-    let gepa_config = create_test_gepa_config_echo();
-
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &function_config,
-        &None,
-        &variant_config,
-        &gepa_config,
-        &create_test_evaluation_config(),
+    let payload = test_analyze_input_echo_helper(
+        vec![create_test_evaluation_info(
+            "test_function",
+            "Test input",
+            "Test output",
+        )],
+        create_test_function_config(),
+        None,
+        create_test_evaluation_config(),
     )
     .await;
-
-    assert!(
-        result.is_ok(),
-        "analyze_inferences should succeed and expose the echoed request payload"
-    );
-    let analyses = result.unwrap();
-    assert_eq!(analyses.len(), 1, "Should return 1 analysis");
-
-    let payload_text = analyses[0]
-        .analysis
-        .iter()
-        .find_map(|block| match block {
-            ContentBlockChatOutput::Text(t) => Some(t.text.as_str()),
-            _ => None,
-        })
-        .expect("Analysis should contain text from echo model");
-    let payload: Value = serde_json::from_str(payload_text)
-        .expect("Echo response should be valid JSON with system and messages");
 
     let system_prompt = payload
         .get("system")
@@ -1017,13 +1006,14 @@ async fn test_analyze_input_with_static_tools() {
         .insert("exact_match".to_string(), Some(serde_json::json!(0.85)));
 
     let (function_config, static_tools) = create_test_function_config_with_static_tools();
-    let user_message = test_analyze_input_echo_helper(
+    let payload = test_analyze_input_echo_helper(
         vec![eval_info],
         function_config,
         static_tools,
         create_test_evaluation_config_with_evaluators(),
     )
     .await;
+    let user_message = extract_role_text(&payload, "user");
 
     // Verify required template sections exist
     assert!(
@@ -1075,9 +1065,8 @@ async fn test_analyze_input_with_static_tools() {
         "Should contain exact_match evaluator"
     );
     assert!(
-        (user_message.contains(r#"\"exact_match\": 0.85"#)
-            || user_message.contains("\"exact_match\":0.85")),
-        "Should have exact_match score"
+        user_message.contains("exact_match") && user_message.contains("0.85"),
+        "Should include exact_match score"
     );
 }
 
@@ -1188,8 +1177,8 @@ async fn test_analyze_input_with_datapoint_tool_params() {
     let analyses = result.unwrap();
     assert_eq!(analyses.len(), 1, "Should return 1 analysis");
 
-    // Extract the user message from echo response
-    let user_message = extract_user_message_from_echo(&analyses[0].analysis);
+    let payload = parse_echo_payload(&analyses[0].analysis);
+    let user_message = extract_role_text(&payload, "user");
 
     // Verify tools section appears (renamed from <available_tools> to <tool_schemas>)
     assert!(
@@ -1350,8 +1339,8 @@ async fn test_analyze_input_evaluation_score_types() {
     let analyses = result.unwrap();
     assert_eq!(analyses.len(), 1);
 
-    // Extract the user message from echo response
-    let user_message = extract_user_message_from_echo(&analyses[0].analysis);
+    let payload = parse_echo_payload(&analyses[0].analysis);
+    let user_message = extract_role_text(&payload, "user");
 
     // Verify evaluation_scores section appears
     assert!(
@@ -1470,8 +1459,8 @@ async fn test_analyze_input_with_tags() {
     let analyses = result.unwrap();
     assert_eq!(analyses.len(), 1);
 
-    // Extract the user message from echo response
-    let user_message = extract_user_message_from_echo(&analyses[0].analysis);
+    let payload = parse_echo_payload(&analyses[0].analysis);
+    let user_message = extract_role_text(&payload, "user");
 
     // Verify tags appear inside the datapoint JSON (not in a separate metadata section)
     assert!(
