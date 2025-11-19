@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::inference::types::ModelInferenceRequest;
-use crate::tool::{ClientSideFunctionTool, ClientSideFunctionToolConfig, ToolChoice};
+use crate::tool::{ClientSideFunctionToolConfig, FunctionTool, ToolChoice};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -105,8 +105,8 @@ impl<'a> From<&'a ClientSideFunctionToolConfig> for ChatCompletionTool<'a> {
     }
 }
 
-impl<'a> From<&'a ClientSideFunctionTool> for ChatCompletionTool<'a> {
-    fn from(tool: &'a ClientSideFunctionTool) -> Self {
+impl<'a> From<&'a FunctionTool> for ChatCompletionTool<'a> {
+    fn from(tool: &'a FunctionTool) -> Self {
         ChatCompletionTool {
             r#type: ChatCompletionToolType::Function,
             function: ChatCompletionFunction {
@@ -424,7 +424,7 @@ mod tests {
 
     #[test]
     fn test_from_client_side_function_tool() {
-        let tool = ClientSideFunctionTool {
+        let tool = FunctionTool {
             name: "direct_tool".to_string(),
             description: "Direct tool".to_string(),
             parameters: json!({"type": "object"}),

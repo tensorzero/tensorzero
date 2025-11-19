@@ -2473,8 +2473,8 @@ mod tool_call_storage_tests {
     use super::*;
     use serde_json::json;
     use tensorzero_core::tool::{
-        AllowedTools, AllowedToolsChoice, ClientSideFunctionTool, ProviderTool, ProviderToolScope,
-        Tool, ToolCallConfigDatabaseInsert, ToolChoice,
+        AllowedTools, AllowedToolsChoice, FunctionTool, ProviderTool, ProviderToolScope, Tool,
+        ToolCallConfigDatabaseInsert, ToolChoice,
     };
 
     #[tokio::test]
@@ -2573,7 +2573,7 @@ mod tool_call_storage_tests {
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
-        let dynamic_tool = Tool::ClientSideFunction(ClientSideFunctionTool {
+        let dynamic_tool = Tool::ClientSideFunction(FunctionTool {
             name: "runtime_tool".to_string(),
             description: "A tool provided at runtime".to_string(),
             parameters: json!({"type": "object", "properties": {}}),
@@ -2661,7 +2661,7 @@ mod tool_call_storage_tests {
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
-        let dynamic_tool = Tool::ClientSideFunction(ClientSideFunctionTool {
+        let dynamic_tool = Tool::ClientSideFunction(FunctionTool {
             name: "dynamic_x".to_string(),
             description: "Dynamic tool X".to_string(),
             parameters: json!({"type": "object"}),
@@ -3032,14 +3032,14 @@ mod tool_call_storage_tests {
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
-        let dynamic_tool1 = Tool::ClientSideFunction(ClientSideFunctionTool {
+        let dynamic_tool1 = Tool::ClientSideFunction(FunctionTool {
             name: "dynamic_tool_1".to_string(),
             description: "First dynamic tool".to_string(),
             parameters: json!({"type": "object", "properties": {"param1": {"type": "string"}}}),
             strict: false,
         });
 
-        let dynamic_tool2 = Tool::ClientSideFunction(ClientSideFunctionTool {
+        let dynamic_tool2 = Tool::ClientSideFunction(FunctionTool {
             name: "dynamic_tool_2".to_string(),
             description: "Second dynamic tool".to_string(),
             parameters: json!({"type": "object", "properties": {"param2": {"type": "number"}}}),

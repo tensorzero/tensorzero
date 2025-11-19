@@ -66,8 +66,7 @@ use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultC
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
 use crate::tool::{
-    ClientSideFunctionTool, ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig,
-    ToolChoice,
+    ClientSideFunctionToolConfig, FunctionTool, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice,
 };
 
 use super::helpers::{convert_stream_error, parse_jsonl_batch_file, JsonlBatchFileInfo};
@@ -1759,8 +1758,8 @@ pub struct GCPVertexGeminiSFTTool<'a> {
     pub tool: GCPVertexGeminiTool<'a>,
 }
 
-impl<'a> From<&'a ClientSideFunctionTool> for GCPVertexGeminiSFTTool<'a> {
-    fn from(tool: &'a ClientSideFunctionTool) -> Self {
+impl<'a> From<&'a FunctionTool> for GCPVertexGeminiSFTTool<'a> {
+    fn from(tool: &'a FunctionTool) -> Self {
         let mut parameters = tool.parameters.clone();
         capitalize_types(&mut parameters);
         let function_declaration = GCPVertexGeminiFunctionDeclaration {

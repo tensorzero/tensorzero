@@ -363,7 +363,7 @@ OrderDirection = Literal["ascending", "descending"]
 
 
 @dataclass(kw_only=True)
-class ClientSideFunctionTool:
+class FunctionTool:
     description: str
     parameters: Any
     name: str
@@ -739,7 +739,7 @@ class InputMessage:
     content: list[InputMessageContent]
 
 
-DynamicTool = Tool | ClientSideFunctionTool
+DynamicTool = Tool | FunctionTool
 
 
 @dataclass(kw_only=True)

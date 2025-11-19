@@ -8,7 +8,7 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * Notably, we assume there is a JSON schema `parameters` that specifies the
  * set of arguments that the tool will accept.
  */
-export type ClientSideFunctionTool = {
+export type FunctionTool = {
   description: string;
   parameters: JsonValue;
   name: string;

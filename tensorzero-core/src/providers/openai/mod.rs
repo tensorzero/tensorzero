@@ -59,8 +59,8 @@ use crate::providers::openai::responses::{
     OpenAIResponsesResponse,
 };
 use crate::tool::{
-    ClientSideFunctionTool, ClientSideFunctionToolConfig, OpenAICustomTool, ToolCall,
-    ToolCallChunk, ToolCallConfig, ToolChoice,
+    ClientSideFunctionToolConfig, FunctionTool, OpenAICustomTool, ToolCall, ToolCallChunk,
+    ToolCallConfig, ToolChoice,
 };
 
 use crate::providers::helpers::{
@@ -2055,8 +2055,8 @@ pub struct OpenAISFTTool<'a> {
     pub function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<&'a ClientSideFunctionTool> for OpenAISFTTool<'a> {
-    fn from(tool: &'a ClientSideFunctionTool) -> Self {
+impl<'a> From<&'a FunctionTool> for OpenAISFTTool<'a> {
+    fn from(tool: &'a FunctionTool) -> Self {
         OpenAISFTTool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {
@@ -2068,8 +2068,8 @@ impl<'a> From<&'a ClientSideFunctionTool> for OpenAISFTTool<'a> {
     }
 }
 
-impl<'a> From<&'a ClientSideFunctionTool> for OpenAITool<'a> {
-    fn from(tool: &'a ClientSideFunctionTool) -> Self {
+impl<'a> From<&'a FunctionTool> for OpenAITool<'a> {
+    fn from(tool: &'a FunctionTool) -> Self {
         OpenAITool::Function {
             function: OpenAIFunction {
                 name: &tool.name,

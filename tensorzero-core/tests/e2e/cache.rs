@@ -14,10 +14,10 @@ use tensorzero::ClientInferenceParams;
 use tensorzero::ClientInput;
 use tensorzero::ClientInputMessage;
 use tensorzero::ClientInputMessageContent;
-use tensorzero::ClientSideFunctionTool;
 use tensorzero::ContentBlockChunk;
 use tensorzero::DynamicTool;
 use tensorzero::DynamicToolParams;
+use tensorzero::FunctionTool;
 use tensorzero::InferenceOutput;
 use tensorzero::InferenceResponse;
 use tensorzero::Tool;
@@ -421,20 +421,18 @@ pub async fn test_dont_cache_tool_call_schema_error() {
             max_age_s: None,
         },
         dynamic_tool_params: DynamicToolParams {
-            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(
-                ClientSideFunctionTool {
-                    name: "get_temperature".to_string(),
-                    description: "Get the temperature".to_string(),
-                    parameters: json!({
-                        "type": "object",
-                        "properties": {
-                            "other_param": {"type": "string"},
-                        },
-                        "required": ["other_param"]
-                    }),
-                    strict: true,
-                },
-            ))]),
+            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(FunctionTool {
+                name: "get_temperature".to_string(),
+                description: "Get the temperature".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "other_param": {"type": "string"},
+                    },
+                    "required": ["other_param"]
+                }),
+                strict: true,
+            }))]),
             ..Default::default()
         },
         ..Default::default()

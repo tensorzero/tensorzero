@@ -69,7 +69,7 @@ use strum::AsRefStr;
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum Tool {
-    ClientSideFunction(ClientSideFunctionTool),
+    ClientSideFunction(FunctionTool),
     #[serde(rename = "openai_custom")]
     OpenAICustom(OpenAICustomTool),
 }
@@ -182,7 +182,7 @@ impl Tool {
 #[serde(deny_unknown_fields)]
 #[export_schema]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-pub struct ClientSideFunctionTool {
+pub struct FunctionTool {
     pub description: String,
     pub parameters: Value,
     pub name: String,
@@ -195,7 +195,7 @@ pub struct ClientSideFunctionTool {
     pub strict: bool,
 }
 
-impl std::fmt::Display for ClientSideFunctionTool {
+impl std::fmt::Display for FunctionTool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -204,7 +204,7 @@ impl std::fmt::Display for ClientSideFunctionTool {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl ClientSideFunctionTool {
+impl FunctionTool {
     #[getter]
     pub fn get_parameters<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         serialize_to_dict(py, self.parameters.clone()).map(|x| x.into_bound(py))
@@ -230,7 +230,7 @@ impl ClientSideFunctionTool {
     }
 }
 
-impl ClientSideFunctionTool {
+impl FunctionTool {
     pub(crate) fn into_dynamic_tool_config(self) -> DynamicToolConfig {
         DynamicToolConfig {
             description: self.description,
@@ -351,7 +351,7 @@ impl<'de> Deserialize<'de> for DynamicTool {
         }
 
         // Fall back to legacy untagged ClientSideFunctionTool format
-        match serde_json::from_value::<ClientSideFunctionTool>(value) {
+        match serde_json::from_value::<FunctionTool>(value) {
             Ok(function_tool) => Ok(DynamicTool(Tool::ClientSideFunction(function_tool))),
             Err(e) => Err(serde::de::Error::custom(format!(
                 "Failed to parse as Tool or ClientSideFunctionTool: {e}"
@@ -368,7 +368,7 @@ impl JsonSchema for DynamicTool {
 
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
         let tool_schema = gen.subschema_for::<Tool>();
-        let client_side_function_schema = gen.subschema_for::<ClientSideFunctionTool>();
+        let client_side_function_schema = gen.subschema_for::<FunctionTool>();
 
         json_schema!({
             "anyOf": [tool_schema, client_side_function_schema]
@@ -1365,7 +1365,7 @@ impl ToolCallConfigDatabaseInsert {
             .iter()
             .filter_map(|tool_name| {
                 config.tools.get(tool_name).map(|static_tool| {
-                    Tool::ClientSideFunction(ClientSideFunctionTool {
+                    Tool::ClientSideFunction(FunctionTool {
                         description: static_tool.description.clone(),
                         parameters: static_tool.parameters.value.clone(),
                         name: static_tool.name.clone(),
@@ -1442,7 +1442,7 @@ pub fn apply_dynamic_tool_params_update_to_tool_call_config(
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct LegacyToolCallConfigDatabaseInsert {
     /// All tools available for this inference (merged static + dynamic tools)
-    pub tools_available: Vec<ClientSideFunctionTool>,
+    pub tools_available: Vec<FunctionTool>,
     /// The tool choice strategy
     pub tool_choice: ToolChoice,
     // TODO: decide what we want the Python interface to be for ToolChoice
@@ -1979,9 +1979,9 @@ fn tool_call_config_to_legacy_tool_database_insert(
 }
 
 // For now, this is required to convert to LegacyToolCallConfigDatabaseInsert for writing to the databse
-impl From<ClientSideFunctionToolConfig> for ClientSideFunctionTool {
+impl From<ClientSideFunctionToolConfig> for FunctionTool {
     fn from(tool_config: ClientSideFunctionToolConfig) -> Self {
-        ClientSideFunctionTool {
+        FunctionTool {
             description: tool_config.description().to_string(),
             parameters: tool_config.parameters().clone(),
             name: tool_config.name().to_string(),
@@ -2030,7 +2030,7 @@ impl From<ToolConfig> for Tool {
 
 impl From<ClientSideFunctionToolConfig> for Tool {
     fn from(tool_config: ClientSideFunctionToolConfig) -> Self {
-        Self::ClientSideFunction(ClientSideFunctionTool {
+        Self::ClientSideFunction(FunctionTool {
             description: tool_config.description().to_string(),
             parameters: tool_config.parameters().clone(),
             name: tool_config.name().to_string(),
@@ -2358,14 +2358,12 @@ mod tests {
         // All function tools are still included, plus the dynamic tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(
-                ClientSideFunctionTool {
-                    name: "establish_campground".to_string(),
-                    description: "Establish a campground".to_string(),
-                    parameters: json!({}),
-                    strict: false,
-                },
-            ))]),
+            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(FunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({}),
+                strict: false,
+            }))]),
             ..Default::default()
         };
         let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
@@ -2393,14 +2391,12 @@ mod tests {
         // All function tools are still included, plus the dynamic tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(
-                ClientSideFunctionTool {
-                    name: "establish_campground".to_string(),
-                    description: "Establish a campground".to_string(),
-                    parameters: json!({}),
-                    strict: false,
-                },
-            ))]),
+            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(FunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({}),
+                strict: false,
+            }))]),
             parallel_tool_calls: Some(false),
             ..Default::default()
         };
@@ -2430,14 +2426,12 @@ mod tests {
         // All function tools are still included, plus the dynamic tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(
-                ClientSideFunctionTool {
-                    name: "establish_campground".to_string(),
-                    description: "Establish a campground".to_string(),
-                    parameters: json!({}),
-                    strict: false,
-                },
-            ))]),
+            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(FunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({}),
+                strict: false,
+            }))]),
             tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
@@ -2543,7 +2537,7 @@ mod tests {
             Some(true),
             &TOOLS,
             DynamicToolParams {
-                additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(ClientSideFunctionTool {
+                additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(FunctionTool {
                     name: "establish_campground".to_string(),
                     description: "Establish a campground".to_string(),
                     parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}),
@@ -2806,20 +2800,18 @@ mod tests {
     async fn test_duplicate_tool_names_error() {
         // Test case where dynamic tool params add a tool with the same name as a static tool
         let dynamic_tool_params = DynamicToolParams {
-            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(
-                ClientSideFunctionTool {
-                    name: "get_temperature".to_string(), // Same name as static tool
-                    description: "Another temperature tool".to_string(),
-                    parameters: json!({
-                        "type": "object",
-                        "properties": {
-                            "city": {"type": "string"}
-                        },
-                        "required": ["city"]
-                    }),
-                    strict: false,
-                },
-            ))]),
+            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(FunctionTool {
+                name: "get_temperature".to_string(), // Same name as static tool
+                description: "Another temperature tool".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "city": {"type": "string"}
+                    },
+                    "required": ["city"]
+                }),
+                strict: false,
+            }))]),
             ..Default::default()
         };
 
@@ -2973,14 +2965,12 @@ mod tests {
                 "get_temperature".to_string(),
                 "establish_campground".to_string(),
             ]),
-            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(
-                ClientSideFunctionTool {
-                    name: "establish_campground".to_string(),
-                    description: "Establish a campground".to_string(),
-                    parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
-                    strict: false,
-                },
-            ))]),
+            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(FunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
+                strict: false,
+            }))]),
             ..Default::default()
         };
 
@@ -3030,14 +3020,12 @@ mod tests {
                 "get_temperature".to_string(),
                 "nonexistent_tool".to_string(),
             ]),
-            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(
-                ClientSideFunctionTool {
-                    name: "establish_campground".to_string(),
-                    description: "Establish a campground".to_string(),
-                    parameters: json!({"type": "object"}),
-                    strict: false,
-                },
-            ))]),
+            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(FunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({"type": "object"}),
+                strict: false,
+            }))]),
             ..Default::default()
         };
 
@@ -3065,14 +3053,12 @@ mod tests {
         // when allowed_tools is explicitly set (AllAllowedTools mode)
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(
-                ClientSideFunctionTool {
-                    name: "establish_campground".to_string(),
-                    description: "Establish a campground".to_string(),
-                    parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
-                    strict: false,
-                },
-            ))]),
+            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(FunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
+                strict: false,
+            }))]),
             ..Default::default()
         };
 
@@ -3763,14 +3749,12 @@ mod tests {
                 "query_articles".to_string(),       // config-only
                 "establish_campground".to_string(), // dynamic
             ]),
-            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(
-                ClientSideFunctionTool {
-                    name: "establish_campground".to_string(),
-                    description: "Establish a campground".to_string(),
-                    parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
-                    strict: false,
-                },
-            ))]),
+            additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(FunctionTool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
+                strict: false,
+            }))]),
             ..Default::default()
         };
 
@@ -3995,7 +3979,7 @@ mod tests {
     #[test]
     fn test_tool_serialization_and_methods() {
         // Function tool round-trip
-        let function_tool = Tool::ClientSideFunction(ClientSideFunctionTool {
+        let function_tool = Tool::ClientSideFunction(FunctionTool {
             name: "test_func".to_string(),
             description: "Test function".to_string(),
             parameters: json!({"type": "object"}),
@@ -4042,7 +4026,7 @@ mod tests {
 
         // Mixed vector conversion
         let tools = vec![
-            DynamicTool(Tool::ClientSideFunction(ClientSideFunctionTool {
+            DynamicTool(Tool::ClientSideFunction(FunctionTool {
                 name: "func1".to_string(),
                 description: "Function 1".to_string(),
                 parameters: json!({"type": "object"}),
@@ -4067,7 +4051,7 @@ mod tests {
         let params = DynamicToolParams {
             allowed_tools: Some(vec!["tool1".to_string()]),
             additional_tools: Some(vec![
-                DynamicTool(Tool::ClientSideFunction(ClientSideFunctionTool {
+                DynamicTool(Tool::ClientSideFunction(FunctionTool {
                     name: "func_tool".to_string(),
                     description: "Function tool".to_string(),
                     parameters: json!({"type": "object"}),
@@ -4144,7 +4128,7 @@ mod tests {
         let dynamic_params = DynamicToolParams {
             allowed_tools: None,
             additional_tools: Some(vec![
-                DynamicTool(Tool::ClientSideFunction(ClientSideFunctionTool {
+                DynamicTool(Tool::ClientSideFunction(FunctionTool {
                     name: "dynamic_func".to_string(),
                     description: "Dynamic function".to_string(),
                     parameters: json!({"type": "object"}),
@@ -4234,7 +4218,7 @@ mod tests {
         let dynamic_params = DynamicToolParams {
             allowed_tools: None,
             additional_tools: Some(vec![
-                DynamicTool(Tool::ClientSideFunction(ClientSideFunctionTool {
+                DynamicTool(Tool::ClientSideFunction(FunctionTool {
                     name: "dynamic_func".to_string(),
                     description: "Func".to_string(),
                     parameters: json!({"type": "object"}),
@@ -4281,7 +4265,7 @@ mod tests {
     #[tokio::test]
     async fn test_database_insert_with_custom_tools() {
         let tools = vec![
-            Tool::ClientSideFunction(ClientSideFunctionTool {
+            Tool::ClientSideFunction(FunctionTool {
                 name: "func_tool".to_string(),
                 description: "Function".to_string(),
                 parameters: json!({"type": "object"}),
