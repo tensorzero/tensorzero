@@ -829,15 +829,24 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "evaluator1".to_string(),
-                EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.5) }),
+                EvaluatorConfig::ExactMatch(ExactMatchConfig {
+                    cutoff: Some(0.5),
+                    description: None,
+                }),
             );
             evaluators.insert(
                 "evaluator2".to_string(),
-                EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.6) }),
+                EvaluatorConfig::ExactMatch(ExactMatchConfig {
+                    cutoff: Some(0.6),
+                    description: None,
+                }),
             );
             evaluators.insert(
                 "evaluator3".to_string(),
-                EvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
+                EvaluatorConfig::ExactMatch(ExactMatchConfig {
+                    cutoff: None,
+                    description: None,
+                }),
             );
             evaluators
         };

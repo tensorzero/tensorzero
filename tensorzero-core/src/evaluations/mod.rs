@@ -42,17 +42,19 @@ pub const LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT: &str =
     include_str!("llm_judge_boolean_output_schema.json");
 
 #[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct InferenceEvaluationConfig {
     pub evaluators: HashMap<String, EvaluatorConfig>,
     pub function_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 /// Deprecated: Use `InferenceEvaluationConfig` instead
 pub type StaticEvaluationConfig = InferenceEvaluationConfig;
 
 #[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvaluationConfig {
     #[serde(alias = "static")]
@@ -60,7 +62,7 @@ pub enum EvaluationConfig {
 }
 
 #[derive(Debug, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvaluatorConfig {
     ExactMatch(ExactMatchConfig),
@@ -94,16 +96,18 @@ impl EvaluatorConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct ExactMatchConfig {
     #[serde(default)]
     pub cutoff: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct LLMJudgeConfig {
     pub input_format: LLMJudgeInputFormat,
@@ -111,6 +115,8 @@ pub struct LLMJudgeConfig {
     pub include: LLMJudgeIncludeConfig,
     pub optimize: LLMJudgeOptimize,
     pub cutoff: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -259,6 +265,8 @@ impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
 pub struct UninitializedInferenceEvaluationConfig {
     evaluators: HashMap<String, UninitializedEvaluatorConfig>,
     function_name: String,
+    #[serde(default)]
+    description: Option<String>,
 }
 
 /// Deprecated: Use `UninitializedInferenceEvaluationConfig` instead
@@ -337,6 +345,7 @@ impl UninitializedInferenceEvaluationConfig {
             InferenceEvaluationConfig {
                 evaluators,
                 function_name: self.function_name,
+                description: self.description,
             },
             function_configs,
             metric_configs,
@@ -365,6 +374,8 @@ struct UninitializedLLMJudgeConfig {
     include: LLMJudgeIncludeConfig,
     #[serde(default)]
     cutoff: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
 }
 
 impl UninitializedEvaluatorConfig {
@@ -510,6 +521,7 @@ impl UninitializedEvaluatorConfig {
                         include: params.include,
                         optimize: params.optimize,
                         cutoff: params.cutoff,
+                        description: params.description,
                     }),
                     Some(function_config),
                     MetricConfig {
@@ -1158,12 +1170,16 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.4) }),
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig {
+                    cutoff: Some(0.4),
+                    description: Some("exact match description".to_string()),
+                }),
             );
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
+                description: Some("evaluation description".to_string()),
             };
 
             let result = uninitialized_config.load(&functions, evaluation_name);
@@ -1171,9 +1187,19 @@ mod tests {
 
             let (config, additional_functions, metric_configs) = result.unwrap();
             assert_eq!(config.function_name, function_name);
+            assert_eq!(
+                config.description.as_deref(),
+                Some("evaluation description")
+            );
             assert_eq!(config.evaluators.len(), 1);
             match config.evaluators.get("em_evaluator").unwrap() {
-                EvaluatorConfig::ExactMatch(params) => assert_eq!(params.cutoff, Some(0.4)),
+                EvaluatorConfig::ExactMatch(params) => {
+                    assert_eq!(params.cutoff, Some(0.4));
+                    assert_eq!(
+                        params.description.as_deref(),
+                        Some("exact match description")
+                    );
+                }
                 EvaluatorConfig::LLMJudge(_) => panic!("Expected ExactMatch evaluator"),
             }
             // No additional function configs for exact match
@@ -1240,6 +1266,7 @@ mod tests {
                     reference_output: false,
                 },
                 cutoff: None,
+                description: Some("llm judge description".to_string()),
             };
 
             let mut evaluators = HashMap::new();
@@ -1251,12 +1278,17 @@ mod tests {
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
+                description: Some("evaluation description llm judge".to_string()),
             };
 
             let (config, additional_functions, metric_configs) = uninitialized_config
                 .load(&functions, evaluation_name)
                 .unwrap();
             assert_eq!(config.evaluators.len(), 1);
+            assert_eq!(
+                config.description.as_deref(),
+                Some("evaluation description llm judge")
+            );
 
             // Verify LLM judge evaluator config
             match config.evaluators.get("llm_judge_evaluation").unwrap() {
@@ -1267,6 +1299,10 @@ mod tests {
                     ));
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Min));
                     assert!(!judge_config.include.reference_output);
+                    assert_eq!(
+                        judge_config.description.as_deref(),
+                        Some("llm judge description")
+                    );
                 }
                 EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator config"),
             }
@@ -1368,6 +1404,7 @@ mod tests {
                     reference_output: true,
                 },
                 cutoff: None,
+                description: Some("llm judge description float".to_string()),
             };
 
             let mut evaluators = HashMap::new();
@@ -1379,12 +1416,17 @@ mod tests {
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
+                description: Some("evaluation description llm judge float".to_string()),
             };
 
             let (config, additional_functions, metric_configs) = uninitialized_config
                 .load(&functions, evaluation_name)
                 .unwrap();
             assert_eq!(config.evaluators.len(), 1);
+            assert_eq!(
+                config.description.as_deref(),
+                Some("evaluation description llm judge float")
+            );
 
             // Verify LLM judge evaluator config
             match config.evaluators.get("llm_judge_float").unwrap() {
@@ -1395,6 +1437,10 @@ mod tests {
                     ));
                     assert!(matches!(judge_config.optimize, LLMJudgeOptimize::Max));
                     assert!(judge_config.include.reference_output);
+                    assert_eq!(
+                        judge_config.description.as_deref(),
+                        Some("llm judge description float")
+                    );
                 }
                 EvaluatorConfig::ExactMatch(_) => panic!("Expected LLMJudge evaluator config"),
             }
@@ -1443,12 +1489,16 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig {
+                    cutoff: None,
+                    description: None,
+                }),
             );
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: "nonexistent_function".to_string(),
+                description: None,
             };
 
             let result = uninitialized_config.load(&functions, evaluation_name);
@@ -1464,12 +1514,16 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig {
+                    cutoff: None,
+                    description: None,
+                }),
             );
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
+                description: None,
             };
 
             let result = uninitialized_config.load(&functions, "invalid::evaluation::name");
@@ -1564,6 +1618,7 @@ mod tests {
                     reference_output: false,
                 },
                 cutoff: Some(0.3),
+                description: None,
             };
 
             let mut evaluators = HashMap::new();
@@ -1575,6 +1630,7 @@ mod tests {
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
+                description: None,
             };
 
             let result = uninitialized_config.load(&functions, evaluation_name);
@@ -1613,12 +1669,16 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "foo::invalid_name".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig {
+                    cutoff: None,
+                    description: None,
+                }),
             );
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
+                description: None,
             };
 
             let result = uninitialized_config.load(&functions, evaluation_name);
@@ -1676,6 +1736,7 @@ mod tests {
                     reference_output: true,
                 },
                 cutoff: None,
+                description: None,
             };
 
             let mut evaluators = HashMap::new();
@@ -1687,6 +1748,7 @@ mod tests {
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
+                description: None,
             };
 
             let result = uninitialized_config.load(&functions, evaluation_name);
@@ -1749,6 +1811,7 @@ mod tests {
                 optimize: LLMJudgeOptimize::Max,
                 include: LLMJudgeIncludeConfig::default(),
                 cutoff: None,
+                description: None,
             };
 
             let mut evaluators = HashMap::new();
@@ -1760,6 +1823,7 @@ mod tests {
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
+                description: None,
             };
 
             let result = uninitialized_config.load(&functions, evaluation_name);
@@ -1826,6 +1890,7 @@ mod tests {
                 optimize: LLMJudgeOptimize::Max,
                 include: LLMJudgeIncludeConfig::default(),
                 cutoff: None,
+                description: None,
             };
 
             let mut evaluators = HashMap::new();
@@ -1837,6 +1902,7 @@ mod tests {
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
+                description: None,
             };
 
             let result = uninitialized_config.load(&functions, evaluation_name);
