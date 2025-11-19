@@ -309,7 +309,10 @@ export async function getEvaluationStatistics(
   const query = `
   WITH ${getEvaluationResultDatapointIdQuery()},
     filtered_inference AS (
-      SELECT * FROM {inference_table_name:Identifier}
+      SELECT
+        id,
+        tags['tensorzero::evaluation_run_id'] AS evaluation_run_id
+      FROM {inference_table_name:Identifier}
       WHERE id IN (SELECT inference_id FROM all_inference_ids)
       AND function_name = {function_name:String}
     ),
@@ -337,7 +340,7 @@ export async function getEvaluationStatistics(
     ),
     float_stats AS (
       SELECT
-        filtered_inference.tags['tensorzero::evaluation_run_id'] AS evaluation_run_id,
+        filtered_inference.evaluation_run_id,
         float_feedback.metric_name AS metric_name,
         toUInt32(count()) AS datapoint_count,
         avg(toFloat64(float_feedback.value)) AS mean_metric,
@@ -348,12 +351,12 @@ export async function getEvaluationStatistics(
         ON float_feedback.target_id = filtered_inference.id
         AND float_feedback.value IS NOT NULL
       GROUP BY
-        filtered_inference.tags['tensorzero::evaluation_run_id'],
+        filtered_inference.evaluation_run_id,
         float_feedback.metric_name
     ),
     boolean_stats AS (
       SELECT
-        filtered_inference.tags['tensorzero::evaluation_run_id'] AS evaluation_run_id,
+        filtered_inference.evaluation_run_id,
         boolean_feedback.metric_name AS metric_name,
         toUInt32(count()) AS datapoint_count,
         avg(toFloat64(boolean_feedback.value)) AS mean_metric,
@@ -364,7 +367,7 @@ export async function getEvaluationStatistics(
         ON boolean_feedback.target_id = filtered_inference.id
         AND boolean_feedback.value IS NOT NULL
       GROUP BY
-        filtered_inference.tags['tensorzero::evaluation_run_id'],
+        filtered_inference.evaluation_run_id,
         boolean_feedback.metric_name
     )
   SELECT * FROM float_stats
