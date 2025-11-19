@@ -93,7 +93,7 @@ jobs:
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
 
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up clickhouse fixtures -d
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up clickhouse fixtures mock-inference-provider -d
           docker compose -f fixtures/docker-compose.yml wait fixtures
 
       - name: Run `pnpm test`
