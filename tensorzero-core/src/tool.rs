@@ -360,7 +360,10 @@ impl<'de> Deserialize<'de> for DynamicTool {
     }
 }
 
-/// TODO: document
+/// We implement a custom JSON schema impl for DynamicTool to mirror the Deserialize
+/// The goal is to preserve backwards compatibility with the original tool format while
+/// adding support for other kinds of tool by using a tagged enum.
+/// This impl uses anyOf to union the new and old formats.
 impl JsonSchema for DynamicTool {
     fn schema_name() -> Cow<'static, str> {
         Cow::Borrowed("DynamicTool")
