@@ -199,6 +199,8 @@ pub struct ListInferencesParams<'a> {
     pub offset: u32,
     /// Ordering criteria for the results.
     pub order_by: Option<&'a [OrderBy]>,
+    /// Experimental: search query to filter inferences by.
+    pub search_query_experimental: Option<&'a str>,
 }
 
 impl Default for ListInferencesParams<'_> {
@@ -213,6 +215,7 @@ impl Default for ListInferencesParams<'_> {
             limit: DEFAULT_INFERENCE_QUERY_LIMIT,
             offset: 0,
             order_by: None,
+            search_query_experimental: None,
         }
     }
 }

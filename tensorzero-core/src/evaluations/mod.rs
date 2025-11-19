@@ -82,6 +82,16 @@ impl EvaluatorConfig {
             EvaluatorConfig::LLMJudge(config) => config.optimize.into(),
         }
     }
+
+    /// Returns true if this evaluator produces Bernoulli (boolean) outputs
+    pub fn is_bernoulli(&self) -> bool {
+        match self {
+            EvaluatorConfig::ExactMatch(_) => true,
+            EvaluatorConfig::LLMJudge(config) => {
+                matches!(config.output_type, LLMJudgeOutputType::Boolean)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]

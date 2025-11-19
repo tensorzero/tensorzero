@@ -35,16 +35,20 @@ use crate::inference::{InferenceProvider, TensorZeroEventError};
 use crate::model::{Credential, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
+use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
     inject_extra_request_data_and_send_eventsource, warn_cannot_forward_url_if_missing_mime_type,
 };
 
-// Import unified OpenAI types for allowed_tools support
-#[cfg(test)]
-use super::openai::AllowedToolsMode;
+use super::chat_completions::{
+    ChatCompletionAllowedToolsMode, ChatCompletionTool, ChatCompletionToolChoice,
+    ChatCompletionToolChoiceString,
+};
 use super::openai::{
-    prepare_allowed_tools_constraint, AllowedToolsChoice as OpenAIAllowedToolsChoice,
+    AllowedToolsChoice as OpenAIAllowedToolsChoice,
+    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode, OpenAIToolType,
+    SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
 };
 
 const PROVIDER_NAME: &str = "Groq";
@@ -576,26 +580,15 @@ pub(super) async fn prepare_groq_messages<'a>(
 pub(super) fn prepare_groq_tools<'a>(
     request: &'a ModelInferenceRequest,
 ) -> PreparedToolsResult<'a> {
-    match &request.tool_config {
-        None => (None, None, None),
-        Some(tool_config) => {
-            if !tool_config.any_tools_available() {
-                return (None, None, None);
-            }
-            let tools = Some(tool_config.tools_available().map(Into::into).collect());
-            let parallel_tool_calls = tool_config.parallel_tool_calls;
+    let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(request, true);
 
-            let tool_choice =
-                if let Some(allowed_tools_choice) = prepare_allowed_tools_constraint(tool_config) {
-                    Some(GroqToolChoice::AllowedTools(allowed_tools_choice))
-                } else {
-                    // No allowed_tools constraint, use regular tool_choice
-                    Some((&tool_config.tool_choice).into())
-                };
+    // Convert from ChatCompletionTool to GroqTool
+    let groq_tools = tools.map(|t| t.into_iter().map(GroqTool::from).collect());
 
-            (tools, tool_choice, parallel_tool_calls)
-        }
-    }
+    // Convert from ChatCompletionToolChoice to GroqToolChoice
+    let groq_tool_choice = tool_choice.map(GroqToolChoice::from);
+
+    (groq_tools, groq_tool_choice, parallel_tool_calls)
 }
 
 /// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
@@ -936,6 +929,20 @@ impl<'a> From<&'a ToolConfig> for GroqTool<'a> {
     }
 }
 
+impl<'a> From<ChatCompletionTool<'a>> for GroqTool<'a> {
+    fn from(tool: ChatCompletionTool<'a>) -> Self {
+        GroqTool {
+            r#type: GroqToolType::Function,
+            function: GroqFunction {
+                name: tool.function.name,
+                description: tool.function.description,
+                parameters: tool.function.parameters,
+            },
+            strict: tool.strict,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
 pub(super) enum GroqToolChoice<'a> {
@@ -979,6 +986,55 @@ impl<'a> From<&'a ToolChoice> for GroqToolChoice<'a> {
                 r#type: GroqToolType::Function,
                 function: SpecificToolFunction { name: tool_name },
             }),
+        }
+    }
+}
+
+impl<'a> From<ChatCompletionToolChoice<'a>> for GroqToolChoice<'a> {
+    fn from(tool_choice: ChatCompletionToolChoice<'a>) -> Self {
+        match tool_choice {
+            ChatCompletionToolChoice::String(tc_string) => match tc_string {
+                ChatCompletionToolChoiceString::None => {
+                    GroqToolChoice::String(GroqToolChoiceString::None)
+                }
+                ChatCompletionToolChoiceString::Auto => {
+                    GroqToolChoice::String(GroqToolChoiceString::Auto)
+                }
+                ChatCompletionToolChoiceString::Required => {
+                    GroqToolChoice::String(GroqToolChoiceString::Required)
+                }
+            },
+            ChatCompletionToolChoice::Specific(specific) => {
+                GroqToolChoice::Specific(SpecificToolChoice {
+                    r#type: GroqToolType::Function,
+                    function: SpecificToolFunction {
+                        name: specific.function.name,
+                    },
+                })
+            }
+            ChatCompletionToolChoice::AllowedTools(allowed_tools) => {
+                // Convert from chat_completions ChatCompletionAllowedToolsChoice to OpenAI AllowedToolsChoice
+                GroqToolChoice::AllowedTools(OpenAIAllowedToolsChoice {
+                    r#type: allowed_tools.r#type,
+                    allowed_tools: OpenAIAllowedToolsConstraint {
+                        mode: match allowed_tools.allowed_tools.mode {
+                            ChatCompletionAllowedToolsMode::Auto => AllowedToolsMode::Auto,
+                            ChatCompletionAllowedToolsMode::Required => AllowedToolsMode::Required,
+                        },
+                        tools: allowed_tools
+                            .allowed_tools
+                            .tools
+                            .into_iter()
+                            .map(|tool_ref| ToolReference {
+                                r#type: OpenAIToolType::Function,
+                                function: OpenAISpecificToolFunction {
+                                    name: tool_ref.function.name,
+                                },
+                            })
+                            .collect(),
+                    },
+                })
+            }
         }
     }
 }
