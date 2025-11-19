@@ -72,7 +72,7 @@ pub struct UpdateChatDatapointRequest {
         rename = "tool_params",
         skip_serializing_if = "Option::is_none"
     )]
-    #[deprecated(note = "Use flattened fields instead. (#4725")]
+    #[deprecated(note = "Use flattened fields instead. (#4725)")]
     #[ts(skip)]
     #[schemars(rename = "tool_params")]
     pub deprecated_do_not_use_tool_params: Option<UpdateDynamicToolParamsRequest>,
@@ -89,7 +89,7 @@ pub struct UpdateChatDatapointRequest {
     /// DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
     /// Moving forward, don't nest these fields.
     #[serde(default, rename = "metadata", skip_serializing_if = "Option::is_none")]
-    #[deprecated(note = "Use flattened fields instead. (#4725")]
+    #[deprecated(note = "Use flattened fields instead. (#4725)")]
     #[ts(skip)]
     #[schemars(rename = "metadata")]
     pub deprecated_do_not_use_metadata: Option<DatapointMetadataUpdate>,
@@ -273,7 +273,7 @@ pub struct UpdateJsonDatapointRequest {
     /// DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
     /// Moving forward, don't nest these fields.
     #[serde(default, rename = "metadata", skip_serializing_if = "Option::is_none")]
-    #[deprecated(note = "Use flattened fields instead. (#4725")]
+    #[deprecated(note = "Use flattened fields instead. (#4725)")]
     #[ts(skip)]
     #[schemars(rename = "metadata")]
     pub deprecated_do_not_use_metadata: Option<DatapointMetadataUpdate>,
@@ -630,6 +630,7 @@ mod tests {
     // When only the deprecated nested 'metadata' field is provided, it should be copied to 'metadata_new'.
     #[test]
     fn test_chat_deprecation_4725_metadata_only_deprecated() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let json = json!({
             "id": "00000000-0000-0000-0000-000000000001",
             "metadata": {
@@ -643,6 +644,7 @@ mod tests {
         {
             assert_eq!(result.deprecated_do_not_use_metadata, None);
         }
+        assert!(logs_contain("The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"));
     }
 
     // Test deserialization of deprecated metadata field (#4725 / 2026.2+).
@@ -702,6 +704,7 @@ mod tests {
     // When only the deprecated nested 'tool_params' field is provided, it should be copied to 'tool_params_new'.
     #[test]
     fn test_chat_deprecation_4725_tool_params_only_deprecated() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let json = json!({
             "id": "00000000-0000-0000-0000-000000000001",
             "tool_params": {
@@ -718,6 +721,7 @@ mod tests {
         {
             assert_eq!(result.deprecated_do_not_use_tool_params, None);
         }
+        assert!(logs_contain("The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"));
     }
 
     // Test deserialization of deprecated tool_params field (#4725 / 2026.2+).
@@ -780,6 +784,7 @@ mod tests {
     // When only the deprecated nested 'metadata' field is provided, it should be copied to 'metadata_new'.
     #[test]
     fn test_json_deprecation_4725_metadata_only_deprecated() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let json = json!({
             "id": "00000000-0000-0000-0000-000000000001",
             "metadata": {
@@ -793,6 +798,7 @@ mod tests {
         {
             assert_eq!(result.deprecated_do_not_use_metadata, None);
         }
+        assert!(logs_contain("The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"));
     }
 
     // Test deserialization of deprecated metadata field (#4725 / 2026.2+).
@@ -886,6 +892,7 @@ mod tests {
     // Verify that multiple tool_params fields can be provided in the deprecated nested form.
     #[test]
     fn test_chat_deprecation_4725_tool_params_multiple_fields_deprecated() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let json = json!({
             "id": "00000000-0000-0000-0000-000000000001",
             "tool_params": {
@@ -906,5 +913,6 @@ mod tests {
         {
             assert_eq!(result.deprecated_do_not_use_tool_params, None);
         }
+        assert!(logs_contain("The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"));
     }
 }
