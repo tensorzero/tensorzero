@@ -57,6 +57,16 @@ impl InferenceQueries for ClickHouseConnectionInfo {
     }
 }
 
+/// Escapes a string for JSON without quotes.
+/// This is used to escape the text query when we doing a substring match on input and output strings, because
+/// input and output strings are JSON-escaped in ClickHouse.
+fn json_escape_string_without_quotes(s: &str) -> Result<String, Error> {
+    let mut json_escaped = serde_json::to_string(s)?;
+    json_escaped.remove(0);
+    json_escaped.pop();
+    Ok(json_escaped)
+}
+
 /// Generates the ClickHouse query and a list of parameters to be set.
 /// The query string will contain placeholders like `{p0:String}`.
 /// The returned `Vec<QueryParameter>` contains the mapping from placeholder names (e.g., "p0")
@@ -97,7 +107,7 @@ pub(crate) fn generate_list_inferences_sql(
             // Reuse the join registry from the filter so we don't create duplicate joins
             let order_by_sql = if opts.order_by.is_some() {
                 generate_order_by_sql(
-                    opts.order_by,
+                    opts,
                     config,
                     &mut query_params,
                     &mut param_idx_counter,
@@ -162,6 +172,7 @@ pub(crate) fn generate_list_inferences_sql(
 
             // Generate ORDER BY clause for both inner and outer queries
             // For UNION ALL queries, we only support timestamp ordering (not metrics)
+            // TODO(#4181): this should support proper ORDER BY generation that supports joining with metrics.
             let order_by_sql = if let Some(order_by) = opts.order_by {
                 let order_clauses: Vec<String> = order_by
                     .iter()
@@ -174,6 +185,14 @@ pub(crate) fn generate_list_inferences_sql(
                                         "ORDER BY metric '{name}' is not supported when querying without function_name"
                                     ),
                                 }));
+                            }
+                            OrderByTerm::SearchRelevance => {
+                                if opts.search_query_experimental.is_none() {
+                                    return Err(Error::new(ErrorDetails::InvalidRequest {
+                                        message: "ORDER BY relevance requires search_query_experimental in the request".to_string(),
+                                    }));
+                                }
+                                "total_term_frequency"
                             }
                         };
                         Ok(format!("{column} {}", o.direction.to_clickhouse_direction()))
@@ -405,6 +424,29 @@ fn generate_single_table_query_for_type(
         where_clauses.push(filter_condition_sql);
     }
 
+    // Add text query term frequency columns and filter
+    if let Some(search_query_experimental) = opts.search_query_experimental {
+        let json_escaped_text_query = json_escape_string_without_quotes(search_query_experimental)?;
+        let text_query_param = add_parameter(
+            json_escaped_text_query,
+            ClickhouseType::String,
+            query_params,
+            param_idx_counter,
+        );
+
+        select_clauses.push(format!(
+            "countSubstringsCaseInsensitiveUTF8(i.input, {text_query_param}) as input_term_frequency"
+        ));
+        select_clauses.push(format!(
+            "countSubstringsCaseInsensitiveUTF8(i.output, {text_query_param}) as output_term_frequency"
+        ));
+        select_clauses.push(
+            "input_term_frequency + output_term_frequency as total_term_frequency".to_string(),
+        );
+
+        where_clauses.push("total_term_frequency > 0".to_string());
+    }
+
     let select_from_sql_fragment = format!(
         r"SELECT {select_clauses} FROM {table_name} AS i",
         select_clauses = select_clauses.iter().join(",\n    "),
@@ -439,10 +481,48 @@ mod tests {
 
     use super::generate_list_inferences_sql;
 
+    mod json_escape_string_without_quotes_tests {
+        use crate::db::clickhouse::inference_queries::json_escape_string_without_quotes;
+
+        #[test]
+        fn test_json_escape_string_without_quotes() {
+            assert_eq!(
+                json_escape_string_without_quotes("").unwrap(),
+                String::new()
+            );
+            assert_eq!(
+                json_escape_string_without_quotes("test").unwrap(),
+                "test".to_string()
+            );
+            assert_eq!(
+                json_escape_string_without_quotes("123").unwrap(),
+                "123".to_string()
+            );
+            assert_eq!(
+                json_escape_string_without_quotes("he's").unwrap(),
+                "he's".to_string()
+            );
+        }
+
+        #[test]
+        fn test_json_escape_string_escapes_correctly() {
+            assert_eq!(
+                json_escape_string_without_quotes(r#""test""#).unwrap(),
+                r#"\"test\""#.to_string()
+            );
+
+            assert_eq!(
+                json_escape_string_without_quotes(r"end of line\next line").unwrap(),
+                r"end of line\\next line".to_string()
+            );
+        }
+    }
+
     async fn get_e2e_config() -> Config {
         // Read the e2e config file
         Config::load_from_path_optional_verify_credentials(
-            &ConfigFileGlob::new_from_path(Path::new("tests/e2e/tensorzero.toml")).unwrap(),
+            &ConfigFileGlob::new_from_path(Path::new("tests/e2e/config/tensorzero.*.toml"))
+                .unwrap(),
             false,
         )
         .await

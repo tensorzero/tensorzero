@@ -587,9 +587,7 @@ export function EvaluationTable({
                                     className="h-[52px] text-center align-middle"
                                   >
                                     {/* Add group and relative positioning to the container */}
-                                    <div
-                                      className={`group relative flex h-full items-center justify-center ${metricValue && evaluatorConfig?.type === "llm_judge" ? "pl-10" : ""}`}
-                                    >
+                                    <div className="group relative flex h-full items-center justify-center">
                                       {metricValue &&
                                       metricType &&
                                       evaluatorConfig ? (
@@ -615,7 +613,7 @@ export function EvaluationTable({
                                           {evaluatorConfig.type ===
                                             "llm_judge" && (
                                             <div
-                                              className="ml-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                                              className="absolute right-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                                               // Stop click event propagation so the row navigation is not triggered
                                               onClick={(e) =>
                                                 e.stopPropagation()
