@@ -363,18 +363,23 @@ pub fn deserialize_from_stored_sample<'a>(
     obj: &Bound<'a, PyAny>,
     config: &Config,
 ) -> PyResult<StoredSampleItem> {
-    if obj.is_instance_of::<StoredInference>() {
-        // Extract wire type and convert to storage type
-        let wire: StoredInference = obj.extract()?;
+    // Try deserializing into named types first
+    let generated_types_module = py.import("tensorzero.generated_types")?;
+    let stored_inference_type = generated_types_module.getattr("StoredInference")?;
+
+    if obj.is_instance(&stored_inference_type)? {
+        let wire = deserialize_from_pyobj::<StoredInference>(py, obj)?;
         let storage = match wire.to_storage(config) {
             Ok(s) => s,
             Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
         };
-        Ok(StoredSampleItem::StoredInference(storage))
-    } else if obj.is_instance_of::<Datapoint>() {
+        return Ok(StoredSampleItem::StoredInference(storage));
+    }
+
+    if obj.is_instance_of::<Datapoint>() {
         // Extract wire type and convert to storage type
         let wire: Datapoint = obj.extract()?;
-        match wire {
+        return match wire {
             Datapoint::Chat(chat_wire) => {
                 let function_config = match config.get_function(&chat_wire.function_name) {
                     Ok(f) => f,
@@ -391,10 +396,11 @@ pub fn deserialize_from_stored_sample<'a>(
             Datapoint::Json(json_wire) => Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
                 json_wire,
             ))),
-        }
-    } else {
-        deserialize_from_pyobj(py, obj)
+        };
     }
+
+    // Fall back to generic deserialization
+    deserialize_from_pyobj(py, obj)
 }
 
 /// In the `experimental_launch_optimization` function, we need to be able to accept

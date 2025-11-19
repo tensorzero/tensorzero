@@ -66,4 +66,3 @@ jobs:
           # Run both of these, as they build dependencies with different features
           cargo build --features e2e_tests --tests
           cargo build-e2e
-

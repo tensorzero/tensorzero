@@ -102,12 +102,16 @@ pub struct GEPAConfig {
 
 /// Uninitialized GEPA configuration (deserializable from TOML)
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
-#[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str, name = "GEPAConfig"))]
+#[ts(export, optional_fields)]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "GEPAConfig"))]
 pub struct UninitializedGEPAConfig {
     pub function_name: String,
     pub evaluation_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub initial_variants: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub variant_prefix: Option<String>,
 
     #[serde(default = "default_batch_size")]
@@ -123,6 +127,8 @@ pub struct UninitializedGEPAConfig {
 
     pub mutation_model: String,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub seed: Option<u32>,
 
     #[serde(default = "default_timeout")]
@@ -134,6 +140,8 @@ pub struct UninitializedGEPAConfig {
     #[serde(default)]
     pub retries: RetryConfig,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub max_tokens: Option<u32>,
 }
 

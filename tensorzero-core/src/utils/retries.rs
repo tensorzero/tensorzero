@@ -20,7 +20,7 @@ use pyo3::prelude::*;
 
 #[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
 #[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct RetryConfig {
     #[serde(default = "default_num_retries")]
     pub num_retries: usize,
