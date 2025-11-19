@@ -101,7 +101,7 @@ impl<'de> Deserialize<'de> for UpdateChatDatapointRequest {
         D: serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
-        #[serde(rename = "UpdateChatDatapointRequest", deny_unknown_fields)]
+        #[serde(rename = "UpdateChatDatapointRequest")]
         struct Helper {
             id: Uuid,
             #[serde(default)]
@@ -284,7 +284,7 @@ impl<'de> Deserialize<'de> for UpdateJsonDatapointRequest {
         D: serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
-        #[serde(rename = "UpdateJsonDatapointRequest", deny_unknown_fields)]
+        #[serde(rename = "UpdateJsonDatapointRequest")]
         struct Helper {
             id: Uuid,
             #[serde(default)]
