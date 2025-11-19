@@ -71,6 +71,11 @@ impl JobHandle for OptimizationJobHandle {
                     .poll(client, credentials, default_credentials)
                     .await
             }
+            OptimizationJobHandle::GEPA(job_handle) => {
+                job_handle
+                    .poll(client, credentials, default_credentials)
+                    .await
+            }
         }
     }
 }
@@ -180,6 +185,17 @@ impl Optimizer for OptimizerInfo {
                 )
                 .await
                 .map(OptimizationJobHandle::TogetherSFT),
+            OptimizerConfig::GEPA(optimizer_config) => optimizer_config
+                .launch(
+                    client,
+                    train_examples,
+                    val_examples,
+                    credentials,
+                    clickhouse_connection_info,
+                    config.clone(),
+                )
+                .await
+                .map(OptimizationJobHandle::GEPA),
         }
     }
 }
