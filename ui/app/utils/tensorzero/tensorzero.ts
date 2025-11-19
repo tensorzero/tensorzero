@@ -371,7 +371,7 @@ export class TensorZeroClient {
    * @returns A promise that resolves with the created datapoint response containing the new ID
    * @throws Error if validation fails or the request fails
    */
-  async createDatapoint(
+  async createDatapointFromInferenceLegacy(
     datasetName: string,
     inferenceId: string,
     outputKind: "inherit" | "demonstration" | "none" = "inherit",
