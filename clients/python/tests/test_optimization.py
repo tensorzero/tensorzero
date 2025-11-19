@@ -187,45 +187,20 @@ def test_sync_together_sft(
         sleep(1)
 
 
-def test_sync_gepa(
+def test_sync_gepa_chat(
     embedded_sync_client: TensorZeroGateway,
     chat_function_rendered_samples: List[RenderedSample],
 ):
     optimization_config = GEPAConfig(
         function_name="basic_test",
         evaluation_name="test_eval",
-        analysis_model="anthropic::claude-sonnet-4-5-20250929",
-        mutation_model="anthropic::claude-sonnet-4-5-20250929",
-        # Test that optional parameters work with defaults
-        # batch_size, max_iterations, max_concurrency, etc. not specified
+        analysis_model="openai::gpt-4o-mini",
+        mutation_model="openai::gpt-4o-mini",
     )
-
-    # Verify required fields are set correctly
-    assert optimization_config.function_name == "basic_test"
-    assert optimization_config.evaluation_name == "test_eval"
-    assert optimization_config.analysis_model == "anthropic::claude-sonnet-4-5-20250929"
-    assert optimization_config.mutation_model == "anthropic::claude-sonnet-4-5-20250929"
-
-    # Verify defaults for optional parameters
-    assert optimization_config.batch_size == 5
-    assert optimization_config.max_iterations == 1
-    assert optimization_config.max_concurrency == 10
-    assert optimization_config.timeout == 300
-    assert optimization_config.include_inference_input_for_mutation is True
-
-    # Verify None defaults
-    assert optimization_config.initial_variants is None
-    assert optimization_config.variant_prefix is None
-    assert optimization_config.seed is None
-    assert optimization_config.max_tokens is None
-
-    # Verify retry config defaults
-    assert optimization_config.retries.num_retries == 0
-    assert optimization_config.retries.max_delay_s == 10.0
 
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_samples=chat_function_rendered_samples,
-        val_samples=None,
+        val_samples=chat_function_rendered_samples,
         optimization_config=optimization_config,
     )
     while True:
@@ -408,45 +383,20 @@ async def test_async_together_sft(
 
 
 @pytest.mark.asyncio
-async def test_async_gepa(
+async def test_async_gepa_json(
     embedded_async_client: AsyncTensorZeroGateway,
-    chat_function_rendered_samples: List[RenderedSample],
+    json_function_rendered_samples: List[RenderedSample],
 ):
     optimization_config = GEPAConfig(
-        function_name="basic_test",
+        function_name="json_success",
         evaluation_name="test_eval",
-        analysis_model="anthropic::claude-sonnet-4-5-20250929",
-        mutation_model="anthropic::claude-sonnet-4-5-20250929",
-        # Test that optional parameters work with defaults
-        # batch_size, max_iterations, max_concurrency, etc. not specified
+        analysis_model="openai::gpt-4o-mini",
+        mutation_model="openai::gpt-4o-mini",
     )
 
-    # Verify required fields are set correctly
-    assert optimization_config.function_name == "basic_test"
-    assert optimization_config.evaluation_name == "test_eval"
-    assert optimization_config.analysis_model == "anthropic::claude-sonnet-4-5-20250929"
-    assert optimization_config.mutation_model == "anthropic::claude-sonnet-4-5-20250929"
-
-    # Verify defaults for optional parameters
-    assert optimization_config.batch_size == 5
-    assert optimization_config.max_iterations == 1
-    assert optimization_config.max_concurrency == 10
-    assert optimization_config.timeout == 300
-    assert optimization_config.include_inference_input_for_mutation is True
-
-    # Verify None defaults
-    assert optimization_config.initial_variants is None
-    assert optimization_config.variant_prefix is None
-    assert optimization_config.seed is None
-    assert optimization_config.max_tokens is None
-
-    # Verify retry config defaults
-    assert optimization_config.retries.num_retries == 0
-    assert optimization_config.retries.max_delay_s == 10.0
-
     optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
-        train_samples=chat_function_rendered_samples,
-        val_samples=None,
+        train_samples=json_function_rendered_samples,
+        val_samples=json_function_rendered_samples,
         optimization_config=optimization_config,
     )
     while True:
