@@ -1,10 +1,7 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use crate::config::ConfigFileGlob;
-use crate::http::{
-    TensorZeroEventSource, TensorzeroHttpClient, TensorzeroRequestBuilder,
-    DEFAULT_HTTP_CLIENT_TIMEOUT,
-};
+use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
 use crate::{
@@ -120,17 +117,21 @@ impl HTTPGateway {
         Ok(resp)
     }
 
-    pub async fn send_and_parse_http_response<T: serde::de::DeserializeOwned>(
+    fn customize_builder<'a>(
         &self,
-        mut builder: TensorzeroRequestBuilder<'_>,
-    ) -> Result<T, TensorZeroError> {
-        // Apply timeout if provided
+        mut builder: TensorzeroRequestBuilder<'a>,
+    ) -> TensorzeroRequestBuilder<'a> {
         if let Some(timeout) = self.timeout {
             builder = builder.timeout(timeout);
         }
+        builder.headers(self.headers.clone())
+    }
 
-        // Apply API key as default Authorization header if provided
-        builder = builder.headers(self.headers.clone());
+    pub async fn send_and_parse_http_response<T: serde::de::DeserializeOwned>(
+        &self,
+        builder: TensorzeroRequestBuilder<'_>,
+    ) -> Result<T, TensorZeroError> {
+        let builder = self.customize_builder(builder);
         let resp = builder.send().await;
         self.check_http_response(resp)
             .await?
@@ -148,6 +149,110 @@ impl HTTPGateway {
                 })
                 .into(),
             })
+    }
+
+    async fn http_inference_stream(
+        &self,
+        builder: TensorzeroRequestBuilder<'_>,
+    ) -> Result<InferenceStream, TensorZeroError> {
+        let event_source =
+            self.customize_builder(builder)
+                .eventsource()
+                .map_err(|e| TensorZeroError::Other {
+                    source: crate::error::Error::new(ErrorDetails::JsonRequest {
+                        message: format!("Error constructing event stream: {e:?}"),
+                    })
+                    .into(),
+                })?;
+
+        let mut event_source = event_source.peekable();
+        let first = event_source.peek().await;
+        if let Some(Err(_)) = first {
+            // Discard the stream if it has an error
+            let res = event_source.next().await;
+            #[expect(clippy::panic)]
+            let Some(Err(e)) = res
+            else {
+                panic!("Peeked error but got non-err {res:?}");
+            };
+            let err_str = format!("Error in streaming response: {e:?}");
+            let inner_err = crate::error::Error::new(ErrorDetails::StreamError {
+                source: Box::new(crate::error::Error::new(ErrorDetails::Serialization {
+                    message: err_str,
+                })),
+            });
+            if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = e {
+                return Err(TensorZeroError::Http {
+                    status_code: code.as_u16(),
+                    text: resp.text().await.ok(),
+                    source: inner_err.into(),
+                });
+            }
+            return Err(TensorZeroError::Other {
+                source: crate::error::Error::new(ErrorDetails::StreamError {
+                    source: Box::new(inner_err),
+                })
+                .into(),
+            });
+        }
+        let verbose_errors = self.verbose_errors;
+        Ok(Box::pin(async_stream::stream! {
+            while let Some(ev) = event_source.next().await {
+                match ev {
+                    Err(e) => {
+                        if matches!(e, reqwest_eventsource::Error::StreamEnded) {
+                            break;
+                        }
+                        yield Err(crate::error::Error::new(ErrorDetails::StreamError {
+                            source: Box::new(crate::error::Error::new(ErrorDetails::Serialization {
+                                message: format!("Error in streaming response: {}", DisplayOrDebug {
+                                    val: e,
+                                    debug: verbose_errors,
+                                })
+                            }))
+                        }))
+                    }
+                    Ok(e) => match e {
+                        Event::Open => continue,
+                        Event::Message(message) => {
+                            if message.data == "[DONE]" {
+                                break;
+                            }
+                            let json: serde_json::Value = serde_json::from_str(&message.data).map_err(|e| {
+                                crate::error::Error::new(ErrorDetails::Serialization {
+                                    message: format!("Error deserializing inference response chunk: {}", DisplayOrDebug {
+                                        val: e,
+                                        debug: verbose_errors,
+                                    }),
+                                })
+                            })?;
+                            if let Some(err) = json.get("error") {
+                                yield Err(crate::error::Error::new(ErrorDetails::StreamError {
+                                    source: Box::new(crate::error::Error::new(ErrorDetails::Serialization {
+                                        message: format!("Stream produced an error: {}", DisplayOrDebug {
+                                            val: err,
+                                            debug: verbose_errors,
+                                        }),
+                                    }))
+                                }));
+                            } else {
+                                let data: InferenceResponseChunk =
+                                serde_json::from_value(json).map_err(|e| {
+                                    crate::error::Error::new(ErrorDetails::Serialization {
+                                        message: format!("Error deserializing json value as InferenceResponseChunk: {}", DisplayOrDebug {
+                                            val: e,
+                                            debug: verbose_errors,
+                                        }),
+                                    })
+                                })?;
+                                yield Ok(data);
+                            }
+
+                        }
+                    }
+                }
+            }
+        }))
     }
 }
 
@@ -730,15 +835,8 @@ impl Client {
                 }
 
                 if params.stream.unwrap_or(false) {
-                    let event_source =
-                        builder.eventsource().map_err(|e| TensorZeroError::Other {
-                            source: crate::error::Error::new(ErrorDetails::JsonRequest {
-                                message: format!("Error constructing event stream: {e:?}"),
-                            })
-                            .into(),
-                        })?;
                     Ok(InferenceOutput::Streaming(
-                        self.http_inference_stream(event_source).await?,
+                        client.http_inference_stream(builder).await?,
                     ))
                 } else {
                     Ok(InferenceOutput::NonStreaming(
@@ -819,100 +917,6 @@ impl Client {
                 .await?)
             }
         }
-    }
-
-    async fn http_inference_stream(
-        &self,
-        event_source: TensorZeroEventSource,
-    ) -> Result<InferenceStream, TensorZeroError> {
-        let mut event_source = event_source.peekable();
-        let first = event_source.peek().await;
-        if let Some(Err(_)) = first {
-            // Discard the stream if it has an error
-            let res = event_source.next().await;
-            #[expect(clippy::panic)]
-            let Some(Err(e)) = res
-            else {
-                panic!("Peeked error but got non-err {res:?}");
-            };
-            let err_str = format!("Error in streaming response: {e:?}");
-            let inner_err = crate::error::Error::new(ErrorDetails::StreamError {
-                source: Box::new(crate::error::Error::new(ErrorDetails::Serialization {
-                    message: err_str,
-                })),
-            });
-            if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = e {
-                return Err(TensorZeroError::Http {
-                    status_code: code.as_u16(),
-                    text: resp.text().await.ok(),
-                    source: inner_err.into(),
-                });
-            }
-            return Err(TensorZeroError::Other {
-                source: crate::error::Error::new(ErrorDetails::StreamError {
-                    source: Box::new(inner_err),
-                })
-                .into(),
-            });
-        }
-        let verbose_errors = self.verbose_errors;
-        Ok(Box::pin(async_stream::stream! {
-            while let Some(ev) = event_source.next().await {
-                match ev {
-                    Err(e) => {
-                        if matches!(e, reqwest_eventsource::Error::StreamEnded) {
-                            break;
-                        }
-                        yield Err(crate::error::Error::new(ErrorDetails::StreamError {
-                            source: Box::new(crate::error::Error::new(ErrorDetails::Serialization {
-                                message: format!("Error in streaming response: {}", DisplayOrDebug {
-                                    val: e,
-                                    debug: verbose_errors,
-                                })
-                            }))
-                        }))
-                    }
-                    Ok(e) => match e {
-                        Event::Open => continue,
-                        Event::Message(message) => {
-                            if message.data == "[DONE]" {
-                                break;
-                            }
-                            let json: serde_json::Value = serde_json::from_str(&message.data).map_err(|e| {
-                                crate::error::Error::new(ErrorDetails::Serialization {
-                                    message: format!("Error deserializing inference response chunk: {}", DisplayOrDebug {
-                                        val: e,
-                                        debug: verbose_errors,
-                                    }),
-                                })
-                            })?;
-                            if let Some(err) = json.get("error") {
-                                yield Err(crate::error::Error::new(ErrorDetails::StreamError {
-                                    source: Box::new(crate::error::Error::new(ErrorDetails::Serialization {
-                                        message: format!("Stream produced an error: {}", DisplayOrDebug {
-                                            val: err,
-                                            debug: verbose_errors,
-                                        }),
-                                    }))
-                                }));
-                            } else {
-                                let data: InferenceResponseChunk =
-                                serde_json::from_value(json).map_err(|e| {
-                                    crate::error::Error::new(ErrorDetails::Serialization {
-                                        message: format!("Error deserializing json value as InferenceResponseChunk: {}", DisplayOrDebug {
-                                            val: e,
-                                            debug: verbose_errors,
-                                        }),
-                                    })
-                                })?;
-                                yield Ok(data);
-                            }
-
-                        }
-                    }
-                }
-            }
-        }))
     }
 }
 
