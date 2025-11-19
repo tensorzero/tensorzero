@@ -1115,11 +1115,9 @@ async fn test_parse_args() {
     assert!(args.to_string().contains("--dataset-name <DATASET_NAME>"));
     assert!(args.to_string().contains("--variant-name <VARIANT_NAME>"));
 
-    // Test required arguments with globbed config file
+    // Test required arguments
     let args = Args::try_parse_from([
         "test",
-        "--config-file",
-        "./config/tensorzero.*.toml",
         "--evaluation-name",
         "my-evaluation",
         "--variant-name",
@@ -1131,10 +1129,7 @@ async fn test_parse_args() {
     assert_eq!(args.evaluation_name, "my-evaluation");
     assert_eq!(args.variant_name, "my-variant");
     assert_eq!(args.dataset_name, "my-dataset");
-    assert_eq!(
-        args.config_file,
-        PathBuf::from("./config/tensorzero.*.toml")
-    );
+    assert_eq!(args.config_file, PathBuf::from("./config/tensorzero.toml"));
     assert_eq!(args.concurrency, 1);
     assert_eq!(args.gateway_url, None);
     assert_eq!(args.format, OutputFormat::Pretty);
