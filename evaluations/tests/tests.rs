@@ -1115,9 +1115,11 @@ async fn test_parse_args() {
     assert!(args.to_string().contains("--dataset-name <DATASET_NAME>"));
     assert!(args.to_string().contains("--variant-name <VARIANT_NAME>"));
 
-    // Test required arguments
+    // Test required arguments with globbed config file
     let args = Args::try_parse_from([
         "test",
+        "--config-file",
+        "./config/tensorzero.*.toml",
         "--evaluation-name",
         "my-evaluation",
         "--variant-name",
@@ -1129,7 +1131,10 @@ async fn test_parse_args() {
     assert_eq!(args.evaluation_name, "my-evaluation");
     assert_eq!(args.variant_name, "my-variant");
     assert_eq!(args.dataset_name, "my-dataset");
-    assert_eq!(args.config_file, PathBuf::from("./config/tensorzero.toml"));
+    assert_eq!(
+        args.config_file,
+        PathBuf::from("./config/tensorzero.*.toml")
+    );
     assert_eq!(args.concurrency, 1);
     assert_eq!(args.gateway_url, None);
     assert_eq!(args.format, OutputFormat::Pretty);
@@ -2535,7 +2540,7 @@ async fn test_cli_args_max_datapoints() {
     .await;
 
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -2593,7 +2598,7 @@ async fn test_cli_args_precision_targets() {
     .await;
 
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
