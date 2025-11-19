@@ -6,6 +6,9 @@ These tests cover the new v1 endpoints:
 - list_inferences: List inferences with filters, pagination, and sorting
 """
 
+import json
+from dataclasses import asdict
+
 import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
@@ -381,3 +384,40 @@ def test_sync_list_inferences_no_function_filter(embedded_sync_client: TensorZer
 
     assert response.inferences is not None
     assert len(response.inferences) >= 1  # Should have at least some inferences
+
+
+def test_sync_list_inferences_with_search_query(embedded_sync_client: TensorZeroGateway):
+    """Test searching for inferences using search_query_experimental."""
+    test_word = "hello"
+
+    request = ListInferencesRequest(
+        function_name="basic_test",
+        output_source="inference",
+        limit=2,
+        offset=0,
+        search_query_experimental=test_word,
+    )
+    response = embedded_sync_client.list_inferences(request=request)
+
+    assert len(response.inferences) > 0
+    for inference in response.inferences:
+        assert test_word in json.dumps(asdict(inference)).lower()
+
+
+@pytest.mark.asyncio
+async def test_async_list_inferences_with_search_query(embedded_async_client: AsyncTensorZeroGateway):
+    """Test async version of search_query_experimental."""
+    test_word = "hello"
+
+    request = ListInferencesRequest(
+        function_name="basic_test",
+        output_source="inference",
+        limit=2,
+        offset=0,
+        search_query_experimental=test_word,
+    )
+    response = await embedded_async_client.list_inferences(request=request)
+
+    assert len(response.inferences) > 0
+    for inference in response.inferences:
+        assert test_word in json.dumps(asdict(inference)).lower()
