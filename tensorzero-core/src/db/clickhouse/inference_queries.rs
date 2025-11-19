@@ -8,7 +8,8 @@ use crate::db::clickhouse::query_builder::{
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::inferences::{
     ClickHouseStoredInferenceWithDispreferredOutputs, GetInferenceBoundsParams, InferenceBounds,
-    InferenceOutputSource, InferenceQueries, ListInferencesParams,
+    InferenceMetadata, InferenceOutputSource, InferenceQueries, ListInferencesByIdParams,
+    ListInferencesParams, PaginateByIdCondition,
 };
 use crate::function::FunctionConfigType;
 use crate::{
@@ -151,6 +152,153 @@ FROM InferenceById FINAL
             earliest_id: rows[0].earliest_id,
             count: rows[0].count,
         })
+    }
+
+    async fn list_inferences_by_id(
+        &self,
+        params: ListInferencesByIdParams,
+    ) -> Result<Vec<InferenceMetadata>, Error> {
+        let mut query_params: Vec<QueryParameter> = Vec::new();
+        let mut param_idx_counter: usize = 0;
+
+        // Build WHERE clauses
+        let mut where_clauses = Vec::new();
+
+        if let Some(function_name) = &params.function_name {
+            let param_placeholder = add_parameter(
+                function_name.clone(),
+                ClickhouseType::String,
+                &mut query_params,
+                &mut param_idx_counter,
+            );
+            where_clauses.push(format!("function_name = {param_placeholder}"));
+        }
+
+        if let Some(variant_name) = &params.variant_name {
+            let param_placeholder = add_parameter(
+                variant_name.clone(),
+                ClickhouseType::String,
+                &mut query_params,
+                &mut param_idx_counter,
+            );
+            where_clauses.push(format!("variant_name = {param_placeholder}"));
+        }
+
+        if let Some(episode_id) = &params.episode_id {
+            let param_placeholder = add_parameter(
+                episode_id.to_string(),
+                ClickhouseType::String,
+                &mut query_params,
+                &mut param_idx_counter,
+            );
+            where_clauses.push(format!("episode_id = {param_placeholder}"));
+        }
+
+        match params.pagination {
+            Some(PaginateByIdCondition::Before { id }) => {
+                let param_placeholder = add_parameter(
+                    id.to_string(),
+                    ClickhouseType::String,
+                    &mut query_params,
+                    &mut param_idx_counter,
+                );
+                where_clauses.push(format!("id_uint < toUInt128(toUUID({param_placeholder}))"));
+            }
+            Some(PaginateByIdCondition::After { id }) => {
+                let param_placeholder = add_parameter(
+                    id.to_string(),
+                    ClickhouseType::String,
+                    &mut query_params,
+                    &mut param_idx_counter,
+                );
+                where_clauses.push(format!("id_uint > toUInt128(toUUID({param_placeholder}))"));
+            }
+            None => {}
+        }
+
+        let where_clause = if where_clauses.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", where_clauses.join(" AND "))
+        };
+
+        let limit_param_placeholder = add_parameter(
+            params.limit,
+            ClickhouseType::UInt64,
+            &mut query_params,
+            &mut param_idx_counter,
+        );
+
+        let query = if let Some(PaginateByIdCondition::After { .. }) = params.pagination {
+            // After case: select ascending then re-order descending
+            format!(
+                "SELECT
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    function_type,
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM
+                (
+                    SELECT
+                        uint_to_uuid(id_uint) as id,
+                        id_uint,
+                        function_name,
+                        variant_name,
+                        episode_id,
+                        function_type
+                    FROM InferenceById FINAL
+                    {where_clause}
+                    ORDER BY id_uint ASC
+                    LIMIT {limit_param_placeholder}
+                )
+                ORDER BY id_uint DESC
+                FORMAT JSONEachRow"
+            )
+        } else {
+            // No pagination or before: simple DESC query
+            format!(
+                "SELECT
+                    uint_to_uuid(id_uint) as id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    function_type,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM InferenceById FINAL
+                {where_clause}
+                ORDER BY id_uint DESC
+                LIMIT {limit_param_placeholder}
+                FORMAT JSONEachRow"
+            )
+        };
+
+        // Execute the query
+        let query_params_map = query_params
+            .iter()
+            .map(|p| (p.name.as_str(), p.value.as_str()))
+            .collect();
+
+        let response = self
+            .inner
+            .run_query_synchronous(query, &query_params_map)
+            .await?;
+
+        let rows: Vec<InferenceMetadata> = response
+            .response
+            .trim()
+            .lines()
+            .map(|line| {
+                serde_json::from_str(line).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseQuery {
+                        message: format!("Failed to deserialize inference row: {e:?}"),
+                    })
+                })
+            })
+            .try_collect()?;
+
+        Ok(rows)
     }
 }
 
@@ -1255,6 +1403,303 @@ mod tests {
             assert_eq!(result.latest_id, None);
             assert_eq!(result.earliest_id, None);
             assert_eq!(result.count, 0);
+        }
+    }
+
+    mod list_inferences_by_id_tests {
+        use super::*;
+        use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+        use crate::db::clickhouse::{
+            ClickHouseConnectionInfo, ClickHouseResponse, ClickHouseResponseMetadata,
+        };
+        use crate::db::inferences::{
+            InferenceQueries, ListInferencesByIdParams, PaginateByIdCondition,
+        };
+        use std::sync::Arc;
+
+        #[tokio::test]
+        async fn test_list_inferences_by_id_no_filters_desc() {
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(|query, params| {
+                    // Should use the simple DESC query without subquery
+                    assert_query_contains(
+                        query,
+                        "SELECT
+                    uint_to_uuid(id_uint) as id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    function_type,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM InferenceById FINAL
+                ORDER BY id_uint DESC
+                LIMIT {p0:UInt64}
+                FORMAT JSONEachRow",
+                    );
+                    assert_eq!(params.get("p0"), Some(&"10"));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: r#"{"id":"01234567-89ab-cdef-0123-456789abcdef","function_name":"test_fn","variant_name":"test_var","episode_id":"fedcba98-7654-3210-fedc-ba9876543210","function_type":"chat","timestamp":"2024-01-01T12:00:00Z"}"#.to_string(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 1,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+            let result = conn
+                .list_inferences_by_id(ListInferencesByIdParams {
+                    function_name: None,
+                    variant_name: None,
+                    episode_id: None,
+                    pagination: None,
+                    limit: 10,
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(result.len(), 1);
+            assert_eq!(
+                result[0].id,
+                Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap()
+            );
+            assert_eq!(result[0].function_name, "test_fn");
+        }
+
+        #[tokio::test]
+        async fn test_list_inferences_by_id_with_filters() {
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(|query, params| {
+                    assert_query_contains(query, "SELECT
+                    uint_to_uuid(id_uint) as id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    function_type,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM InferenceById FINAL
+                WHERE function_name = {p0:String} AND variant_name = {p1:String} AND episode_id = {p2:String}
+                ORDER BY id_uint DESC
+                LIMIT {p3:UInt64}
+                FORMAT JSONEachRow");
+                    assert_eq!(params.get("p0"), Some(&"test_function"));
+                    assert_eq!(params.get("p1"), Some(&"test_variant"));
+                    assert_eq!(params.get("p2"), Some(&"01234567-89ab-cdef-0123-456789abcdef"));
+                    assert_eq!(params.get("p3"), Some(&"5"));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+            let result = conn
+                .list_inferences_by_id(ListInferencesByIdParams {
+                    function_name: Some("test_function".to_string()),
+                    variant_name: Some("test_variant".to_string()),
+                    episode_id: Some(
+                        Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap(),
+                    ),
+                    pagination: None,
+                    limit: 5,
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(result.len(), 0);
+        }
+
+        #[tokio::test]
+        async fn test_list_inferences_by_id_with_before_pagination() {
+            let before_id = Uuid::parse_str("fedcba98-7654-3210-fedc-ba9876543210").unwrap();
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(query, "SELECT
+                    uint_to_uuid(id_uint) as id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    function_type,
+                    formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM InferenceById FINAL
+                WHERE id_uint < toUInt128(toUUID({p0:String}))
+                ORDER BY id_uint DESC
+                LIMIT {p1:UInt64}
+                FORMAT JSONEachRow");
+                    assert_eq!(
+                        params.get("p0"),
+                        Some(&"fedcba98-7654-3210-fedc-ba9876543210")
+                    );
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+            let result = conn
+                .list_inferences_by_id(ListInferencesByIdParams {
+                    function_name: None,
+                    variant_name: None,
+                    episode_id: None,
+                    pagination: Some(PaginateByIdCondition::Before { id: before_id }),
+                    limit: 10,
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(result.len(), 0);
+        }
+
+        #[tokio::test]
+        async fn test_list_inferences_by_id_with_after_pagination() {
+            let after_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(
+                        query,
+                        "SELECT
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    function_type,
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM
+                (
+                    SELECT
+                        uint_to_uuid(id_uint) as id,
+                        id_uint,
+                        function_name,
+                        variant_name,
+                        episode_id,
+                        function_type
+                    FROM InferenceById FINAL
+                    WHERE id_uint > toUInt128(toUUID({p0:String}))
+                    ORDER BY id_uint ASC
+                    LIMIT {p1:UInt64}
+                )
+                ORDER BY id_uint DESC
+                FORMAT JSONEachRow",
+                    );
+                    assert_eq!(
+                        params.get("p0"),
+                        Some(&"01234567-89ab-cdef-0123-456789abcdef")
+                    );
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+            let result = conn
+                .list_inferences_by_id(ListInferencesByIdParams {
+                    function_name: None,
+                    variant_name: None,
+                    episode_id: None,
+                    pagination: Some(PaginateByIdCondition::After { id: after_id }),
+                    limit: 10,
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(result.len(), 0);
+        }
+
+        #[tokio::test]
+        async fn test_list_inferences_by_id_with_after_pagination_and_filters() {
+            let after_id = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+            let mut mock_clickhouse_client = MockClickHouseClient::new();
+            mock_clickhouse_client
+                .expect_run_query_synchronous()
+                .withf(move |query, params| {
+                    assert_query_contains(
+                        query,
+                        "SELECT
+                    id,
+                    function_name,
+                    variant_name,
+                    episode_id,
+                    function_type,
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM
+                (
+                    SELECT
+                        uint_to_uuid(id_uint) as id,
+                        id_uint,
+                        function_name,
+                        variant_name,
+                        episode_id,
+                        function_type
+                    FROM InferenceById FINAL
+                    WHERE function_name = {p0:String} AND id_uint > toUInt128(toUUID({p1:String}))
+                    ORDER BY id_uint ASC
+                    LIMIT {p2:UInt64}
+                )
+                ORDER BY id_uint DESC
+                FORMAT JSONEachRow",
+                    );
+                    assert_eq!(params.get("p0"), Some(&"test_function"));
+                    assert_eq!(
+                        params.get("p1"),
+                        Some(&"01234567-89ab-cdef-0123-456789abcdef")
+                    );
+                    assert_eq!(params.get("p2"), Some(&"10"));
+                    true
+                })
+                .returning(|_, _| {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 0,
+                        },
+                    })
+                });
+            let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+            let result = conn
+                .list_inferences_by_id(ListInferencesByIdParams {
+                    function_name: Some("test_function".to_string()),
+                    variant_name: None,
+                    episode_id: None,
+                    pagination: Some(PaginateByIdCondition::After { id: after_id }),
+                    limit: 10,
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(result.len(), 0);
         }
     }
 }

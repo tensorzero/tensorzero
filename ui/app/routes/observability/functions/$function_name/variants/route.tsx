@@ -14,8 +14,8 @@ import VariantInferenceTable from "./VariantInferenceTable";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import {
   countInferencesForVariant,
-  queryInferenceTableBoundsByVariantName,
-  queryInferenceTableByVariantName,
+  queryInferenceTableBounds,
+  queryInferenceTable,
 } from "~/utils/clickhouse/inference.server";
 import { getVariantPerformances } from "~/utils/clickhouse/function";
 import type { TimeWindow } from "~/types/tensorzero";
@@ -61,7 +61,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
 
-  const inferencePromise = queryInferenceTableByVariantName({
+  const inferencePromise = queryInferenceTable({
     function_name,
     variant_name,
     limit,
@@ -69,7 +69,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     after: afterInference || undefined,
   });
 
-  const tableBoundsPromise = queryInferenceTableBoundsByVariantName({
+  const tableBoundsPromise = queryInferenceTableBounds({
     function_name,
     variant_name,
   });
