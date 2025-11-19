@@ -17,6 +17,7 @@ from .generated_types import (
     AlwaysExtraBodyDelete,
     AlwaysExtraHeader,
     AlwaysExtraHeaderDelete,
+    ClientSideFunctionTool,
     ContentBlockChatOutput,
     ContentBlockChatOutputText,
     ContentBlockChatOutputToolCall,
