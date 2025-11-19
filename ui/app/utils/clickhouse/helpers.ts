@@ -115,7 +115,8 @@ export function waldConfidenceIntervalUpper(valueExpr: string): string {
 
 /**
  * Generates a ClickHouse SQL expression for computing the lower bound of a 95% Wilson confidence interval.
- * Wilson CI is more accurate for binary/Bernoulli data, especially with extreme proportions.
+ * Wilson CIs are more accurate than Wald CIs for binary/Bernoulli data with small sample sizes or
+ * extreme proportions (close to 0 or 1).
  *
  * Use this for boolean-valued metrics (values that are 0 or 1).
  *
@@ -147,7 +148,8 @@ export function wilsonConfidenceIntervalLower(valueExpr: string): string {
 
 /**
  * Generates a ClickHouse SQL expression for computing the upper bound of a 95% Wilson confidence interval.
- * Wilson CI is more accurate for binary/Bernoulli data, especially with extreme proportions.
+ * Wilson CIs are more accurate than Wald CIs for binary/Bernoulli data with small sample sizes or
+ * extreme proportions (close to 0 or 1).
  *
  * Use this for boolean-valued metrics (values that are 0 or 1).
  *
