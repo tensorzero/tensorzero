@@ -32,7 +32,7 @@ async fn test_get_deployment_id() {
 
 async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero::Client {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("tests/e2e/tensorzero.toml");
+    config_path.push("tests/e2e/config/tensorzero.*.toml");
     let config = Arc::new(
         Config::load_from_path_optional_verify_credentials(
             &ConfigFileGlob::new_from_path(&config_path).unwrap(),

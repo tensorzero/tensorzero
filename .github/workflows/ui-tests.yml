@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   ui-tests:
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
 
     strategy:
@@ -67,10 +67,10 @@ jobs:
 
       - name: Build `tensorzero-node`
         working-directory: internal/tensorzero-node
-        run: pnpm build
+        run: pnpm build:debug
 
       - name: Download `gateway` container
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
           name: build-gateway-container
           path: .
@@ -92,7 +92,7 @@ jobs:
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
 
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up -d
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up clickhouse fixtures mock-inference-provider -d
           docker compose -f fixtures/docker-compose.yml wait fixtures
 
       - name: Run `pnpm test`

@@ -83,7 +83,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
 
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("../tensorzero-core/tests/e2e/tensorzero.toml");
+    config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
 
     // Create an embedded client so that we run migrations
     let tensorzero_client =

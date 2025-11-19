@@ -25,6 +25,7 @@ use tensorzero_core::config::{
     ConfigFileGlob, ConfigLoadInfo, MetricConfigOptimize, UninitializedVariantInfo,
 };
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
+use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
     config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::StoredDatapoint,
     function::FunctionConfig,
@@ -524,9 +525,9 @@ pub async fn run_evaluation_core_streaming(
     // Spawn a task to collect results and stream them
     let sender_clone = sender.clone();
     let mut num_completed_datapoints = 0;
-    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-    #[expect(clippy::disallowed_methods)]
-    tokio::spawn(async move {
+    // We don't want to block (embedded) gateway shutdown on the evaluation finishing - the `receiver`
+    // is responsible for determining if we're interested in the evaluation results.
+    spawn_ignoring_shutdown(async move {
         while let Some(result) = join_set.join_next_with_id().await {
             let update = match result {
                 Ok((_, Ok((datapoint, inference_response, evaluation_result)))) => {

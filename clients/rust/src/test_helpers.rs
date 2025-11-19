@@ -17,7 +17,7 @@ pub async fn make_http_gateway() -> Client {
 
 pub fn get_e2e_config_path() -> std::path::PathBuf {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("../../tensorzero-core/tests/e2e/tensorzero.toml");
+    config_path.push("../../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     config_path
 }
 
