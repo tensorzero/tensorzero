@@ -356,24 +356,24 @@ def main() -> None:
             except OSError:
                 pass
 
-    # Delete the schemas directory after successful generation
-    print()
-    print("Cleaning up schemas directory...")
-    try:
-        if schema_dir.exists():
-            shutil.rmtree(schema_dir)
-            print(f"✓ Deleted {schema_dir}")
-    except Exception as e:
-        print(f"⚠ Warning: Could not delete schemas directory: {e}")
+    # # Delete the schemas directory after successful generation
+    # print()
+    # print("Cleaning up schemas directory...")
+    # try:
+    #     if schema_dir.exists():
+    #         shutil.rmtree(schema_dir)
+    #         print(f"✓ Deleted {schema_dir}")
+    # except Exception as e:
+    #     print(f"⚠ Warning: Could not delete schemas directory: {e}")
 
-    print()
-    print("=" * 70)
-    print("✓ Generation complete!")
-    print("=" * 70)
-    print()
-    print("Generated types can be imported with:")
-    print("    from tensorzero.generated_types import ...")
-    print()
+    # print()
+    # print("=" * 70)
+    # print("✓ Generation complete!")
+    # print("=" * 70)
+    # print()
+    # print("Generated types can be imported with:")
+    # print("    from tensorzero.generated_types import ...")
+    # print()
 
 
 if __name__ == "__main__":
