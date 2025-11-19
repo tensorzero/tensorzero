@@ -1569,10 +1569,12 @@ fn prepare_openai_tools<'a>(request: &'a ModelInferenceRequest) -> PreparedOpenA
             if !tool_config.any_tools_available() && tool_config.openai_custom_tools.is_empty() {
                 return (None, None, None);
             }
+            // This is the only place where we add OpenAI custom tools
             let tools = Some(
                 tool_config
                     .tools_available()
                     .map(Into::into)
+                    // VERY IMPORTANT
                     .chain(
                         tool_config
                             .openai_custom_tools
