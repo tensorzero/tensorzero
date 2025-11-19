@@ -48,7 +48,7 @@ export function useInferenceClick(episodeRoute: string): {
       }
       return prev;
     });
-  }, [episodeRoute, fetcher]);
+  }, [episodeRoute]);
 
   const handleCloseSheet = useCallback(() => {
     setOpenSheetInferenceId(null);
