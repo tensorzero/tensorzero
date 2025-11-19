@@ -22,9 +22,13 @@ use crate::function::FunctionConfig;
 
 use crate::config::SchemaData;
 use crate::experimentation::ExperimentationConfig;
-use crate::function::{FunctionConfigChat, FunctionConfigJson};
+use crate::function::FunctionConfigChat;
+#[cfg(feature = "e2e_tests")]
+use crate::function::FunctionConfigJson;
 use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
-use crate::tool::{create_implicit_tool_call_config, ToolChoice};
+#[cfg(feature = "e2e_tests")]
+use crate::tool::create_implicit_tool_call_config;
+use crate::tool::ToolChoice;
 use std::collections::HashSet;
 
 /// Returns the `tensorzero::hello_chat` function configuration.
@@ -102,13 +106,12 @@ fn get_hello_json_function() -> Arc<FunctionConfig> {
 /// - report_error: For critical failures in the inference output
 /// - report_improvement: For suboptimal but technically correct outputs
 /// - report_optimal: For high-quality aspects worth preserving
-/// TODO: support new templates/schemas
 fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
     // Define user schema inline
     let user_schema_json = serde_json::json!({
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
-        "required": ["function_config", "static_tools", "evaluation_config", "templates_map", "datapoint", "output", "evaluation_scores"],
+        "required": ["function_config", "evaluation_config", "templates_map", "datapoint", "output", "evaluation_scores"],
         "additionalProperties": false,
         "properties": {
             "function_config": {

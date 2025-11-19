@@ -35,5 +35,5 @@ Respond with ONE of the following XML formats based on your analysis:
 - `<report_improvement>` if the inference output is suboptimal but not erroneous
 - `<report_optimal>` if the inference output demonstrates high quality
 
-Follow the exact XML format specified in the system message for your chosen response type.
+Follow the exact XML format specified in your instructions for your chosen response type.
 </task>

@@ -94,10 +94,7 @@ pub fn build_analyze_input(
         let score = result_opt
             .as_ref()
             .map(|value| match value {
-                serde_json::Value::Number(n) => {
-                    // Convert to f32 precision for consistency
-                    json!(n.as_f64().map(|f| f as f32))
-                }
+                serde_json::Value::Number(n) => json!(n),
                 serde_json::Value::Bool(b) => json!(b),
                 _ => json!(null),
             })
@@ -270,7 +267,7 @@ pub async fn analyze_inferences(
                 // Extract the response
                 let InferenceOutput::NonStreaming(response) = inference_output else {
                     return Err(Error::new(ErrorDetails::Inference {
-                        message: "analyze inference called with stream: false, cannot get Streaming response".to_string(),
+                        message: "Expected NonStreaming response but got Streaming".to_string(),
                     }))
                 };
 

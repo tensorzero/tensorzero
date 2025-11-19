@@ -179,6 +179,8 @@ pub struct UninitializedChatTemplate {
 #[ts(export)]
 pub struct UninitializedChatTemplates {
     #[serde(flatten)]
+    /// Internal map of chat templates, made public for GEPA optimizer integration.
+    /// External users should use provided methods rather than accessing directly.
     pub inner: HashMap<String, UninitializedChatTemplate>,
 }
 

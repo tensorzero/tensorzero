@@ -25,7 +25,7 @@ use tensorzero_core::{
     tool::StaticToolConfig,
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
-use tensorzero_optimizers::gepa::{analyze_inferences, Analysis};
+use tensorzero_optimizers::gepa::analyze_inferences;
 use uuid::Uuid;
 
 // ============================================================================
@@ -360,20 +360,6 @@ pub fn create_test_evaluation_info(
         response,
         evaluations: HashMap::new(),
         evaluator_errors: HashMap::new(),
-    }
-}
-
-/// Create mock Analysis for testing mutate
-pub fn create_test_inference_with_analysis(
-    _variant_name: &str,
-    _output_text: &str,
-    analysis_text: &str,
-) -> Analysis {
-    Analysis {
-        inference: None,
-        analysis: vec![ContentBlockChatOutput::Text(Text {
-            text: analysis_text.to_string(),
-        })],
     }
 }
 
