@@ -1021,8 +1021,8 @@ mod tests {
     };
     use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput, Text};
     use crate::tool::{
-        AllowedTools, AllowedToolsChoice, ClientSideFunctionTool, Tool,
-        ToolCallConfigDatabaseInsert, ToolChoice,
+        AllowedTools, AllowedToolsChoice, FunctionTool, Tool, ToolCallConfigDatabaseInsert,
+        ToolChoice,
     };
 
     use super::*;
@@ -2066,8 +2066,8 @@ mod tests {
     #[tokio::test]
     async fn test_insert_chat_datapoint_with_tool_params_executes_successfully() {
         use crate::tool::{
-            AllowedTools, AllowedToolsChoice, ClientSideFunctionTool, Tool,
-            ToolCallConfigDatabaseInsert, ToolChoice,
+            AllowedTools, AllowedToolsChoice, FunctionTool, Tool, ToolCallConfigDatabaseInsert,
+            ToolChoice,
         };
 
         let mut mock_clickhouse_client = MockClickHouseClient::new();
@@ -2124,7 +2124,7 @@ mod tests {
                 text: "response".to_string(),
             })]),
             tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-                vec![Tool::ClientSideFunction(ClientSideFunctionTool {
+                vec![Tool::ClientSideFunction(FunctionTool {
                     name: "get_temperature".to_string(),
                     description: "Get temperature".to_string(),
                     parameters: json!({"type": "object"}),
@@ -2209,7 +2209,7 @@ mod tests {
                 text: "response".to_string(),
             })]),
             tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-                vec![Tool::ClientSideFunction(ClientSideFunctionTool {
+                vec![Tool::ClientSideFunction(FunctionTool {
                     name: "get_temperature".to_string(),
                     description: "Get temperature".to_string(),
                     parameters: json!({"type": "object"}),

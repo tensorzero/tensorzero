@@ -14,9 +14,9 @@ use tensorzero::ClientInferenceParams;
 use tensorzero::ClientInput;
 use tensorzero::ClientInputMessage;
 use tensorzero::ClientInputMessageContent;
-use tensorzero::ClientSideFunctionTool;
 use tensorzero::ContentBlockChunk;
 use tensorzero::DynamicToolParams;
+use tensorzero::FunctionTool;
 use tensorzero::InferenceOutput;
 use tensorzero::InferenceResponse;
 use tensorzero_core::cache::cache_lookup_streaming;
@@ -419,7 +419,7 @@ pub async fn test_dont_cache_tool_call_schema_error() {
             max_age_s: None,
         },
         dynamic_tool_params: DynamicToolParams {
-            additional_tools: Some(vec![ClientSideFunctionTool {
+            additional_tools: Some(vec![FunctionTool {
                 name: "get_temperature".to_string(),
                 description: "Get the temperature".to_string(),
                 parameters: json!({

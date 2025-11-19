@@ -174,7 +174,7 @@ class InferenceResponseToolCall:
 
 
 @dataclass(kw_only=True)
-class ClientSideFunctionTool:
+class FunctionTool:
     description: str
     parameters: Any
     name: str
@@ -354,22 +354,14 @@ OrderDirection = Literal["ascending", "descending"]
 
 
 @dataclass(kw_only=True)
-class DatapointMetadataUpdate:
-    name: str | None | UnsetType = UNSET
-    """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    """
-
-
-@dataclass(kw_only=True)
 class UpdateDatapointMetadataRequest:
     id: str
     """
     The ID of the datapoint to update. Required.
     """
-    metadata: DatapointMetadataUpdate
+    name: str | None | UnsetType = UNSET
     """
-    Metadata fields to update.
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     """
 
 
@@ -390,6 +382,14 @@ class CreateDatapointsResponse:
     ids: list[str]
     """
     The IDs of the newly-generated datapoints.
+    """
+
+
+@dataclass(kw_only=True)
+class DatapointMetadataUpdate:
+    name: str | None | UnsetType = UNSET
+    """
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     """
 
 
@@ -619,7 +619,16 @@ class OrderByMetric:
     by: Literal["metric"] = "metric"
 
 
-OrderBy = OrderByTimestamp | OrderByMetric
+@dataclass(kw_only=True)
+class OrderBySearchRelevance:
+    direction: OrderDirection
+    """
+    The ordering direction.
+    """
+    by: Literal["search_relevance"] = "search_relevance"
+
+
+OrderBy = OrderByTimestamp | OrderByMetric | OrderBySearchRelevance
 
 
 @dataclass(kw_only=True)
@@ -629,7 +638,7 @@ class DynamicToolParams:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[ClientSideFunctionTool] | None = None
+    additional_tools: list[FunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -647,6 +656,38 @@ class DynamicToolParams:
     provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
     """
     Provider-specific tool configurations
+    """
+
+
+@dataclass(kw_only=True)
+class UpdateDynamicToolParamsRequest:
+    allowed_tools: list[str] | None | UnsetType = UNSET
+    """
+    A subset of static tools configured for the function that the inference is explicitly allowed to use.
+    If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
+    provided at inference time). If specified as a value, it will be set to the provided value.
+    """
+    additional_tools: list[FunctionTool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
+    Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
+    new tools or exclude removed tools.
+    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    """
+    tool_choice: ToolChoice | None | UnsetType = UNSET
+    """
+    User-specified tool choice strategy.
+    If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
+    """
+    parallel_tool_calls: bool | None | UnsetType = UNSET
+    """
+    Whether to use parallel tool calls in the inference.
+    If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    provider_tools: list[ProviderTool] | None = None
+    """
+    Provider-specific tool configurations
+    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
 
 
@@ -736,7 +777,7 @@ class CreateChatDatapointRequest:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[ClientSideFunctionTool] | None = None
+    additional_tools: list[FunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -828,7 +869,7 @@ class ChatInferenceDatapoint:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[ClientSideFunctionTool] | None = None
+    additional_tools: list[FunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -902,7 +943,7 @@ class StoredChatInference:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[ClientSideFunctionTool] | None = None
+    additional_tools: list[FunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -953,18 +994,42 @@ class UpdateChatDatapointRequestInternal:
     Chat datapoint output. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     it will overwrite the existing output.
     """
-    tool_params: DynamicToolParams | None | UnsetType = UNSET
+    allowed_tools: list[str] | None | UnsetType = UNSET
     """
-    Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    A subset of static tools configured for the function that the inference is explicitly allowed to use.
+    If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
+    provided at inference time). If specified as a value, it will be set to the provided value.
+    """
+    additional_tools: list[FunctionTool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
+    Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
+    new tools or exclude removed tools.
+    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    """
+    tool_choice: ToolChoice | None | UnsetType = UNSET
+    """
+    User-specified tool choice strategy.
+    If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
+    """
+    parallel_tool_calls: bool | None | UnsetType = UNSET
+    """
+    Whether to use parallel tool calls in the inference.
+    If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    provider_tools: list[ProviderTool] | None = None
+    """
+    Provider-specific tool configurations
+    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
     tags: dict[str, Any] | None = None
     """
     Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     it will be overwrite the existing tags.
     """
-    metadata: DatapointMetadataUpdate | None = None
+    name: str | None | UnsetType = UNSET
     """
-    Metadata fields. If omitted, it will be left unchanged.
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     """
 
 
@@ -994,9 +1059,9 @@ class UpdateJsonDatapointRequestInternal:
     Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     it will be overwrite the existing tags.
     """
-    metadata: DatapointMetadataUpdate | None = None
+    name: str | None | UnsetType = UNSET
     """
-    Metadata fields. If omitted, it will be left unchanged.
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     """
 
 
@@ -1200,4 +1265,19 @@ class ListInferencesRequest:
     """
     Optional ordering criteria for the results.
     Supports multiple sort criteria (e.g., sort by timestamp then by metric).
+    """
+    search_query_experimental: str | None = None
+    """
+    Text query to filter. Case-insensitive substring search over the inferences' input and output.
+
+    THIS FEATURE IS EXPERIMENTAL, and we may change or remove it at any time.
+    We recommend against depending on this feature for critical use cases.
+
+    Important limitations:
+    - This requires an exact substring match; we do not tokenize this query string.
+    - This doesn't search for any content in the template itself.
+    - Quality is based on term frequency > 0, without any relevance scoring.
+    - There are no performance guarantees (it's best effort only). Today, with no other
+      filters, it will perform a full table scan, which may be extremely slow depending
+      on the data volume.
     """
