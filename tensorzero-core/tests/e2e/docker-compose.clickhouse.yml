@@ -33,7 +33,7 @@ services:
       target: gateway
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
-    command: [--config-file, tensorzero-core/tests/e2e/tensorzero.toml]
+    command: [--config-file, tensorzero-core/tests/e2e/config/tensorzero.*.toml]
     volumes:
       # Mount the e2e directory so the config path exists inside the container
       - ./:/app/tensorzero-core/tests/e2e:ro
@@ -99,7 +99,7 @@ services:
       TENSORZERO_S3_FIXTURES_PATH: /app/ui/fixtures/s3-fixtures
       TENSORZERO_CI: 1
     volumes:
-      - ./tensorzero.toml:/app/tensorzero-core/tests/e2e/tensorzero.toml:ro
+      - ./config/:/app/tensorzero-core/tests/e2e/config/:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
       - ../../../target:/app/target
