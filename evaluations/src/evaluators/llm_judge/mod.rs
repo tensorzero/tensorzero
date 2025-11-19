@@ -426,8 +426,8 @@ mod tests {
 
     use serde_json::json;
     use tensorzero_core::client::{File, Role, UrlFile};
-    use tensorzero_core::endpoints::datasets::JsonInferenceDatapoint;
     use tensorzero_core::endpoints::datasets::StoredChatInferenceDatapoint;
+    use tensorzero_core::endpoints::datasets::StoredJsonInferenceDatapoint;
     use tensorzero_core::endpoints::inference::ChatInferenceResponse;
     use tensorzero_core::endpoints::inference::JsonInferenceResponse;
     use tensorzero_core::evaluations::LLMJudgeIncludeConfig;
@@ -928,7 +928,7 @@ mod tests {
         assert_eq!(result, r#"[{"type":"text","text":"Reference text"}]"#);
 
         // Test with reference output enabled and present (json)
-        let datapoint = StoredDatapoint::Json(JsonInferenceDatapoint {
+        let datapoint = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
@@ -1149,7 +1149,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &StoredDatapoint::Json(JsonInferenceDatapoint {
+            &StoredDatapoint::Json(StoredJsonInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 name: None,
