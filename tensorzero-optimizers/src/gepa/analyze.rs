@@ -274,7 +274,7 @@ pub async fn analyze_inferences(
                 // Extract text content from the response
                 let InferenceResponse::Chat(chat_response) = &response else {
                     return Err(Error::new(ErrorDetails::Inference {
-                        message: "analyze function is defined as Chat, cannot return Json".to_string(),
+                        message: "analyze function is defined as Chat, cannot return JSON".to_string(),
                     }))
                 };
 
