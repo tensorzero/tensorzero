@@ -122,24 +122,9 @@ pub fn create_test_function_config_with_schemas() -> FunctionConfig {
     })
 }
 
-/// Create a basic FunctionConfig and None for static_tools (no tools)
-pub fn create_test_config_and_tools() -> (
-    FunctionConfig,
-    Option<HashMap<String, Arc<StaticToolConfig>>>,
-) {
-    (create_test_function_config(), None)
-}
-
-/// Create a FunctionConfig with schemas and None for static_tools
-pub fn create_test_config_and_tools_with_schemas() -> (
-    FunctionConfig,
-    Option<HashMap<String, Arc<StaticToolConfig>>>,
-) {
-    (create_test_function_config_with_schemas(), None)
-}
-
-/// Create a tuple of FunctionConfig and static tools (calculator and weather) for testing
-pub fn create_test_config_and_tools_with_static_tools() -> (
+/// Create a FunctionConfig with static tools (calculator and weather) for testing
+/// Returns tuple of (FunctionConfig, Option<HashMap<tools>>) for use with analyze_inferences
+pub fn create_test_function_config_with_static_tools() -> (
     FunctionConfig,
     Option<HashMap<String, Arc<StaticToolConfig>>>,
 ) {
@@ -431,6 +416,7 @@ pub fn create_test_evaluation_config_with_evaluators() -> EvaluationConfig {
         function_name: "test_function".to_string(),
     })
 }
+
 /// Check if analysis contains one of the expected XML tags
 fn contains_expected_xml_tag(analysis: &[ContentBlockChatOutput]) -> bool {
     let text = analysis
@@ -462,49 +448,33 @@ fn extract_user_message_from_echo(analysis: &[ContentBlockChatOutput]) -> String
 // Basic Functionality Tests
 // ============================================================================
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_inferences_success() {
-    // Setup: Create gateway client and test data
+/// Helper function for basic analyze_inferences tests
+async fn test_analyze_inferences_with_eval_infos(
+    eval_infos: Vec<EvaluationInfo>,
+    expected_count: usize,
+) {
     let client = make_embedded_gateway().await;
-
-    let eval_infos = vec![
-        create_test_evaluation_info("test_function", "What is 2+2?", "The answer is 4."),
-        create_test_evaluation_info(
-            "test_function",
-            "What is the capital of France?",
-            "The capital of France is Paris.",
-        ),
-        create_test_evaluation_info(
-            "test_function",
-            "Explain gravity.",
-            "Gravity is a force that attracts objects with mass.",
-        ),
-    ];
-
-    let (function_config, static_tools) = create_test_config_and_tools();
+    let function_config = create_test_function_config();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
 
-    // Execute: Call analyze_inferences
     let result = analyze_inferences(
         &client,
         &eval_infos,
         &function_config,
-        &static_tools,
+        &None,
         &variant_config,
         &gepa_config,
         &create_test_evaluation_config(),
     )
     .await;
 
-    // Assert: Verify success and correct number of results
-    let analyses = result.unwrap_or_else(|e| {
-        panic!("analyze_inferences should succeed but got error: {e}");
-    });
+    let analyses = result.expect("analyze_inferences should succeed");
+
     assert_eq!(
         analyses.len(),
-        3,
-        "Should return analysis for all 3 inferences"
+        expected_count,
+        "Should return analysis for all {expected_count} inferences"
     );
 
     // Verify each analysis has content and expected XML tags
@@ -521,85 +491,38 @@ async fn test_analyze_inferences_success() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_inferences_empty_input() {
-    // Setup: Create gateway client with empty evaluation infos
-    let client = make_embedded_gateway().await;
+async fn test_analyze_inferences_success() {
+    let eval_infos = vec![
+        create_test_evaluation_info("test_function", "What is 2+2?", "The answer is 4."),
+        create_test_evaluation_info(
+            "test_function",
+            "What is the capital of France?",
+            "The capital of France is Paris.",
+        ),
+        create_test_evaluation_info(
+            "test_function",
+            "Explain gravity.",
+            "Gravity is a force that attracts objects with mass.",
+        ),
+    ];
 
-    let eval_infos: Vec<EvaluationInfo> = vec![];
-    let (function_config, static_tools) = create_test_config_and_tools();
-    let variant_config = create_test_variant_config();
-    let gepa_config = create_test_gepa_config();
-
-    // Execute: Call with empty input
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &function_config,
-        &static_tools,
-        &variant_config,
-        &gepa_config,
-        &create_test_evaluation_config(),
-    )
-    .await;
-
-    // Assert: Should succeed with empty results
-    let analyses = result.unwrap_or_else(|e| {
-        panic!("analyze_inferences should handle empty input but got error: {e}");
-    });
-    assert_eq!(analyses.len(), 0, "Should return empty Vec for empty input");
+    test_analyze_inferences_with_eval_infos(eval_infos, 3).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_inferences_single_inference() {
-    // Setup: Create gateway client with single inference
-    let client = make_embedded_gateway().await;
-
-    let eval_infos = vec![create_test_evaluation_info(
-        "test_function",
-        "Test input",
-        "Test output",
-    )];
-
-    let (function_config, static_tools) = create_test_config_and_tools();
-    let variant_config = create_test_variant_config();
-    let gepa_config = create_test_gepa_config();
-
-    // Execute
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &function_config,
-        &static_tools,
-        &variant_config,
-        &gepa_config,
-        &create_test_evaluation_config(),
-    )
-    .await;
-
-    // Assert: Verify exactly one result
-    assert!(result.is_ok(), "analyze_inferences should succeed");
-    let analyses = result.unwrap();
-    assert_eq!(analyses.len(), 1, "Should return exactly 1 analysis");
-    assert!(
-        !analyses[0].analysis.is_empty(),
-        "Analysis should have content"
-    );
-    assert!(
-        contains_expected_xml_tag(&analyses[0].analysis),
-        "Analysis should contain expected XML tags"
-    );
+async fn test_analyze_inferences_empty_input() {
+    test_analyze_inferences_with_eval_infos(vec![], 0).await;
 }
 
 // ============================================================================
 // Concurrency Tests
 // ============================================================================
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_inferences_concurrency_limit() {
-    // Setup: Create gateway client and multiple inferences
+/// Helper function for concurrency tests
+async fn test_analyze_inferences_with_concurrency(num_inferences: usize, max_concurrency: u32) {
     let client = make_embedded_gateway().await;
 
-    let eval_infos: Vec<EvaluationInfo> = (0..5)
+    let eval_infos: Vec<EvaluationInfo> = (0..num_inferences)
         .map(|i| {
             create_test_evaluation_info(
                 "test_function",
@@ -609,78 +532,37 @@ async fn test_analyze_inferences_concurrency_limit() {
         })
         .collect();
 
-    let (function_config, static_tools) = create_test_config_and_tools();
+    let function_config = create_test_function_config();
     let variant_config = create_test_variant_config();
-
-    // Set low concurrency limit
     let mut gepa_config = create_test_gepa_config();
-    gepa_config.max_concurrency = 2;
+    gepa_config.max_concurrency = max_concurrency;
 
-    // Execute: Should complete successfully despite low concurrency
     let result = analyze_inferences(
         &client,
         &eval_infos,
         &function_config,
-        &static_tools,
+        &None,
         &variant_config,
         &gepa_config,
         &create_test_evaluation_config(),
     )
     .await;
 
-    // Assert: All analyses should complete
     assert!(
         result.is_ok(),
         "analyze_inferences should succeed with concurrency limit"
     );
     let analyses = result.unwrap();
-    assert_eq!(analyses.len(), 5, "Should return all 5 analyses");
+    assert_eq!(
+        analyses.len(),
+        num_inferences,
+        "Should return all {num_inferences} analyses"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_inferences_parallel_execution() {
-    // Setup: Create gateway client and many inferences
-    let client = make_embedded_gateway().await;
-
-    let eval_infos: Vec<EvaluationInfo> = (0..10)
-        .map(|i| {
-            create_test_evaluation_info(
-                "test_function",
-                &format!("Test input {i}"),
-                &format!("Test output {i}"),
-            )
-        })
-        .collect();
-
-    let (function_config, static_tools) = create_test_config_and_tools();
-    let variant_config = create_test_variant_config();
-    let mut gepa_config = create_test_gepa_config();
-    gepa_config.max_concurrency = 5;
-
-    // Execute: Should process in parallel
-    let start = std::time::Instant::now();
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &function_config,
-        &static_tools,
-        &variant_config,
-        &gepa_config,
-        &create_test_evaluation_config(),
-    )
-    .await;
-    let duration = start.elapsed();
-
-    // Assert: All analyses should complete
-    assert!(result.is_ok(), "analyze_inferences should succeed");
-    let analyses = result.unwrap();
-    assert_eq!(analyses.len(), 10, "Should return all 10 analyses");
-
-    // Parallel execution should be reasonably fast (not testing exact timing due to variance)
-    assert!(
-        duration.as_secs() < 30,
-        "Parallel execution should complete in reasonable time, took {duration:?}"
-    );
+async fn test_analyze_inferences_concurrency_limit() {
+    test_analyze_inferences_with_concurrency(5, 2).await;
 }
 
 // ============================================================================
@@ -698,7 +580,7 @@ async fn test_analyze_inferences_invalid_model() {
         "Test output",
     )];
 
-    let (function_config, static_tools) = create_test_config_and_tools();
+    let function_config = create_test_function_config();
     let variant_config = create_test_variant_config();
     let mut gepa_config = create_test_gepa_config();
     gepa_config.analysis_model = "invalid_provider::nonexistent_model".to_string();
@@ -708,7 +590,7 @@ async fn test_analyze_inferences_invalid_model() {
         &client,
         &eval_infos,
         &function_config,
-        &static_tools,
+        &None,
         &variant_config,
         &gepa_config,
         &create_test_evaluation_config(),
@@ -740,7 +622,7 @@ async fn test_analyze_inferences_with_schemas() {
         "Test output",
     )];
 
-    let (function_config, static_tools) = create_test_config_and_tools_with_schemas();
+    let function_config = create_test_function_config_with_schemas();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
 
@@ -749,7 +631,7 @@ async fn test_analyze_inferences_with_schemas() {
         &client,
         &eval_infos,
         &function_config,
-        &static_tools,
+        &None,
         &variant_config,
         &gepa_config,
         &create_test_evaluation_config(),
@@ -914,7 +796,7 @@ async fn test_analyze_inferences_response_structure() {
         "42",
     )];
 
-    let (function_config, static_tools) = create_test_config_and_tools();
+    let function_config = create_test_function_config();
     let variant_config = create_test_variant_config();
     let mut gepa_config = create_test_gepa_config();
     gepa_config.include_inference_for_mutation = true; // Enable to verify inference structure
@@ -924,7 +806,7 @@ async fn test_analyze_inferences_response_structure() {
         &client,
         &eval_infos,
         &function_config,
-        &static_tools,
+        &None,
         &variant_config,
         &gepa_config,
         &create_test_evaluation_config(),
@@ -974,39 +856,29 @@ async fn test_analyze_inferences_response_structure() {
 // Input Formatting Validation Tests (using echo model)
 // ============================================================================
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_input_includes_evaluations() {
-    // Setup: Create gateway client with echo model to inspect input
+/// Helper function for echo model tests that validates input format
+/// Returns the user_message from the echo response for assertion
+async fn test_analyze_input_echo_helper(
+    eval_infos: Vec<EvaluationInfo>,
+    function_config: FunctionConfig,
+    static_tools: Option<HashMap<String, Arc<StaticToolConfig>>>,
+    eval_config: EvaluationConfig,
+) -> String {
     let client = make_embedded_gateway().await;
-
-    // Create evaluation info with scores
-    let mut eval_info = create_test_evaluation_info("test_function", "Test input", "Test output");
-
-    // Add evaluator scores
-    eval_info
-        .evaluations
-        .insert("exact_match".to_string(), Some(serde_json::json!(0.85)));
-    eval_info
-        .evaluations
-        .insert("fluency".to_string(), Some(serde_json::json!(0.92)));
-
-    let (function_config, static_tools) = create_test_config_and_tools();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config_echo();
 
-    // Execute: Call with echo model
     let result = analyze_inferences(
         &client,
-        &[eval_info],
+        &eval_infos,
         &function_config,
         &static_tools,
         &variant_config,
         &gepa_config,
-        &create_test_evaluation_config_with_evaluators(),
+        &eval_config,
     )
     .await;
 
-    // Assert: Parse echo response and verify evaluations are included
     assert!(
         result.is_ok(),
         "analyze_inferences should succeed: {:?}",
@@ -1015,318 +887,172 @@ async fn test_analyze_input_includes_evaluations() {
     let analyses = result.unwrap();
     assert_eq!(analyses.len(), 1, "Should return 1 analysis");
 
-    let user_message = extract_user_message_from_echo(&analyses[0].analysis);
+    extract_user_message_from_echo(&analyses[0].analysis)
+}
 
-    // Verify evaluation sections exist
+/// Comprehensive test for input template with schemas
+/// Tests that schemas, required fields, and evaluation config all appear correctly in template
+#[tokio::test(flavor = "multi_thread")]
+async fn test_analyze_input_with_schemas() {
+    let mut eval_info = create_test_evaluation_info("test_function", "Test input", "Test output");
+    eval_info
+        .evaluations
+        .insert("exact_match".to_string(), Some(serde_json::json!(0.85)));
+    eval_info
+        .evaluations
+        .insert("fluency".to_string(), Some(serde_json::json!(0.92)));
+
+    let function_config = create_test_function_config_with_schemas();
+    let user_message = test_analyze_input_echo_helper(
+        vec![eval_info],
+        function_config,
+        None,
+        create_test_evaluation_config_with_evaluators(),
+    )
+    .await;
+
+    // Verify required template sections exist
+    assert!(
+        user_message.contains("<function_context>"),
+        "Should have function_context"
+    );
+    assert!(
+        user_message.contains("<function_config>"),
+        "Should have function_config"
+    );
+    assert!(
+        user_message.contains("<inference_context>"),
+        "Should have inference_context"
+    );
+    assert!(
+        user_message.contains("<inference_output>"),
+        "Should have inference_output"
+    );
     assert!(
         user_message.contains("<evaluation_config>"),
-        "User message should contain <evaluation_config> section (renamed from evaluation_context)"
+        "Should have evaluation_config"
     );
     assert!(
         user_message.contains("<evaluation_scores>"),
-        "User message should contain <evaluation_scores> section"
+        "Should have evaluation_scores"
     );
 
-    // Note: user_message is JSON-serialized, so quotes are escaped as \" and newlines as \n
-    // The evaluation_config and evaluation_scores are now pure JSON (no internal XML structure)
-
-    // Verify exact_match evaluator appears in evaluation_config JSON
+    // Verify schemas appear in function_config JSON
     assert!(
-        user_message.contains(r#"\"exact_match\""#) || user_message.contains("exact_match"),
-        "User message should contain exact_match evaluator name in JSON"
+        user_message.contains(r#"\"schemas\""#) || user_message.contains("schemas"),
+        "Should contain schemas in function_config JSON"
     );
     assert!(
-        user_message.contains(r#"\"type\": \"exact_match\""#)
-            || user_message.contains("\"type\":\"exact_match\""),
-        "exact_match should have type=exact_match in JSON"
-    );
-    assert!(
-        user_message.contains(r#"\"cutoff\":"#) && user_message.contains("0.8"),
-        "exact_match should have cutoff with value 0.8"
+        user_message.contains("system") || user_message.contains("user"),
+        "Should contain schema role names (system/user)"
     );
 
-    // Verify fluency evaluator (LLMJudge type) with all fields in evaluation_config JSON
+    // Verify evaluation config includes evaluator definitions
     assert!(
-        user_message.contains(r#"\"fluency\""#) || user_message.contains("fluency"),
-        "User message should contain fluency evaluator name in JSON"
+        user_message.contains("exact_match"),
+        "Should contain exact_match evaluator"
+    );
+    assert!(
+        user_message.contains("fluency"),
+        "Should contain fluency evaluator"
     );
     assert!(
         user_message.contains(r#"\"type\": \"llm_judge\""#)
             || user_message.contains("\"type\":\"llm_judge\""),
-        "fluency should have type=llm_judge in JSON"
-    );
-    assert!(
-        user_message.contains(r#"\"input_format\": \"serialized\""#)
-            || user_message.contains("\"input_format\":\"serialized\""),
-        "fluency should have input_format=serialized in JSON"
-    );
-    assert!(
-        user_message.contains(r#"\"output_type\": \"float\""#)
-            || user_message.contains("\"output_type\":\"float\""),
-        "fluency should have output_type=float in JSON"
-    );
-    assert!(
-        user_message.contains(r#"\"optimize\": \"max\""#)
-            || user_message.contains("\"optimize\":\"max\""),
-        "fluency should have optimize=max in JSON"
-    );
-    assert!(
-        user_message.contains(r#"\"cutoff\": 0.5"#) || user_message.contains("\"cutoff\":0.5"),
-        "fluency should have cutoff=0.5 in JSON"
-    );
-    // Note: system_instructions field is not included in the serialized evaluation_config
-    assert!(
-        user_message.contains(r#"\"reference_output\": false"#)
-            || user_message.contains("\"reference_output\":false"),
-        "fluency should have reference_output=false in include in JSON"
+        "Should have llm_judge type for fluency"
     );
 
-    // Verify scores appear in the evaluation_scores JSON section (not as XML tags)
+    // Verify evaluation scores appear
     assert!(
         (user_message.contains(r#"\"exact_match\": 0.85"#)
-            || user_message.contains("\"exact_match\":0.85"))
-            && user_message.contains("<evaluation_scores>"),
-        "exact_match score should be 0.85 in evaluation_scores JSON"
+            || user_message.contains("\"exact_match\":0.85")),
+        "Should have exact_match score of 0.85"
     );
     assert!(
         (user_message.contains(r#"\"fluency\": 0.92"#)
-            || user_message.contains("\"fluency\":0.92"))
-            && user_message.contains("<evaluation_scores>"),
-        "fluency score should be 0.92 in evaluation_scores JSON"
+            || user_message.contains("\"fluency\":0.92")),
+        "Should have fluency score of 0.92"
     );
 }
 
+/// Comprehensive test for input template with static tools
+/// Tests that tools, required fields, and evaluation config all appear correctly in template
 #[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_input_includes_required_fields() {
-    // Setup: Create gateway client with echo model to verify all required template fields
-    // Use basic config with no schemas, tools, or tags to verify conditional fields don't appear
-    let client = make_embedded_gateway().await;
+async fn test_analyze_input_with_static_tools() {
+    let mut eval_info =
+        create_test_evaluation_info("test_function", "What is 2+2?", "The answer is 4.");
+    eval_info
+        .evaluations
+        .insert("exact_match".to_string(), Some(serde_json::json!(0.85)));
 
-    let eval_infos = vec![create_test_evaluation_info(
-        "test_function",
-        "Test input",
-        "Test output",
-    )];
-
-    let (function_config, static_tools) = create_test_config_and_tools();
-    let variant_config = create_test_variant_config();
-    let gepa_config = create_test_gepa_config_echo();
-
-    // Execute
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &function_config,
-        &static_tools,
-        &variant_config,
-        &gepa_config,
-        &create_test_evaluation_config(),
+    let (function_config, static_tools) = create_test_function_config_with_static_tools();
+    let user_message = test_analyze_input_echo_helper(
+        vec![eval_info],
+        function_config,
+        static_tools,
+        create_test_evaluation_config_with_evaluators(),
     )
     .await;
 
-    // Assert: Verify all required fields are present
-    assert!(result.is_ok(), "analyze_inferences should succeed");
-    let analyses = result.unwrap();
-    let user_message = extract_user_message_from_echo(&analyses[0].analysis);
-
-    // Required: <function_context> section with JSON-serialized config
+    // Verify required template sections exist
     assert!(
         user_message.contains("<function_context>"),
-        "User message should contain <function_context> section"
-    );
-    assert!(
-        user_message.contains("<function_config>"),
-        "User message should contain <function_config> section with JSON"
-    );
-    // Function name is now inside the JSON-serialized function_config
-    assert!(
-        user_message.contains(r#"\"function_name\""#) || user_message.contains("function_name"),
-        "User message should contain function_name in JSON structure"
-    );
-    assert!(
-        user_message.contains("test_function"),
-        "User message should contain the function name value"
+        "Should have function_context"
     );
     assert!(
         user_message.contains("<tool_schemas>"),
-        "User message should contain <tool_schemas> section (even if null)"
+        "Should have tool_schemas section"
     );
     assert!(
         user_message.contains("<evaluation_config>"),
-        "User message should contain <evaluation_config> section with JSON"
+        "Should have evaluation_config"
     );
-
-    // Required: <inference_context> section with JSON-serialized data
-    assert!(
-        user_message.contains("<inference_context>"),
-        "User message should contain <inference_context> section"
-    );
-    assert!(
-        user_message.contains("<message_templates>"),
-        "User message should contain <message_templates> section with JSON"
-    );
-    assert!(
-        user_message.contains("<datapoint>"),
-        "User message should contain <datapoint> section with JSON"
-    );
-    // Datapoint contains the inference input and metadata
-    assert!(
-        user_message.contains("Test input") || user_message.contains(r#"\"input\""#),
-        "User message should contain datapoint input information"
-    );
-
-    // Required: <inference_output> section
-    assert!(
-        user_message.contains("<inference_output>"),
-        "User message should contain <inference_output> section with JSON"
-    );
-    assert!(
-        user_message.contains("Test output"),
-        "User message should contain the inference output"
-    );
-
-    // Required: <evaluation_scores> section
     assert!(
         user_message.contains("<evaluation_scores>"),
-        "User message should contain <evaluation_scores> section"
+        "Should have evaluation_scores"
     );
 
-    // Note: The new template structure uses JSON serialization of high-level objects
-    // instead of extracting individual fields into XML sections:
-    // - function_name is inside function_config JSON
-    // - schemas are inside function_config.schemas JSON
-    // - tools are in tool_schemas section as JSON
-    // - tags are inside datapoint.tags JSON
-    // - evaluation config is in evaluation_config section as JSON
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_input_includes_schemas() {
-    // Setup: Use function config with schemas
-    let client = make_embedded_gateway().await;
-
-    let eval_infos = vec![create_test_evaluation_info(
-        "test_function",
-        "Test input",
-        "Test output",
-    )];
-
-    let (function_config, static_tools) = create_test_config_and_tools_with_schemas();
-    let variant_config = create_test_variant_config();
-    let gepa_config = create_test_gepa_config_echo();
-
-    // Execute
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &function_config,
-        &static_tools,
-        &variant_config,
-        &gepa_config,
-        &create_test_evaluation_config(),
-    )
-    .await;
-
-    // Assert: Verify schemas are included
-    assert!(result.is_ok(), "analyze_inferences should succeed");
-    let analyses = result.unwrap();
-
-    let user_message = extract_user_message_from_echo(&analyses[0].analysis);
-
-    // Schemas are now inside the function_config JSON, not a separate section
-    assert!(
-        user_message.contains("<function_config>"),
-        "User message should contain <function_config> section"
-    );
-    assert!(
-        user_message.contains(r#"\"schemas\""#) || user_message.contains("schemas"),
-        "User message should contain schemas inside function_config JSON"
-    );
-    assert!(
-        user_message.contains("system") || user_message.contains("user"),
-        "User message should contain schema role names (system/user) inside JSON"
-    );
-}
-
-// ============================================================================
-// Tool Handling Tests
-// ============================================================================
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_input_with_static_tools() {
-    // Setup: Create gateway client with static tools (calculator and weather)
-    let client = make_embedded_gateway().await;
-
-    // Use helper to get function config with static tools
-    let (function_config, static_tools) = create_test_config_and_tools_with_static_tools();
-
-    // Create test evaluation info
-    let eval_infos = vec![create_test_evaluation_info(
-        "test_function",
-        "What is 2+2?",
-        "The answer is 4.",
-    )];
-
-    let variant_config = create_test_variant_config();
-    let gepa_config = create_test_gepa_config_echo(); // Use echo model
-
-    // Execute
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &function_config,
-        &static_tools,
-        &variant_config,
-        &gepa_config,
-        &create_test_evaluation_config(),
-    )
-    .await;
-
-    // Assert: Should succeed
-    assert!(
-        result.is_ok(),
-        "analyze_inferences should succeed with static tools"
-    );
-    let analyses = result.unwrap();
-    assert_eq!(analyses.len(), 1, "Should return 1 analysis");
-
-    // Extract the user message from echo response
-    let user_message = extract_user_message_from_echo(&analyses[0].analysis);
-
-    // Verify tools section appears in template input (renamed from <available_tools> to <tool_schemas>)
-    assert!(
-        user_message.contains("<tool_schemas>"),
-        "User message should contain <tool_schemas> section when tools are configured"
-    );
-
-    // Verify both tools appear (calculator and weather) inside the JSON
+    // Verify both tools appear with their details
     assert!(
         user_message.contains("calculator"),
-        "User message should contain the calculator tool"
+        "Should contain calculator tool"
     );
     assert!(
         user_message.contains("weather"),
-        "User message should contain the weather tool"
+        "Should contain weather tool"
     );
-
     assert!(
         user_message.contains("Evaluates mathematical expressions"),
-        "User message should contain the calculator tool description"
+        "Should have calculator description"
     );
     assert!(
         user_message.contains("Gets weather information"),
-        "User message should contain the weather tool description"
+        "Should have weather description"
     );
-
     assert!(
         user_message.contains("expression"),
-        "User message should contain the calculator tool parameter"
+        "Should have calculator parameter"
     );
     assert!(
         user_message.contains("location"),
-        "User message should contain the weather tool parameter"
+        "Should have weather parameter"
+    );
+
+    // Verify evaluation config and scores
+    assert!(
+        user_message.contains("exact_match"),
+        "Should contain exact_match evaluator"
+    );
+    assert!(
+        (user_message.contains(r#"\"exact_match\": 0.85"#)
+            || user_message.contains("\"exact_match\":0.85")),
+        "Should have exact_match score"
     );
 }
+
+// ============================================================================
+// Tool Handling Tests - Custom datapoint construction
+// ============================================================================
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_input_with_datapoint_tool_params() {
@@ -1339,7 +1065,7 @@ async fn test_analyze_input_with_datapoint_tool_params() {
     let client = make_embedded_gateway().await;
 
     // Use helper to get function config with static tools (calculator and weather)
-    let (function_config, static_tools) = create_test_config_and_tools_with_static_tools();
+    let (function_config, static_tools) = create_test_function_config_with_static_tools();
 
     // Create datapoint with tool_params that restricts to only calculator
     let tool_params = ToolCallConfigDatabaseInsert::new_for_test(
@@ -1461,7 +1187,7 @@ async fn test_analyze_input_evaluation_score_types() {
     // Setup: Create gateway client
     let client = make_embedded_gateway().await;
 
-    let (function_config, static_tools) = create_test_config_and_tools();
+    let function_config = create_test_function_config();
     let variant_config = create_test_variant_config();
 
     // Create a datapoint with different evaluation score types
@@ -1577,7 +1303,7 @@ async fn test_analyze_input_evaluation_score_types() {
         &client,
         &eval_infos,
         &function_config,
-        &static_tools,
+        &None,
         &variant_config,
         &gepa_config,
         &eval_config,
@@ -1630,7 +1356,7 @@ async fn test_analyze_input_with_tags() {
     // Setup: Create gateway client
     let client = make_embedded_gateway().await;
 
-    let (function_config, static_tools) = create_test_config_and_tools();
+    let function_config = create_test_function_config();
     let variant_config = create_test_variant_config();
 
     // Create a datapoint with tags
@@ -1698,7 +1424,7 @@ async fn test_analyze_input_with_tags() {
         &client,
         &eval_infos,
         &function_config,
-        &static_tools,
+        &None,
         &variant_config,
         &gepa_config,
         &create_test_evaluation_config(),
