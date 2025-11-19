@@ -190,11 +190,9 @@ pub async fn run_evaluation_streaming(
         evaluation_run_id,
         inference_cache: cache_mode,
         concurrency,
-        limit: None,
-        offset: None,
     };
 
-    let result = match run_evaluation_core_streaming(core_args).await {
+    let result = match run_evaluation_core_streaming(core_args, None, HashMap::new()).await {
         Ok(result) => result,
         Err(error) => {
             let _ = callback.abort();

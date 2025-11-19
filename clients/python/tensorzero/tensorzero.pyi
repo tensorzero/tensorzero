@@ -52,8 +52,11 @@ from .generated_types import (
     Datapoint,
     DeleteDatapointsResponse,
     GetDatapointsResponse,
+    GetInferencesResponse,
     InferenceFilter,
     ListDatapointsRequest,
+    ListInferencesRequest,
+    StoredInference,
     UpdateDatapointMetadataRequest,
     UpdateDatapointRequest,
     UpdateDatapointsResponse,
@@ -158,65 +161,6 @@ class AsyncEvaluationJobHandler:
     def __repr__(self) -> str: ...
 
 @final
-class StoredInference:
-    Chat: Type["StoredInference"]
-    Json: Type["StoredInference"]
-
-    def __init__(
-        self,
-        type: str,
-        function_name: str,
-        variant_name: str,
-        input: Any,
-        output: Any,
-        episode_id: UUID,
-        inference_id: UUID,
-        timestamp: str,
-        allowed_tools: Optional[List[str]] = None,
-        additional_tools: Optional[List[Any]] = None,
-        tool_choice: Optional[str] = None,
-        parallel_tool_calls: Optional[bool] = None,
-        provider_tools: Optional[List[Any]] = None,
-        output_schema: Optional[Any] = None,
-        # Dispreferred outputs are lists because there may be several of them in the future.
-        dispreferred_outputs: Union[List[ChatInferenceOutput], List[JsonInferenceOutput]] = [],
-        tags: Dict[str, str] = {},
-    ) -> None: ...
-    def __repr__(self) -> str: ...
-    @property
-    def function_name(self) -> str: ...
-    @property
-    def variant_name(self) -> str: ...
-    @property
-    def input(self) -> ResolvedInput: ...
-    @property
-    def output(self) -> Any: ...
-    @property
-    def episode_id(self) -> Optional[UUID]: ...
-    @property
-    def inference_id(self) -> Optional[UUID]: ...
-    @property
-    def allowed_tools(self) -> Optional[List[str]]: ...
-    @property
-    def additional_tools(self) -> Optional[List[Any]]: ...
-    @property
-    def parallel_tool_calls(self) -> Optional[bool]: ...
-    @property
-    def provider_tools(self) -> Optional[List[Any]]: ...
-    @property
-    def output_schema(self) -> Optional[Any]: ...
-    @property
-    def type(self) -> str: ...
-    @property
-    def timestamp(self) -> str: ...
-    @property
-    def dispreferred_outputs(
-        self,
-    ) -> Union[List[ChatInferenceOutput], List[JsonInferenceOutput]]: ...
-    @property
-    def tags(self) -> Dict[str, str]: ...
-
-@final
 class RenderedSample:
     function_name: str
     input: ModelInput
@@ -246,6 +190,7 @@ class OptimizationJobHandle:
     FireworksSFT: Type["OptimizationJobHandle"]
     GCPVertexGeminiSFT: Type["OptimizationJobHandle"]
     TogetherSFT: Type["OptimizationJobHandle"]
+    GEPA: Type["OptimizationJobHandle"]
 
 @final
 class OptimizationJobStatus:
@@ -261,6 +206,7 @@ class OptimizationJobInfo:
     FireworksSFT: Type["OptimizationJobInfo"]
     GCPVertexGeminiSFT: Type["OptimizationJobInfo"]
     TogetherSFT: Type["OptimizationJobInfo"]
+    GEPA: Type["OptimizationJobInfo"]
     @property
     def message(self) -> str: ...
     @property
@@ -911,6 +857,34 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `CreateDatapointsResponse` object.
         """
 
+    def get_inferences(
+        self,
+        *,
+        ids: Sequence[str],
+        function_name: Optional[str] = None,
+        output_source: str = "inference",
+    ) -> GetInferencesResponse:
+        """
+        Get specific inferences by their IDs.
+
+        :param ids: A sequence of inference IDs to retrieve. They should be in UUID format.
+        :param function_name: Optional function name to filter by (improves query performance).
+        :param output_source: The source of the output ("inference" or "demonstration"). Default: "inference".
+        :return: A `GetInferencesResponse` object.
+        """
+
+    def list_inferences(
+        self,
+        *,
+        request: ListInferencesRequest,
+    ) -> GetInferencesResponse:
+        """
+        List inferences with optional filtering, pagination, and sorting.
+
+        :param request: A `ListInferencesRequest` object with filter parameters.
+        :return: A `GetInferencesResponse` object.
+        """
+
     def experimental_list_inferences(
         self,
         *,
@@ -933,30 +907,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param limit: The maximum number of inferences to return. Optional
         :param offset: The offset to start from. Optional
         :return: A list of `StoredInference` instances.
-        """
-
-    def experimental_render_inferences(
-        self,
-        *,
-        stored_inferences: List[StoredInference],
-        variants: Dict[str, str],
-    ) -> List[RenderedSample]:
-        """
-        DEPRECATED: use `experimental_render_samples` instead.
-        Render a list of stored samples into a list of rendered stored samples.
-
-        This function performs two main tasks:
-        1. Resolves all network resources (e.g., images) in the stored samples.
-        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
-           To do this, the function needs to know which variant to use for each function that might appear in the data.
-
-        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
-        the function has no variant specified, or the process of downloading resources fails.
-        In the future, this behavior may be made configurable by the caller.
-
-        :param stored_inferences: A list of stored samples to render.
-        :param variants: A mapping from function name to variant name.
-        :return: A list of rendered samples.
         """
 
     def experimental_render_samples(
@@ -1021,9 +971,9 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         variant_name: Optional[str] = None,
         concurrency: int = 1,
         inference_cache: str = "on",
-        dynamic_variant_config: Optional[Dict[str, Any]] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
+        internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        max_datapoints: Optional[int] = None,
+        adaptive_stopping: Optional[Dict[str, Dict[str, float]]] = None,
     ) -> EvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -1031,15 +981,13 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
         :param evaluation_name: The name of the evaluation to run
         :param dataset_name: The name of the dataset to use for evaluation
-        :param variant_name: The name of the variant to evaluate (omit or set to None when using dynamic_variant_config)
+        :param variant_name: The name of the variant to evaluate
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
-        :param dynamic_variant_config: Optional dynamic variant configuration to use instead of config file lookup. If provided, `variant_name` should be omitted or set to None.
-        :param limit: Maximum number of datapoints to evaluate, starting from the newest (None = no limit)
-        :param offset: Number of newest datapoints to skip before starting evaluation (None = no offset)
+        :param internal_dynamic_variant_config: Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
+        :param max_datapoints: Maximum number of datapoints to evaluate from the dataset
+        :param adaptive_stopping: Optional dict configuring adaptive stopping behavior. Example: {"precision": {"exact_match": 0.2, "llm_judge": 0.15}}. The "precision" field maps evaluator names to CI half-width thresholds.
         :return: An EvaluationJobHandler for iterating over evaluation results
-
-        Note: Datapoints are ordered by creation time in descending order (newest first).
         """
         ...
 
@@ -1451,6 +1399,34 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `CreateDatapointsResponse` object.
         """
 
+    async def get_inferences(
+        self,
+        *,
+        ids: Sequence[str | UUID | uuid_utils.UUID],
+        function_name: Optional[str] = None,
+        output_source: str = "inference",
+    ) -> GetInferencesResponse:
+        """
+        Get specific inferences by their IDs.
+
+        :param ids: A sequence of inference IDs to retrieve. They should be in UUID format.
+        :param function_name: Optional function name to filter by (improves query performance).
+        :param output_source: The source of the output ("inference" or "demonstration"). Default: "inference".
+        :return: A `GetInferencesResponse` object.
+        """
+
+    async def list_inferences(
+        self,
+        *,
+        request: ListInferencesRequest,
+    ) -> GetInferencesResponse:
+        """
+        List inferences with optional filtering, pagination, and sorting.
+
+        :param request: A `ListInferencesRequest` object with filter parameters.
+        :return: A `GetInferencesResponse` object.
+        """
+
     async def experimental_list_inferences(
         self,
         *,
@@ -1473,31 +1449,6 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param limit: The maximum number of inferences to return. Optional
         :param offset: The offset to start from. Optional
         :return: A list of `StoredInference` instances.
-        """
-
-    async def experimental_render_inferences(
-        self,
-        *,
-        stored_inferences: List[StoredInference],
-        variants: Dict[str, str],
-    ) -> List[RenderedSample]:
-        """
-        DEPRECATED: use `experimental_render_samples` instead.
-
-        Render a list of stored samples into a list of rendered stored samples.
-
-        This function performs two main tasks:
-        1. Resolves all network resources (e.g., images) in the stored samples.
-        2. Prepares all messages into "simple" messages that have been templated for a particular variant.
-           To do this, the function needs to know which variant to use for each function that might appear in the data.
-
-        IMPORTANT: For now, this function drops datapoints that are invalid, such as those where templating fails,
-        the function has no variant specified, or the process of downloading resources fails.
-        In the future, this behavior may be made configurable by the caller.
-
-        :param stored_inferences: A list of stored samples to render.
-        :param variants: A mapping from function name to variant name.
-        :return: A list of rendered samples.
         """
 
     async def experimental_render_samples(
@@ -1561,9 +1512,9 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         variant_name: Optional[str] = None,
         concurrency: int = 1,
         inference_cache: str = "on",
-        dynamic_variant_config: Optional[Dict[str, Any]] = None,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
+        internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        max_datapoints: Optional[int] = None,
+        adaptive_stopping: Optional[Dict[str, Dict[str, float]]] = None,
     ) -> AsyncEvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -1571,15 +1522,13 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param evaluation_name: The name of the evaluation to run
         :param dataset_name: The name of the dataset to use for evaluation
-        :param variant_name: The name of the variant to evaluate. Should be omitted or set to None when using `dynamic_variant_config`.
+        :param variant_name: The name of the variant to evaluate
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
-        :param dynamic_variant_config: Optional dynamic variant configuration to use instead of config file lookup. If provided, `variant_name` should be omitted or set to None.
-        :param limit: Maximum number of datapoints to evaluate, starting from the newest (None = no limit)
-        :param offset: Number of newest datapoints to skip before starting evaluation (None = no offset)
+        :param internal_dynamic_variant_config: Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
+        :param max_datapoints: Maximum number of datapoints to evaluate from the dataset
+        :param adaptive_stopping: Optional dict configuring adaptive stopping behavior. Example: {"precision": {"exact_match": 0.2, "llm_judge": 0.15}}. The "precision" field maps evaluator names to CI half-width thresholds.
         :return: An AsyncEvaluationJobHandler for iterating over evaluation results
-
-        Note: Datapoints are ordered by creation time in descending order (newest first).
         """
         ...
 
@@ -1638,7 +1587,6 @@ __all__ = [
     "RenderedSample",
     "ResolvedInput",
     "ResolvedInputMessage",
-    "StoredInference",
     "TensorZeroGateway",
     "TogetherSFTConfig",
     "VariantsConfig",

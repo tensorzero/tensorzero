@@ -65,9 +65,9 @@ use tensorzero_core::{
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
-    ClientSideFunctionTool, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, LaunchOptimizationParams, ListDatapointsRequest,
-    ListInferencesParams, OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
+    Datapoint, DynamicToolParams, FeedbackParams, FunctionTool, InferenceOutput, InferenceParams,
+    InferenceStream, LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams,
+    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
     WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
@@ -100,7 +100,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TensorZeroGateway>()?;
     m.add_class::<LocalHttpGateway>()?;
     m.add_class::<RenderedSample>()?;
-    m.add_class::<StoredInference>()?;
     m.add_class::<EvaluationJobHandler>()?;
     m.add_class::<AsyncEvaluationJobHandler>()?;
     m.add_class::<UninitializedOpenAIRFTConfig>()?;
@@ -439,17 +438,16 @@ impl BaseTensorZeroGateway {
             None
         };
 
-        let additional_tools: Option<Vec<ClientSideFunctionTool>> =
-            if let Some(tools) = additional_tools {
-                Some(
-                    tools
-                        .into_iter()
-                        .map(|key_vals| parse_tool(py, key_vals))
-                        .collect::<Result<Vec<ClientSideFunctionTool>, PyErr>>()?,
-                )
-            } else {
-                None
-            };
+        let additional_tools: Option<Vec<FunctionTool>> = if let Some(tools) = additional_tools {
+            Some(
+                tools
+                    .into_iter()
+                    .map(|key_vals| parse_tool(py, key_vals))
+                    .collect::<Result<Vec<FunctionTool>, PyErr>>()?,
+            )
+        } else {
+            None
+        };
 
         let provider_tools: Option<Vec<ProviderTool>> = if let Some(provider_tools) = provider_tools
         {
@@ -542,30 +540,30 @@ impl BaseTensorZeroGateway {
     }
 }
 
-/// Helper function to construct an EvaluationVariant from the optional variant_name and dynamic_variant_config parameters.
-/// Deserializes the dynamic_variant_config if provided and validates that exactly one of the two is provided.
+/// Helper function to construct an EvaluationVariant from the optional variant_name and internal_dynamic_variant_config parameters.
+/// Deserializes the internal_dynamic_variant_config if provided and validates that exactly one of the two is provided.
 fn construct_evaluation_variant(
     py: Python<'_>,
-    dynamic_variant_config: Option<&Bound<'_, PyDict>>,
+    internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     variant_name: Option<String>,
 ) -> PyResult<EvaluationVariant> {
-    // Deserialize dynamic_variant_config if provided
-    let dynamic_variant_config: Option<UninitializedVariantInfo> =
-        if let Some(config) = dynamic_variant_config {
+    // Deserialize internal_dynamic_variant_config if provided
+    let internal_dynamic_variant_config: Option<UninitializedVariantInfo> =
+        if let Some(config) = internal_dynamic_variant_config {
             Some(deserialize_from_pyobj(py, config)?)
         } else {
             None
         };
 
-    match (dynamic_variant_config, variant_name) {
+    match (internal_dynamic_variant_config, variant_name) {
         (Some(info), None) => Ok(EvaluationVariant::Info(Box::new(info))),
         (None, Some(name)) => Ok(EvaluationVariant::Name(name)),
         (None, None) => Err(PyValueError::new_err(
-            "Either 'variant_name' or 'dynamic_variant_config' must be provided.",
+            "Either `variant_name` or `internal_dynamic_variant_config` must be provided.",
         )),
         (Some(_), Some(_)) => Err(PyValueError::new_err(
-            "Cannot specify both 'variant_name' and 'dynamic_variant_config'. \
-            When using a dynamic variant, provide only 'dynamic_variant_config'.",
+            "Cannot specify both `variant_name` and `internal_dynamic_variant_config`. \
+            When using a dynamic variant, provide only `internal_dynamic_variant_config`.",
         )),
     }
 }
@@ -1323,25 +1321,29 @@ impl TensorZeroGateway {
     ///
     /// * `evaluation_name` - User chosen name of the evaluation.
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
-    /// * `variant_name` - Optional name of the variant to evaluate (omit when using dynamic_variant_config)
+    /// * `variant_name` - Optional name of the variant to evaluate
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
-    /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
-    /// * `limit` - Maximum number of datapoints to evaluate, starting from the newest (None = no limit)
-    /// * `offset` - Number of newest datapoints to skip before starting evaluation (None = no offset)
-    ///
-    /// Note: Datapoints are ordered by creation time in descending order (newest first).
+    /// * `internal_dynamic_variant_config` - Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
+    /// * `max_datapoints` - Optional maximum number of datapoints to evaluate from the dataset
+    /// * `adaptive_stopping` - Optional dict configuring adaptive stopping behavior for evals.
+    ///                         Example for two evaluators named "exact_match" and "llm_judge":
+    ///                           `{"precision": {"exact_match": 0.2, "llm_judge": 0.15}}`
+    ///                         The "precision" field maps evaluator names to confidence interval half-widths.
+    ///                         Evaluation for a given evaluator stops when it achieves its precision target,
+    ///                         i.e. the width of the larger of the two halves of its confidence interval
+    ///                         is <= the precision target.
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
-                        dynamic_variant_config=None,
-                        limit=None,
-                        offset=None
+                        internal_dynamic_variant_config=None,
+                        max_datapoints=None,
+                        adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, limit=None, offset=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
@@ -1351,9 +1353,9 @@ impl TensorZeroGateway {
         variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
-        dynamic_variant_config: Option<&Bound<'_, PyDict>>,
-        limit: Option<usize>,
-        offset: Option<usize>,
+        internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
+        max_datapoints: Option<usize>,
+        adaptive_stopping: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
 
@@ -1371,7 +1373,31 @@ impl TensorZeroGateway {
             )?;
 
         let variant =
-            construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
+            construct_evaluation_variant(this.py(), internal_dynamic_variant_config, variant_name)?;
+
+        // Parse adaptive_stopping config from Python dict
+        let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
+            // Extract the "precision" field from adaptive_stopping dict
+            if let Ok(Some(precision_bound)) = adaptive_stopping_dict.get_item("precision") {
+                let precision_dict_bound = precision_bound.downcast::<PyDict>().map_err(|_| {
+                    PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                        "adaptive_stopping['precision'] must be a dictionary",
+                    )
+                })?;
+
+                let mut map = std::collections::HashMap::new();
+                for (key, value) in precision_dict_bound.iter() {
+                    let key_str: String = key.extract()?;
+                    let value_f64: f64 = value.extract()?;
+                    map.insert(key_str, value_f64 as f32);
+                }
+                map
+            } else {
+                HashMap::new()
+            }
+        } else {
+            HashMap::new()
+        };
 
         let core_args = EvaluationCoreArgs {
             tensorzero_client: client.clone(),
@@ -1383,15 +1409,15 @@ impl TensorZeroGateway {
             variant,
             concurrency,
             inference_cache: inference_cache_enum,
-            limit,
-            offset,
         };
 
-        let result =
-            tokio_block_on_without_gil(this.py(), run_evaluation_core_streaming(core_args))
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
-                })?;
+        let result = tokio_block_on_without_gil(
+            this.py(),
+            run_evaluation_core_streaming(core_args, max_datapoints, precision_targets_map),
+        )
+        .map_err(|e| {
+            pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
+        })?;
 
         Ok(EvaluationJobHandler {
             receiver: Mutex::new(result.receiver),
@@ -1438,7 +1464,7 @@ impl TensorZeroGateway {
         order_by: Option<Bound<'_, PyAny>>,
         limit: Option<u32>,
         offset: Option<u32>,
-    ) -> PyResult<Vec<StoredInference>> {
+    ) -> PyResult<Py<PyList>> {
         let client = this.as_super().client.clone();
         let filters = filters
             .as_ref()
@@ -1466,49 +1492,83 @@ impl TensorZeroGateway {
             ..Default::default()
         };
         let fut = client.experimental_list_inferences(params);
-        let wires: Vec<StoredInference> =
+        let wires =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        Ok(wires)
+
+        // Convert each StoredInference to the appropriate Python dataclass
+        let py_objects: Vec<_> = wires
+            .iter()
+            .map(|inference| {
+                convert_response_to_python_dataclass(
+                    this.py(),
+                    inference,
+                    "tensorzero",
+                    match inference {
+                        StoredInference::Chat(_) => "StoredInferenceChat",
+                        StoredInference::Json(_) => "StoredInferenceJson",
+                    },
+                )
+            })
+            .collect::<PyResult<_>>()?;
+
+        Ok(PyList::new(this.py(), py_objects)?.unbind())
     }
 
-    /// DEPRECATED: use `experimental_render_samples` instead.
-    /// Render a list of stored inferences into a list of rendered stored inferences.
-    /// There are two things that need to happen in this function:
-    /// 1. We need to resolve all network resources (e.g. images) in the stored inferences.
-    /// 2. We need to prepare all messages into "simple" messages that have been templated for a particular variant.
-    ///    To do this, we need to know what variant to use for each function that might appear in the data.
+    /// Get specific inferences by their IDs.
     ///
-    /// IMPORTANT: For now, this function drops datapoints which are bad, e.g. ones where templating fails, the function
-    ///            has no variant specified, or where the process of downloading resources fails.
-    ///            In future we will make this behavior configurable by the caller.
-    ///
-    /// :param stored_inferences: A list of stored inferences to render.
-    /// :param variants: A map from function name to variant name.
-    /// :return: A list of rendered stored inferences.
-    #[pyo3(signature = (*, stored_inferences, variants))]
-    fn experimental_render_inferences(
+    /// :param ids: A sequence of inference IDs to retrieve. They should be in UUID format.
+    /// :param function_name: Optional function name to filter by (improves query performance).
+    /// :param output_source: The source of the output ("inference" or "demonstration"). Default: "inference".
+    /// :return: A `GetInferencesResponse` object.
+    #[pyo3(signature = (*, ids, function_name=None, output_source="inference"))]
+    fn get_inferences(
         this: PyRef<'_, Self>,
-        stored_inferences: Vec<Bound<'_, PyAny>>,
-        variants: HashMap<String, String>,
-    ) -> PyResult<Vec<RenderedSample>> {
-        tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
+        ids: Vec<Bound<'_, PyAny>>,
+        function_name: Option<String>,
+        output_source: &str,
+    ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
-        let config = client.config().ok_or_else(|| {
-            PyValueError::new_err(
-                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
-            )
-        })?;
-        // Enter the Tokio runtime context while still holding the GIL
-        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
-        // for JSON schema compilation
-        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
-        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
-        let stored_inferences = stored_inferences
-            .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
+        let ids: Vec<uuid::Uuid> = ids
+            .into_iter()
+            .map(|id| python_uuid_to_uuid("id", id))
             .collect::<Result<Vec<_>, _>>()?;
-        let fut = client.experimental_render_samples(stored_inferences, variants);
-        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+
+        let output_source =
+            output_source
+                .try_into()
+                .map_err(|e: tensorzero_core::error::Error| {
+                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
+                })?;
+
+        let fut = client.get_inferences(ids, function_name, output_source);
+        let response =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        convert_response_to_python_dataclass(
+            this.py(),
+            response,
+            "tensorzero",
+            "GetInferencesResponse",
+        )
+    }
+
+    /// List inferences with optional filtering, pagination, and sorting.
+    ///
+    /// :param request: A `ListInferencesRequest` object with filter parameters.
+    /// :return: A `GetInferencesResponse` object.
+    #[pyo3(signature = (*, request))]
+    fn list_inferences(this: PyRef<'_, Self>, request: Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let client = this.as_super().client.clone();
+        let request = deserialize_from_pyobj(this.py(), &request)?;
+
+        let fut = client.list_inferences(request);
+        let response =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        convert_response_to_python_dataclass(
+            this.py(),
+            response,
+            "tensorzero",
+            "GetInferencesResponse",
+        )
     }
 
     /// Render a list of stored samples (datapoints or inferences) into a list of rendered stored samples.
@@ -2440,25 +2500,29 @@ impl AsyncTensorZeroGateway {
     ///
     /// * `evaluation_name` - User chosen name of the evaluation.
     /// * `dataset_name` - The name of the stored dataset to use for variant evaluation
-    /// * `variant_name` - Optional name of the variant to evaluate (omit when using dynamic_variant_config)
+    /// * `variant_name` - Optional name of the variant to evaluate
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
-    /// * `dynamic_variant_config` - Optional dynamic variant configuration dict
-    /// * `limit` - Maximum number of datapoints to evaluate, starting from the newest (None = no limit)
-    /// * `offset` - Number of newest datapoints to skip before starting evaluation (None = no offset)
-    ///
-    /// Note: Datapoints are ordered by creation time in descending order (newest first).
+    /// * `internal_dynamic_variant_config` - Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
+    /// * `max_datapoints` - Optional maximum number of datapoints to evaluate from the dataset
+    /// * `adaptive_stopping` - Optional dict configuring adaptive stopping behavior for evals.
+    ///                         Example for two evaluators named "exact_match" and "llm_judge":
+    ///                           `{"precision": {"exact_match": 0.2, "llm_judge": 0.15}}`
+    ///                         The "precision" field maps evaluator names to confidence interval half-widths.
+    ///                         Evaluation for a given evaluator stops when it achieves its precision target,
+    ///                         i.e. the width of the larger of the two halves of its confidence interval
+    ///                         is <= the precision target.
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
-                        dynamic_variant_config=None,
-                        limit=None,
-                        offset=None
+                        internal_dynamic_variant_config=None,
+                        max_datapoints=None,
+                        adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', dynamic_variant_config=None, limit=None, offset=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
@@ -2468,9 +2532,9 @@ impl AsyncTensorZeroGateway {
         variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
-        dynamic_variant_config: Option<&Bound<'py, PyDict>>,
-        limit: Option<usize>,
-        offset: Option<usize>,
+        internal_dynamic_variant_config: Option<&Bound<'py, PyDict>>,
+        max_datapoints: Option<usize>,
+        adaptive_stopping: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();
 
@@ -2481,7 +2545,31 @@ impl AsyncTensorZeroGateway {
             )?;
 
         let variant =
-            construct_evaluation_variant(this.py(), dynamic_variant_config, variant_name)?;
+            construct_evaluation_variant(this.py(), internal_dynamic_variant_config, variant_name)?;
+
+        // Parse adaptive_stopping config from Python dict
+        let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
+            // Extract the "precision" field from adaptive_stopping dict
+            if let Ok(Some(precision_bound)) = adaptive_stopping_dict.get_item("precision") {
+                let precision_dict_bound = precision_bound.downcast::<PyDict>().map_err(|_| {
+                    PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                        "adaptive_stopping['precision'] must be a dictionary",
+                    )
+                })?;
+
+                let mut map = std::collections::HashMap::new();
+                for (key, value) in precision_dict_bound.iter() {
+                    let key_str: String = key.extract()?;
+                    let value_f64: f64 = value.extract()?;
+                    map.insert(key_str, value_f64 as f32);
+                }
+                map
+            } else {
+                HashMap::new()
+            }
+        } else {
+            HashMap::new()
+        };
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             // Get app state data
@@ -2501,15 +2589,14 @@ impl AsyncTensorZeroGateway {
                 variant,
                 concurrency,
                 inference_cache: inference_cache_enum,
-                limit,
-                offset,
             };
 
-            let result = run_evaluation_core_streaming(core_args)
-                .await
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
-                })?;
+            let result =
+                run_evaluation_core_streaming(core_args, max_datapoints, precision_targets_map)
+                    .await
+                    .map_err(|e| {
+                        pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
+                    })?;
 
             Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let handler = AsyncEvaluationJobHandler {
@@ -2590,7 +2677,93 @@ impl AsyncTensorZeroGateway {
             };
             let res = client.experimental_list_inferences(params).await;
             Python::attach(|py| match res {
-                Ok(wire_inferences) => Ok(PyList::new(py, wire_inferences)?.unbind()),
+                Ok(wire_inferences) => {
+                    // Convert each StoredInference to the appropriate Python dataclass
+                    let py_objects: Vec<_> = wire_inferences
+                        .iter()
+                        .map(|inference| {
+                            convert_response_to_python_dataclass(
+                                py,
+                                inference,
+                                "tensorzero",
+                                match inference {
+                                    StoredInference::Chat(_) => "StoredInferenceChat",
+                                    StoredInference::Json(_) => "StoredInferenceJson",
+                                },
+                            )
+                        })
+                        .collect::<PyResult<_>>()?;
+
+                    Ok(PyList::new(py, py_objects)?.unbind())
+                }
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// Get specific inferences by their IDs.
+    ///
+    /// :param ids: A sequence of inference IDs to retrieve. They should be in UUID format.
+    /// :param function_name: Optional function name to filter by (improves query performance).
+    /// :param output_source: The source of the output ("inference" or "demonstration"). Default: "inference".
+    /// :return: A `GetInferencesResponse` object.
+    #[pyo3(signature = (*, ids, function_name=None, output_source="inference"))]
+    fn get_inferences<'a>(
+        this: PyRef<'a, Self>,
+        ids: Vec<Bound<'a, PyAny>>,
+        function_name: Option<String>,
+        output_source: &str,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let ids: Vec<uuid::Uuid> = ids
+            .into_iter()
+            .map(|id| python_uuid_to_uuid("id", id))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let output_source =
+            output_source
+                .try_into()
+                .map_err(|e: tensorzero_core::error::Error| {
+                    convert_error(this.py(), TensorZeroError::Other { source: e.into() })
+                })?;
+
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client
+                .get_inferences(ids, function_name, output_source)
+                .await;
+            Python::attach(|py| match res {
+                Ok(response) => convert_response_to_python_dataclass(
+                    py,
+                    response,
+                    "tensorzero",
+                    "GetInferencesResponse",
+                ),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// List inferences with optional filtering, pagination, and sorting.
+    ///
+    /// :param request: A `ListInferencesRequest` object with filter parameters.
+    /// :return: A `GetInferencesResponse` object.
+    #[pyo3(signature = (*, request))]
+    fn list_inferences<'a>(
+        this: PyRef<'a, Self>,
+        request: Bound<'a, PyAny>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let request = deserialize_from_pyobj(this.py(), &request)?;
+
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.list_inferences(request).await;
+            Python::attach(|py| match res {
+                Ok(response) => convert_response_to_python_dataclass(
+                    py,
+                    response,
+                    "tensorzero",
+                    "GetInferencesResponse",
+                ),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2620,40 +2793,6 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param stored_inferences: A list of stored inferences to render.
     /// :param variants: A map from function name to variant name.
-    /// :return: A list of rendered stored inferences.
-    #[pyo3(signature = (*, stored_inferences, variants))]
-    fn experimental_render_inferences<'a>(
-        this: PyRef<'a, Self>,
-        stored_inferences: Vec<Bound<'a, PyAny>>,
-        variants: HashMap<String, String>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
-        let client = this.as_super().client.clone();
-        let config = client.config().ok_or_else(|| {
-            PyValueError::new_err(
-                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
-            )
-        })?;
-        // Enter the Tokio runtime context while still holding the GIL
-        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
-        // for JSON schema compilation
-        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
-        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
-        let stored_inferences = stored_inferences
-            .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
-            .collect::<Result<Vec<_>, _>>()?;
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client
-                .experimental_render_samples(stored_inferences, variants)
-                .await;
-            Python::attach(|py| match res {
-                Ok(inferences) => Ok(PyList::new(py, inferences)?.unbind()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
     /// Render a list of stored samples into a list of rendered stored samples.
     ///
     /// This function performs two main tasks:

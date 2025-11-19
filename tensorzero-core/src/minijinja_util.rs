@@ -212,7 +212,7 @@ const MIXTURE_OF_N_FUSER_CANDIDATES: &str = r"Here are the candidate answers (wi
 pub(crate) mod tests {
     use std::path::PathBuf;
 
-    use crate::{config::path::ResolvedTomlPath, jsonschema_util::StaticJSONSchema};
+    use crate::{config::path::ResolvedTomlPathData, jsonschema_util::StaticJSONSchema};
 
     use super::*;
     use serde_json::json;
@@ -340,46 +340,46 @@ pub(crate) mod tests {
     }
 
     // Filled in system template
-    pub fn get_system_filled_template() -> ResolvedTomlPath {
-        ResolvedTomlPath::new_for_tests(
+    pub fn get_system_filled_template() -> ResolvedTomlPathData {
+        ResolvedTomlPathData::new_for_tests(
             PathBuf::from("system_filled"),
             Some("You are a helpful and friendly assistant named ChatGPT".to_string()),
         )
     }
 
     // Filled in user template
-    pub fn get_user_filled_template() -> ResolvedTomlPath {
-        ResolvedTomlPath::new_for_tests(
+    pub fn get_user_filled_template() -> ResolvedTomlPathData {
+        ResolvedTomlPathData::new_for_tests(
             PathBuf::from("user_filled"),
             Some("What's the capital of Japan?".to_string()),
         )
     }
 
     // Filled in assistant template
-    pub fn get_assistant_filled_template() -> ResolvedTomlPath {
-        ResolvedTomlPath::new_for_tests(
+    pub fn get_assistant_filled_template() -> ResolvedTomlPathData {
+        ResolvedTomlPathData::new_for_tests(
             PathBuf::from("assistant_filled"),
             Some("I'm sorry but I can't help you with that because of it's against my ethical guidelines".to_string()),
         )
     }
 
     // System template
-    pub fn get_system_template() -> ResolvedTomlPath {
-        ResolvedTomlPath::new_for_tests(
+    pub fn get_system_template() -> ResolvedTomlPathData {
+        ResolvedTomlPathData::new_for_tests(
             PathBuf::from("system"),
             Some("You are a helpful and friendly assistant named {{ assistant_name }}".to_string()),
         )
     }
 
-    pub fn get_assistant_template() -> ResolvedTomlPath {
-        ResolvedTomlPath::new_for_tests(
+    pub fn get_assistant_template() -> ResolvedTomlPathData {
+        ResolvedTomlPathData::new_for_tests(
             PathBuf::from("assistant"),
             Some("I'm sorry but I can't help you with that because of {{ reason }}".to_string()),
         )
     }
 
-    pub fn get_greeting_with_age_template() -> ResolvedTomlPath {
-        ResolvedTomlPath::new_for_tests(
+    pub fn get_greeting_with_age_template() -> ResolvedTomlPathData {
+        ResolvedTomlPathData::new_for_tests(
             PathBuf::from("greeting_with_age"),
             Some("Hello, {{ name }}! You are {{ age }} years old.".to_string()),
         )
@@ -394,34 +394,37 @@ pub(crate) mod tests {
         // Template 2
         templates.insert(
             "greeting_with_age".to_string(),
-            get_greeting_with_age_template().read().unwrap(),
+            get_greeting_with_age_template().data().to_string(),
         );
 
         // System template
-        templates.insert("system".to_string(), get_system_template().read().unwrap());
+        templates.insert(
+            "system".to_string(),
+            get_system_template().data().to_string(),
+        );
 
         // Filled in system template
         templates.insert(
             "system_filled".to_string(),
-            get_system_filled_template().read().unwrap(),
+            get_system_filled_template().data().to_string(),
         );
 
         // Assistant Template
         templates.insert(
             "assistant".to_string(),
-            get_assistant_template().read().unwrap(),
+            get_assistant_template().data().to_string(),
         );
 
         // Filled in assistant template
         templates.insert(
             "assistant_filled".to_string(),
-            get_assistant_filled_template().read().unwrap(),
+            get_assistant_filled_template().data().to_string(),
         );
 
         // Filled in user template
         templates.insert(
             "user_filled".to_string(),
-            get_user_filled_template().read().unwrap(),
+            get_user_filled_template().data().to_string(),
         );
 
         // Template with tojson filter

@@ -235,6 +235,9 @@ async def test_async_run_evaluation_invalid_cache_mode(
         )
 
 
+# NEW TESTS FOR DYNAMIC VARIANT CONFIG
+
+
 def test_sync_run_evaluation_with_dynamic_variant(
     evaluation_datasets: Dict[str, str],
     embedded_sync_client: TensorZeroGateway,
@@ -263,7 +266,7 @@ def test_sync_run_evaluation_with_dynamic_variant(
     job = embedded_sync_client.experimental_run_evaluation(
         evaluation_name="haiku_without_outputs",
         dataset_name=evaluation_datasets["good-haikus-no-output"],
-        dynamic_variant_config=dynamic_variant,
+        internal_dynamic_variant_config=dynamic_variant,
         concurrency=10,
         inference_cache="off",
     )
@@ -333,7 +336,7 @@ async def test_async_run_evaluation_with_dynamic_variant(
     job = await embedded_async_client.experimental_run_evaluation(
         evaluation_name="entity_extraction",
         dataset_name=evaluation_datasets["extract_entities_0.8"],
-        dynamic_variant_config=dynamic_variant,
+        internal_dynamic_variant_config=dynamic_variant,
         concurrency=10,
         inference_cache="off",
     )
@@ -387,7 +390,7 @@ def test_sync_run_evaluation_both_variant_params_error(
     evaluation_datasets: Dict[str, str],
     embedded_sync_client: TensorZeroGateway,
 ):
-    """Test sync client experimental_run_evaluation rejects both variant_name and dynamic_variant_config."""
+    """Test sync client experimental_run_evaluation rejects both variant_name and internal_dynamic_variant_config."""
     dynamic_variant = {
         "type": "chat_completion",
         "model": "gpt-4o-mini-2024-07-18",
@@ -397,13 +400,13 @@ def test_sync_run_evaluation_both_variant_params_error(
         },
     }
 
-    # Providing both variant_name and dynamic_variant_config should raise ValueError
-    with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*dynamic_variant_config"):
+    # Providing both variant_name and internal_dynamic_variant_config should raise ValueError
+    with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*internal_dynamic_variant_config"):
         embedded_sync_client.experimental_run_evaluation(
             evaluation_name="haiku_without_outputs",
             dataset_name=evaluation_datasets["good-haikus-no-output"],
             variant_name="gpt_4o_mini",
-            dynamic_variant_config=dynamic_variant,
+            internal_dynamic_variant_config=dynamic_variant,
             concurrency=1,
             inference_cache="off",
         )
@@ -414,7 +417,7 @@ async def test_async_run_evaluation_both_variant_params_error(
     evaluation_datasets: Dict[str, str],
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    """Test async client experimental_run_evaluation rejects both variant_name and dynamic_variant_config."""
+    """Test async client experimental_run_evaluation rejects both variant_name and internal_dynamic_variant_config."""
     dynamic_variant = {
         "type": "chat_completion",
         "model": "gpt-4o-mini-2024-07-18",
@@ -424,163 +427,100 @@ async def test_async_run_evaluation_both_variant_params_error(
         },
     }
 
-    # Providing both variant_name and dynamic_variant_config should raise ValueError
-    with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*dynamic_variant_config"):
+    # Providing both variant_name and internal_dynamic_variant_config should raise ValueError
+    with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*internal_dynamic_variant_config"):
         await embedded_async_client.experimental_run_evaluation(
             evaluation_name="haiku_without_outputs",
             dataset_name=evaluation_datasets["good-haikus-no-output"],
             variant_name="gpt_4o_mini",
-            dynamic_variant_config=dynamic_variant,
+            internal_dynamic_variant_config=dynamic_variant,
             concurrency=1,
             inference_cache="off",
         )
 
 
-def test_sync_run_evaluation_with_limit(
+def test_sync_run_evaluation_with_adaptive_stopping(
     evaluation_datasets: Dict[str, str],
     embedded_sync_client: TensorZeroGateway,
 ):
-    """Test sync client experimental_run_evaluation with limit parameter."""
+    """Test sync client experimental_run_evaluation with adaptive stopping parameters."""
     job = embedded_sync_client.experimental_run_evaluation(
-        evaluation_name="haiku_without_outputs",
-        dataset_name=evaluation_datasets["good-haikus-no-output"],
+        evaluation_name="entity_extraction",
+        dataset_name=evaluation_datasets["extract_entities_0.8"],
         variant_name="gpt_4o_mini",
         concurrency=2,
-        inference_cache="off",
-        limit=5,
+        inference_cache="on",
+        max_datapoints=4,
+        adaptive_stopping={"precision": {"exact_match": 0.2}},
     )
 
     # Test run_info property
     run_info: Dict[str, Any] = job.run_info
     assert "evaluation_run_id" in run_info
     assert "num_datapoints" in run_info
-    assert run_info["num_datapoints"] == 5  # Should be limited to 5
+    assert isinstance(run_info["num_datapoints"], int)
+
+    # With adaptive stopping, we should stop early if precision threshold is met
+    # Dataset only has 6 datapoints, so it can't reach MIN_DATAPOINTS (20)
+    # Should respect max_datapoints (4) or dataset size, whichever is smaller
+    num_datapoints = run_info["num_datapoints"]
+    assert num_datapoints <= 4, f"Should process all 6 datapoints in dataset, got {num_datapoints}"
 
     # Consume all results
     results: List[Dict[str, Any]] = []
     for result in job.results():
         results.append(result)
-
-    # Should have exactly 5 results due to limit
-    assert len(results) == 5
-
-    # Verify all results are success or error types
-    for result in results:
+        assert "type" in result
         assert result["type"] in ["success", "error"]
+
+    assert len(results) == num_datapoints
+
+    # Test summary stats
+    stats: Dict[str, EvaluatorStatsDict] = job.summary_stats()
+    assert isinstance(stats, dict)
+    assert "exact_match" in stats
+    assert "count_sports" in stats
 
 
 @pytest.mark.asyncio
-async def test_async_run_evaluation_with_limit(
+async def test_async_run_evaluation_with_adaptive_stopping(
     evaluation_datasets: Dict[str, str],
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    """Test async client experimental_run_evaluation with limit parameter."""
+    """Test async client experimental_run_evaluation with adaptive stopping parameters."""
     job = await embedded_async_client.experimental_run_evaluation(
         evaluation_name="haiku_without_outputs",
         dataset_name=evaluation_datasets["good-haikus-no-output"],
         variant_name="gpt_4o_mini",
         concurrency=2,
         inference_cache="off",
-        limit=3,
+        max_datapoints=7,
+        adaptive_stopping={"precision": {"topic_starts_with_f": 0.3}},
     )
 
     # Test run_info property
     run_info: Dict[str, Any] = job.run_info
     assert "evaluation_run_id" in run_info
     assert "num_datapoints" in run_info
-    assert run_info["num_datapoints"] == 3  # Should be limited to 3
+    assert isinstance(run_info["num_datapoints"], int)
+
+    # With adaptive stopping, we should stop early if precision threshold is met
+    # Dataset only has 10 datapoints, so it can't reach MIN_DATAPOINTS (20)
+    # Should respect max_datapoints (7) or dataset size, whichever is smaller
+    num_datapoints = run_info["num_datapoints"]
+    assert num_datapoints <= 7, f"Should process max of 7 datapoints, got {num_datapoints}"
 
     # Consume all results
     results: List[Dict[str, Any]] = []
     async for result in job.results():
         results.append(result)
-
-    # Should have exactly 3 results due to limit
-    assert len(results) == 3
-
-    # Verify all results are success or error types
-    for result in results:
+        assert "type" in result
         assert result["type"] in ["success", "error"]
 
+    assert len(results) == num_datapoints
 
-def test_sync_run_evaluation_with_offset(
-    evaluation_datasets: Dict[str, str],
-    embedded_sync_client: TensorZeroGateway,
-):
-    """Test sync client experimental_run_evaluation with offset parameter."""
-    # Run without offset to get baseline
-    job1 = embedded_sync_client.experimental_run_evaluation(
-        evaluation_name="haiku_without_outputs",
-        dataset_name=evaluation_datasets["good-haikus-no-output"],
-        variant_name="gpt_4o_mini",
-        concurrency=2,
-        inference_cache="off",
-        limit=5,
-        offset=0,
-    )
-
-    results1: List[Dict[str, Any]] = []
-    for result in job1.results():
-        results1.append(result)
-
-    # Run with offset to skip first 2 datapoints
-    job2 = embedded_sync_client.experimental_run_evaluation(
-        evaluation_name="haiku_without_outputs",
-        dataset_name=evaluation_datasets["good-haikus-no-output"],
-        variant_name="gpt_4o_mini",
-        concurrency=2,
-        inference_cache="off",
-        limit=3,
-        offset=2,
-    )
-
-    results2: List[Dict[str, Any]] = []
-    for result in job2.results():
-        results2.append(result)
-
-    # With offset=2 and limit=3, should get 3 results
-    assert len(results2) == 3
-
-    # Verify that results are different (offset should skip different datapoints)
-    # Note: Results come back in async order, so we need to sort by datapoint ID in descending order
-    # to match the database ordering (newest first). We then take the 3rd, 4th, 5th datapoints
-    # (indices 2:5) from results1 and compare with results2
-    if all(r["type"] == "success" for r in results1) and all(r["type"] == "success" for r in results2):
-        # Sort results1 by datapoint ID in descending order (newest first), then extract IDs for positions 2-4 (0-indexed)
-        sorted_results1 = sorted(results1, key=lambda r: r["datapoint"]["id"], reverse=True)
-        ids1 = [r["datapoint"]["id"] for r in sorted_results1[2:5]]
-
-        # Sort results2 by datapoint ID in descending order (newest first) and extract IDs
-        sorted_results2 = sorted(results2, key=lambda r: r["datapoint"]["id"], reverse=True)
-        ids2 = [r["datapoint"]["id"] for r in sorted_results2]
-
-        assert ids1 == ids2, "Offset should skip the first 2 datapoints"
-
-
-@pytest.mark.asyncio
-async def test_async_run_evaluation_with_limit_and_offset(
-    evaluation_datasets: Dict[str, str],
-    embedded_async_client: AsyncTensorZeroGateway,
-):
-    """Test async client experimental_run_evaluation with both limit and offset parameters."""
-    job = await embedded_async_client.experimental_run_evaluation(
-        evaluation_name="haiku_without_outputs",
-        dataset_name=evaluation_datasets["good-haikus-no-output"],
-        variant_name="gpt_4o_mini",
-        concurrency=2,
-        inference_cache="off",
-        limit=4,
-        offset=3,
-    )
-
-    # Test run_info property
-    run_info: Dict[str, Any] = job.run_info
-    assert run_info["num_datapoints"] == 4  # Should be limited to 4
-
-    # Consume all results
-    results: List[Dict[str, Any]] = []
-    async for result in job.results():
-        results.append(result)
-
-    # Should have exactly 4 results (limit=4, offset=3 means datapoints 3-6)
-    assert len(results) == 4
+    # Test summary stats
+    stats: Dict[str, EvaluatorStatsDict] = await job.summary_stats()
+    assert isinstance(stats, dict)
+    assert "exact_match" in stats
+    assert "topic_starts_with_f" in stats

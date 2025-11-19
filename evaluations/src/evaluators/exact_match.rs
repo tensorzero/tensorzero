@@ -119,8 +119,8 @@ mod tests {
                 text: "hello world".to_string(),
             })],
             usage: Usage {
-                input_tokens: 10,
-                output_tokens: 10,
+                input_tokens: Some(10),
+                output_tokens: Some(10),
             },
             original_response: None,
             finish_reason: None,
@@ -137,8 +137,8 @@ mod tests {
                 text: "hello, world!".to_string(),
             })],
             usage: Usage {
-                input_tokens: 10,
-                output_tokens: 10,
+                input_tokens: Some(10),
+                output_tokens: Some(10),
             },
             original_response: None,
             finish_reason: None,
@@ -224,8 +224,8 @@ mod tests {
                 raw: Some(r#"{"foo": "bar"}"#.to_string()),
             },
             usage: Usage {
-                input_tokens: 10,
-                output_tokens: 10,
+                input_tokens: Some(10),
+                output_tokens: Some(10),
             },
             original_response: None,
             finish_reason: None,
@@ -243,8 +243,8 @@ mod tests {
                 raw: Some(r#"{"foo": "baz"}"#.to_string()),
             },
             usage: Usage {
-                input_tokens: 10,
-                output_tokens: 10,
+                input_tokens: Some(10),
+                output_tokens: Some(10),
             },
             original_response: None,
             finish_reason: None,

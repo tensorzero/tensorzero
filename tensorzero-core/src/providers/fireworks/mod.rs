@@ -7,7 +7,7 @@ use crate::inference::types::chat_completion_inference_params::{
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::{
     http::TensorZeroEventSource, providers::helpers_thinking_block::THINK_CHUNK_ID,
-    tool::ClientSideFunctionTool,
+    tool::FunctionTool,
 };
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -46,9 +46,9 @@ use crate::{
 use super::{
     helpers_thinking_block::{process_think_blocks, ThinkingState},
     openai::{
-        get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
-        OpenAIFunction, OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool,
-        OpenAIToolChoice, OpenAIToolType, OpenAIUsage,
+        get_chat_url, handle_openai_error, tensorzero_to_openai_messages, OpenAIFunction,
+        OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
+        OpenAIToolType, OpenAIUsage,
     },
 };
 
@@ -380,6 +380,38 @@ struct FireworksRequest<'a> {
     reasoning_effort: Option<String>,
 }
 
+type PreparedFireworksToolsResult<'a> = (
+    Option<Vec<OpenAITool<'a>>>,
+    Option<OpenAIToolChoice<'a>>,
+    Option<bool>,
+);
+
+/// If there are no tools passed or the tools are empty, return None for both tools and tool_choice
+/// Otherwise convert the tool choice and tools to Fireworks format
+pub(super) fn prepare_fireworks_tools<'a>(
+    request: &'a ModelInferenceRequest,
+) -> PreparedFireworksToolsResult<'a> {
+    match &request.tool_config {
+        None => (None, None, None),
+        Some(tool_config) => {
+            if !tool_config.any_tools_available() {
+                return (None, None, None);
+            }
+            let tools = Some(
+                tool_config
+                    .strict_tools_available()
+                    .map(Into::into)
+                    .collect(),
+            );
+            let parallel_tool_calls = tool_config.parallel_tool_calls;
+
+            // Fireworks does not support allowed_tools constraint, use regular tool_choice
+            let tool_choice = Some((&tool_config.tool_choice).into());
+            (tools, tool_choice, parallel_tool_calls)
+        }
+    }
+}
+
 fn apply_inference_params(
     request: &mut FireworksRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
@@ -438,7 +470,7 @@ impl<'a> FireworksRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
+        let (tools, tool_choice, _) = prepare_fireworks_tools(request);
         let tools = tools.map(|t| t.into_iter().map(OpenAITool::into).collect());
 
         let mut fireworks_request = FireworksRequest {
@@ -494,8 +526,8 @@ pub struct FireworksTool<'a> {
     function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<&'a ClientSideFunctionTool> for FireworksTool<'a> {
-    fn from(tool: &'a ClientSideFunctionTool) -> Self {
+impl<'a> From<&'a FunctionTool> for FireworksTool<'a> {
+    fn from(tool: &'a FunctionTool) -> Self {
         FireworksTool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {
@@ -930,8 +962,8 @@ mod tests {
                 },
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
 
@@ -1117,8 +1149,8 @@ mod tests {
                 },
             }],
             usage: OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1166,8 +1198,8 @@ mod tests {
             "Hello, world!".to_string().into()
         );
         assert_eq!(inference_response.raw_response, "test_response");
-        assert_eq!(inference_response.usage.input_tokens, 10);
-        assert_eq!(inference_response.usage.output_tokens, 20);
+        assert_eq!(inference_response.usage.input_tokens, Some(10));
+        assert_eq!(inference_response.usage.output_tokens, Some(20));
         assert_eq!(
             inference_response.latency,
             Latency::NonStreaming {
@@ -1253,8 +1285,8 @@ mod tests {
         let chunk = FireworksChatChunk {
             choices: vec![],
             usage: Some(OpenAIUsage {
-                prompt_tokens: 10,
-                completion_tokens: 20,
+                prompt_tokens: Some(10),
+                completion_tokens: Some(20),
             }),
         };
         let message = fireworks_to_tensorzero_chunk(
@@ -1271,8 +1303,8 @@ mod tests {
         assert_eq!(
             message.usage,
             Some(Usage {
-                input_tokens: 10,
-                output_tokens: 20,
+                input_tokens: Some(10),
+                output_tokens: Some(20),
             })
         );
     }

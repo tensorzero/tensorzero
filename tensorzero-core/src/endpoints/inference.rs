@@ -6,6 +6,7 @@ use axum::{debug_handler, Extension, Json};
 use futures::stream::Stream;
 use futures::FutureExt;
 use futures_core::FusedStream;
+use indexmap::IndexMap;
 use metrics::counter;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
@@ -352,7 +353,7 @@ pub async fn inference(
     let stream = params.stream.unwrap_or(false);
 
     // Keep track of which variants failed
-    let mut variant_errors: HashMap<String, Error> = HashMap::new();
+    let mut variant_errors: IndexMap<String, Error> = IndexMap::new();
 
     // Set up inference config
     let output_schema = params.output_schema.map(DynamicJSONSchema::new);
@@ -565,6 +566,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
     });
 
     if stream {
+        let deferred_tasks = inference_clients.deferred_tasks.clone();
         let result = variant
             .infer_stream(
                 resolved_input.clone(),
@@ -617,10 +619,12 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             inference_metadata,
             stream,
             clickhouse_connection_info.clone(),
+            deferred_tasks.clone(),
         );
 
         Ok(InferenceOutput::Streaming(Box::pin(stream)))
     } else {
+        let deferred_tasks = inference_clients.deferred_tasks.clone();
         let result = variant
             .infer(
                 Arc::clone(&resolved_input),
@@ -659,9 +663,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             // not be cancelled partway through execution if the outer '/inference' request
             // is cancelled. This reduces the chances that we only write to some tables and not others
             // (but this is inherently best-effort due to ClickHouse's lack of transactions).
-            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-            #[expect(clippy::disallowed_methods)]
-            let write_future = tokio::spawn(async move {
+            let write_future = deferred_tasks.spawn(async move {
                 let _: () = write_inference(
                     &clickhouse_connection_info,
                     &config,
@@ -777,11 +779,13 @@ fn create_stream(
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
+    deferred_tasks: TaskTracker,
 ) -> impl FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
-        let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).sum());
-        if extra_usage == Some(Usage { input_tokens: 0, output_tokens: 0 }) {
+        let mut extra_usage = Some(Usage::sum_iter_strict(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached)));
+        // If `extra_usage` is zero, we don't want to potentially add the extra chunk below. It is handled already in `prepare_response_chunk`.
+        if extra_usage == Some(Usage { input_tokens: Some(0), output_tokens: Some(0) }) {
             extra_usage = None;
         }
         let mut inference_ttft = None;
@@ -932,9 +936,7 @@ fn create_stream(
                 drop(clickhouse_connection_info);
             };
             if async_write {
-                // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-                #[expect(clippy::disallowed_methods)]
-                tokio::spawn(write_future);
+                deferred_tasks.spawn(write_future);
             } else {
                 write_future.await;
             }
@@ -1195,11 +1197,6 @@ pub struct JsonInferenceResponseChunk {
     pub original_chunk: Option<String>,
 }
 
-const ZERO_USAGE: Usage = Usage {
-    input_tokens: 0,
-    output_tokens: 0,
-};
-
 impl InferenceResponseChunk {
     fn new(
         inference_result: InferenceResultChunk,
@@ -1214,7 +1211,10 @@ impl InferenceResponseChunk {
             // When our outer inference result is cached, don't
             // add `extra_usage` to it. We'll append a final usage chunk
             // in `create_stream` if needed
-            Some(ZERO_USAGE)
+            Some(Usage {
+                input_tokens: Some(0),
+                output_tokens: Some(0),
+            })
         } else {
             inference_result.usage().copied()
         };
@@ -1231,8 +1231,7 @@ impl InferenceResponseChunk {
             };
             if is_empty {
                 if let Some(extra_usage) = extra_usage.take() {
-                    result_usage.input_tokens += extra_usage.input_tokens;
-                    result_usage.output_tokens += extra_usage.output_tokens;
+                    result_usage.sum_strict(&extra_usage);
                 }
             }
         }

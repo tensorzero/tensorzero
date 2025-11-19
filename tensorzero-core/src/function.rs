@@ -35,8 +35,8 @@ use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{
-    AllowedToolsChoice, DynamicToolParams, StaticToolConfig, Tool, ToolCallConfig,
-    ToolCallConfigConstructorArgs, ToolCallConfigDatabaseInsert, ToolChoice,
+    DynamicToolParams, StaticToolConfig, Tool, ToolCallConfig, ToolCallConfigConstructorArgs,
+    ToolCallConfigDatabaseInsert, ToolChoice,
 };
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
@@ -407,49 +407,6 @@ impl FunctionConfig {
         Ok(tool_config.map(std::convert::Into::into))
     }
 
-    /// Convert ToolCallConfigDatabaseInsert back to DynamicToolParams
-    pub fn database_insert_to_dynamic_tool_params(
-        &self,
-        db_insert: ToolCallConfigDatabaseInsert,
-    ) -> DynamicToolParams {
-        let ToolCallConfigDatabaseInsert {
-            dynamic_tools,
-            dynamic_provider_tools,
-            allowed_tools,
-            tool_choice,
-            parallel_tool_calls,
-            .. // TODO: Ideally we can say all but private fields must be destructured here.
-        } = db_insert;
-
-        let allowed_tools = match allowed_tools.choice {
-            AllowedToolsChoice::FunctionDefault => None,
-            AllowedToolsChoice::DynamicAllowedTools => Some(allowed_tools.tools),
-        };
-
-        let additional_tools = if dynamic_tools.is_empty() {
-            None
-        } else {
-            Some(
-                dynamic_tools
-                    .into_iter()
-                    .map(|tool| match tool {
-                        Tool::ClientSideFunction(client_tool) => client_tool,
-                        // When new Tool variants are added, this will cause a compile error,
-                        // forcing us to handle them explicitly
-                    })
-                    .collect(),
-            )
-        };
-
-        DynamicToolParams {
-            allowed_tools,
-            additional_tools,
-            tool_choice: Some(tool_choice),
-            parallel_tool_calls,
-            provider_tools: dynamic_provider_tools,
-        }
-    }
-
     #[instrument(skip_all, fields(inference_id))]
     pub async fn prepare_response(
         &self,
@@ -754,7 +711,7 @@ fn validate_single_message(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::path::ResolvedTomlPath;
+    use crate::config::path::ResolvedTomlPathData;
     use crate::config::UninitializedSchemas;
     use crate::endpoints::inference::InferenceIds;
     use crate::inference::types::Arguments;
@@ -791,7 +748,7 @@ mod tests {
         let mut temp_file = NamedTempFile::new().expect("Failed to create temporary file");
         write!(temp_file, "{schema}").expect("Failed to write schema to temporary file");
 
-        StaticJSONSchema::from_path(ResolvedTomlPath::new_for_tests(
+        StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             temp_file.path().to_owned(),
             None,
         ))
@@ -1818,8 +1775,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec!["Hello, world!".to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -1885,8 +1842,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"name": "Jerry", "age": 30}"#.to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -1938,8 +1895,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"name": "Jerry", "age": "thirty"}"#.to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -1994,8 +1951,8 @@ mod tests {
         };
         let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2047,8 +2004,8 @@ mod tests {
         };
         let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2100,8 +2057,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = Vec::new();
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 0,
+            input_tokens: Some(10),
+            output_tokens: Some(0),
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2171,8 +2128,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2218,8 +2175,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"response": "forty-two"}"#.to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2273,8 +2230,8 @@ mod tests {
         };
         let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2325,8 +2282,8 @@ mod tests {
         };
         let content_blocks = vec![ContentBlockOutput::ToolCall(tool_call)];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let model_response = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -2383,8 +2340,8 @@ mod tests {
         let inference_id = Uuid::now_v7();
         let content_blocks = vec![r#"{"answer": "42"}"#.to_string().into()];
         let usage = Usage {
-            input_tokens: 10,
-            output_tokens: 10,
+            input_tokens: Some(10),
+            output_tokens: Some(10),
         };
         let latency = Latency::NonStreaming {
             response_time: Duration::from_millis(100),
@@ -2425,239 +2382,6 @@ mod tests {
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
             }
             InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
-        }
-    }
-
-    mod database_insert_to_dynamic_tool_params_tests {
-        use super::*;
-        use crate::tool::{
-            AllowedTools, AllowedToolsChoice, ClientSideFunctionTool, Tool,
-            ToolCallConfigDatabaseInsert,
-        };
-
-        fn create_test_tool(name: &str, strict: bool) -> ClientSideFunctionTool {
-            ClientSideFunctionTool {
-                name: name.to_string(),
-                description: format!("Description for {name}"),
-                parameters: json!({"type": "object", "properties": {"input": {"type": "string"}}}),
-                strict,
-            }
-        }
-
-        fn create_chat_function(tool_names: Vec<&str>) -> FunctionConfig {
-            FunctionConfig::Chat(FunctionConfigChat {
-                variants: HashMap::new(),
-                schemas: SchemaData::default(),
-                tools: tool_names.into_iter().map(String::from).collect(),
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: Some(true),
-                ..Default::default()
-            })
-        }
-
-        #[test]
-        fn test_tool_partitioning() {
-            // Test 1: Only static tools (all match function config)
-            // Static tools are NOT stored in dynamic_tools, only their names in allowed_tools
-            let function_config = create_chat_function(vec!["tool1", "tool2"]);
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![], // No dynamic tools - these are static from function config
-                vec![],
-                AllowedTools {
-                    tools: vec!["tool1".to_string(), "tool2".to_string()],
-                    choice: AllowedToolsChoice::DynamicAllowedTools, // Explicit list
-                },
-                ToolChoice::Required,
-                Some(false),
-            );
-            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-            assert_eq!(
-                result.allowed_tools,
-                Some(vec!["tool1".to_string(), "tool2".to_string()])
-            );
-            assert_eq!(result.additional_tools, None);
-
-            // Test 2: Only dynamic tools (none match function config)
-            // Dynamic tools are stored in dynamic_tools, allowed_tools uses function defaults
-            let function_config = create_chat_function(vec!["static1"]);
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![
-                    Tool::ClientSideFunction(create_test_tool("dynamic1", false)),
-                    Tool::ClientSideFunction(create_test_tool("dynamic2", true)),
-                ],
-                vec![],
-                AllowedTools {
-                    tools: vec![], // Empty, will use function's defaults (static1)
-                    choice: AllowedToolsChoice::FunctionDefault, // Use function defaults
-                },
-                ToolChoice::None,
-                Some(true),
-            );
-            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-            assert_eq!(result.allowed_tools, None);
-            assert_eq!(result.additional_tools.as_ref().unwrap().len(), 2);
-            assert_eq!(
-                result.additional_tools.as_ref().unwrap()[0].name,
-                "dynamic1"
-            );
-            assert_eq!(
-                result.additional_tools.as_ref().unwrap()[1].name,
-                "dynamic2"
-            );
-
-            // Test 3: Mixed static and dynamic tools
-            // Static tools (a, b) go in allowed_tools, dynamic tools (x, y) go in dynamic_tools
-            let function_config = create_chat_function(vec!["a", "b"]);
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![
-                    Tool::ClientSideFunction(create_test_tool("x", true)),
-                    Tool::ClientSideFunction(create_test_tool("y", true)),
-                ],
-                vec![],
-                AllowedTools {
-                    tools: vec!["a".to_string(), "b".to_string()], // Only static tools
-                    choice: AllowedToolsChoice::DynamicAllowedTools,
-                },
-                ToolChoice::Auto,
-                None,
-            );
-            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-            assert_eq!(
-                result.allowed_tools,
-                Some(vec!["a".to_string(), "b".to_string()])
-            );
-            let additional = result.additional_tools.unwrap();
-            assert_eq!(additional.len(), 2);
-            assert_eq!(additional[0].name, "x");
-            assert_eq!(additional[1].name, "y");
-            assert!(additional[0].strict);
-            assert!(additional[1].strict);
-
-            // Test 4: Empty tools list
-            let function_config = create_chat_function(vec!["tool1"]);
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![],
-                vec![],
-                AllowedTools {
-                    tools: vec![],
-                    choice: AllowedToolsChoice::FunctionDefault,
-                },
-                ToolChoice::None,
-                None,
-            );
-            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-            assert_eq!(result.allowed_tools, None);
-            assert_eq!(result.additional_tools, None);
-
-            // Test 5: Chat function with no tools in config, all provided dynamically
-            // Function has no static tools, so allowed_tools should be None (use function defaults)
-            let function_config = create_chat_function(vec![]);
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![
-                    Tool::ClientSideFunction(create_test_tool("tool1", false)),
-                    Tool::ClientSideFunction(create_test_tool("tool2", true)),
-                ],
-                vec![],
-                AllowedTools {
-                    tools: vec![], // Function has no defaults
-                    choice: AllowedToolsChoice::FunctionDefault,
-                },
-                ToolChoice::Auto,
-                None,
-            );
-            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-            assert_eq!(result.allowed_tools, None);
-            assert_eq!(result.additional_tools.as_ref().unwrap().len(), 2);
-        }
-
-        #[test]
-        fn test_field_preservation() {
-            let function_config = create_chat_function(vec!["tool1"]);
-
-            // Test tool_choice variants
-            // tool1 is a static tool (in function config), so don't store in dynamic_tools
-            for choice in [
-                ToolChoice::None,
-                ToolChoice::Auto,
-                ToolChoice::Required,
-                ToolChoice::Specific("tool1".to_string()),
-            ] {
-                let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                    vec![], // Empty - tool1 is static
-                    vec![],
-                    AllowedTools {
-                        tools: vec!["tool1".to_string()],
-                        choice: AllowedToolsChoice::DynamicAllowedTools,
-                    },
-                    choice.clone(),
-                    None,
-                );
-                let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-                assert_eq!(result.tool_choice, Some(choice));
-            }
-
-            // Test parallel_tool_calls variants
-            for ptc in [None, Some(true), Some(false)] {
-                let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                    vec![], // Empty - tool1 is static
-                    vec![],
-                    AllowedTools {
-                        tools: vec!["tool1".to_string()],
-                        choice: AllowedToolsChoice::DynamicAllowedTools,
-                    },
-                    ToolChoice::Auto,
-                    ptc,
-                );
-                let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-                assert_eq!(result.parallel_tool_calls, ptc);
-            }
-
-            // Test provider_tools are preserved (no longer lossy!)
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![], // Empty - tool1 is static
-                vec![], // Empty provider tools
-                AllowedTools {
-                    tools: vec!["tool1".to_string()],
-                    choice: AllowedToolsChoice::DynamicAllowedTools,
-                },
-                ToolChoice::Auto,
-                None,
-            );
-            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-            assert_eq!(result.provider_tools, vec![]);
-        }
-
-        #[test]
-        fn test_tool_metadata_preservation() {
-            let function_config = create_chat_function(vec![]);
-            let tool = ClientSideFunctionTool {
-                name: "test_tool".to_string(),
-                description: "A detailed description".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {"param1": {"type": "string"}, "param2": {"type": "number"}},
-                    "required": ["param1"]
-                }),
-                strict: true,
-            };
-
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![Tool::ClientSideFunction(tool.clone())],
-                vec![],
-                AllowedTools {
-                    tools: vec![], // Function has no defaults
-                    choice: AllowedToolsChoice::FunctionDefault,
-                },
-                ToolChoice::Auto,
-                Some(false),
-            );
-            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
-
-            let result_tool = &result.additional_tools.unwrap()[0];
-            assert_eq!(result_tool.name, tool.name);
-            assert_eq!(result_tool.description, tool.description);
-            assert_eq!(result_tool.parameters, tool.parameters);
-            assert_eq!(result_tool.strict, tool.strict);
         }
     }
 

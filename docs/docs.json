@@ -47,8 +47,8 @@
               "gateway/configure-models-and-providers",
               "gateway/configure-functions-and-variants",
               "gateway/create-a-prompt-template",
+              "gateway/generate-structured-outputs",
               "gateway/generate-embeddings",
-              "gateway/tutorial",
               "gateway/guides/batch-inference",
               "gateway/guides/episodes",
               "gateway/guides/inference-caching",
@@ -395,6 +395,14 @@
     {
       "source": "/evaluations/dynamic-evaluations/api-reference/",
       "destination": "/evaluations/workflow-evaluations/api-reference"
+    },
+    {
+      "source": "/gateway/tutorial/",
+      "destination": "/quickstart"
+    },
+    {
+      "source": "/gateway/tutorial/",
+      "destination": "/quickstart"
     }
   ]
 }

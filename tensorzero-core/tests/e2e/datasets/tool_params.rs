@@ -40,7 +40,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
     let datapoint_id = Uuid::now_v7();
 
     // Define custom dynamic tool (same as inference tests for consistency)
-    let custom_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let custom_tool = tensorzero_core::tool::FunctionTool {
         name: "custom_weather_tool".to_string(),
         description: "A custom tool added dynamically".to_string(),
         parameters: serde_json::from_value(json!({
@@ -56,7 +56,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
     };
 
     // Get the static tool from function config to create proper ToolCallConfigDatabaseInsert
-    let get_temp_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let get_temp_tool = tensorzero_core::tool::FunctionTool {
         name: "get_temperature".to_string(),
         description: "Get the current temperature in a given location".to_string(),
         parameters: serde_json::from_value(json!({
@@ -81,7 +81,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
         }],
         AllowedTools {
             tools: vec![get_temp_tool.name.clone(), custom_tool.name.clone()],
-            choice: AllowedToolsChoice::DynamicAllowedTools,
+            choice: AllowedToolsChoice::Explicit,
         },
         ToolChoice::Specific("get_temperature".to_string()),
         Some(false),
@@ -159,8 +159,10 @@ async fn test_datapoint_full_tool_params_round_trip() {
     // Static tool (from function config) should be in allowed_tools
     let allowed_tools = dp["allowed_tools"].as_array().unwrap();
     assert_eq!(allowed_tools.len(), 2);
-    assert_eq!(allowed_tools[0], "get_temperature");
-    assert_eq!(allowed_tools[1], "custom_weather_tool");
+    let allowed_tools_set: std::collections::HashSet<&str> =
+        allowed_tools.iter().map(|v| v.as_str().unwrap()).collect();
+    assert!(allowed_tools_set.contains("get_temperature"));
+    assert!(allowed_tools_set.contains("custom_weather_tool"));
 
     // Dynamic tool should be in additional_tools
     let additional_tools = dp["additional_tools"].as_array().unwrap();
@@ -195,7 +197,7 @@ async fn test_datapoint_update_tool_params() {
     let original_id = Uuid::now_v7();
 
     // Create original datapoint with initial tool_params
-    let get_temp_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let get_temp_tool = tensorzero_core::tool::FunctionTool {
         name: "get_temperature".to_string(),
         description: "Get the current temperature in a given location".to_string(),
         parameters: serde_json::from_value(json!({
@@ -214,7 +216,7 @@ async fn test_datapoint_update_tool_params() {
         vec![],
         AllowedTools {
             tools: vec![get_temp_tool.name.clone()],
-            choice: AllowedToolsChoice::DynamicAllowedTools,
+            choice: AllowedToolsChoice::Explicit,
         },
         ToolChoice::Auto,
         Some(false),
@@ -274,12 +276,10 @@ async fn test_datapoint_update_tool_params() {
             "datapoints": [{
                 "type": "chat",
                 "id": original_id.to_string(),
-                "tool_params": {
-                    "allowed_tools": ["get_temperature"],
-                    "additional_tools": [updated_tool],
-                    "tool_choice": {"specific": "updated_tool"},
-                    "parallel_tool_calls": true
-                }
+                "allowed_tools": ["get_temperature"],
+                "additional_tools": [updated_tool],
+                "tool_choice": {"specific": "updated_tool"},
+                "parallel_tool_calls": true
             }]
         }))
         .send()
@@ -329,11 +329,7 @@ async fn test_datapoint_update_tool_params() {
     let dp = &datapoints[0];
 
     // Verify updated tool_params (flattened at top level)
-    assert_eq!(
-        dp["allowed_tools"],
-        json!(["get_temperature", "updated_tool"]),
-        "allowed_tools should be updated"
-    );
+    assert_eq!(dp["allowed_tools"], json!(["get_temperature"]),);
 
     let additional_tools = dp["additional_tools"].as_array().unwrap();
     assert_eq!(additional_tools.len(), 1);
@@ -359,7 +355,7 @@ async fn test_list_datapoints_with_tool_params() {
     let dp2_id = Uuid::now_v7();
     let dp3_id = Uuid::now_v7();
 
-    let base_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let base_tool = tensorzero_core::tool::FunctionTool {
         name: "get_temperature".to_string(),
         description: "Get temperature".to_string(),
         parameters: serde_json::from_value(json!({
@@ -371,7 +367,7 @@ async fn test_list_datapoints_with_tool_params() {
         strict: false,
     };
 
-    let custom_tool_1 = tensorzero_core::tool::ClientSideFunctionTool {
+    let custom_tool_1 = tensorzero_core::tool::FunctionTool {
         name: "tool_1".to_string(),
         description: "First tool".to_string(),
         parameters: serde_json::from_value(json!({
@@ -382,7 +378,7 @@ async fn test_list_datapoints_with_tool_params() {
         strict: false,
     };
 
-    let custom_tool_2 = tensorzero_core::tool::ClientSideFunctionTool {
+    let custom_tool_2 = tensorzero_core::tool::FunctionTool {
         name: "tool_2".to_string(),
         description: "Second tool".to_string(),
         parameters: serde_json::from_value(json!({
@@ -415,7 +411,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![],
             AllowedTools {
                 tools: vec![base_tool.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,
             None,
@@ -449,7 +445,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![],
             AllowedTools {
                 tools: vec![base_tool.name.clone(), custom_tool_1.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Required,
             Some(false),
@@ -483,7 +479,7 @@ async fn test_list_datapoints_with_tool_params() {
             vec![],
             AllowedTools {
                 tools: vec![custom_tool_2.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::None,
             Some(true),
@@ -539,10 +535,15 @@ async fn test_list_datapoints_with_tool_params() {
 
     // Verify DP2: Static + one dynamic (flattened)
     let dp2_json = find_dp(&dp2_id);
-    assert_eq!(
-        dp2_json["allowed_tools"],
-        json!(["get_temperature", "tool_1"])
-    );
+    let allowed_tools: std::collections::HashSet<&str> = dp2_json["allowed_tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    let expected_tools: std::collections::HashSet<&str> =
+        ["get_temperature", "tool_1"].into_iter().collect();
+    assert_eq!(allowed_tools, expected_tools);
     let add_tools_2 = dp2_json["additional_tools"].as_array().unwrap();
     assert_eq!(add_tools_2.len(), 1);
     assert_eq!(add_tools_2[0]["name"], "tool_1");
@@ -570,7 +571,7 @@ async fn test_datapoint_only_static_tools() {
     let dataset_name = format!("test-dp-static-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
 
-    let static_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let static_tool = tensorzero_core::tool::FunctionTool {
         name: "get_temperature".to_string(),
         description: "Get temperature".to_string(),
         parameters: serde_json::from_value(json!({
@@ -602,7 +603,7 @@ async fn test_datapoint_only_static_tools() {
             vec![],
             vec![],
             AllowedTools {
-                tools: vec![static_tool.name.clone()],
+                tools: [static_tool.name.clone()].into_iter().collect(),
                 choice: AllowedToolsChoice::FunctionDefault,
             },
             ToolChoice::Auto,
@@ -659,7 +660,7 @@ async fn test_datapoint_only_dynamic_tools() {
     let datapoint_id = Uuid::now_v7();
 
     // Include both static tool from config AND dynamic tool in storage
-    let static_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let static_tool = tensorzero_core::tool::FunctionTool {
         name: "get_temperature".to_string(),
         description: "Get temperature".to_string(),
         parameters: serde_json::from_value(json!({
@@ -671,7 +672,7 @@ async fn test_datapoint_only_dynamic_tools() {
         strict: false,
     };
 
-    let dynamic_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let dynamic_tool = tensorzero_core::tool::FunctionTool {
         name: "runtime_tool".to_string(),
         description: "A tool only available at runtime".to_string(),
         parameters: serde_json::from_value(json!({
@@ -704,7 +705,7 @@ async fn test_datapoint_only_dynamic_tools() {
             vec![],
             AllowedTools {
                 tools: vec![static_tool.name.clone(), dynamic_tool.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,
             None,
@@ -737,11 +738,13 @@ async fn test_datapoint_only_dynamic_tools() {
     let resp_json: Value = resp.json().await.unwrap();
     let dp = &resp_json["datapoints"][0];
 
-    // Static tool from function config should be in allowed_tools (flattened)
+    // Static + dynamic tool should be in allowed_tools
     let allowed_tools = dp["allowed_tools"].as_array().unwrap();
     assert_eq!(allowed_tools.len(), 2);
-    assert_eq!(allowed_tools[0], "get_temperature");
-    assert_eq!(allowed_tools[1], "runtime_tool");
+    let allowed_tools_set: std::collections::HashSet<&str> =
+        allowed_tools.iter().map(|v| v.as_str().unwrap()).collect();
+    assert!(allowed_tools_set.contains("runtime_tool"));
+    assert!(allowed_tools_set.contains("get_temperature"));
 
     // Dynamic tool should be in additional_tools (flattened)
     let additional_tools = dp["additional_tools"].as_array().unwrap();
@@ -764,7 +767,7 @@ async fn test_datapoint_tool_params_three_states() {
 
     // Create datapoint with tool_params
     let original_id = Uuid::now_v7();
-    let tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let tool = tensorzero_core::tool::FunctionTool {
         name: "get_temperature".to_string(),
         description: "Get temperature".to_string(),
         parameters: serde_json::from_value(json!({
@@ -796,7 +799,7 @@ async fn test_datapoint_tool_params_three_states() {
             vec![],
             AllowedTools {
                 tools: vec![tool.name.clone()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,
+                choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,
             None,
@@ -857,7 +860,7 @@ async fn test_datapoint_tool_params_three_states() {
         "tool_params fields should still exist when field is omitted"
     );
 
-    // Test Case 2: Set tool_params to null -> removes tool_params
+    // Test Case 2: Clear tool params fields
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
@@ -866,7 +869,11 @@ async fn test_datapoint_tool_params_three_states() {
             "datapoints": [{
                 "type": "chat",
                 "id": new_id_1.to_string(),
-                "tool_params": null  // Explicitly null - should remove
+                "allowed_tools": [],
+                "additional_tools": [],
+                "tool_choice": null,
+                "parallel_tool_calls": null,
+                "provider_tools": []
             }]
         }))
         .send()
@@ -891,12 +898,34 @@ async fn test_datapoint_tool_params_three_states() {
         .unwrap();
 
     let dp2 = &resp2.json::<Value>().await.unwrap()["datapoints"][0];
-    // With flatten, when tool_params is null, the fields should not be present
-    assert!(
-        dp2["allowed_tools"].is_null()
-            && dp2["additional_tools"].is_null()
-            && dp2["tool_choice"].is_null(),
-        "tool_params fields should be null when explicitly set to null"
+
+    assert_eq!(
+        dp2["allowed_tools"],
+        json!([]),
+        "allowed_tools should be set to empty array"
+    );
+    assert_eq!(
+        dp2["additional_tools"],
+        json!(null),
+        "additional_tools should be cleared"
+    );
+    assert_eq!(
+        dp2["provider_tools"],
+        json!([]),
+        "provider_tools should be set to empty array"
+    );
+
+    // tool_choice and parallel_tool_calls now take on the function's value
+    // See tensorzero-core/tests/e2e/tensorzero.toml
+    assert_eq!(
+        dp2["tool_choice"],
+        json!("auto"),
+        "tool_choice should be set to function's tool choice"
+    );
+    assert_eq!(
+        dp2["parallel_tool_calls"],
+        json!(null),
+        "parallel_tool_calls should be cleared"
     );
 
     // Test Case 3: Set tool_params to new value -> updates tool_params
@@ -918,10 +947,9 @@ async fn test_datapoint_tool_params_three_states() {
             "datapoints": [{
                 "type": "chat",
                 "id": new_id_2.to_string(),
-                "tool_params": {
-                    "additional_tools": [new_tool],
-                    "tool_choice": "required"
-                }
+                "allowed_tools": json!(null),
+                "additional_tools": [new_tool],
+                "tool_choice": "required"
             }]
         }))
         .send()
@@ -947,11 +975,10 @@ async fn test_datapoint_tool_params_three_states() {
 
     let dp3 = &resp3.json::<Value>().await.unwrap()["datapoints"][0];
     // With flatten, tool params fields should be at top level
-    assert!(
-        !dp3["tool_choice"].is_null(),
-        "tool_params should be set to new value"
+    assert_eq!(
+        dp3["tool_choice"], "required",
+        "tool_choice should be set to new value"
     );
-    assert_eq!(dp3["tool_choice"], "required");
 
     // When only additional_tools provided without explicit allowed_tools, the database stores
     // AllowedToolsChoice::FunctionDefault which deserializes as None/null on read.

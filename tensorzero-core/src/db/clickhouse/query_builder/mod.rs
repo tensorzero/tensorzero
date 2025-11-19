@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     config::{Config, MetricConfigType},
-    db::clickhouse::query_builder::parameters::add_parameter,
+    db::{clickhouse::query_builder::parameters::add_parameter, inferences::ListInferencesParams},
     error::{Error, ErrorDetails},
 };
 
@@ -331,18 +331,35 @@ impl InferenceFilter {
 }
 
 pub fn generate_order_by_sql(
-    order_by: Option<&[OrderBy]>,
+    opts: &ListInferencesParams<'_>,
     config: &Config,
     params_map: &mut Vec<QueryParameter>,
     param_idx_counter: &mut usize,
     joins: &mut JoinRegistry,
 ) -> Result<String, Error> {
-    let Some(order_by) = order_by else {
+    let Some(order_by) = opts.order_by else {
         return Ok(String::new());
     };
     if order_by.is_empty() {
         return Ok(String::new());
     }
+
+    for term in order_by {
+        // TODO(shuyangli): Validate that if ORDER BY includes a metric, we should have an appropriate
+        // metric inference filter.
+
+        // If ORDER BY includes search_relevance, search_query_experimental must be provided
+        if matches!(term.term, OrderByTerm::SearchRelevance)
+            && opts.search_query_experimental.is_none()
+        {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message:
+                    "ORDER BY search_relevance requires search_query_experimental to be provided"
+                        .to_string(),
+            }));
+        }
+    }
+
     let mut order_by_clauses = Vec::new();
     for term in order_by {
         let sql_expr = match &term.term {
@@ -362,6 +379,11 @@ pub fn generate_order_by_sql(
                 };
                 let join_alias = joins.get_or_insert(key, params_map, param_idx_counter);
                 format!("{join_alias}.value")
+            }
+            OrderByTerm::SearchRelevance => {
+                // Note: The total_term_frequency column is added in generate_single_table_query_for_type
+                // when search_query_experimental is provided. The column is referenced directly here.
+                "total_term_frequency".to_string()
             }
         };
         let direction = term.direction.to_clickhouse_direction();
@@ -409,7 +431,9 @@ mod tests {
     use uuid::Uuid;
 
     use crate::db::clickhouse::inference_queries::generate_list_inferences_sql;
-    use crate::db::clickhouse::query_builder::test_util::assert_query_equals;
+    use crate::db::clickhouse::query_builder::test_util::{
+        assert_query_contains, assert_query_equals,
+    };
     use crate::db::inferences::{
         ClickHouseStoredInferenceWithDispreferredOutputs, InferenceOutputSource,
         ListInferencesParams,
@@ -2699,5 +2723,99 @@ FORMAT JSONEachRow";
             },
         ];
         assert_eq!(params, expected_params);
+    }
+
+    #[tokio::test]
+    async fn test_order_by_search_relevance() {
+        let config = get_e2e_config().await;
+        let order_by = vec![OrderBy {
+            term: OrderByTerm::SearchRelevance,
+            direction: OrderDirection::Desc,
+        }];
+        let opts = ListInferencesParams {
+            function_name: Some("write_haiku"),
+            order_by: Some(&order_by),
+            search_query_experimental: Some("test query"),
+            ..Default::default()
+        };
+
+        let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        let expected_sql = r"
+SELECT
+    'chat' as type,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.episode_id as episode_id,
+    i.function_name as function_name,
+    i.id as inference_id,
+    i.input as input,
+    '' as output_schema,
+    i.tags as tags,
+    i.tool_params as tool_params,
+    i.dynamic_tools as dynamic_tools,
+    i.dynamic_provider_tools as dynamic_provider_tools,
+    i.allowed_tools as allowed_tools,
+    i.tool_choice as tool_choice,
+    i.parallel_tool_calls as parallel_tool_calls,
+    i.variant_name as variant_name,
+    i.output as output,
+    countSubstringsCaseInsensitiveUTF8(i.input, {p1:String}) as input_term_frequency,
+    countSubstringsCaseInsensitiveUTF8(i.output, {p1:String}) as output_term_frequency,
+    input_term_frequency + output_term_frequency as total_term_frequency
+FROM ChatInference AS i
+WHERE
+    i.function_name = {p0:String}
+    AND total_term_frequency > 0
+ORDER BY total_term_frequency DESC NULLS LAST
+LIMIT {p2:UInt64}
+OFFSET {p3:UInt64}
+FORMAT JSONEachRow";
+        assert_query_equals(&sql, expected_sql);
+
+        assert!(params.contains(&QueryParameter {
+            name: "p1".to_string(),
+            value: "test query".to_string(),
+        }));
+    }
+
+    #[tokio::test]
+    async fn test_order_by_search_relevance_filters_both_tables() {
+        let config = get_e2e_config().await;
+        let order_by = vec![OrderBy {
+            term: OrderByTerm::SearchRelevance,
+            direction: OrderDirection::Desc,
+        }];
+        let opts = ListInferencesParams {
+            order_by: Some(&order_by),
+            search_query_experimental: Some("test query"),
+            ..Default::default()
+        };
+
+        let (sql, _) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        // SQL should order by total_term_frequency DESC for both tables
+        assert_query_contains(&sql, "FROM ChatInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC");
+        assert_query_contains(&sql, "UNION ALL");
+        assert_query_contains(&sql, "FROM JsonInference AS i WHERE total_term_frequency > 0 ORDER BY total_term_frequency DESC");
+        // Should also order by total_term_frequency DESC for the combined result
+        assert_query_contains(&sql, "AS combined ORDER BY total_term_frequency DESC");
+    }
+
+    #[tokio::test]
+    async fn test_order_by_search_relevance_without_query_returns_error() {
+        let config = get_e2e_config().await;
+        let order_by = vec![OrderBy {
+            term: OrderByTerm::SearchRelevance,
+            direction: OrderDirection::Desc,
+        }];
+        let opts = ListInferencesParams {
+            function_name: Some("write_haiku"),
+            order_by: Some(&order_by),
+            search_query_experimental: None,
+            ..Default::default()
+        };
+
+        let result = generate_list_inferences_sql(&config, &opts);
+        assert!(result.is_err());
     }
 }

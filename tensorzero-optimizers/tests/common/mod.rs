@@ -31,7 +31,7 @@ use tensorzero_core::{
     model_table::ProviderTypeDefaultCredentials,
     optimization::{OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerInfo},
     stored_inference::StoredOutput,
-    tool::{ClientSideFunctionTool, DynamicToolParams, ToolCall, ToolChoice, ToolResult},
+    tool::{DynamicToolParams, FunctionTool, ToolCall, ToolChoice, ToolResult},
     variant::JsonMode,
 };
 use tensorzero_optimizers::{JobHandle, Optimizer};
@@ -210,6 +210,9 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         }
         OptimizerOutput::Variant(_) => {
             panic!("Expected model output, got variant output");
+        }
+        OptimizerOutput::Variants(_) => {
+            panic!("Expected model output, got variants output");
         }
     };
 }
@@ -438,7 +441,7 @@ fn generate_tool_call_example() -> RenderedSample {
         stored_output: Some(StoredOutput::Chat(inference_response_tool_call)),
         tool_params: DynamicToolParams {
             allowed_tools: None,
-            additional_tools: Some(vec![ClientSideFunctionTool {
+            additional_tools: Some(vec![FunctionTool {
                 name: "get_weather".to_string(),
                 description: "Get the weather for a location".to_string(),
                 parameters: serde_json::json!({

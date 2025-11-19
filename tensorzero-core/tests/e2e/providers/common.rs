@@ -87,6 +87,7 @@ pub struct ModelTestProvider {
 #[derive(Clone, Debug)]
 pub struct EmbeddingTestProvider {
     pub model_name: String,
+    pub dimensions: usize,
 }
 
 /// Enforce that every provider implements a common set of tests.
@@ -752,6 +753,10 @@ model = "responses-gpt-4o-mini-2024-07-18"
 [functions.pdf_test.variants.gcp_vertex_gemini]
 type = "chat_completion"
 model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite"
+
+[functions.pdf_test.variants.gcp_vertex_anthropic]
+type = "chat_completion"
+model = "gcp_vertex_anthropic::projects/tensorzero-public/locations/global/publishers/anthropic/models/claude-sonnet-4-5@20250929"
 
 [functions.pdf_test.variants.google_ai_studio]
 type = "chat_completion"
@@ -2626,11 +2631,11 @@ pub async fn check_base64_pdf_response(
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     if should_be_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert_eq!(input_tokens, Some(0));
+        assert_eq!(output_tokens, Some(0));
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.unwrap() > 0);
+        assert!(output_tokens.unwrap() > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -2779,11 +2784,11 @@ pub async fn check_base64_image_response(
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     if should_be_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert_eq!(input_tokens, Some(0));
+        assert_eq!(output_tokens, Some(0));
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.unwrap() > 0);
+        assert!(output_tokens.unwrap() > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -2933,11 +2938,11 @@ pub async fn check_url_image_response(
     let input_tokens = usage.input_tokens;
     let output_tokens = usage.output_tokens;
     if should_be_cached {
-        assert_eq!(input_tokens, 0);
-        assert_eq!(output_tokens, 0);
+        assert_eq!(input_tokens, Some(0));
+        assert_eq!(output_tokens, Some(0));
     } else {
-        assert!(input_tokens > 0);
-        assert!(output_tokens > 0);
+        assert!(input_tokens.unwrap() > 0);
+        assert!(output_tokens.unwrap() > 0);
     }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -9012,7 +9017,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         },
         stream: Some(false),
         dynamic_tool_params: tensorzero::DynamicToolParams {
-            additional_tools: Some(vec![tensorzero::ClientSideFunctionTool {
+            additional_tools: Some(vec![tensorzero::FunctionTool {
                 name: "get_temperature".to_string(),
                 description: "Get the current temperature in a given location".to_string(),
                 parameters: json!({
@@ -9315,7 +9320,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         extra_headers: get_extra_headers(),
         stream: Some(true),
         dynamic_tool_params: tensorzero::DynamicToolParams {
-            additional_tools: Some(vec![tensorzero::ClientSideFunctionTool {
+            additional_tools: Some(vec![tensorzero::FunctionTool {
                 name: "get_temperature".to_string(),
                 description: "Get the current temperature in a given location".to_string(),
                 parameters: json!({

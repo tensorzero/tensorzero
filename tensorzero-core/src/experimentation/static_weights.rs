@@ -13,7 +13,7 @@ use crate::{
     variant::VariantInfo,
 };
 
-use super::VariantSampler;
+use super::{check_duplicates_across_map, check_duplicates_within, VariantSampler};
 
 /// Pure function for static weights sampling logic.
 /// Given a uniform sample in [0, 1), selects a variant from active_variants
@@ -118,6 +118,12 @@ impl VariantSampler for StaticWeightsConfig {
         _postgres: &PostgresConnectionInfo,
         _cancel_token: CancellationToken,
     ) -> Result<(), Error> {
+        // Check for duplicates within fallback_variants
+        check_duplicates_within(&self.fallback_variants, "fallback_variants")?;
+
+        // Check for duplicates across candidate_variants and fallback_variants
+        check_duplicates_across_map(self.candidate_variants.keys(), &self.fallback_variants)?;
+
         // Validate that all weights are non-negative
         for weight in self.candidate_variants.values() {
             if *weight < 0.0 {
@@ -151,6 +157,7 @@ impl VariantSampler for StaticWeightsConfig {
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
         _postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
+        // Sampling is stable per episode ID
         let uniform_sample = get_uniform_value(function_name, &episode_id);
         let selected_variant_name = sample_static_weights(
             active_variants,
@@ -965,5 +972,80 @@ mod tests {
         let result = config.get_current_display_probabilities("test", &active_variants, &postgres);
 
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_setup_validation_duplicate_fallbacks() {
+        let config = StaticWeightsConfig {
+            candidate_variants: BTreeMap::from([("A".to_string(), 1.0)]),
+            fallback_variants: vec!["B".to_string(), "C".to_string(), "B".to_string()],
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("`fallback_variants` contains duplicate entries"));
+        assert!(err_msg.contains("B"));
+    }
+
+    #[tokio::test]
+    async fn test_setup_validation_duplicate_across_lists() {
+        let config = StaticWeightsConfig {
+            candidate_variants: BTreeMap::from([("A".to_string(), 1.0), ("B".to_string(), 2.0)]),
+            fallback_variants: vec!["B".to_string(), "C".to_string()],
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("cannot appear in both `candidate_variants` and `fallback_variants`")
+        );
+        assert!(err_msg.contains("B"));
+    }
+
+    #[tokio::test]
+    async fn test_setup_validation_multiple_duplicates_across_lists() {
+        let config = StaticWeightsConfig {
+            candidate_variants: BTreeMap::from([
+                ("A".to_string(), 1.0),
+                ("B".to_string(), 2.0),
+                ("C".to_string(), 3.0),
+            ]),
+            fallback_variants: vec!["B".to_string(), "C".to_string(), "D".to_string()],
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("cannot appear in both `candidate_variants` and `fallback_variants`")
+        );
+        assert!(err_msg.contains("B"));
+        assert!(err_msg.contains("C"));
     }
 }

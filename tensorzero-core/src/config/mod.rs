@@ -28,11 +28,10 @@ use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
-use crate::config::path::ResolvedTomlPath;
+use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
 use crate::config::span_map::SpanMap;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -172,7 +171,7 @@ pub struct TemplateFilesystemAccess {
     /// Defaults to `false`
     #[serde(default)]
     enabled: bool,
-    base_path: Option<ResolvedTomlPath>,
+    base_path: Option<ResolvedTomlPathDirectory>,
 }
 
 #[derive(Clone, Debug, Serialize, ts_rs::TS)]
@@ -395,20 +394,26 @@ impl OtlpConfig {
         if self.traces.enabled {
             match self.traces.format {
                 OtlpTracesFormat::OpenTelemetry => {
-                    span.set_attribute("gen_ai.usage.input_tokens", usage.input_tokens as i64);
-                    span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens as i64);
-                    span.set_attribute(
-                        "gen_ai.usage.total_tokens",
-                        (usage.input_tokens + usage.output_tokens) as i64,
-                    );
+                    if let Some(input_tokens) = usage.input_tokens {
+                        span.set_attribute("gen_ai.usage.input_tokens", input_tokens as i64);
+                    }
+                    if let Some(output_tokens) = usage.output_tokens {
+                        span.set_attribute("gen_ai.usage.output_tokens", output_tokens as i64);
+                    }
+                    if let Some(total_tokens) = usage.total_tokens() {
+                        span.set_attribute("gen_ai.usage.total_tokens", total_tokens as i64);
+                    }
                 }
                 OtlpTracesFormat::OpenInference => {
-                    span.set_attribute("llm.token_count.prompt", usage.input_tokens as i64);
-                    span.set_attribute("llm.token_count.completion", usage.output_tokens as i64);
-                    span.set_attribute(
-                        "llm.token_count.total",
-                        (usage.input_tokens + usage.output_tokens) as i64,
-                    );
+                    if let Some(input_tokens) = usage.input_tokens {
+                        span.set_attribute("llm.token_count.prompt", input_tokens as i64);
+                    }
+                    if let Some(output_tokens) = usage.output_tokens {
+                        span.set_attribute("llm.token_count.completion", output_tokens as i64);
+                    }
+                    if let Some(total_tokens) = usage.total_tokens() {
+                        span.set_attribute("llm.token_count.total", total_tokens as i64);
+                    }
                 }
             }
         }
@@ -752,13 +757,10 @@ impl Config {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
         let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
             SKIP_CREDENTIAL_VALIDATION
-                .scope(
-                    (),
-                    Self::load_from_toml(globbed_config.table, &globbed_config.span_map),
-                )
+                .scope((), Self::load_from_toml(globbed_config.table))
                 .await?
         } else {
-            Self::load_from_toml(globbed_config.table, &globbed_config.span_map).await?
+            Self::load_from_toml(globbed_config.table).await?
         };
 
         if validate_credentials {
@@ -770,7 +772,7 @@ impl Config {
         Ok(config)
     }
 
-    async fn load_from_toml(table: toml::Table, span_map: &SpanMap) -> Result<Config, Error> {
+    async fn load_from_toml(table: toml::Table) -> Result<Config, Error> {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.");
         }
@@ -905,33 +907,12 @@ impl Config {
         // Initialize the templates
         let template_paths = config.get_templates();
         let template_fs_base_path = if config.gateway.template_filesystem_access.enabled {
-            if let Some(base_path) = &config.gateway.template_filesystem_access.base_path {
-                Some(base_path.get_real_path().map_err(|e| {
-                    Error::new(ErrorDetails::InternalError {
-                        message: format!("Failed to get real path for base path: {e}. {IMPOSSIBLE_ERROR_MESSAGE}"),
-                    })
-                })?.to_owned())
-            } else if let Some(single_file) = span_map.get_single_file() {
-                crate::utils::deprecation_warning("`[gateway.template_filesystem_access.base_path]` is not set, using config file base path. Please specify `[gateway.template_filesystem_access.base_path]`");
-                Some(
-                    single_file
-                        .parent()
-                        .ok_or_else(|| {
-                            Error::new(ErrorDetails::Config {
-                                message: format!(
-                                    "Failed to determine base path for config file `{}`",
-                                    single_file.to_string_lossy()
-                                ),
-                            })
-                        })?
-                        .to_owned(),
-                )
-            } else {
-                return Err(ErrorDetails::Config {
-                    message: "`[gateway.template_filesystem_access]` is enabled, but `[gateway.template_filesystem_access.base_path]` is not set.".to_string()
-                }
-                .into());
-            }
+            let base_path = config.gateway.template_filesystem_access.base_path
+                .as_ref()
+                .ok_or_else(|| Error::new(ErrorDetails::Config {
+                    message: "`gateway.template_filesystem_access.enabled` is true but `base_path` is not specified. Please set `gateway.template_filesystem_access.base_path` to the directory containing your template files.".to_string()
+                }))?;
+            Some(base_path.get_real_path().to_owned())
         } else {
             None
         };
@@ -1289,7 +1270,6 @@ pub struct UninitializedConfig {
 /// and merging them into a single `toml::Table`
 struct UninitializedGlobbedConfig {
     table: toml::Table,
-    span_map: SpanMap,
 }
 
 impl UninitializedConfig {
@@ -1298,8 +1278,8 @@ impl UninitializedConfig {
         glob: &ConfigFileGlob,
         allow_empty_glob: bool,
     ) -> Result<UninitializedGlobbedConfig, Error> {
-        let (span_map, table) = SpanMap::from_glob(glob, allow_empty_glob)?;
-        Ok(UninitializedGlobbedConfig { table, span_map })
+        let table = SpanMap::from_glob(glob, allow_empty_glob)?;
+        Ok(UninitializedGlobbedConfig { table })
     }
 }
 
@@ -1334,7 +1314,7 @@ pub enum UninitializedFunctionConfig {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedSchema {
-    path: ResolvedTomlPath,
+    path: ResolvedTomlPathData,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -1348,9 +1328,9 @@ pub struct UninitializedSchemas {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigChat {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<ResolvedTomlPath>,
-    user_schema: Option<ResolvedTomlPath>,
-    assistant_schema: Option<ResolvedTomlPath>,
+    system_schema: Option<ResolvedTomlPathData>,
+    user_schema: Option<ResolvedTomlPathData>,
+    assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
     schemas: UninitializedSchemas,
     #[serde(default)]
@@ -1368,12 +1348,12 @@ pub struct UninitializedFunctionConfigChat {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigJson {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
-    system_schema: Option<ResolvedTomlPath>,
-    user_schema: Option<ResolvedTomlPath>,
-    assistant_schema: Option<ResolvedTomlPath>,
+    system_schema: Option<ResolvedTomlPathData>,
+    user_schema: Option<ResolvedTomlPathData>,
+    assistant_schema: Option<ResolvedTomlPathData>,
     #[serde(default)]
     schemas: UninitializedSchemas,
-    output_schema: Option<ResolvedTomlPath>, // schema will default to {} if not specified
+    output_schema: Option<ResolvedTomlPathData>, // schema will default to {} if not specified
     #[serde(default)]
     description: Option<String>,
     experimentation: Option<UninitializedExperimentationConfig>,
@@ -1705,7 +1685,7 @@ impl UninitializedVariantInfo {
 #[serde(deny_unknown_fields)]
 pub struct UninitializedToolConfig {
     pub description: String,
-    pub parameters: ResolvedTomlPath,
+    pub parameters: ResolvedTomlPathData,
     pub name: Option<String>,
     #[serde(default)]
     pub strict: bool,
@@ -1727,13 +1707,13 @@ impl UninitializedToolConfig {
 #[ts(export)]
 pub struct PathWithContents {
     #[cfg_attr(test, ts(type = "string"))]
-    pub path: ResolvedTomlPath,
+    pub path: ResolvedTomlPathData,
     pub contents: String,
 }
 
 impl PathWithContents {
-    pub fn from_path(path: ResolvedTomlPath) -> Result<Self, Error> {
-        let contents = path.read()?;
+    pub fn from_path(path: ResolvedTomlPathData) -> Result<Self, Error> {
+        let contents = path.data().to_string();
         Ok(Self { path, contents })
     }
 }
