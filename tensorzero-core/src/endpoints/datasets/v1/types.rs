@@ -147,7 +147,7 @@ impl<'de> Deserialize<'de> for UpdateChatDatapointRequest {
                 ));
             }
             // Emit deprecation warning
-            tracing::warn!(
+            crate::utils::deprecation_warning(
                 "The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"
             );
             // Copy tool_params to tool_params_new
@@ -170,7 +170,7 @@ impl<'de> Deserialize<'de> for UpdateChatDatapointRequest {
                 ));
             }
             // Emit deprecation warning
-            tracing::warn!(
+            crate::utils::deprecation_warning(
                 "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"
             );
             // Copy metadata to metadata_new
@@ -318,7 +318,7 @@ impl<'de> Deserialize<'de> for UpdateJsonDatapointRequest {
                 ));
             }
             // Emit deprecation warning
-            tracing::warn!(
+            crate::utils::deprecation_warning(
                 "The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"
             );
             // Copy metadata to metadata_new
