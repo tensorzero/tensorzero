@@ -55,10 +55,10 @@ pub struct Analysis {
 ///
 /// # Arguments
 /// * `eval_info` - Evaluation information containing the datapoint and inference response
-/// * `function_config` - Function configuration (serialized as function_context in template)
+/// * `function_config` - Function configuration (serialized as function_config in template)
 /// * `static_tools` - Static tools from Config.tools (serialized as tool_schemas in template)
 /// * `variant_config` - Variant configuration used to extract templates
-/// * `evaluation_config` - Evaluation config (serialized as evaluation_context in template)
+/// * `evaluation_config` - Evaluation config (serialized as evaluation_config in template)
 ///
 /// # Returns
 /// * Template arguments containing: function_config, static_tools, evaluation_config,
