@@ -515,6 +515,7 @@ pub async fn run_evaluation_core_streaming(
         let inference_cache = args.inference_cache;
         let tokens_clone = cancellation_tokens_arc.clone();
         let semaphore_clone = semaphore.clone();
+
         // Skip feedback for dynamic variants (they're not production-ready)
         // Named variants: send_feedback=true, Dynamic variants: send_feedback=false
         let send_feedback = !matches!(variant.as_ref(), EvaluationVariant::Info(_));
@@ -522,7 +523,16 @@ pub async fn run_evaluation_core_streaming(
             // Acquire semaphore permit for the entire task (inference + evaluation)
             let _permit = semaphore_clone.acquire().await?;
 
-            let input = Arc::new(resolved_input_to_client_input(datapoint.input().clone().reresolve(&clients_clone.tensorzero_client).await?)?);
+            // Convert Input back to StoredInput, then use reresolve() which delegates
+            // to the TensorZero client. This currently requires us to configure `tensorzero_client` in
+            // HTTPGateway mode for the UI e2e tests to pass (we can't construct a `FetchContext` and
+            // load data from `Input`).
+            //
+            // TODO(#4844): Rethink file loading architecture, so we can do this without requiring a client in HTTP gateway mode.
+            let stored_input = datapoint.input().clone().into_stored_input_without_file_handling()?;
+            let resolved_input = stored_input.reresolve(&clients_clone.tensorzero_client).await?;
+            let input = Arc::new(resolved_input_to_client_input(resolved_input)?);
+
             let inference_response = Arc::new(
                 infer_datapoint(InferDatapointParams {
                     clients: &clients_clone,
