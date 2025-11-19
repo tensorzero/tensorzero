@@ -155,8 +155,7 @@ async fn test_create_evaluation_dataset_chat() {
 
     // Call create_evaluation_dataset
     let result =
-        create_evaluation_dataset(&config, &http_client, &clickhouse, &samples, &dataset_name)
-            .await;
+        create_evaluation_dataset(&config, &http_client, &clickhouse, samples, &dataset_name).await;
 
     assert!(
         result.is_ok(),
@@ -234,8 +233,7 @@ async fn test_create_evaluation_dataset_json() {
 
     // Call create_evaluation_dataset
     let result =
-        create_evaluation_dataset(&config, &http_client, &clickhouse, &samples, &dataset_name)
-            .await;
+        create_evaluation_dataset(&config, &http_client, &clickhouse, samples, &dataset_name).await;
 
     assert!(
         result.is_ok(),

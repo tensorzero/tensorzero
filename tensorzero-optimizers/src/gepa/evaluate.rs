@@ -30,13 +30,13 @@ pub async fn create_evaluation_dataset(
     config: &Config,
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
-    samples: &[RenderedSample],
+    samples: Vec<RenderedSample>,
     dataset_name: &str,
 ) -> Result<(), Error> {
     // Convert RenderedSamples to CreateDatapointRequest using the helper method
     let datapoints: Result<Vec<CreateDatapointRequest>, Error> = samples
-        .iter()
-        .map(|sample| sample.clone().into_create_datapoint_request())
+        .into_iter()
+        .map(|sample| sample.into_create_datapoint_request())
         .collect();
 
     let request = CreateDatapointsRequest {
