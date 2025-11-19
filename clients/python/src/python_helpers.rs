@@ -7,7 +7,7 @@ use pyo3::{exceptions::PyValueError, prelude::*, sync::PyOnceLock, types::PyDict
 use tensorzero_core::endpoints::workflow_evaluation_run::WorkflowEvaluationRunEpisodeResponse;
 use tensorzero_core::inference::types::pyo3_helpers::{deserialize_from_pyobj, serialize_to_dict};
 use tensorzero_rust::{
-    ClientSideFunctionTool, FeedbackResponse, InferenceResponse, InferenceResponseChunk,
+    FeedbackResponse, FunctionTool, InferenceResponse, InferenceResponseChunk,
     WorkflowEvaluationRunResponse,
 };
 use uuid::Uuid;
@@ -118,7 +118,7 @@ pub fn python_uuid_to_uuid(param_name: &str, val: Bound<'_, PyAny>) -> PyResult<
 pub fn parse_tool(
     py: Python<'_>,
     key_vals: HashMap<String, Bound<'_, PyAny>>,
-) -> PyResult<ClientSideFunctionTool> {
+) -> PyResult<FunctionTool> {
     let name = key_vals.get("name").ok_or_else(|| {
         PyValueError::new_err(format!("Missing 'name' in additional tool: {key_vals:?}"))
     })?;
@@ -138,7 +138,7 @@ pub fn parse_tool(
         false
     };
     let tool_params: serde_json::Value = deserialize_from_pyobj(py, params)?;
-    Ok(ClientSideFunctionTool {
+    Ok(FunctionTool {
         name: name.extract()?,
         description: description.extract()?,
         parameters: tool_params,

@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::tool::{ClientSideFunctionTool, InferenceResponseToolCall, ToolCallWrapper, ToolChoice};
+use crate::tool::{FunctionTool, InferenceResponseToolCall, ToolCallWrapper, ToolChoice};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct OpenAICompatibleFunctionCall {
@@ -215,7 +215,7 @@ pub(crate) struct OpenAICompatibleToolChoiceParams {
     pub tool_choice: Option<ToolChoice>,
 }
 
-impl From<OpenAICompatibleTool> for ClientSideFunctionTool {
+impl From<OpenAICompatibleTool> for FunctionTool {
     fn from(tool: OpenAICompatibleTool) -> Self {
         match tool {
             OpenAICompatibleTool::Function {
@@ -223,7 +223,7 @@ impl From<OpenAICompatibleTool> for ClientSideFunctionTool {
                 name,
                 parameters,
                 strict,
-            } => ClientSideFunctionTool {
+            } => FunctionTool {
                 description: description.unwrap_or_default(),
                 parameters,
                 name,

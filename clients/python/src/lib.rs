@@ -65,9 +65,9 @@ use tensorzero_core::{
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
-    ClientSideFunctionTool, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, LaunchOptimizationParams, ListDatapointsRequest,
-    ListInferencesParams, OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
+    Datapoint, DynamicToolParams, FeedbackParams, FunctionTool, InferenceOutput, InferenceParams,
+    InferenceStream, LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams,
+    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
     WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
@@ -438,17 +438,16 @@ impl BaseTensorZeroGateway {
             None
         };
 
-        let additional_tools: Option<Vec<ClientSideFunctionTool>> =
-            if let Some(tools) = additional_tools {
-                Some(
-                    tools
-                        .into_iter()
-                        .map(|key_vals| parse_tool(py, key_vals))
-                        .collect::<Result<Vec<ClientSideFunctionTool>, PyErr>>()?,
-                )
-            } else {
-                None
-            };
+        let additional_tools: Option<Vec<FunctionTool>> = if let Some(tools) = additional_tools {
+            Some(
+                tools
+                    .into_iter()
+                    .map(|key_vals| parse_tool(py, key_vals))
+                    .collect::<Result<Vec<FunctionTool>, PyErr>>()?,
+            )
+        } else {
+            None
+        };
 
         let provider_tools: Option<Vec<ProviderTool>> = if let Some(provider_tools) = provider_tools
         {
@@ -1326,16 +1325,27 @@ impl TensorZeroGateway {
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `internal_dynamic_variant_config` - Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
+    /// * `max_datapoints` - Optional maximum number of datapoints to evaluate from the dataset
+    /// * `adaptive_stopping` - Optional dict configuring adaptive stopping behavior for evals.
+    ///                         Example for two evaluators named "exact_match" and "llm_judge":
+    ///                           `{"precision": {"exact_match": 0.2, "llm_judge": 0.15}}`
+    ///                         The "precision" field maps evaluator names to confidence interval half-widths.
+    ///                         Evaluation for a given evaluator stops when it achieves its precision target,
+    ///                         i.e. the width of the larger of the two halves of its confidence interval
+    ///                         is <= the precision target.
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
-                        internal_dynamic_variant_config=None
+                        internal_dynamic_variant_config=None,
+                        max_datapoints=None,
+                        adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
+    #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
         evaluation_name: String,
@@ -1344,6 +1354,8 @@ impl TensorZeroGateway {
         concurrency: usize,
         inference_cache: String,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
+        max_datapoints: Option<usize>,
+        adaptive_stopping: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
 
@@ -1363,6 +1375,30 @@ impl TensorZeroGateway {
         let variant =
             construct_evaluation_variant(this.py(), internal_dynamic_variant_config, variant_name)?;
 
+        // Parse adaptive_stopping config from Python dict
+        let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
+            // Extract the "precision" field from adaptive_stopping dict
+            if let Ok(Some(precision_bound)) = adaptive_stopping_dict.get_item("precision") {
+                let precision_dict_bound = precision_bound.downcast::<PyDict>().map_err(|_| {
+                    PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                        "adaptive_stopping['precision'] must be a dictionary",
+                    )
+                })?;
+
+                let mut map = std::collections::HashMap::new();
+                for (key, value) in precision_dict_bound.iter() {
+                    let key_str: String = key.extract()?;
+                    let value_f64: f64 = value.extract()?;
+                    map.insert(key_str, value_f64 as f32);
+                }
+                map
+            } else {
+                HashMap::new()
+            }
+        } else {
+            HashMap::new()
+        };
+
         let core_args = EvaluationCoreArgs {
             tensorzero_client: client.clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
@@ -1377,7 +1413,7 @@ impl TensorZeroGateway {
 
         let result = tokio_block_on_without_gil(
             this.py(),
-            run_evaluation_core_streaming(core_args, None, HashMap::new()),
+            run_evaluation_core_streaming(core_args, max_datapoints, precision_targets_map),
         )
         .map_err(|e| {
             pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
@@ -2468,16 +2504,27 @@ impl AsyncTensorZeroGateway {
     /// * `concurrency` - The maximum number of examples to process in parallel
     /// * `inference_cache` - Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
     /// * `internal_dynamic_variant_config` - Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
+    /// * `max_datapoints` - Optional maximum number of datapoints to evaluate from the dataset
+    /// * `adaptive_stopping` - Optional dict configuring adaptive stopping behavior for evals.
+    ///                         Example for two evaluators named "exact_match" and "llm_judge":
+    ///                           `{"precision": {"exact_match": 0.2, "llm_judge": 0.15}}`
+    ///                         The "precision" field maps evaluator names to confidence interval half-widths.
+    ///                         Evaluation for a given evaluator stops when it achieves its precision target,
+    ///                         i.e. the width of the larger of the two halves of its confidence interval
+    ///                         is <= the precision target.
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
-                        internal_dynamic_variant_config=None
+                        internal_dynamic_variant_config=None,
+                        max_datapoints=None,
+                        adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
+    #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
         this: PyRef<'py, Self>,
         evaluation_name: String,
@@ -2486,6 +2533,8 @@ impl AsyncTensorZeroGateway {
         concurrency: usize,
         inference_cache: String,
         internal_dynamic_variant_config: Option<&Bound<'py, PyDict>>,
+        max_datapoints: Option<usize>,
+        adaptive_stopping: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();
 
@@ -2497,6 +2546,30 @@ impl AsyncTensorZeroGateway {
 
         let variant =
             construct_evaluation_variant(this.py(), internal_dynamic_variant_config, variant_name)?;
+
+        // Parse adaptive_stopping config from Python dict
+        let precision_targets_map = if let Some(adaptive_stopping_dict) = adaptive_stopping {
+            // Extract the "precision" field from adaptive_stopping dict
+            if let Ok(Some(precision_bound)) = adaptive_stopping_dict.get_item("precision") {
+                let precision_dict_bound = precision_bound.downcast::<PyDict>().map_err(|_| {
+                    PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                        "adaptive_stopping['precision'] must be a dictionary",
+                    )
+                })?;
+
+                let mut map = std::collections::HashMap::new();
+                for (key, value) in precision_dict_bound.iter() {
+                    let key_str: String = key.extract()?;
+                    let value_f64: f64 = value.extract()?;
+                    map.insert(key_str, value_f64 as f32);
+                }
+                map
+            } else {
+                HashMap::new()
+            }
+        } else {
+            HashMap::new()
+        };
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             // Get app state data
@@ -2518,11 +2591,12 @@ impl AsyncTensorZeroGateway {
                 inference_cache: inference_cache_enum,
             };
 
-            let result = run_evaluation_core_streaming(core_args, None, HashMap::new())
-                .await
-                .map_err(|e| {
-                    pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
-                })?;
+            let result =
+                run_evaluation_core_streaming(core_args, max_datapoints, precision_targets_map)
+                    .await
+                    .map_err(|e| {
+                        pyo3::exceptions::PyRuntimeError::new_err(format!("Evaluation failed: {e}"))
+                    })?;
 
             Python::attach(|py| -> PyResult<Py<PyAny>> {
                 let handler = AsyncEvaluationJobHandler {
