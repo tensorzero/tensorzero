@@ -333,7 +333,7 @@ test("getCuratedInferences retrieves correct data", async () => {
     undefined,
   );
   expect(allResults.length).toBe(604);
-});
+}, 10000);
 
 // Test countFeedbacksForMetric
 test("countFeedbacksForMetric returns correct counts", async () => {

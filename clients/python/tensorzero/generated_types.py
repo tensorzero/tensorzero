@@ -378,6 +378,14 @@ OrderDirection = Literal["ascending", "descending"]
 
 
 @dataclass(kw_only=True)
+class DatapointMetadataUpdate:
+    name: str | None | UnsetType = UNSET
+    """
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+
+
+@dataclass(kw_only=True)
 class UpdateDatapointMetadataRequest:
     id: str
     """
@@ -406,14 +414,6 @@ class CreateDatapointsResponse:
     ids: list[str]
     """
     The IDs of the newly-generated datapoints.
-    """
-
-
-@dataclass(kw_only=True)
-class DatapointMetadataUpdate:
-    name: str | None | UnsetType = UNSET
-    """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     """
 
 
@@ -980,6 +980,38 @@ class StoredJsonInference:
 
 
 @dataclass(kw_only=True)
+class UpdateDynamicToolParamsRequest:
+    allowed_tools: list[str] | None | UnsetType = UNSET
+    """
+    A subset of static tools configured for the function that the inference is explicitly allowed to use.
+    If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
+    provided at inference time). If specified as a value, it will be set to the provided value.
+    """
+    additional_tools: list[DynamicTool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
+    Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
+    new tools or exclude removed tools.
+    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    """
+    tool_choice: ToolChoice | None | UnsetType = UNSET
+    """
+    User-specified tool choice strategy.
+    If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
+    """
+    parallel_tool_calls: bool | None | UnsetType = UNSET
+    """
+    Whether to use parallel tool calls in the inference.
+    If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    provider_tools: list[ProviderTool] | None = None
+    """
+    Provider-specific tool configurations
+    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    """
+
+
+@dataclass(kw_only=True)
 class UpdateChatDatapointRequestInternal:
     id: str
     """
@@ -1022,6 +1054,11 @@ class UpdateChatDatapointRequestInternal:
     Provider-specific tool configurations
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
+    tool_params: UpdateDynamicToolParamsRequest | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Datapoint tool parameters.
+    Moving forward, don't nest these fields.
+    """
     tags: dict[str, Any] | None = None
     """
     Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
@@ -1030,6 +1067,11 @@ class UpdateChatDatapointRequestInternal:
     name: str | None | UnsetType = UNSET
     """
     Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    metadata: DatapointMetadataUpdate | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
+    Moving forward, don't nest these fields.
     """
 
 
@@ -1062,6 +1104,11 @@ class UpdateJsonDatapointRequestInternal:
     name: str | None | UnsetType = UNSET
     """
     Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    metadata: DatapointMetadataUpdate | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
+    Moving forward, don't nest these fields.
     """
 
 
@@ -1127,38 +1174,6 @@ class UpdateDatapointsRequest:
     datapoints: list[UpdateDatapointRequest]
     """
     The datapoints to update.
-    """
-
-
-@dataclass(kw_only=True)
-class UpdateDynamicToolParamsRequest:
-    allowed_tools: list[str] | None | UnsetType = UNSET
-    """
-    A subset of static tools configured for the function that the inference is explicitly allowed to use.
-    If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
-    provided at inference time). If specified as a value, it will be set to the provided value.
-    """
-    additional_tools: list[DynamicTool] | None = None
-    """
-    Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
-    Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
-    new tools or exclude removed tools.
-    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
-    """
-    tool_choice: ToolChoice | None | UnsetType = UNSET
-    """
-    User-specified tool choice strategy.
-    If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
-    """
-    parallel_tool_calls: bool | None | UnsetType = UNSET
-    """
-    Whether to use parallel tool calls in the inference.
-    If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    """
-    provider_tools: list[ProviderTool] | None = None
-    """
-    Provider-specific tool configurations
-    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
 
 

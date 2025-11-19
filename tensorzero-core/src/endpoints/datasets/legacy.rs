@@ -236,7 +236,7 @@ async fn insert_from_existing(
                 OutputKind::None => None,
             };
             // TODO(#3957): the `put_json_datapoints` call should really take a `JsonInferenceDatapointInsert`. We'll fix it separately.
-            let datapoint = JsonInferenceDatapoint {
+            let datapoint = StoredJsonInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,
                 name: None,
@@ -537,7 +537,7 @@ pub async fn update_datapoint_handler(
                 None
             };
 
-            let datapoint = JsonInferenceDatapoint {
+            let datapoint = StoredJsonInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: json.function_name,
                 name: json.name,
@@ -1210,13 +1210,14 @@ impl Datapoint {
 
 impl StoredDatapoint {
     /// Convert to wire type, properly handling tool params by subtracting static tools
+    /// TODO(shuyangli): Prepare for resolving
     pub fn into_datapoint(self, config: &Config) -> Result<Datapoint, Error> {
         match self {
             StoredDatapoint::Chat(chat) => {
                 let function_config = config.get_function(&chat.function_name)?;
                 Ok(Datapoint::Chat(chat.into_datapoint(&function_config)))
             }
-            StoredDatapoint::Json(json) => Ok(Datapoint::Json(json)),
+            StoredDatapoint::Json(json) => Ok(Datapoint::Json(json.into_datapoint())),
         }
     }
 }
@@ -1248,6 +1249,29 @@ impl ChatInferenceDatapoint {
             updated_at: self.updated_at,
             name: self.name,
         })
+    }
+}
+
+impl JsonInferenceDatapoint {
+    /// Convert to storage type.
+    pub fn into_storage(self) -> StoredJsonInferenceDatapoint {
+        StoredJsonInferenceDatapoint {
+            dataset_name: self.dataset_name,
+            function_name: self.function_name,
+            id: self.id,
+            episode_id: self.episode_id,
+            input: self.input,
+            output: self.output,
+            output_schema: self.output_schema,
+            tags: self.tags,
+            auxiliary: self.auxiliary,
+            is_deleted: self.is_deleted,
+            is_custom: self.is_custom,
+            source_inference_id: self.source_inference_id,
+            staled_at: self.staled_at,
+            updated_at: self.updated_at,
+            name: self.name,
+        }
     }
 }
 
@@ -1369,7 +1393,7 @@ impl Datapoint {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StoredDatapoint {
     Chat(StoredChatInferenceDatapoint),
-    Json(JsonInferenceDatapoint),
+    Json(StoredJsonInferenceDatapoint),
 }
 
 impl StoredDatapoint {
@@ -1647,8 +1671,68 @@ impl std::fmt::Display for JsonInferenceDatapoint {
     }
 }
 
-impl From<JsonInferenceDatapoint> for JsonInferenceDatapointInsert {
-    fn from(datapoint: JsonInferenceDatapoint) -> Self {
+/// Storage variant of JsonInferenceDatapoint for database operations (no Python/TypeScript bindings).
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct StoredJsonInferenceDatapoint {
+    /// Name of the dataset to write to.
+    pub dataset_name: String,
+
+    /// Name of the function that generated this datapoint.
+    pub function_name: String,
+
+    /// Unique identifier for the datapoint.
+    pub id: Uuid,
+
+    /// Episode ID that the datapoint belongs to.
+    pub episode_id: Option<Uuid>,
+
+    /// Input type that we directly store in ClickHouse.
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
+    pub input: StoredInput,
+
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_optional_string_or_parsed_json"
+    )]
+    pub output: Option<JsonInferenceOutput>,
+
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
+    pub output_schema: serde_json::Value,
+
+    // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tags: Option<HashMap<String, String>>,
+
+    /// Deprecated, do not use.
+    #[serde(skip_serializing, default)]
+    pub auxiliary: String,
+
+    /// If true, this datapoint was deleted.
+    pub is_deleted: bool,
+
+    /// If true, this datapoint was manually created or edited by the user.
+    #[serde(default)]
+    pub is_custom: bool,
+
+    /// Source inference ID that generated this datapoint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_inference_id: Option<Uuid>,
+
+    /// Timestamp when the datapoint was marked as stale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staled_at: Option<String>,
+
+    /// Timestamp when the datapoint was updated.
+    pub updated_at: String,
+
+    /// Human-readable name of the datapoint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+impl From<StoredJsonInferenceDatapoint> for JsonInferenceDatapointInsert {
+    fn from(datapoint: StoredJsonInferenceDatapoint) -> Self {
         JsonInferenceDatapointInsert {
             dataset_name: datapoint.dataset_name,
             function_name: datapoint.function_name,
@@ -1663,6 +1747,28 @@ impl From<JsonInferenceDatapoint> for JsonInferenceDatapointInsert {
             staled_at: datapoint.staled_at,
             source_inference_id: datapoint.source_inference_id,
             is_custom: datapoint.is_custom,
+        }
+    }
+}
+
+impl StoredJsonInferenceDatapoint {
+    pub fn into_datapoint(self) -> JsonInferenceDatapoint {
+        JsonInferenceDatapoint {
+            dataset_name: self.dataset_name,
+            function_name: self.function_name,
+            id: self.id,
+            episode_id: self.episode_id,
+            input: self.input,
+            output: self.output,
+            output_schema: self.output_schema,
+            tags: self.tags,
+            auxiliary: self.auxiliary,
+            is_deleted: self.is_deleted,
+            is_custom: self.is_custom,
+            source_inference_id: self.source_inference_id,
+            staled_at: self.staled_at,
+            updated_at: self.updated_at,
+            name: self.name,
         }
     }
 }
