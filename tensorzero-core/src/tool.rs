@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::{
     collections::{HashMap, HashSet},
@@ -6,12 +7,13 @@ use std::{
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use schemars::JsonSchema;
+use schemars::{json_schema, JsonSchema, Schema, SchemaGenerator};
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use tensorzero_derive::export_schema;
 
+use crate::endpoints::datasets::v1::types::UpdateDynamicToolParamsRequest;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::{
@@ -170,7 +172,7 @@ impl Tool {
     }
 }
 
-/// `ClientSideFunctionTool` is a particular kind of tool that relies
+/// `FunctionTool` is a particular kind of tool that relies
 /// on the client to execute a function on their side (a ToolCall content block)
 /// and return the result on the next turn (a ToolCallResult).
 /// Notably, we assume there is a JSON schema `parameters` that specifies the
@@ -319,9 +321,11 @@ impl OpenAICustomTool {
 /// to parsing as an untagged `ClientSideFunctionTool` (wrapping it as
 /// `Tool::ClientSideFunction`).
 ///
-/// Note: We don't derive TS or JsonSchema because this is a wrapper type that uses
-/// custom deserialization logic. The actual Tool type has those derives.
-#[derive(Clone, Debug, PartialEq)]
+/// Note: We manually implement JsonSchema because this is a wrapper type that uses
+/// custom deserialization logic. For TypeScript, we delegate to the wrapped Tool type.
+/// Since TypeScript types are internal for now, we can use the explictly tagged enum.
+#[derive(ts_rs::TS, Clone, Debug, PartialEq)]
+#[ts(export)]
 pub struct DynamicTool(pub Tool);
 
 impl Serialize for DynamicTool {
@@ -353,6 +357,22 @@ impl<'de> Deserialize<'de> for DynamicTool {
                 "Failed to parse as Tool or ClientSideFunctionTool: {e}"
             ))),
         }
+    }
+}
+
+/// TODO: document
+impl JsonSchema for DynamicTool {
+    fn schema_name() -> Cow<'static, str> {
+        Cow::Borrowed("DynamicTool")
+    }
+
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        let tool_schema = gen.subschema_for::<Tool>();
+        let client_side_function_schema = gen.subschema_for::<ClientSideFunctionTool>();
+
+        json_schema!({
+            "anyOf": [tool_schema, client_side_function_schema]
+        })
     }
 }
 
@@ -1184,36 +1204,6 @@ impl std::fmt::Display for ToolCallConfigDatabaseInsert {
 }
 
 impl ToolCallConfigDatabaseInsert {
-    /// Updates the fields of this ToolCallConfigDatabaseInsert with the provided values.
-    /// Each parameter is a double option:
-    /// - `None` means no update (leave unchanged)
-    /// - `Some(None)` means set to the default/empty value
-    /// - `Some(Some(value))` means set to the provided value
-    pub fn update(
-        &mut self,
-        dynamic_tools: Option<Option<Vec<Tool>>>,
-        dynamic_provider_tools: Option<Option<Vec<ProviderTool>>>,
-        allowed_tools: Option<Option<AllowedTools>>,
-        tool_choice: Option<Option<ToolChoice>>,
-        parallel_tool_calls: Option<Option<bool>>,
-    ) {
-        if let Some(value) = dynamic_tools {
-            self.dynamic_tools = value.unwrap_or_default();
-        }
-        if let Some(value) = dynamic_provider_tools {
-            self.dynamic_provider_tools = value.unwrap_or_default();
-        }
-        if let Some(value) = allowed_tools {
-            self.allowed_tools = value.unwrap_or_default();
-        }
-        if let Some(value) = tool_choice {
-            self.tool_choice = value.unwrap_or_default();
-        }
-        if let Some(value) = parallel_tool_calls {
-            self.parallel_tool_calls = value;
-        }
-    }
-
     /// Creates a `ToolCallConfigDatabaseInsert` for testing purposes.
     ///
     /// # Understanding the Data Model
@@ -1394,6 +1384,58 @@ impl ToolCallConfigDatabaseInsert {
     }
 }
 
+/// Updates the dynamic tool parameters with the provided request and returns the updated ToolCallConfigDatabaseInsert.
+pub fn apply_dynamic_tool_params_update_to_tool_call_config(
+    existing_tool_params: Option<ToolCallConfigDatabaseInsert>,
+    update_request: UpdateDynamicToolParamsRequest,
+    function_config: &FunctionConfig,
+    static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+) -> Result<Option<ToolCallConfigDatabaseInsert>, Error> {
+    if update_request.allowed_tools.is_none()
+        && update_request.additional_tools.is_none()
+        && update_request.tool_choice.is_none()
+        && update_request.parallel_tool_calls.is_none()
+        && update_request.provider_tools.is_none()
+    {
+        return Ok(existing_tool_params);
+    }
+
+    let mut merged_dynamic_tool_params: DynamicToolParams =
+        existing_tool_params.unwrap_or_default().into();
+
+    // Handle allowed_tools (three-state: omitted, null, value)
+    // Omitted (None): no change
+    // Some(None) = explicitly null -> clear to None
+    // Some(Some(vec)) = set to explicit list
+    if let Some(allowed_tools) = update_request.allowed_tools {
+        merged_dynamic_tool_params.allowed_tools = allowed_tools;
+    }
+
+    // Handle additional_tools
+    if let Some(additional_tools) = update_request.additional_tools {
+        merged_dynamic_tool_params.additional_tools = Some(additional_tools);
+    }
+
+    // Handle tool_choice (three-state: omitted, null, value)
+    if let Some(tool_choice_opt) = update_request.tool_choice {
+        // Some(None) = explicitly null -> clear to None (use function default)
+        // Some(Some(choice)) = set to specific value
+        merged_dynamic_tool_params.tool_choice = tool_choice_opt;
+    }
+
+    // Handle parallel_tool_calls (three-state: omitted, null, value)
+    if let Some(parallel_opt) = update_request.parallel_tool_calls {
+        merged_dynamic_tool_params.parallel_tool_calls = parallel_opt;
+    }
+
+    // Handle provider_tools
+    if let Some(provider_tools) = update_request.provider_tools {
+        merged_dynamic_tool_params.provider_tools = provider_tools;
+    }
+
+    function_config.dynamic_tool_params_to_database_insert(merged_dynamic_tool_params, static_tools)
+}
+
 /// This is a legacy struct. We use it for deserializing historical data and
 /// continuing to write the same format only.
 /// This should not be used in new code.
@@ -1483,6 +1525,7 @@ pub struct LegacyToolCallConfigDatabaseInsert {
 pub struct DynamicToolParams {
     /// A subset of static tools configured for the function that the inference is allowed to use. Optional.
     /// If not provided, all static tools are allowed.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub allowed_tools: Option<Vec<String>>,
 
     /// Tools that the user provided at inference time (not in function config), in addition to the function-configured
@@ -1493,10 +1536,12 @@ pub struct DynamicToolParams {
     pub additional_tools: Option<Vec<DynamicTool>>,
     /// User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
     /// Optional.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
 
     /// Whether to use parallel tool calls in the inference. Optional.
     /// If provided during inference, it will override the function-configured parallel tool calls.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub parallel_tool_calls: Option<bool>,
 
     /// Provider-specific tool configurations

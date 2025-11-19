@@ -276,12 +276,10 @@ async fn test_datapoint_update_tool_params() {
             "datapoints": [{
                 "type": "chat",
                 "id": original_id.to_string(),
-                "tool_params": {
-                    "allowed_tools": ["get_temperature"],
-                    "additional_tools": [updated_tool],
-                    "tool_choice": {"specific": "updated_tool"},
-                    "parallel_tool_calls": true
-                }
+                "allowed_tools": ["get_temperature"],
+                "additional_tools": [updated_tool],
+                "tool_choice": {"specific": "updated_tool"},
+                "parallel_tool_calls": true
             }]
         }))
         .send()
@@ -857,7 +855,7 @@ async fn test_datapoint_tool_params_three_states() {
         "tool_params fields should still exist when field is omitted"
     );
 
-    // Test Case 2: Set tool_params to null -> removes tool_params
+    // Test Case 2: Clear tool params fields
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
@@ -866,7 +864,11 @@ async fn test_datapoint_tool_params_three_states() {
             "datapoints": [{
                 "type": "chat",
                 "id": new_id_1.to_string(),
-                "tool_params": null  // Explicitly null - should remove
+                "allowed_tools": [],
+                "additional_tools": [],
+                "tool_choice": null,
+                "parallel_tool_calls": null,
+                "provider_tools": []
             }]
         }))
         .send()
@@ -891,12 +893,34 @@ async fn test_datapoint_tool_params_three_states() {
         .unwrap();
 
     let dp2 = &resp2.json::<Value>().await.unwrap()["datapoints"][0];
-    // With flatten, when tool_params is null, the fields should not be present
-    assert!(
-        dp2["allowed_tools"].is_null()
-            && dp2["additional_tools"].is_null()
-            && dp2["tool_choice"].is_null(),
-        "tool_params fields should be null when explicitly set to null"
+
+    assert_eq!(
+        dp2["allowed_tools"],
+        json!([]),
+        "allowed_tools should be set to empty array"
+    );
+    assert_eq!(
+        dp2["additional_tools"],
+        json!(null),
+        "additional_tools should be cleared"
+    );
+    assert_eq!(
+        dp2["provider_tools"],
+        json!([]),
+        "provider_tools should be set to empty array"
+    );
+
+    // tool_choice and parallel_tool_calls now take on the function's value
+    // See tensorzero-core/tests/e2e/tensorzero.toml
+    assert_eq!(
+        dp2["tool_choice"],
+        json!("auto"),
+        "tool_choice should be set to function's tool choice"
+    );
+    assert_eq!(
+        dp2["parallel_tool_calls"],
+        json!(null),
+        "parallel_tool_calls should be cleared"
     );
 
     // Test Case 3: Set tool_params to new value -> updates tool_params
@@ -918,10 +942,9 @@ async fn test_datapoint_tool_params_three_states() {
             "datapoints": [{
                 "type": "chat",
                 "id": new_id_2.to_string(),
-                "tool_params": {
-                    "additional_tools": [new_tool],
-                    "tool_choice": "required"
-                }
+                "allowed_tools": json!(null),
+                "additional_tools": [new_tool],
+                "tool_choice": "required"
             }]
         }))
         .send()
@@ -947,11 +970,10 @@ async fn test_datapoint_tool_params_three_states() {
 
     let dp3 = &resp3.json::<Value>().await.unwrap()["datapoints"][0];
     // With flatten, tool params fields should be at top level
-    assert!(
-        !dp3["tool_choice"].is_null(),
-        "tool_params should be set to new value"
+    assert_eq!(
+        dp3["tool_choice"], "required",
+        "tool_choice should be set to new value"
     );
-    assert_eq!(dp3["tool_choice"], "required");
 
     // When only additional_tools provided without explicit allowed_tools, the database stores
     // AllowedToolsChoice::FunctionDefault which deserializes as None/null on read.

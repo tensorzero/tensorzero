@@ -48,17 +48,12 @@ futures-core = "0.3.30"
 hex = "0.4.3"
 itertools = "0.14.0"
 jsonschema = "0.33.0"
-jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
+# TODO - unpin when https://github.com/EmbarkStudios/cargo-deny/issues/803 is fixed
+jsonwebtoken = { version = "=10.1.0", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
 metrics = "0.24.2"
 metrics-exporter-prometheus = { workspace = true }
-minijinja = { version = "2.12.0", features = [
-    "loader",
-    "debug",
-    "json",
-    "loop_controls",
-    "builtins",
-] }
+minijinja = { workspace = true }
 object_store = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
@@ -109,7 +104,7 @@ pyo3 = { workspace = true, optional = true }
 google-cloud-auth = { workspace = true }
 mime = { workspace = true }
 mime_guess = "2.0.5"
-indexmap = "2.12.0"
+indexmap = { version = "2.12.0", features = ["serde"] }
 base64 = "0.22.1"
 thiserror = "2.0.16"
 globset = "0.4.18"

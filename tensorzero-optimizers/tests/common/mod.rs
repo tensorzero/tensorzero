@@ -214,6 +214,9 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         OptimizerOutput::Variant(_) => {
             panic!("Expected model output, got variant output");
         }
+        OptimizerOutput::Variants(_) => {
+            panic!("Expected model output, got variants output");
+        }
     };
 }
 

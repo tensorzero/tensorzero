@@ -148,6 +148,12 @@ impl<'a> From<&'a ToolChoice> for ChatCompletionToolChoice<'a> {
 fn prepare_chat_completion_allowed_tools_constraint<'a>(
     tool_config: &'a crate::tool::ToolCallConfig,
 ) -> Option<ChatCompletionAllowedToolsChoice<'a>> {
+    // OpenAI-compatible providers don't allow both tool-choice "none" and tool-choice "allowed_tools",
+    // since they're both set via the top-level "tool_choice" field.
+    // We make `ToolChoice::None` take priority - that is, we allow "none" of the allowed tools.
+    if tool_config.tool_choice == ToolChoice::None {
+        return None;
+    }
     let allowed_tools_list = tool_config.allowed_tools.as_dynamic_allowed_tools()?;
 
     // Construct the OpenAI spec-compliant allowed_tools structure
@@ -529,6 +535,27 @@ mod tests {
             .collect();
         assert!(tool_names.contains(&"tool1"));
         assert!(tool_names.contains(&"tool2"));
+    }
+
+    #[test]
+    fn test_prepare_allowed_tools_constraint_choice_none() {
+        let tool_config = ToolCallConfig {
+            tool_choice: ToolChoice::None,
+            allowed_tools: AllowedTools {
+                tools: vec!["tool1".to_string(), "tool2".to_string()]
+                    .into_iter()
+                    .collect(),
+                choice: AllowedToolsChoice::Explicit,
+            },
+            parallel_tool_calls: None,
+            static_tools_available: vec![create_static_tool_config()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![],
+            openai_custom_tools: vec![],
+        };
+
+        let result = prepare_chat_completion_allowed_tools_constraint(&tool_config);
+        assert!(result.is_none());
     }
 
     #[test]

@@ -12,7 +12,7 @@ pub use crate::db::clickhouse::query_builder::{
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
-use crate::tool::DynamicToolParams;
+use crate::tool::{DynamicTool, DynamicToolParams, ProviderTool, ToolChoice};
 
 /// Request to update one or more datapoints in a dataset.
 #[derive(Debug, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
@@ -61,19 +61,53 @@ pub struct UpdateChatDatapointRequest {
     #[serde(default)]
     pub output: Option<Vec<ContentBlockChatOutput>>,
 
-    /// Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    #[serde(default, deserialize_with = "deserialize_double_option")]
-    #[schemars(extend("x-double-option" = true))]
-    pub tool_params: Option<Option<DynamicToolParams>>,
+    /// Datapoint tool parameters.
+    #[serde(flatten)]
+    pub tool_params: UpdateDynamicToolParamsRequest,
 
     /// Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     /// it will be overwrite the existing tags.
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
 
-    /// Metadata fields. If omitted, it will be left unchanged.
-    #[serde(default)]
-    pub metadata: Option<DatapointMetadataUpdate>,
+    /// Metadata fields to update.
+    #[serde(flatten)]
+    pub metadata: DatapointMetadataUpdate,
+}
+
+/// A request to update the dynamic tool parameters of a datapoint.
+#[derive(Debug, Serialize, Deserialize, Default, Clone, JsonSchema, ts_rs::TS)]
+#[ts(export, optional_fields)]
+#[export_schema]
+pub struct UpdateDynamicToolParamsRequest {
+    /// A subset of static tools configured for the function that the inference is explicitly allowed to use.
+    /// If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
+    /// provided at inference time). If specified as a value, it will be set to the provided value.
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
+    pub allowed_tools: Option<Option<Vec<String>>>,
+
+    /// Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
+    /// Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
+    /// new tools or exclude removed tools.
+    /// If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    pub additional_tools: Option<Vec<DynamicTool>>,
+
+    /// User-specified tool choice strategy.
+    /// If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
+    pub tool_choice: Option<Option<ToolChoice>>,
+
+    /// Whether to use parallel tool calls in the inference.
+    /// If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
+    pub parallel_tool_calls: Option<Option<bool>>,
+
+    /// Provider-specific tool configurations
+    /// If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    pub provider_tools: Option<Vec<ProviderTool>>,
 }
 
 /// An update request for a JSON datapoint.
@@ -112,9 +146,9 @@ pub struct UpdateJsonDatapointRequest {
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
 
-    /// Metadata fields. If omitted, it will be left unchanged.
-    #[serde(default)]
-    pub metadata: Option<DatapointMetadataUpdate>,
+    /// Metadata fields to update.
+    #[serde(flatten)]
+    pub metadata: DatapointMetadataUpdate,
 }
 
 /// A request to update the output of a JSON datapoint.
@@ -129,7 +163,7 @@ pub struct JsonDatapointOutputUpdate {
 }
 
 /// A request to update the metadata of a datapoint.
-#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
+#[derive(Debug, Serialize, Default, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[export_schema]
 pub struct DatapointMetadataUpdate {
@@ -168,6 +202,7 @@ pub struct UpdateDatapointMetadataRequest {
     pub id: Uuid,
 
     /// Metadata fields to update.
+    #[serde(flatten)]
     pub metadata: DatapointMetadataUpdate,
 }
 

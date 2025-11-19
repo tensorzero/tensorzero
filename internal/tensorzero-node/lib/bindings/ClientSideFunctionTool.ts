@@ -2,7 +2,7 @@
 import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
- * `ClientSideFunctionTool` is a particular kind of tool that relies
+ * `FunctionTool` is a particular kind of tool that relies
  * on the client to execute a function on their side (a ToolCall content block)
  * and return the result on the next turn (a ToolCallResult).
  * Notably, we assume there is a JSON schema `parameters` that specifies the
