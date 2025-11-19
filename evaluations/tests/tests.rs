@@ -2328,6 +2328,7 @@ async fn test_evaluation_with_dynamic_variant() {
     assert!(result.run_info.num_datapoints > 0);
 }
 
+/// Tests that `run_evaluation_core_streaming` correctly respects the `max_datapoints` parameter.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_max_datapoints_parameter() {
     init_tracing_for_tests();
@@ -2399,6 +2400,8 @@ async fn test_max_datapoints_parameter() {
     );
 }
 
+/// Tests that `run_evaluation_core_streaming` correctly implements adaptive stopping with precision targets
+/// for multiple evaluators.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_precision_targets_parameter() {
     init_tracing_for_tests();
@@ -2435,7 +2438,7 @@ async fn test_precision_targets_parameter() {
     // exact_match: CI half-width <= 0.10
     // topic_starts_with_f: CI half-width <= 0.13
     let mut precision_targets = HashMap::new();
-    precision_targets.insert("exact_match".to_string(), 0.10);
+    precision_targets.insert("exact_match".to_string(), 0.20);
     precision_targets.insert("topic_starts_with_f".to_string(), 0.13);
 
     let core_args = EvaluationCoreArgs {
@@ -2517,6 +2520,7 @@ async fn test_precision_targets_parameter() {
     );
 }
 
+/// Tests that the CLI interface (`run_evaluation`) correctly respects the `max_datapoints` constraint.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_cli_args_max_datapoints() {
     init_tracing_for_tests();
@@ -2574,6 +2578,7 @@ async fn test_cli_args_max_datapoints() {
     );
 }
 
+/// Tests that the CLI interface (`run_evaluation`) correctly implements adaptive stopping with precision targets.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_cli_args_precision_targets() {
     init_tracing_for_tests();

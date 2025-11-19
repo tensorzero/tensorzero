@@ -96,37 +96,36 @@ pub struct Args {
     /// Example: --adaptive-stopping-precision exact_match=0.13,llm_judge=0.16
     /// Evaluator stops when confidence interval (CI) half-width (or the maximum width of the two
     /// halves of the CI in the case of asymmetric CIs) <= precision_target.
-    #[arg(long = "adaptive-stopping-precision", value_parser = parse_precision_targets, default_value = "")]
+    #[arg(long = "adaptive-stopping-precision", value_parser = parse_precision_target, value_delimiter = ',', num_args = 0..)]
     pub precision_targets: Vec<(String, f32)>,
 }
 
-/// Parse precision targets argument in format "evaluator1=target_value1,evaluator2=target_value2,..."
-fn parse_precision_targets(s: &str) -> Result<Vec<(String, f32)>, String> {
-    // Return empty vec if input is empty
-    if s.trim().is_empty() {
-        return Ok(Vec::new());
+/// Parse a single precision target in format "evaluator_name=precision_target"
+fn parse_precision_target(s: &str) -> Result<(String, f32), String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err("Precision target cannot be empty".to_string());
     }
 
-    s.split(',')
-        .map(|pair| {
-            let parts: Vec<&str> = pair.trim().splitn(2, '=').collect();
-            if parts.len() != 2 {
-                return Err(format!(
-                    "Invalid precision format: '{pair}'. Expected format: evaluator_name=precision_target"
-                ));
-            }
-            let evaluator_name = parts[0].to_string();
-            let precision_target = parts[1]
-                .parse::<f32>()
-                .map_err(|e| format!("Invalid pr value '{}': {e}", parts[1]))?;
-            if precision_target < 0.0 {
-                return Err(format!(
-                    "Precision value must be non-negative, got {precision_target}"
-                ));
-            }
-            Ok((evaluator_name, precision_target))
-        })
-        .collect()
+    let parts: Vec<&str> = s.splitn(2, '=').collect();
+    if parts.len() != 2 {
+        return Err(format!(
+            "Invalid precision format: '{s}'. Expected format: evaluator_name=precision_target"
+        ));
+    }
+
+    let evaluator_name = parts[0].to_string();
+    let precision_target = parts[1]
+        .parse::<f32>()
+        .map_err(|e| format!("Invalid precision value '{}': {e}", parts[1]))?;
+
+    if precision_target < 0.0 {
+        return Err(format!(
+            "Precision value must be non-negative, got {precision_target}"
+        ));
+    }
+
+    Ok((evaluator_name, precision_target))
 }
 
 pub struct Clients {
