@@ -75,7 +75,7 @@ async fn run_evaluations_json() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -352,7 +352,7 @@ async fn run_exact_match_evaluation_chat() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -477,7 +477,7 @@ async fn run_llm_judge_evaluation_chat() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let tensorzero_client = get_tensorzero_client().await;
@@ -701,7 +701,7 @@ async fn run_image_evaluation() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -918,7 +918,7 @@ async fn check_invalid_image_evaluation() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1021,7 +1021,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1066,7 +1066,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1227,7 +1227,7 @@ async fn run_evaluations_errors() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1274,7 +1274,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     init_tracing_for_tests();
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(PathBuf::from(&format!(
-            "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+            "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         ))),
         clickhouse_url: None,
@@ -1646,7 +1646,7 @@ async fn run_evaluations_best_of_3() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1836,7 +1836,7 @@ async fn run_evaluations_mixture_of_3() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -2029,7 +2029,7 @@ async fn run_evaluations_dicl() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -2256,7 +2256,7 @@ async fn test_evaluation_with_dynamic_variant() {
     .await;
 
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
 
@@ -2349,7 +2349,7 @@ async fn test_max_datapoints_parameter() {
     let config = Arc::new(
         Config::load_from_path_optional_verify_credentials(
             &tensorzero_core::config::ConfigFileGlob::new_from_path(&PathBuf::from(&format!(
-                "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+                "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
                 std::env::var("CARGO_MANIFEST_DIR").unwrap()
             )))
             .unwrap(),
@@ -2422,7 +2422,7 @@ async fn test_precision_targets_parameter() {
     let config = Arc::new(
         Config::load_from_path_optional_verify_credentials(
             &tensorzero_core::config::ConfigFileGlob::new_from_path(&PathBuf::from(&format!(
-                "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+                "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
                 std::env::var("CARGO_MANIFEST_DIR").unwrap()
             )))
             .unwrap(),
