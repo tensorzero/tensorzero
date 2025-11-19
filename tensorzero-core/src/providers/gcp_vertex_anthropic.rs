@@ -541,7 +541,8 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             } else {
                 Some(
                     c.strict_tools_available()
-                        .map(Into::into)
+                        // GCP Vertex Anthropic does not support structured outputs
+                        .map(|tool| AnthropicTool::new(tool, false))
                         .collect::<Vec<_>>(),
                 )
             }
@@ -898,13 +899,14 @@ mod tests {
             parameters: DynamicJSONSchema::new(parameters.clone()),
             strict: false,
         });
-        let anthropic_tool: AnthropicTool = (&tool).into();
+        let anthropic_tool: AnthropicTool = AnthropicTool::new(&tool, false);
         assert_eq!(
             anthropic_tool,
             AnthropicTool {
                 name: "test",
                 description: Some("test"),
                 input_schema: &parameters,
+                strict: None,
             }
         );
     }
@@ -1217,6 +1219,7 @@ mod tests {
                     name: WEATHER_TOOL.name(),
                     description: Some(WEATHER_TOOL.description()),
                     input_schema: WEATHER_TOOL.parameters(),
+                    strict: None,
                 }]),
                 ..Default::default()
             }
