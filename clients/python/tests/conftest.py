@@ -14,13 +14,18 @@ from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatDatapointInsert,
+    ClientSideFunctionTool,
+    ContentBlockChatOutputText,
     JsonDatapointInsert,
     JsonInferenceOutput,
     RenderedSample,
-    StoredInference,
+    StoredInferenceChat,
+    StoredInferenceJson,
+    StoredInput,
+    StoredInputMessage,
+    StoredInputMessageContentText,
+    StoredInputMessageContentThought,
     TensorZeroGateway,
-    Text,
-    Tool,
     patch_openai_client,
 )
 from tensorzero.util import uuid7
@@ -99,28 +104,27 @@ def sync_client(request: FixtureRequest):
 def mixed_rendered_samples(
     embedded_sync_client: TensorZeroGateway,
 ) -> List[RenderedSample]:
-    chat_inference = StoredInference(
-        type="chat",
+    chat_inference = StoredInferenceChat(
         function_name="basic_test",
         variant_name="default",
-        input={
-            "system": {"assistant_name": "foo"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "thought", "text": "hmmm"},
-                        {"type": "text", "value": "bar"},
+        input=StoredInput(
+            system={"assistant_name": "foo"},
+            messages=[
+                StoredInputMessage(
+                    role="user",
+                    content=[
+                        StoredInputMessageContentThought(type="thought", text="hmmm"),
+                        StoredInputMessageContentText(type="text", text="bar"),
                     ],
-                },
+                )
             ],
-        },
-        output=[Text(text="Hello world")],
-        episode_id=uuid7(),
-        inference_id=uuid7(),
+        ),
+        output=[ContentBlockChatOutputText(text="Hello world")],
+        episode_id=str(uuid7()),
+        inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
         additional_tools=[
-            Tool(
+            ClientSideFunctionTool(
                 name="test",
                 description="test",
                 parameters={
@@ -133,26 +137,24 @@ def mixed_rendered_samples(
         ],
         tool_choice="auto",
         parallel_tool_calls=False,
-        output_schema=None,
         dispreferred_outputs=[],
         tags={"test_key": "test_value"},
     )
-    json_inference = StoredInference(
-        type="json",
+    json_inference = StoredInferenceJson(
         function_name="json_success",
         variant_name="dummy",
-        input={
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Japan"}}],
-                },
+        input=StoredInput(
+            system={"assistant_name": "Dr. Mehta"},
+            messages=[
+                StoredInputMessage(
+                    role="user",
+                    content=[StoredInputMessageContentText(type="text", text='{"country": "Japan"}')],
+                )
             ],
-        },
+        ),
         output=JsonInferenceOutput(parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'),
-        episode_id=uuid7(),
-        inference_id=uuid7(),
+        episode_id=str(uuid7()),
+        inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
         output_schema={
             "type": "object",
@@ -173,26 +175,24 @@ def chat_function_rendered_samples(
     embedded_sync_client: TensorZeroGateway,
 ) -> List[RenderedSample]:
     """Fixture for optimization tests - chat function samples without tools."""
-    chat_inference = StoredInference(
-        type="chat",
+    chat_inference = StoredInferenceChat(
         function_name="basic_test",
         variant_name="default",
-        input={
-            "system": {"assistant_name": "foo"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "value": "What is the capital of France?"}],
-                },
+        input=StoredInput(
+            system={"assistant_name": "foo"},
+            messages=[
+                StoredInputMessage(
+                    role="user",
+                    content=[StoredInputMessageContentText(type="text", text="What is the capital of France?")],
+                )
             ],
-        },
-        output=[Text(text="The capital of France is Paris.")],
-        episode_id=uuid7(),
-        inference_id=uuid7(),
+        ),
+        output=[ContentBlockChatOutputText(text="The capital of France is Paris.")],
+        episode_id=str(uuid7()),
+        inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
         tool_choice="none",
         parallel_tool_calls=False,
-        output_schema=None,
         dispreferred_outputs=[],
         tags={"test_key": "test_value"},
     )
@@ -209,22 +209,21 @@ def json_function_rendered_samples(
     embedded_sync_client: TensorZeroGateway,
 ) -> List[RenderedSample]:
     """Fixture for optimization tests - JSON function samples."""
-    json_inference = StoredInference(
-        type="json",
+    json_inference = StoredInferenceJson(
         function_name="json_success",
         variant_name="dummy",
-        input={
-            "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "value": {"country": "Japan"}}],
-                },
+        input=StoredInput(
+            system={"assistant_name": "Dr. Mehta"},
+            messages=[
+                StoredInputMessage(
+                    role="user",
+                    content=[StoredInputMessageContentText(type="text", text='{"country": "Japan"}')],
+                )
             ],
-        },
+        ),
         output=JsonInferenceOutput(parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'),
-        episode_id=uuid7(),
-        inference_id=uuid7(),
+        episode_id=str(uuid7()),
+        inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
         output_schema={
             "type": "object",

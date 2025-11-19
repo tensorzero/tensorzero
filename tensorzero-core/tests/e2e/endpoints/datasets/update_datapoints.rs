@@ -5,7 +5,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::Duration;
-use tensorzero::{GetDatapointParams, StoredDatapoint};
+use tensorzero::{ClientSideFunctionTool, GetDatapointParams, StoredDatapoint};
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::{
@@ -16,10 +16,11 @@ use tensorzero_core::db::datasets::{
 };
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
-    StoredInputMessageContent, System, Text,
+    StoredInputMessageContent, System, Template, Text,
 };
 use tensorzero_core::tool::{
-    AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert, ToolChoice,
+    AllowedTools, AllowedToolsChoice, ProviderTool, ProviderToolScope, Tool,
+    ToolCallConfigDatabaseInsert, ToolChoice,
 };
 
 use crate::common::get_gateway_endpoint;
@@ -544,9 +545,7 @@ async fn test_update_datapoint_with_metadata() {
             "datapoints": [{
                 "type": "chat",
                 "id": datapoint_id.to_string(),
-                "metadata": {
-                    "name": "Test Datapoint Name"
-                }
+                "name": "Test Datapoint Name"
             }]
         }))
         .send()
@@ -743,11 +742,19 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
             text: "Output".to_string(),
         })]),
         tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-            vec![],
-            vec![],
+            vec![Tool::ClientSideFunction(ClientSideFunctionTool {
+                name: "test_tool".to_string(),
+                description: "Test tool".to_string(),
+                parameters: json!({}),
+                strict: false,
+            })],
+            vec![ProviderTool {
+                scope: ProviderToolScope::Unscoped,
+                tool: json!({"foo": "bar"}),
+            }],
             AllowedTools {
-                tools: vec![],
-                choice: AllowedToolsChoice::FunctionDefault,
+                tools: vec!["test_tool".to_string()],
+                choice: AllowedToolsChoice::Explicit,
             },
             ToolChoice::Auto,
             None,
@@ -766,7 +773,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Update to set tool_params to null
+    // Update to set tool_params fields to null
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
@@ -775,7 +782,9 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
             "datapoints": [{
                 "type": "chat",
                 "id": datapoint_id.to_string(),
-                "tool_params": null,
+                "allowed_tools": null,
+                "additional_tools": [],
+                "provider_tools": [],
             }]
         }))
         .send()
@@ -788,7 +797,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Verify the new datapoint has tool_params set to None
+    // Verify the new datapoint has tool_params fields cleared appropriately
     let new_datapoint = clickhouse
         .get_datapoint(&GetDatapointParams {
             dataset_name: dataset_name.clone(),
@@ -802,7 +811,10 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_none());
-    assert_eq!(chat_datapoint.tool_params, None);
+    assert!(
+        chat_datapoint.tool_params.is_none(),
+        "When all tool params are cleared, tool params should be None (through deserialize_optional_tool_info)"
+    );
 }
 
 #[tokio::test]
@@ -950,9 +962,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
             "datapoints": [{
                 "type": "chat",
                 "id": datapoint_id.to_string(),
-                "metadata": {
-                    "name": null
-                }
+                "name": null
             }]
         }))
         .send()
@@ -1225,7 +1235,7 @@ async fn test_update_metadata_chat_datapoint() {
         .json(&json!({
             "datapoints": [{
                 "id": datapoint_id.to_string(),
-                "metadata": {"name": "updated_name"}
+                "name": "updated_name"
             }]
         }))
         .send()
@@ -1325,7 +1335,7 @@ async fn test_update_metadata_json_datapoint() {
         .json(&json!({
             "datapoints": [{
                 "id": datapoint_id.to_string(),
-                "metadata": {"name": "updated_json_name"}
+                "name": "updated_json_name"
             }]
         }))
         .send()
@@ -1408,7 +1418,7 @@ async fn test_update_metadata_set_name_to_null() {
         .json(&json!({
             "datapoints": [{
                 "id": datapoint_id.to_string(),
-                "metadata": {"name": null}
+                "name": null,
             }]
         }))
         .send()
@@ -1612,4 +1622,279 @@ async fn test_update_metadata_duplicate_ids() {
         .unwrap();
 
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_get_chat_datapoint_modify_and_update_roundtrip() {
+    let http_client = Client::new();
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test-roundtrip-{}", Uuid::now_v7());
+
+    // Create a datapoint
+    let datapoint_id = Uuid::now_v7();
+    let mut tags = HashMap::new();
+    tags.insert("env".to_string(), "test".to_string());
+
+    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "basic_test".to_string(),
+        name: Some("Original Name".to_string()),
+        id: datapoint_id,
+        episode_id: None,
+        input: StoredInput {
+            system: Some(System::Template(Arguments(
+                json!({"assistant_name": "Test"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ))),
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Original message".to_string(),
+                })],
+            }],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "Original output".to_string(),
+        })]),
+        tool_params: None,
+        tags: Some(tags),
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        // Make a non-custom datapoint so that it can be modified
+        is_custom: false,
+    });
+
+    clickhouse
+        .insert_datapoints(&[datapoint_insert])
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Get the datapoint via HTTP API
+    let get_resp = http_client
+        .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+        .json(&json!({
+            "ids": [datapoint_id.to_string()]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(get_resp.status().is_success());
+    let get_datapoints_response: Value = get_resp.json().await.unwrap();
+
+    // Modify the output field in the JSON
+    assert!(
+        get_datapoints_response["datapoints"]
+            .as_array()
+            .unwrap()
+            .len()
+            == 1
+    );
+    let mut first_datapoint = get_datapoints_response["datapoints"][0].clone();
+    first_datapoint["output"][0]["text"] = json!("Modified output");
+
+    // Round-trip to update_datapoints
+    let update_resp = http_client
+        .patch(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/datapoints",
+        )))
+        .json(&json!({
+            "datapoints": [first_datapoint]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        update_resp.status().is_success(),
+        "Update request failed: {:?}",
+        update_resp.status()
+    );
+    let resp_json: Value = update_resp.json().await.unwrap();
+    let new_id: Uuid = resp_json["ids"][0].as_str().unwrap().parse().unwrap();
+    assert_ne!(new_id, datapoint_id, "Should create a new datapoint ID");
+
+    // Wait for async inserts
+    clickhouse_flush_async_insert(&clickhouse).await;
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+
+    // Verify the new datapoint has the modified output
+    let new_datapoint = clickhouse
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id: new_id,
+            allow_stale: Some(false),
+        })
+        .await
+        .unwrap();
+
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
+        panic!("Expected chat datapoint");
+    };
+    assert!(chat_datapoint.staled_at.is_none());
+    assert_eq!(
+        chat_datapoint.output,
+        Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "Modified output".to_string(),
+        })]),
+        "Output should be modified"
+    );
+    // Verify it's now marked as "custom"
+    assert!(
+        chat_datapoint.is_custom,
+        "Datapoint should be marked as custom"
+    );
+    // Verify other fields remain unchanged
+    assert_eq!(
+        chat_datapoint.name,
+        Some("Original Name".to_string()),
+        "Name should remain unchanged"
+    );
+    assert_eq!(
+        chat_datapoint.tags,
+        Some(HashMap::from([("env".to_string(), "test".to_string())])),
+        "Tags should remain unchanged"
+    );
+}
+
+#[tokio::test]
+async fn test_get_json_datapoint_modify_and_update_roundtrip() {
+    let http_client = Client::new();
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test-json-roundtrip-{}", Uuid::now_v7());
+
+    // Create a JSON datapoint
+    let datapoint_id = Uuid::now_v7();
+    let mut tags = HashMap::new();
+    tags.insert("env".to_string(), "test".to_string());
+
+    let output_schema = json!({
+        "type": "object",
+        "properties": {"answer": {"type": "string"}},
+        "required": ["answer"],
+        "additionalProperties": false
+    });
+
+    let datapoint_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "json_success".to_string(),
+        name: Some("Original Name".to_string()),
+        id: datapoint_id,
+        episode_id: None,
+        input: StoredInput {
+            system: Some(System::Template(Arguments(
+                json!({"assistant_name": "Alfred Pennyworth"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ))),
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::Template(Template {
+                    name: "user".to_string(),
+                    arguments: Arguments(json!({"country": "Japan"}).as_object().unwrap().clone()),
+                })],
+            }],
+        },
+        output: Some(JsonInferenceOutput {
+            raw: Some(r#"{"answer":"4"}"#.to_string()),
+            parsed: Some(json!({"answer": "4"})),
+        }),
+        output_schema,
+        tags: Some(tags),
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        // Mark as non-custom so that it can be modified
+        is_custom: false,
+    });
+
+    clickhouse
+        .insert_datapoints(&[datapoint_insert])
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Get the datapoint via HTTP API
+    let get_resp = http_client
+        .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+        .json(&json!({
+            "ids": [datapoint_id.to_string()]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(get_resp.status().is_success());
+    let get_datapoints_response: Value = get_resp.json().await.unwrap();
+
+    // Modify the output field in the JSON
+    assert!(
+        get_datapoints_response["datapoints"]
+            .as_array()
+            .unwrap()
+            .len()
+            == 1
+    );
+    let mut first_datapoint = get_datapoints_response["datapoints"][0].clone();
+    first_datapoint["output"] = json!({
+        "raw": r#"{"answer":"5"}"#
+    });
+    first_datapoint["name"] = json!("Modified Name");
+
+    // Send it back to update_datapoints
+    let update_resp = http_client
+        .patch(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/datapoints",
+        )))
+        .json(&json!({
+            "datapoints": [first_datapoint]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        update_resp.status().is_success(),
+        "Update request failed: {:?}",
+        update_resp.status()
+    );
+    let resp_json: Value = update_resp.json().await.unwrap();
+    let new_id: Uuid = resp_json["ids"][0].as_str().unwrap().parse().unwrap();
+    assert_ne!(new_id, datapoint_id, "Should create a new datapoint ID");
+
+    // Wait for async inserts
+    clickhouse_flush_async_insert(&clickhouse).await;
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+
+    // Verify the new datapoint has the modified output and name
+    let new_datapoint = clickhouse
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id: new_id,
+            allow_stale: Some(false),
+        })
+        .await
+        .unwrap();
+
+    let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
+        panic!("Expected json datapoint");
+    };
+    assert!(json_datapoint.staled_at.is_none());
+
+    let output = json_datapoint.output.unwrap();
+    assert_eq!(output.parsed.unwrap(), json!({"answer": "5"}));
+
+    // Verify other fields remain unchanged
+    assert_eq!(json_datapoint.name, Some("Modified Name".to_string()));
+    assert_eq!(
+        json_datapoint.tags,
+        Some(HashMap::from([("env".to_string(), "test".to_string())]))
+    );
 }
