@@ -1422,7 +1422,7 @@ mod tests {
         };
 
         // Setup inference config
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         let inference_config = InferenceConfig {
             templates: Arc::new(templates),
             tool_config: None,
@@ -1549,7 +1549,7 @@ mod tests {
         });
 
         // Setup inference config
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         let inference_config = InferenceConfig {
             templates: Arc::new(templates),
             tool_config: None,

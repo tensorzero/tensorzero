@@ -949,7 +949,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_system_message() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Test without templates, string message
         let fuser_config = FuserConfig {
@@ -1130,7 +1130,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_candidate_message() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Prepare some candidate InferenceResults
         let model_inference_response = ModelInferenceResponseWithMetadata {
@@ -1215,7 +1215,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_candidate_message_json() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
@@ -1321,7 +1321,7 @@ mod tests {
             fuser: fuser_config,
         };
 
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
