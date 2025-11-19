@@ -65,7 +65,7 @@ function EvaluationForm({
   const [maxDatapoints, setMaxDatapoints] = useState<string>(
     initialFormState?.max_datapoints ?? "",
   );
-  const [precisionTargets, setprecisionTargets] = useState<
+  const [precisionTargets, setPrecisionTargets] = useState<
     Record<string, string>
   >(initialFormState?.precision_targets ?? {});
 
@@ -100,7 +100,7 @@ function EvaluationForm({
     ) {
       setSelectedEvaluationName(null);
       setSelectedVariantName(null);
-      setprecisionTargets({});
+      setPrecisionTargets({});
     }
 
     // Validate dataset name - if datasets have loaded and the dataset doesn't exist, clear it
@@ -147,7 +147,7 @@ function EvaluationForm({
       const currentKeys = Object.keys(precisionTargets).sort().join(",");
       const newKeys = Object.keys(newLimits).sort().join(",");
       if (currentKeys !== newKeys) {
-        setprecisionTargets(newLimits);
+        setPrecisionTargets(newLimits);
       }
     }
   }, [selectedEvaluationName, config.evaluations, precisionTargets]);
@@ -160,7 +160,7 @@ function EvaluationForm({
       !maxDatapoints.includes("."));
 
   // Validate precision_targets: all values must be non-negative numbers
-  const areprecisionTargetsValid = Object.values(precisionTargets).every(
+  const arePrecisionTargetsValid = Object.values(precisionTargets).every(
     (value) => {
       if (value === "") return true;
       // Check if the entire string is a valid number
@@ -179,7 +179,7 @@ function EvaluationForm({
     inferenceCache !== null &&
     concurrencyLimit !== "" &&
     isMaxDatapointsValid &&
-    areprecisionTargetsValid;
+    arePrecisionTargetsValid;
 
   return (
     <fetcher.Form
@@ -366,8 +366,8 @@ function EvaluationForm({
           inferenceCache={inferenceCache}
           setInferenceCache={setInferenceCache}
           precisionTargets={precisionTargets}
-          setprecisionTargets={setprecisionTargets}
-          areprecisionTargetsValid={areprecisionTargetsValid}
+          setPrecisionTargets={setPrecisionTargets}
+          arePrecisionTargetsValid={arePrecisionTargetsValid}
           evaluatorNames={evaluatorNames}
           defaultOpen={inferenceCache !== "on"}
         />
