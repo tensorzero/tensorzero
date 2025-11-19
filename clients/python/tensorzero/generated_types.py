@@ -174,7 +174,7 @@ class InferenceResponseToolCall:
 
 
 @dataclass(kw_only=True)
-class ClientSideFunctionTool:
+class FunctionTool:
     description: str
     parameters: Any
     name: str
@@ -638,7 +638,7 @@ class DynamicToolParams:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[ClientSideFunctionTool] | None = None
+    additional_tools: list[FunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -667,7 +667,7 @@ class UpdateDynamicToolParamsRequest:
     If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
     provided at inference time). If specified as a value, it will be set to the provided value.
     """
-    additional_tools: list[ClientSideFunctionTool] | None = None
+    additional_tools: list[FunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
     Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
@@ -777,7 +777,7 @@ class CreateChatDatapointRequest:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[ClientSideFunctionTool] | None = None
+    additional_tools: list[FunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -869,7 +869,7 @@ class ChatInferenceDatapoint:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[ClientSideFunctionTool] | None = None
+    additional_tools: list[FunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -943,7 +943,7 @@ class StoredChatInference:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[ClientSideFunctionTool] | None = None
+    additional_tools: list[FunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -1000,7 +1000,7 @@ class UpdateChatDatapointRequestInternal:
     If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
     provided at inference time). If specified as a value, it will be set to the provided value.
     """
-    additional_tools: list[ClientSideFunctionTool] | None = None
+    additional_tools: list[FunctionTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
     Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
