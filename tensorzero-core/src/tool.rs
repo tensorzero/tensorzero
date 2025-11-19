@@ -1538,8 +1538,6 @@ pub struct DynamicToolParams {
     /// Tools that the user provided at inference time (not in function config), in addition to the function-configured
     /// tools, that are also allowed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(as = "Option<Vec<Tool>>")]
-    #[schemars(with = "Option<Vec<Tool>>")]
     pub additional_tools: Option<Vec<DynamicTool>>,
     /// User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
     /// Optional.

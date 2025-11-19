@@ -190,11 +190,26 @@ class ToolClientSideFunction:
 
 
 @dataclass(kw_only=True)
-class OpenAICustomToolFormat1:
+class OpenAICustomToolFormatText:
     type: Literal["text"] = "text"
 
 
 OpenAIGrammarSyntax = Literal["lark", "regex"]
+
+
+@dataclass(kw_only=True)
+class FunctionTool:
+    description: str
+    parameters: Any
+    name: str
+    strict: bool | None = False
+    """
+    `strict` here specifies that TensorZero should attempt to use any facilities
+    available from the model provider to force the model to generate an accurate tool call,
+    notably OpenAI's strict tool call mode (https://platform.openai.com/docs/guides/function-calling#strict-mode).
+    This imposes additional restrictions on the JSON schema that may vary across providers
+    so we allow it to be configurable.
+    """
 
 
 @dataclass(kw_only=True)
@@ -360,21 +375,6 @@ class TimeDatapointFilter(TimeFilter):
 
 
 OrderDirection = Literal["ascending", "descending"]
-
-
-@dataclass(kw_only=True)
-class FunctionTool:
-    description: str
-    parameters: Any
-    name: str
-    strict: bool | None = False
-    """
-    `strict` here specifies that TensorZero should attempt to use any facilities
-    available from the model provider to force the model to generate an accurate tool call,
-    notably OpenAI's strict tool call mode (https://platform.openai.com/docs/guides/function-calling#strict-mode).
-    This imposes additional restrictions on the JSON schema that may vary across providers
-    so we allow it to be configurable.
-    """
 
 
 @dataclass(kw_only=True)
@@ -684,12 +684,12 @@ StoredInputMessageContent = (
 
 
 @dataclass(kw_only=True)
-class OpenAICustomToolFormat2:
+class OpenAICustomToolFormatGrammar:
     grammar: OpenAIGrammarDefinition
     type: Literal["grammar"] = "grammar"
 
 
-OpenAICustomToolFormat = OpenAICustomToolFormat1 | OpenAICustomToolFormat2
+OpenAICustomToolFormat = OpenAICustomToolFormatText | OpenAICustomToolFormatGrammar
 
 
 @dataclass(kw_only=True)
@@ -739,73 +739,13 @@ class InputMessage:
     content: list[InputMessageContent]
 
 
-DynamicTool = Tool | FunctionTool
-
-
-@dataclass(kw_only=True)
-class DynamicToolParams:
-    allowed_tools: list[str] | None = None
-    """
-    A subset of static tools configured for the function that the inference is allowed to use. Optional.
-    If not provided, all static tools are allowed.
-    """
-    additional_tools: list[Tool] | None = None
-    """
-    Tools that the user provided at inference time (not in function config), in addition to the function-configured
-    tools, that are also allowed.
-    """
-    tool_choice: ToolChoice | None = None
-    """
-    User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
-    Optional.
-    """
-    parallel_tool_calls: bool | None = None
-    """
-    Whether to use parallel tool calls in the inference. Optional.
-    If provided during inference, it will override the function-configured parallel tool calls.
-    """
-    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
-    """
-    Provider-specific tool configurations
-    """
-
-
-@dataclass(kw_only=True)
-class UpdateDynamicToolParamsRequest:
-    allowed_tools: list[str] | None | UnsetType = UNSET
-    """
-    A subset of static tools configured for the function that the inference is explicitly allowed to use.
-    If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
-    provided at inference time). If specified as a value, it will be set to the provided value.
-    """
-    additional_tools: list[DynamicTool] | None = None
-    """
-    Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
-    Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
-    new tools or exclude removed tools.
-    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
-    """
-    tool_choice: ToolChoice | None | UnsetType = UNSET
-    """
-    User-specified tool choice strategy.
-    If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
-    """
-    parallel_tool_calls: bool | None | UnsetType = UNSET
-    """
-    Whether to use parallel tool calls in the inference.
-    If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    """
-    provider_tools: list[ProviderTool] | None = None
-    """
-    Provider-specific tool configurations
-    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
-    """
-
-
 @dataclass(kw_only=True)
 class StoredInput:
     system: System | None = None
     messages: list[StoredInputMessage] | None = field(default_factory=lambda: [])
+
+
+DynamicTool = Tool | FunctionTool
 
 
 @dataclass(kw_only=True)
@@ -837,7 +777,7 @@ class CreateChatDatapointRequest:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[Tool] | None = None
+    additional_tools: list[DynamicTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -929,7 +869,7 @@ class ChatInferenceDatapoint:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[Tool] | None = None
+    additional_tools: list[DynamicTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -1003,7 +943,7 @@ class StoredChatInference:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[Tool] | None = None
+    additional_tools: list[DynamicTool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -1147,6 +1087,34 @@ class CreateDatapointsRequest:
 
 
 @dataclass(kw_only=True)
+class DynamicToolParams:
+    allowed_tools: list[str] | None = None
+    """
+    A subset of static tools configured for the function that the inference is allowed to use. Optional.
+    If not provided, all static tools are allowed.
+    """
+    additional_tools: list[DynamicTool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured
+    tools, that are also allowed.
+    """
+    tool_choice: ToolChoice | None = None
+    """
+    User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+    Optional.
+    """
+    parallel_tool_calls: bool | None = None
+    """
+    Whether to use parallel tool calls in the inference. Optional.
+    If provided during inference, it will override the function-configured parallel tool calls.
+    """
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
+    """
+    Provider-specific tool configurations
+    """
+
+
+@dataclass(kw_only=True)
 class GetDatapointsResponse:
     datapoints: list[Datapoint]
     """
@@ -1159,6 +1127,38 @@ class UpdateDatapointsRequest:
     datapoints: list[UpdateDatapointRequest]
     """
     The datapoints to update.
+    """
+
+
+@dataclass(kw_only=True)
+class UpdateDynamicToolParamsRequest:
+    allowed_tools: list[str] | None | UnsetType = UNSET
+    """
+    A subset of static tools configured for the function that the inference is explicitly allowed to use.
+    If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
+    provided at inference time). If specified as a value, it will be set to the provided value.
+    """
+    additional_tools: list[DynamicTool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
+    Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
+    new tools or exclude removed tools.
+    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    """
+    tool_choice: ToolChoice | None | UnsetType = UNSET
+    """
+    User-specified tool choice strategy.
+    If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
+    """
+    parallel_tool_calls: bool | None | UnsetType = UNSET
+    """
+    Whether to use parallel tool calls in the inference.
+    If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    provider_tools: list[ProviderTool] | None = None
+    """
+    Provider-specific tool configurations
+    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
 
 
