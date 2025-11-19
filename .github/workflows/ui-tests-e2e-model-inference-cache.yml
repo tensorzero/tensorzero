@@ -82,7 +82,7 @@ jobs:
         run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
 
       - name: Download container images
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
           pattern: build-*-container
           merge-multiple: true
@@ -303,7 +303,7 @@ jobs:
 
       - name: Upload Playwright artifacts (GitHub runner)
         if: failure() && inputs.regen_cache == false
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: playwright-report-auth-${{ matrix.auth_enabled }}
           path: |
