@@ -7,6 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use evaluations::EvaluatorStats;
 use tensorzero_core::{
     config::MetricConfigOptimize,
     error::{Error, ErrorDetails},
@@ -19,6 +20,13 @@ pub type EvaluatorName = String;
 
 /// Unique identifier for a datapoint/example in a dataset
 pub type DatapointId = String;
+
+/// Threshold for warning about high missing score rates
+///
+/// Variants with more than 30% missing evaluations will trigger a warning.
+/// This threshold helps identify variants that may be unreliable due to
+/// systematic evaluation failures.
+const HIGH_MISSING_RATE_THRESHOLD: f32 = 0.3;
 
 /// Scores for all evaluators on a single datapoint
 pub type DatapointScores = HashMap<EvaluatorName, Option<f32>>;
@@ -45,8 +53,8 @@ pub struct ParetoFrontier {
 /// Uses the evaluation config to determine objective directions (optimize: max/min).
 /// Returns true if child Pareto-dominates parent (better/equal on all, strictly better on ≥1 evaluator summary stats).
 pub fn is_improvement(
-    parent_stats: &HashMap<String, evaluations::EvaluatorStats>,
-    child_stats: &HashMap<String, evaluations::EvaluatorStats>,
+    parent_stats: &HashMap<String, EvaluatorStats>,
+    child_stats: &HashMap<String, EvaluatorStats>,
     evaluation_config: &InferenceEvaluationConfig,
 ) -> bool {
     // Get evaluators from the evaluation config
@@ -96,7 +104,7 @@ pub fn is_improvement(
 /// Updates the Pareto frontier based on instance-wise Pareto dominance
 ///
 /// Filters candidates to only include Pareto-optimal variants based on validation scores.
-/// Returns the filtered variants and their frequencies (count of instances dominated).
+/// Returns the filtered variants and their frequencies (count of instances where each variant is Pareto-optimal).
 ///
 /// # Arguments
 /// * `candidates` - Candidate variants to filter
@@ -133,9 +141,9 @@ pub fn update_pareto_frontier(
 
     // Check if we have any valid scores
     if val_scores_map.is_empty() {
-        tracing::warn!("No valid scores found for any variant");
+        tracing::warn!("No validation scores provided for any variant");
         return Err(Error::new(ErrorDetails::InternalError {
-            message: "All variants failed evaluation".to_string(),
+            message: "No validation scores provided for any variant".to_string(),
         }));
     }
 
@@ -262,13 +270,9 @@ pub fn update_pareto_frontier(
             let total_possible = total_datapoints * total_evaluators;
             if total_possible > 0 {
                 // Count non-None scores across all (datapoint, evaluator) pairs
-                let non_none_count = Some(per_datapoint)
-                    .into_iter()
-                    .flat_map(|scores| {
-                        datapoint_ids
-                            .iter()
-                            .filter_map(|datapoint_id| scores.get(datapoint_id))
-                    })
+                let non_none_count = datapoint_ids
+                    .iter()
+                    .filter_map(|datapoint_id| per_datapoint.get(datapoint_id))
                     .flat_map(|scores| {
                         evaluators.keys().filter_map(move |evaluator_name| {
                             scores.get(evaluator_name).and_then(|s| s.as_ref())
@@ -278,7 +282,7 @@ pub fn update_pareto_frontier(
 
                 let missing_rate = 1.0 - (non_none_count as f32 / total_possible as f32);
 
-                if missing_rate > 0.3 {
+                if missing_rate > HIGH_MISSING_RATE_THRESHOLD {
                     tracing::warn!(
                         "Variant '{}' has high missing score rate: {:.1}% ({}/{} evaluations succeeded)",
                         variant_name,
@@ -591,13 +595,13 @@ mod tests {
     /// * `stats` - Slice of (evaluator_name, mean, stderr, count) tuples
     fn create_evaluator_stats(
         stats: &[(&str, f32, f32, usize)],
-    ) -> HashMap<String, evaluations::EvaluatorStats> {
+    ) -> HashMap<String, EvaluatorStats> {
         stats
             .iter()
             .map(|(name, mean, stderr, count)| {
                 (
                     name.to_string(),
-                    evaluations::EvaluatorStats {
+                    EvaluatorStats {
                         mean: *mean,
                         stderr: *stderr,
                         count: *count,
@@ -1496,10 +1500,10 @@ mod tests {
         }
 
         let val_scores_map = variant_scores;
-        let variant_names: Vec<&str> = (0..num_variants)
-            .map(|v| Box::leak(format!("variant_{v}").into_boxed_str()) as &str)
-            .collect();
-        let candidates = create_test_variants(&variant_names);
+        let variant_names: Vec<String> =
+            (0..num_variants).map(|v| format!("variant_{v}")).collect();
+        let variant_name_refs: Vec<&str> = variant_names.iter().map(|s| s.as_str()).collect();
+        let candidates = create_test_variants(&variant_name_refs);
 
         // Measure execution time
         let start = Instant::now();
@@ -1555,7 +1559,9 @@ mod tests {
         // Should return error when all evaluations failed
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.to_string().contains("All variants failed evaluation"));
+        assert!(error
+            .to_string()
+            .contains("No validation scores provided for any variant"));
     }
 
     #[test]

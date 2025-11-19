@@ -25,7 +25,7 @@ use tensorzero_core::{
 use crate::{JobHandle, Optimizer};
 
 mod pareto;
-// TDOD: do not re-export
+// TODO: do not re-export
 pub use pareto::{is_improvement, update_pareto_frontier};
 
 #[async_trait]
