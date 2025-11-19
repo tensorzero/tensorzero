@@ -1,18 +1,24 @@
 use reqwest::Client;
 use serde_json::json;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tensorzero::{ClientExt, Role, StoredDatapoint};
-use tensorzero_core::inference::types::{
-    Arguments, ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputMessage,
-    StoredInputMessageContent, Template, Text,
+use tensorzero_core::endpoints::datasets::v1::types::{
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest,
+    CreateDatapointsResponse, CreateJsonDatapointRequest, JsonDatapointOutputUpdate,
 };
+use tensorzero_core::inference::types::{
+    Arguments, ContentBlockChatOutput, Input, InputMessage, InputMessageContent,
+    JsonInferenceOutput, StoredInput, StoredInputMessage, StoredInputMessageContent, Template,
+    Text,
+};
+use tensorzero_core::tool::{DynamicToolParams, FunctionTool, ToolChoice};
 use uuid::Uuid;
 
 use tensorzero_core::config::Config;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::datasets::{DatasetQueries, GetDatapointsParams};
-use tensorzero_core::endpoints::datasets::v1::types::CreateDatapointsResponse;
 
 use crate::common::get_gateway_endpoint;
 
@@ -37,23 +43,31 @@ async fn test_create_chat_datapoint_basic() {
     let client = Client::new();
     let (clickhouse, _config) = get_test_setup().await;
 
-    let request = json!({
-        "datapoints": [{
-            "type": "chat",
-            "function_name": "write_haiku",
-            "input": {
-                "messages": [{
-                    "role": "user",
-                    "content": [{"type": "template", "name": "user", "arguments": {"topic": "coding"}}]
-                }]
+    let request = CreateDatapointsRequest {
+        datapoints: vec![CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+            function_name: "write_haiku".to_string(),
+            episode_id: None,
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
+                        arguments: Arguments(
+                            json!({"topic": "coding"}).as_object().unwrap().clone(),
+                        ),
+                    })],
+                }],
             },
-            "output": [{
-                "type": "text",
-                "text": "Code flows like water\nBugs emerge from the shadows\nRefactor brings peace"
-            }],
-            "name": "Test Haiku Datapoint"
-        }]
-    });
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "Code flows like water\nBugs emerge from the shadows\nRefactor brings peace"
+                    .to_string(),
+            })]),
+            dynamic_tool_params: DynamicToolParams::default(),
+            tags: None,
+            name: Some("Test Haiku Datapoint".to_string()),
+        })],
+    };
 
     let response = client
         .post(get_gateway_endpoint(
@@ -132,30 +146,34 @@ async fn test_create_json_datapoint_basic() {
     let client = Client::new();
     let (clickhouse, _config) = get_test_setup().await;
 
-    let request = json!({
-        "datapoints": [{
-            "type": "json",
-            "function_name": "extract_entities",
-            "input": {
-                "messages": [{
-                    "role": "user",
-                    "content": [{"type": "text", "text": "+1 Ernie Els ( South Africa ) through 8"}]
-                }]
+    let request = CreateDatapointsRequest {
+        datapoints: vec![CreateDatapointRequest::Json(CreateJsonDatapointRequest {
+            function_name: "extract_entities".to_string(),
+            episode_id: None,
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "+1 Ernie Els ( South Africa ) through 8".to_string(),
+                    })],
+                }],
             },
-            "output": {
-                "raw":  r#"{"sentiment":"positive","confidence":0.95}"#
-            },
-            "output_schema": {
+            output: Some(JsonDatapointOutputUpdate {
+                raw: r#"{"sentiment":"positive","confidence":0.95}"#.to_string(),
+            }),
+            output_schema: Some(json!({
                 "type": "object",
                 "properties": {
                     "sentiment": {"type": "string"},
                     "confidence": {"type": "number"}
                 },
                 "required": ["sentiment", "confidence"]
-            },
-            "name": "Test Sentiment Datapoint"
-        }]
-    });
+            })),
+            tags: None,
+            name: Some("Test Sentiment Datapoint".to_string()),
+        })],
+    };
 
     let response = client
         .post(get_gateway_endpoint(
@@ -218,59 +236,82 @@ async fn test_create_multiple_datapoints() {
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
 
-    let request = json!({
-        "datapoints": [
-            {
-                "type": "chat",
-                "function_name": "write_haiku",
-                "input": {
-                    "messages": [{
-                        "role": "user",
-                        "content": [{"type": "template", "name": "user", "arguments": {"topic": "nature"}}]
-                    }]
+    let request = CreateDatapointsRequest {
+        datapoints: vec![
+            CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+                function_name: "write_haiku".to_string(),
+                episode_id: None,
+                input: Input {
+                    system: None,
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Template(Template {
+                            name: "user".to_string(),
+                            arguments: Arguments(
+                                json!({"topic": "nature"}).as_object().unwrap().clone(),
+                            ),
+                        })],
+                    }],
                 },
-                "output": [{
-                    "type": "text",
-                    "text": "Leaves fall silently\nWhispering ancient secrets\nNature's quiet dance"
-                }]
-            },
-            {
-                "type": "chat",
-                "function_name": "write_haiku",
-                "input": {
-                    "messages": [{
-                        "role": "user",
-                        "content": [{"type": "template", "name": "user", "arguments": {"topic": "technology"}}]
-                    }]
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "Leaves fall silently\nWhispering ancient secrets\nNature's quiet dance"
+                        .to_string(),
+                })]),
+                dynamic_tool_params: DynamicToolParams::default(),
+                tags: None,
+                name: None,
+            }),
+            CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+                function_name: "write_haiku".to_string(),
+                episode_id: None,
+                input: Input {
+                    system: None,
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Template(Template {
+                            name: "user".to_string(),
+                            arguments: Arguments(
+                                json!({"topic": "technology"}).as_object().unwrap().clone(),
+                            ),
+                        })],
+                    }],
                 },
-                "output": [{
-                    "type": "text",
-                    "text": "Silicon whispers\nElectrons dance through circuits\nFuture unfolds fast"
-                }]
-            },
-            {
-                "type": "json",
-                "function_name": "extract_entities",
-                "input": {
-                    "messages": [{
-                        "role": "user",
-                        "content": [{"type": "text", "text": "+1 Ernie Els ( South Africa ) through 8"}]
-                    }]
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "Silicon whispers\nElectrons dance through circuits\nFuture unfolds fast"
+                        .to_string(),
+                })]),
+                dynamic_tool_params: DynamicToolParams::default(),
+                tags: None,
+                name: None,
+            }),
+            CreateDatapointRequest::Json(CreateJsonDatapointRequest {
+                function_name: "extract_entities".to_string(),
+                episode_id: None,
+                input: Input {
+                    system: None,
+                    messages: vec![InputMessage {
+                        role: Role::User,
+                        content: vec![InputMessageContent::Text(Text {
+                            text: "+1 Ernie Els ( South Africa ) through 8".to_string(),
+                        })],
+                    }],
                 },
-                "output": {
-                    "raw": r#"{"sentiment":"positive","confidence":0.98}"#
-                },
-                "output_schema": {
+                output: Some(JsonDatapointOutputUpdate {
+                    raw: r#"{"sentiment":"positive","confidence":0.98}"#.to_string(),
+                }),
+                output_schema: Some(json!({
                     "type": "object",
                     "properties": {
                         "sentiment": {"type": "string"},
                         "confidence": {"type": "number"}
                     },
                     "required": ["sentiment", "confidence"]
-                }
-            }
-        ]
-    });
+                })),
+                tags: None,
+                name: None,
+            }),
+        ],
+    };
 
     let response = client
         .post(get_gateway_endpoint(
@@ -291,34 +332,47 @@ async fn test_create_chat_datapoint_with_tools() {
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
 
-    let request = json!({
-        "datapoints": [{
-            "type": "chat",
-            "function_name": "write_haiku",
-            "input": {
-                "messages": [{
-                    "role": "user",
-                    "content": [{"type": "template", "name": "user", "arguments": {"topic": "nature"}}]
-                }]
+    let request = CreateDatapointsRequest {
+        datapoints: vec![CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+            function_name: "write_haiku".to_string(),
+            episode_id: None,
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
+                        arguments: Arguments(
+                            json!({"topic": "nature"}).as_object().unwrap().clone(),
+                        ),
+                    })],
+                }],
             },
-            "output": [{
-                "type": "text",
-                "text": "A simple haiku"
-            }],
-            "tools": [{
-                "name": "get_weather",
-                "description": "Get the weather",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "location": {"type": "string"}
-                    },
-                    "required": ["location"]
-                }
-            }],
-            "tool_choice": "auto"
-        }]
-    });
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "A simple haiku".to_string(),
+            })]),
+            dynamic_tool_params: DynamicToolParams {
+                allowed_tools: None,
+                additional_tools: Some(vec![FunctionTool {
+                    name: "get_weather".to_string(),
+                    description: "Get the weather".to_string(),
+                    parameters: json!({
+                        "type": "object",
+                        "properties": {
+                            "location": {"type": "string"}
+                        },
+                        "required": ["location"]
+                    }),
+                    strict: false,
+                }]),
+                tool_choice: Some(ToolChoice::Auto),
+                parallel_tool_calls: None,
+                provider_tools: vec![],
+            },
+            tags: None,
+            name: None,
+        })],
+    };
 
     let response = client
         .post(get_gateway_endpoint("/v1/datasets/test_tools/datapoints"))
@@ -337,27 +391,34 @@ async fn test_create_datapoint_with_tags() {
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
 
-    let request = json!({
-        "datapoints": [{
-            "type": "chat",
-            "function_name": "write_haiku",
-            "input": {
-                "messages": [{
-                    "role": "user",
-                    "content": [{"type": "template", "name": "user", "arguments": {"topic": "nature"}}]
-                }]
+    let request = CreateDatapointsRequest {
+        datapoints: vec![CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+            function_name: "write_haiku".to_string(),
+            episode_id: None,
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
+                        arguments: Arguments(
+                            json!({"topic": "nature"}).as_object().unwrap().clone(),
+                        ),
+                    })],
+                }],
             },
-            "output": [{
-                "type": "text",
-                "text": "Tagged haiku here"
-            }],
-            "tags": {
-                "environment": "test",
-                "version": "1.0",
-                "quality": "high"
-            }
-        }]
-    });
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "Tagged haiku here".to_string(),
+            })]),
+            dynamic_tool_params: DynamicToolParams::default(),
+            tags: Some(HashMap::from([
+                ("environment".to_string(), "test".to_string()),
+                ("version".to_string(), "1.0".to_string()),
+                ("quality".to_string(), "high".to_string()),
+            ])),
+            name: None,
+        })],
+    };
 
     let response = client
         .post(get_gateway_endpoint("/v1/datasets/test_tags/datapoints"))
@@ -458,29 +519,34 @@ async fn test_create_json_datapoint_invalid_schema() {
     let client = Client::new();
     let (clickhouse, _config) = get_test_setup().await;
 
-    let request = json!({
-        "datapoints": [{
-            "type": "json",
-            "function_name": "extract_entities",
-            "input": {
-                "messages": [{
-                    "role": "user",
-                    "content": [{"type": "text", "text": "Test"}]
-                }]
+    let request = CreateDatapointsRequest {
+        datapoints: vec![CreateDatapointRequest::Json(CreateJsonDatapointRequest {
+            function_name: "extract_entities".to_string(),
+            episode_id: None,
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Test".to_string(),
+                    })],
+                }],
             },
-            "output": {
-                "raw": r#"{"sentiment":"positive","confidence":"not a number"}"#
-            },
-            "output_schema": {
+            output: Some(JsonDatapointOutputUpdate {
+                raw: r#"{"sentiment":"positive","confidence":"not a number"}"#.to_string(),
+            }),
+            output_schema: Some(json!({
                 "type": "object",
                 "properties": {
                     "sentiment": {"type": "string"},
                     "confidence": {"type": "number"}
                 },
                 "required": ["sentiment", "confidence"]
-            }
-        }]
-    });
+            })),
+            tags: None,
+            name: None,
+        })],
+    };
 
     let response = client
         .post(get_gateway_endpoint(
@@ -536,23 +602,30 @@ async fn test_create_datapoint_with_episode_id() {
 
     let episode_id = Uuid::now_v7();
 
-    let request = json!({
-        "datapoints": [{
-            "type": "chat",
-            "function_name": "write_haiku",
-            "episode_id": episode_id,
-            "input": {
-                "messages": [{
-                    "role": "user",
-                    "content": [{"type": "template", "name": "user", "arguments": {"topic": "nature"}}]
-                }]
+    let request = CreateDatapointsRequest {
+        datapoints: vec![CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+            function_name: "write_haiku".to_string(),
+            episode_id: Some(episode_id),
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
+                        arguments: Arguments(
+                            json!({"topic": "nature"}).as_object().unwrap().clone(),
+                        ),
+                    })],
+                }],
             },
-            "output": [{
-                "type": "text",
-                "text": "Episode haiku"
-            }]
-        }]
-    });
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "Episode haiku".to_string(),
+            })]),
+            dynamic_tool_params: DynamicToolParams::default(),
+            tags: None,
+            name: None,
+        })],
+    };
 
     let response = client
         .post(get_gateway_endpoint("/v1/datasets/test_episode/datapoints"))
@@ -576,18 +649,28 @@ async fn test_create_datapoint_without_output() {
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
 
-    let request = json!({
-        "datapoints": [{
-            "type": "chat",
-            "function_name": "write_haiku",
-            "input": {
-                "messages": [{
-                    "role": "user",
-                    "content": [{"type": "template", "name": "user", "arguments": {"topic": "nature"}}]
-                }]
-            }
-        }]
-    });
+    let request = CreateDatapointsRequest {
+        datapoints: vec![CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+            function_name: "write_haiku".to_string(),
+            episode_id: None,
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Template(Template {
+                        name: "user".to_string(),
+                        arguments: Arguments(
+                            json!({"topic": "nature"}).as_object().unwrap().clone(),
+                        ),
+                    })],
+                }],
+            },
+            output: None,
+            dynamic_tool_params: DynamicToolParams::default(),
+            tags: None,
+            name: None,
+        })],
+    };
 
     let response = client
         .post(get_gateway_endpoint(
@@ -609,21 +692,27 @@ async fn test_create_json_datapoint_default_schema() {
     let (_clickhouse, _config) = get_test_setup().await;
 
     // Test that output_schema is optional and defaults to function's schema
-    let request = json!({
-        "datapoints": [{
-            "type": "json",
-            "function_name": "extract_entities",
-            "input": {
-                "messages": [{
-                    "role": "user",
-                    "content": [{"type": "text", "text": "Test"}]
-                }]
+    let request = CreateDatapointsRequest {
+        datapoints: vec![CreateDatapointRequest::Json(CreateJsonDatapointRequest {
+            function_name: "extract_entities".to_string(),
+            episode_id: None,
+            input: Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "Test".to_string(),
+                    })],
+                }],
             },
-            "output": {
-                "raw": r#"{"sentiment":"neutral","confidence":0.5}"#
-            }
-        }]
-    });
+            output: Some(JsonDatapointOutputUpdate {
+                raw: r#"{"sentiment":"neutral","confidence":0.5}"#.to_string(),
+            }),
+            output_schema: None,
+            tags: None,
+            name: None,
+        })],
+    };
 
     let response = client
         .post(get_gateway_endpoint(

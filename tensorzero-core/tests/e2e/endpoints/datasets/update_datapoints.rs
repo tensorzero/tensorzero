@@ -14,6 +14,11 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, JsonInferenceDatapointInsert,
 };
+use tensorzero_core::endpoints::datasets::v1::types::{
+    DatapointMetadataUpdate, JsonDatapointOutputUpdate, UpdateChatDatapointRequest,
+    UpdateDatapointMetadataRequest, UpdateDatapointRequest, UpdateDatapointsMetadataRequest,
+    UpdateDatapointsRequest, UpdateDynamicToolParamsRequest, UpdateJsonDatapointRequest,
+};
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, System, Template, Text,
@@ -75,18 +80,23 @@ async fn test_update_chat_datapoint_output() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Now update the datapoint with new output and tags
+    let request = UpdateDatapointsRequest {
+        datapoints: vec![UpdateDatapointRequest::Chat(UpdateChatDatapointRequest {
+            id: datapoint_id,
+            input: None,
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "Updated output".to_string(),
+            })]),
+            tool_params: UpdateDynamicToolParamsRequest::default(),
+            tags: Some(HashMap::from([("version".to_string(), "2".to_string())])),
+            metadata: DatapointMetadataUpdate::default(),
+        })],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "id": datapoint_id.to_string(),
-                "output": [{"type": "text", "text": "Updated output"}],
-                "tags": {"version": "2"}
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -208,19 +218,23 @@ async fn test_update_json_datapoint_output() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update the datapoint with new output
+    let request = UpdateDatapointsRequest {
+        datapoints: vec![UpdateDatapointRequest::Json(UpdateJsonDatapointRequest {
+            id: datapoint_id,
+            input: None,
+            output: Some(Some(JsonDatapointOutputUpdate {
+                raw: "{\"answer\": \"updated\"}".to_string(),
+            })),
+            output_schema: None,
+            tags: None,
+            metadata: DatapointMetadataUpdate::default(),
+        })],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "json",
-                "id": datapoint_id.to_string(),
-                "output": {
-                    "raw": "{\"answer\": \"updated\"}",
-                },
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -338,24 +352,35 @@ async fn test_update_multiple_datapoints() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update both datapoints in one request
+    let request = UpdateDatapointsRequest {
+        datapoints: vec![
+            UpdateDatapointRequest::Chat(UpdateChatDatapointRequest {
+                id: datapoint_id1,
+                input: None,
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "Updated output 1".to_string(),
+                })]),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                tags: None,
+                metadata: DatapointMetadataUpdate::default(),
+            }),
+            UpdateDatapointRequest::Chat(UpdateChatDatapointRequest {
+                id: datapoint_id2,
+                input: None,
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "Updated output 2".to_string(),
+                })]),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                tags: None,
+                metadata: DatapointMetadataUpdate::default(),
+            }),
+        ],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": [
-                {
-                    "type": "chat",
-                    "id": datapoint_id1.to_string(),
-                    "output": [{"type": "text", "text": "Updated output 1"}],
-                },
-                {
-                    "type": "chat",
-                    "id": datapoint_id2.to_string(),
-                    "output": [{"type": "text", "text": "Updated output 2"}],
-                }
-            ]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -404,17 +429,23 @@ async fn test_update_datapoint_not_found() {
     let dataset_name = format!("test-update-not-found-{}", Uuid::now_v7());
     let nonexistent_id = Uuid::now_v7();
 
+    let request = UpdateDatapointsRequest {
+        datapoints: vec![UpdateDatapointRequest::Chat(UpdateChatDatapointRequest {
+            id: nonexistent_id,
+            input: None,
+            output: Some(vec![ContentBlockChatOutput::Text(Text {
+                text: "New output".to_string(),
+            })]),
+            tool_params: UpdateDynamicToolParamsRequest::default(),
+            tags: None,
+            metadata: DatapointMetadataUpdate::default(),
+        })],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "id": nonexistent_id.to_string(),
-                "output": [{"type": "text", "text": "New output"}],
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -469,19 +500,24 @@ async fn test_update_datapoint_type_mismatch() {
 
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Try to update it as a JSON datapoint
+    // Try to update it as a JSON datapoint (this should fail because it's actually a chat datapoint)
+    let request = UpdateDatapointsRequest {
+        datapoints: vec![UpdateDatapointRequest::Json(UpdateJsonDatapointRequest {
+            id: datapoint_id,
+            input: None,
+            output: Some(Some(JsonDatapointOutputUpdate {
+                raw: "{\"answer\": \"test\"}".to_string(),
+            })),
+            output_schema: Some(json!({"type": "object"})),
+            tags: None,
+            metadata: DatapointMetadataUpdate::default(),
+        })],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "json",
-                "id": datapoint_id.to_string(),
-                "output": {"answer": "test"},
-                "output_schema": {"type": "object"}
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -537,17 +573,23 @@ async fn test_update_datapoint_with_metadata() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update with new name metadata
+    let request = UpdateDatapointsRequest {
+        datapoints: vec![UpdateDatapointRequest::Chat(UpdateChatDatapointRequest {
+            id: datapoint_id,
+            input: None,
+            output: None,
+            tool_params: UpdateDynamicToolParamsRequest::default(),
+            tags: None,
+            metadata: DatapointMetadataUpdate {
+                name: Some(Some("Test Datapoint Name".to_string())),
+            },
+        })],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "id": datapoint_id.to_string(),
-                "name": "Test Datapoint Name"
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -578,13 +620,12 @@ async fn test_update_datapoint_empty_request() {
     let http_client = Client::new();
     let dataset_name = format!("test-update-empty-{}", Uuid::now_v7());
 
+    let request = UpdateDatapointsRequest { datapoints: vec![] };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": []
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -598,24 +639,35 @@ async fn test_update_datapoint_duplicate_ids() {
     let dataset_name = format!("test-update-duplicate-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
 
+    let request = UpdateDatapointsRequest {
+        datapoints: vec![
+            UpdateDatapointRequest::Chat(UpdateChatDatapointRequest {
+                id: datapoint_id,
+                input: None,
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "Output 1".to_string(),
+                })]),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                tags: None,
+                metadata: DatapointMetadataUpdate::default(),
+            }),
+            UpdateDatapointRequest::Chat(UpdateChatDatapointRequest {
+                id: datapoint_id,
+                input: None,
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "Output 2".to_string(),
+                })]),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                tags: None,
+                metadata: DatapointMetadataUpdate::default(),
+            }),
+        ],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": [
-                {
-                    "type": "chat",
-                    "id": datapoint_id.to_string(),
-                    "output": [{"type": "text", "text": "Output 1"}],
-                },
-                {
-                    "type": "chat",
-                    "id": datapoint_id.to_string(),
-                    "output": [{"type": "text", "text": "Output 2"}],
-                }
-            ]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -671,17 +723,21 @@ async fn test_update_chat_datapoint_set_output_to_null() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update to set output to empty
+    let request = UpdateDatapointsRequest {
+        datapoints: vec![UpdateDatapointRequest::Chat(UpdateChatDatapointRequest {
+            id: datapoint_id,
+            input: None,
+            output: Some(vec![]),
+            tool_params: UpdateDynamicToolParamsRequest::default(),
+            tags: None,
+            metadata: DatapointMetadataUpdate::default(),
+        })],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "id": datapoint_id.to_string(),
-                "output": [],
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -774,19 +830,27 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update to set tool_params fields to null
+    let request = UpdateDatapointsRequest {
+        datapoints: vec![UpdateDatapointRequest::Chat(UpdateChatDatapointRequest {
+            id: datapoint_id,
+            input: None,
+            output: None,
+            tool_params: UpdateDynamicToolParamsRequest {
+                allowed_tools: Some(None),
+                additional_tools: Some(vec![]),
+                tool_choice: None,
+                parallel_tool_calls: None,
+                provider_tools: Some(vec![]),
+            },
+            tags: None,
+            metadata: DatapointMetadataUpdate::default(),
+        })],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "id": datapoint_id.to_string(),
-                "allowed_tools": null,
-                "additional_tools": [],
-                "provider_tools": [],
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -868,17 +932,21 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update to set tags to empty
+    let request = UpdateDatapointsRequest {
+        datapoints: vec![UpdateDatapointRequest::Chat(UpdateChatDatapointRequest {
+            id: datapoint_id,
+            input: None,
+            output: None,
+            tool_params: UpdateDynamicToolParamsRequest::default(),
+            tags: Some(HashMap::new()),
+            metadata: DatapointMetadataUpdate::default(),
+        })],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "id": datapoint_id.to_string(),
-                "tags": {},
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -954,17 +1022,21 @@ async fn test_update_chat_datapoint_set_name_to_null() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update to set name to null
+    let request = UpdateDatapointsRequest {
+        datapoints: vec![UpdateDatapointRequest::Chat(UpdateChatDatapointRequest {
+            id: datapoint_id,
+            input: None,
+            output: None,
+            tool_params: UpdateDynamicToolParamsRequest::default(),
+            tags: None,
+            metadata: DatapointMetadataUpdate { name: Some(None) },
+        })],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "chat",
-                "id": datapoint_id.to_string(),
-                "name": null
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -1047,17 +1119,21 @@ async fn test_update_json_datapoint_set_output_to_null() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update to set output to null
+    let request = UpdateDatapointsRequest {
+        datapoints: vec![UpdateDatapointRequest::Json(UpdateJsonDatapointRequest {
+            id: datapoint_id,
+            input: None,
+            output: Some(None),
+            output_schema: None,
+            tags: None,
+            metadata: DatapointMetadataUpdate::default(),
+        })],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "json",
-                "id": datapoint_id.to_string(),
-                "output": null,
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -1144,17 +1220,21 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update to set tags to null
+    let request = UpdateDatapointsRequest {
+        datapoints: vec![UpdateDatapointRequest::Json(UpdateJsonDatapointRequest {
+            id: datapoint_id,
+            input: None,
+            output: None,
+            output_schema: None,
+            tags: Some(HashMap::new()),
+            metadata: DatapointMetadataUpdate::default(),
+        })],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "type": "json",
-                "id": datapoint_id.to_string(),
-                "tags": {},
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -1228,16 +1308,19 @@ async fn test_update_metadata_chat_datapoint() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update metadata
+    let request = UpdateDatapointsMetadataRequest {
+        datapoints: vec![UpdateDatapointMetadataRequest {
+            id: datapoint_id,
+            metadata: DatapointMetadataUpdate {
+                name: Some(Some("updated_name".to_string())),
+            },
+        }],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints/metadata",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "id": datapoint_id.to_string(),
-                "name": "updated_name"
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -1328,16 +1411,19 @@ async fn test_update_metadata_json_datapoint() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update metadata
+    let request = UpdateDatapointsMetadataRequest {
+        datapoints: vec![UpdateDatapointMetadataRequest {
+            id: datapoint_id,
+            metadata: DatapointMetadataUpdate {
+                name: Some(Some("updated_json_name".to_string())),
+            },
+        }],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints/metadata",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "id": datapoint_id.to_string(),
-                "name": "updated_json_name"
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -1411,16 +1497,17 @@ async fn test_update_metadata_set_name_to_null() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Set name to null
+    let request = UpdateDatapointsMetadataRequest {
+        datapoints: vec![UpdateDatapointMetadataRequest {
+            id: datapoint_id,
+            metadata: DatapointMetadataUpdate { name: Some(None) },
+        }],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints/metadata",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "id": datapoint_id.to_string(),
-                "name": null,
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -1513,22 +1600,27 @@ async fn test_update_metadata_batch() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Update both datapoints' metadata
+    let request = UpdateDatapointsMetadataRequest {
+        datapoints: vec![
+            UpdateDatapointMetadataRequest {
+                id: datapoint_id1,
+                metadata: DatapointMetadataUpdate {
+                    name: Some(Some("updated_name1".to_string())),
+                },
+            },
+            UpdateDatapointMetadataRequest {
+                id: datapoint_id2,
+                metadata: DatapointMetadataUpdate {
+                    name: Some(Some("updated_name2".to_string())),
+                },
+            },
+        ],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints/metadata",
         )))
-        .json(&json!({
-            "datapoints": [
-                {
-                    "id": datapoint_id1.to_string(),
-                    "metadata": {"name": "updated_name1"}
-                },
-                {
-                    "id": datapoint_id2.to_string(),
-                    "metadata": {"name": "updated_name2"}
-                }
-            ]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -1578,16 +1670,19 @@ async fn test_update_metadata_datapoint_not_found() {
     let dataset_name = format!("test-update-metadata-notfound-{}", Uuid::now_v7());
     let non_existent_id = Uuid::now_v7();
 
+    let request = UpdateDatapointsMetadataRequest {
+        datapoints: vec![UpdateDatapointMetadataRequest {
+            id: non_existent_id,
+            metadata: DatapointMetadataUpdate {
+                name: Some(Some("new_name".to_string())),
+            },
+        }],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints/metadata",
         )))
-        .json(&json!({
-            "datapoints": [{
-                "id": non_existent_id.to_string(),
-                "metadata": {"name": "new_name"}
-            }]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -1601,22 +1696,27 @@ async fn test_update_metadata_duplicate_ids() {
     let dataset_name = format!("test-update-metadata-duplicate-{}", Uuid::now_v7());
     let duplicate_id = Uuid::now_v7();
 
+    let request = UpdateDatapointsMetadataRequest {
+        datapoints: vec![
+            UpdateDatapointMetadataRequest {
+                id: duplicate_id,
+                metadata: DatapointMetadataUpdate {
+                    name: Some(Some("name1".to_string())),
+                },
+            },
+            UpdateDatapointMetadataRequest {
+                id: duplicate_id,
+                metadata: DatapointMetadataUpdate {
+                    name: Some(Some("name2".to_string())),
+                },
+            },
+        ],
+    };
     let resp = http_client
         .patch(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints/metadata",
         )))
-        .json(&json!({
-            "datapoints": [
-                {
-                    "id": duplicate_id.to_string(),
-                    "metadata": {"name": "name1"}
-                },
-                {
-                    "id": duplicate_id.to_string(),
-                    "metadata": {"name": "name2"}
-                }
-            ]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();

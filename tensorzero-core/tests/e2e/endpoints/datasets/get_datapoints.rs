@@ -10,6 +10,7 @@ use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, JsonInferenceDatapointInsert,
 };
+use tensorzero_core::endpoints::datasets::v1::types::GetDatapointsRequest;
 use tensorzero_core::endpoints::datasets::DatapointKind;
 use tensorzero_core::inference::types::{
     Arguments, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
@@ -74,11 +75,12 @@ mod get_datapoints_tests {
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Get the datapoint via the endpoint
+        let request = GetDatapointsRequest {
+            ids: vec![datapoint_id],
+        };
         let resp = http_client
             .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
-            .json(&json!({
-                "ids": [datapoint_id.to_string()]
-            }))
+            .json(&request)
             .send()
             .await
             .unwrap();
@@ -159,11 +161,12 @@ mod get_datapoints_tests {
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Get the datapoint via the endpoint
+        let request = GetDatapointsRequest {
+            ids: vec![datapoint_id],
+        };
         let resp = http_client
             .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
-            .json(&json!({
-                "ids": [datapoint_id.to_string()]
-            }))
+            .json(&request)
             .send()
             .await
             .unwrap();
@@ -284,11 +287,12 @@ mod get_datapoints_tests {
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Get all three datapoints
+        let request = GetDatapointsRequest {
+            ids: vec![chat_id1, chat_id2, json_id],
+        };
         let resp = http_client
             .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
-            .json(&json!({
-                "ids": [chat_id1.to_string(), chat_id2.to_string(), json_id.to_string()]
-            }))
+            .json(&request)
             .send()
             .await
             .unwrap();
@@ -362,14 +366,15 @@ mod get_datapoints_tests {
         let non_existent_id1 = Uuid::now_v7();
         let non_existent_id2 = Uuid::now_v7();
 
+        let request = GetDatapointsRequest {
+            ids: vec![existing_id, non_existent_id1, non_existent_id2],
+        };
         let resp = http_client
-        .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
-        .json(&json!({
-            "ids": [existing_id.to_string(), non_existent_id1.to_string(), non_existent_id2.to_string()]
-        }))
-        .send()
-        .await
-        .unwrap();
+            .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+            .json(&request)
+            .send()
+            .await
+            .unwrap();
 
         assert!(resp.status().is_success());
 
@@ -437,11 +442,12 @@ mod get_datapoints_tests {
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // get_datapoints should return stale datapoints (unlike list_datapoints)
+        let request = GetDatapointsRequest {
+            ids: vec![datapoint_id],
+        };
         let resp = http_client
             .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
-            .json(&json!({
-                "ids": [datapoint_id.to_string()]
-            }))
+            .json(&request)
             .send()
             .await
             .unwrap();
@@ -460,11 +466,10 @@ mod get_datapoints_tests {
     async fn test_get_datapoints_empty_ids_list() {
         let http_client = Client::new();
 
+        let request = GetDatapointsRequest { ids: vec![] };
         let resp = http_client
             .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
-            .json(&json!({
-                "ids": []
-            }))
+            .json(&request)
             .send()
             .await
             .unwrap();
@@ -480,6 +485,7 @@ mod get_datapoints_tests {
     async fn test_get_datapoints_invalid_uuid() {
         let http_client = Client::new();
 
+        // Keep json!() for negative test with invalid UUID
         let resp = http_client
             .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
             .json(&json!({

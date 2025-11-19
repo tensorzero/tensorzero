@@ -10,7 +10,9 @@ use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, GetDatapointsParams,
     JsonInferenceDatapointInsert,
 };
-use tensorzero_core::endpoints::datasets::v1::types::DeleteDatapointsResponse;
+use tensorzero_core::endpoints::datasets::v1::types::{
+    DeleteDatapointsRequest, DeleteDatapointsResponse,
+};
 use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tensorzero_core::inference::types::{
     JsonInferenceOutput, Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
@@ -77,13 +79,14 @@ async fn test_delete_datapoints_single_chat() {
     assert_eq!(datapoints.len(), 1);
 
     // Delete the datapoint via the endpoint
+    let request = DeleteDatapointsRequest {
+        ids: vec![datapoint_id],
+    };
     let resp = http_client
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "ids": [datapoint_id.to_string()]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -233,13 +236,14 @@ async fn test_delete_datapoints_multiple_mixed() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Delete all three datapoints
+    let request = DeleteDatapointsRequest {
+        ids: vec![chat_id1, chat_id2, json_id],
+    };
     let resp = http_client
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "ids": [chat_id1.to_string(), chat_id2.to_string(), json_id.to_string()]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -275,7 +279,7 @@ async fn test_delete_datapoints_empty_ids_list() {
     let http_client = Client::new();
     let dataset_name = format!("test-delete-dp-empty-{}", Uuid::now_v7());
 
-    // Try to delete with empty IDs list
+    // Try to delete with empty IDs list - keep json!() for negative test
     let resp = http_client
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
@@ -335,13 +339,14 @@ async fn test_delete_datapoints_non_existent_id() {
 
     // Try to delete with a mix of existing and non-existent IDs
     let non_existent_id = Uuid::now_v7();
+    let request = DeleteDatapointsRequest {
+        ids: vec![existing_id, non_existent_id],
+    };
     let resp = http_client
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "ids": [existing_id.to_string(), non_existent_id.to_string()]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -373,13 +378,14 @@ async fn test_delete_datapoints_invalid_dataset_name() {
     let datapoint_id = Uuid::now_v7();
 
     // Try to delete from a dataset with a reserved name
+    let request = DeleteDatapointsRequest {
+        ids: vec![datapoint_id],
+    };
     let resp = http_client
         .delete(get_gateway_endpoint(
             "/v1/datasets/tensorzero::dataset/datapoints",
         ))
-        .json(&json!({
-            "ids": [datapoint_id.to_string()]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -395,13 +401,14 @@ async fn test_delete_datapoints_from_empty_dataset() {
     let non_existent_id = Uuid::now_v7();
 
     // Try to delete from an empty/non-existent dataset
+    let request = DeleteDatapointsRequest {
+        ids: vec![non_existent_id],
+    };
     let resp = http_client
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "ids": [non_existent_id.to_string()]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -456,13 +463,14 @@ async fn test_delete_datapoints_already_stale() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Delete it once
+    let request = DeleteDatapointsRequest {
+        ids: vec![datapoint_id],
+    };
     let resp = http_client
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "ids": [datapoint_id.to_string()]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
@@ -474,13 +482,14 @@ async fn test_delete_datapoints_already_stale() {
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Try to delete it again
+    let request = DeleteDatapointsRequest {
+        ids: vec![datapoint_id],
+    };
     let resp = http_client
         .delete(get_gateway_endpoint(&format!(
             "/v1/datasets/{dataset_name}/datapoints"
         )))
-        .json(&json!({
-            "ids": [datapoint_id.to_string()]
-        }))
+        .json(&request)
         .send()
         .await
         .unwrap();
