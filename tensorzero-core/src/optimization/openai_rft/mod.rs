@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
-    endpoints::openai_compatible::JsonSchemaInfo,
+    endpoints::openai_compatible::types::chat_completions::JsonSchemaInfo,
     error::Error,
     model::CredentialLocationWithFallback,
     providers::openai::{grader::OpenAIGrader, OpenAICredentials},

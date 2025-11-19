@@ -266,7 +266,7 @@ def test_sync_run_evaluation_with_dynamic_variant(
     job = embedded_sync_client.experimental_run_evaluation(
         evaluation_name="haiku_without_outputs",
         dataset_name=evaluation_datasets["good-haikus-no-output"],
-        dynamic_variant_config=dynamic_variant,
+        internal_dynamic_variant_config=dynamic_variant,
         concurrency=10,
         inference_cache="off",
     )
@@ -336,7 +336,7 @@ async def test_async_run_evaluation_with_dynamic_variant(
     job = await embedded_async_client.experimental_run_evaluation(
         evaluation_name="entity_extraction",
         dataset_name=evaluation_datasets["extract_entities_0.8"],
-        dynamic_variant_config=dynamic_variant,
+        internal_dynamic_variant_config=dynamic_variant,
         concurrency=10,
         inference_cache="off",
     )
@@ -390,7 +390,7 @@ def test_sync_run_evaluation_both_variant_params_error(
     evaluation_datasets: Dict[str, str],
     embedded_sync_client: TensorZeroGateway,
 ):
-    """Test sync client experimental_run_evaluation rejects both variant_name and dynamic_variant_config."""
+    """Test sync client experimental_run_evaluation rejects both variant_name and internal_dynamic_variant_config."""
     dynamic_variant = {
         "type": "chat_completion",
         "model": "gpt-4o-mini-2024-07-18",
@@ -400,13 +400,13 @@ def test_sync_run_evaluation_both_variant_params_error(
         },
     }
 
-    # Providing both variant_name and dynamic_variant_config should raise ValueError
-    with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*dynamic_variant_config"):
+    # Providing both variant_name and internal_dynamic_variant_config should raise ValueError
+    with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*internal_dynamic_variant_config"):
         embedded_sync_client.experimental_run_evaluation(
             evaluation_name="haiku_without_outputs",
             dataset_name=evaluation_datasets["good-haikus-no-output"],
             variant_name="gpt_4o_mini",
-            dynamic_variant_config=dynamic_variant,
+            internal_dynamic_variant_config=dynamic_variant,
             concurrency=1,
             inference_cache="off",
         )
@@ -417,7 +417,7 @@ async def test_async_run_evaluation_both_variant_params_error(
     evaluation_datasets: Dict[str, str],
     embedded_async_client: AsyncTensorZeroGateway,
 ):
-    """Test async client experimental_run_evaluation rejects both variant_name and dynamic_variant_config."""
+    """Test async client experimental_run_evaluation rejects both variant_name and internal_dynamic_variant_config."""
     dynamic_variant = {
         "type": "chat_completion",
         "model": "gpt-4o-mini-2024-07-18",
@@ -427,13 +427,100 @@ async def test_async_run_evaluation_both_variant_params_error(
         },
     }
 
-    # Providing both variant_name and dynamic_variant_config should raise ValueError
-    with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*dynamic_variant_config"):
+    # Providing both variant_name and internal_dynamic_variant_config should raise ValueError
+    with pytest.raises(ValueError, match="Cannot specify both.*variant_name.*internal_dynamic_variant_config"):
         await embedded_async_client.experimental_run_evaluation(
             evaluation_name="haiku_without_outputs",
             dataset_name=evaluation_datasets["good-haikus-no-output"],
             variant_name="gpt_4o_mini",
-            dynamic_variant_config=dynamic_variant,
+            internal_dynamic_variant_config=dynamic_variant,
             concurrency=1,
             inference_cache="off",
         )
+
+
+def test_sync_run_evaluation_with_adaptive_stopping(
+    evaluation_datasets: Dict[str, str],
+    embedded_sync_client: TensorZeroGateway,
+):
+    """Test sync client experimental_run_evaluation with adaptive stopping parameters."""
+    job = embedded_sync_client.experimental_run_evaluation(
+        evaluation_name="entity_extraction",
+        dataset_name=evaluation_datasets["extract_entities_0.8"],
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="on",
+        max_datapoints=4,
+        adaptive_stopping={"precision": {"exact_match": 0.2}},
+    )
+
+    # Test run_info property
+    run_info: Dict[str, Any] = job.run_info
+    assert "evaluation_run_id" in run_info
+    assert "num_datapoints" in run_info
+    assert isinstance(run_info["num_datapoints"], int)
+
+    # With adaptive stopping, we should stop early if precision threshold is met
+    # Dataset only has 6 datapoints, so it can't reach MIN_DATAPOINTS (20)
+    # Should respect max_datapoints (4) or dataset size, whichever is smaller
+    num_datapoints = run_info["num_datapoints"]
+    assert num_datapoints <= 4, f"Should process all 6 datapoints in dataset, got {num_datapoints}"
+
+    # Consume all results
+    results: List[Dict[str, Any]] = []
+    for result in job.results():
+        results.append(result)
+        assert "type" in result
+        assert result["type"] in ["success", "error"]
+
+    assert len(results) == num_datapoints
+
+    # Test summary stats
+    stats: Dict[str, EvaluatorStatsDict] = job.summary_stats()
+    assert isinstance(stats, dict)
+    assert "exact_match" in stats
+    assert "count_sports" in stats
+
+
+@pytest.mark.asyncio
+async def test_async_run_evaluation_with_adaptive_stopping(
+    evaluation_datasets: Dict[str, str],
+    embedded_async_client: AsyncTensorZeroGateway,
+):
+    """Test async client experimental_run_evaluation with adaptive stopping parameters."""
+    job = await embedded_async_client.experimental_run_evaluation(
+        evaluation_name="haiku_without_outputs",
+        dataset_name=evaluation_datasets["good-haikus-no-output"],
+        variant_name="gpt_4o_mini",
+        concurrency=2,
+        inference_cache="off",
+        max_datapoints=7,
+        adaptive_stopping={"precision": {"topic_starts_with_f": 0.3}},
+    )
+
+    # Test run_info property
+    run_info: Dict[str, Any] = job.run_info
+    assert "evaluation_run_id" in run_info
+    assert "num_datapoints" in run_info
+    assert isinstance(run_info["num_datapoints"], int)
+
+    # With adaptive stopping, we should stop early if precision threshold is met
+    # Dataset only has 10 datapoints, so it can't reach MIN_DATAPOINTS (20)
+    # Should respect max_datapoints (7) or dataset size, whichever is smaller
+    num_datapoints = run_info["num_datapoints"]
+    assert num_datapoints <= 7, f"Should process max of 7 datapoints, got {num_datapoints}"
+
+    # Consume all results
+    results: List[Dict[str, Any]] = []
+    async for result in job.results():
+        results.append(result)
+        assert "type" in result
+        assert result["type"] in ["success", "error"]
+
+    assert len(results) == num_datapoints
+
+    # Test summary stats
+    stats: Dict[str, EvaluatorStatsDict] = await job.summary_stats()
+    assert isinstance(stats, dict)
+    assert "exact_match" in stats
+    assert "topic_starts_with_f" in stats

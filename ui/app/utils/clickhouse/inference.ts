@@ -11,7 +11,7 @@ import {
 import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
-  ClientSideFunctionTool,
+  FunctionTool,
 } from "~/types/tensorzero";
 
 // Zod schemas for ToolCallConfigDatabaseInsert
@@ -20,7 +20,7 @@ export const toolSchema = z.object({
   parameters: JsonValueSchema,
   name: z.string(),
   strict: z.boolean(),
-}) satisfies z.ZodType<ClientSideFunctionTool>;
+}) satisfies z.ZodType<FunctionTool>;
 
 export const toolChoiceSchema = z.union([
   z.literal("none"),

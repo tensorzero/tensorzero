@@ -20,7 +20,6 @@ from tensorzero import (
     CreateDatapointRequestChat,
     CreateDatapointRequestJson,
     CreateDatapointsFromInferenceRequestParamsInferenceIds,
-    DatapointMetadataUpdate,
     Input,
     InputMessage,
     InputMessageContentTemplate,
@@ -256,9 +255,7 @@ def test_sync_update_datapoints_metadata(sync_client: TensorZeroGateway):
     # Update metadata using v1 endpoint (returns list of UUIDs)
     response = sync_client.update_datapoints_metadata(
         dataset_name=dataset_name,
-        requests=[
-            UpdateDatapointMetadataRequest(id=str(original_id), metadata=DatapointMetadataUpdate(name="updated_name"))
-        ],
+        requests=[UpdateDatapointMetadataRequest(id=str(original_id), name="updated_name")],
     )
     updated_ids = response.ids
 
@@ -280,7 +277,7 @@ def test_sync_update_datapoints_metadata(sync_client: TensorZeroGateway):
     # Clear the name using v1 endpoint
     response = sync_client.update_datapoints_metadata(
         dataset_name=dataset_name,
-        requests=[UpdateDatapointMetadataRequest(id=str(original_id), metadata=DatapointMetadataUpdate(name=None))],
+        requests=[UpdateDatapointMetadataRequest(id=str(original_id), name=None)],
     )
 
     # Wait for the metadata to be updated
@@ -325,7 +322,7 @@ async def test_async_update_datapoints_metadata(async_client: AsyncTensorZeroGat
     response = await async_client.update_datapoints_metadata(
         dataset_name=dataset_name,
         requests=[
-            UpdateDatapointMetadataRequest(id=str(original_id), metadata=DatapointMetadataUpdate(name="modified"))
+            UpdateDatapointMetadataRequest(id=str(original_id), name="modified"),
         ],
     )
     updated_ids = response.ids
