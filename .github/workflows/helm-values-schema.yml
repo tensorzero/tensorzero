@@ -1,0 +1,38 @@
+name: Generate values schema json
+
+on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "examples/production-deployment-k8s-helm/values.yaml"
+
+jobs:
+  generate:
+    name: Generate values schema json
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate values schema json
+        uses: losisin/helm-values-schema-json-action@v1
+        with:
+          input: examples/production-deployment-k8s-helm/values.yaml
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add examples/production-deployment-k8s-helm/values.schema.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update values.schema.json"
+            git push
+          fi
