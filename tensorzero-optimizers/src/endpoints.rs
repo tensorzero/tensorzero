@@ -102,6 +102,7 @@ pub async fn launch_optimization_workflow(
                 limit: limit.unwrap_or(DEFAULT_LIST_INFERENCES_QUERY_LIMIT_MAX_FOR_OPTIMIZATIONS),
                 offset: offset.unwrap_or(0),
                 order_by: order_by.as_deref(),
+                search_query_experimental: None,
             },
         )
         .await?;

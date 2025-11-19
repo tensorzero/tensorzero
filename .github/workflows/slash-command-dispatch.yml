@@ -21,9 +21,9 @@ jobs:
           echo "ACTOR_MEMBER=$MEMBER" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-      - name: Leave a comment if permission check fails
-        if: ${{ steps.check-permission.outputs.ACTOR_MEMBER != '1' }}
+
+      - name: Leave a comment if permission check fails for a slash command
+        if: ${{ steps.check-permission.outputs.ACTOR_MEMBER != '1' && (startsWith(github.event.comment.body, '/')) }}
         uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -43,4 +43,3 @@ jobs:
             check-fork
           # Use our custom permission check above, since `peter-evans/slash-command-dispatch` doesn't handle organizations
           permission: none
-
