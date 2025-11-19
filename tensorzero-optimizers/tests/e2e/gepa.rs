@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use evaluations::EvaluationInfo;
+use serde_json::Value;
 use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero_core::{
     config::{path::ResolvedTomlPathData, SchemaData},
@@ -945,6 +946,63 @@ async fn test_analyze_input_with_schemas() {
         (user_message.contains(r#"\"fluency\": 0.92"#)
             || user_message.contains("\"fluency\":0.92")),
         "Should have fluency score of 0.92"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_analyze_input_includes_system_template() {
+    let client = make_embedded_gateway().await;
+
+    let eval_infos = vec![create_test_evaluation_info(
+        "test_function",
+        "Test input",
+        "Test output",
+    )];
+
+    let function_config = create_test_function_config();
+    let variant_config = create_test_variant_config();
+    let gepa_config = create_test_gepa_config_echo();
+
+    let result = analyze_inferences(
+        &client,
+        &eval_infos,
+        &function_config,
+        &None,
+        &variant_config,
+        &gepa_config,
+        &create_test_evaluation_config(),
+    )
+    .await;
+
+    assert!(
+        result.is_ok(),
+        "analyze_inferences should succeed and expose the echoed request payload"
+    );
+    let analyses = result.unwrap();
+    assert_eq!(analyses.len(), 1, "Should return 1 analysis");
+
+    let payload_text = analyses[0]
+        .analysis
+        .iter()
+        .find_map(|block| match block {
+            ContentBlockChatOutput::Text(t) => Some(t.text.as_str()),
+            _ => None,
+        })
+        .expect("Analysis should contain text from echo model");
+    let payload: Value = serde_json::from_str(payload_text)
+        .expect("Echo response should be valid JSON with system and messages");
+
+    let system_prompt = payload
+        .get("system")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    assert!(
+        !system_prompt.is_empty(),
+        "System prompt from analyze variant should be present"
+    );
+    assert!(
+        system_prompt.contains("diagnosing quality issues in LLM-generated outputs"),
+        "System prompt should include the GEPA analyze system template text, got: {system_prompt}"
     );
 }
 
