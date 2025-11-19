@@ -1044,76 +1044,6 @@ class UpdateChatDatapointRequestInternal:
 
 
 @dataclass(kw_only=True)
-class UpdateChatDatapointRequest(UpdateChatDatapointRequestInternal):
-    type: Literal["chat"] = "chat"
-
-
-@dataclass(kw_only=True)
-class UpdateJsonDatapointRequest:
-    id: str
-    """
-    The ID of the datapoint to update. Required.
-    """
-    type: Literal["json"] = "json"
-    input: Input | None = None
-    """
-    Datapoint input. If omitted, it will be left unchanged.
-    """
-    output: JsonDatapointOutputUpdate | None = None
-    """
-    JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    This will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will
-    also be stored, because we allow invalid outputs in datapoints by design.
-    """
-    output_schema: Any | None = None
-    """
-    The output schema of the JSON datapoint. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    If not provided, the function's output schema will be used.
-    """
-    tags: dict[str, Any] | None = None
-    """
-    Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
-    it will be overwrite the existing tags.
-    """
-    name: str | None = None
-    """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    """
-    metadata: DatapointMetadataUpdate | None = None
-    """
-    DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
-    Moving forward, don't nest these fields.
-    """
-
-
-UpdateDatapointRequest = UpdateChatDatapointRequest | UpdateJsonDatapointRequest
-
-
-@dataclass(kw_only=True)
-class CreateDatapointsRequest:
-    datapoints: list[CreateDatapointRequest]
-    """
-    The datapoints to create.
-    """
-
-
-@dataclass(kw_only=True)
-class GetDatapointsResponse:
-    datapoints: list[Datapoint]
-    """
-    The retrieved datapoints.
-    """
-
-
-@dataclass(kw_only=True)
-class UpdateDatapointsRequest:
-    datapoints: list[UpdateDatapointRequest]
-    """
-    The datapoints to update.
-    """
-
-
-@dataclass(kw_only=True)
 class UpdateJsonDatapointRequestInternal:
     id: str
     """
@@ -1147,6 +1077,43 @@ class UpdateJsonDatapointRequestInternal:
     """
     DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
     Moving forward, don't nest these fields.
+    """
+
+
+@dataclass(kw_only=True)
+class UpdateChatDatapointRequest(UpdateChatDatapointRequestInternal):
+    type: Literal["chat"] = "chat"
+
+
+@dataclass(kw_only=True)
+class UpdateJsonDatapointRequest(UpdateJsonDatapointRequestInternal):
+    type: Literal["json"] = "json"
+
+
+UpdateDatapointRequest = UpdateChatDatapointRequest | UpdateJsonDatapointRequest
+
+
+@dataclass(kw_only=True)
+class CreateDatapointsRequest:
+    datapoints: list[CreateDatapointRequest]
+    """
+    The datapoints to create.
+    """
+
+
+@dataclass(kw_only=True)
+class GetDatapointsResponse:
+    datapoints: list[Datapoint]
+    """
+    The retrieved datapoints.
+    """
+
+
+@dataclass(kw_only=True)
+class UpdateDatapointsRequest:
+    datapoints: list[UpdateDatapointRequest]
+    """
+    The datapoints to update.
     """
 
 

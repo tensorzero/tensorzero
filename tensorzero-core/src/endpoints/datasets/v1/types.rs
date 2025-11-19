@@ -240,7 +240,6 @@ pub struct UpdateDynamicToolParamsRequest {
 #[ts(export, optional_fields)]
 #[export_schema]
 #[schemars(title = "UpdateJsonDatapointRequestInternal")]
-#[serde(deny_unknown_fields)]
 pub struct UpdateJsonDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
