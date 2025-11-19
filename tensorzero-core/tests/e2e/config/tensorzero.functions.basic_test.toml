@@ -1,0 +1,791 @@
+[functions.basic_test]
+type = "chat"
+system_schema = "../../../fixtures/config/functions/basic_test/system_schema.json"
+
+[functions.basic_test.variants.test]
+type = "chat_completion"
+weight = 1
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+temperature = 1.0
+max_tokens = 100
+seed = 69
+
+[functions.basic_test.variants.test2]
+type = "chat_completion"
+model = "test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.error]
+type = "chat_completion"
+model = "error"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.slow]
+type = "chat_completion"
+model = "slow"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.test_dynamic_api_key]
+type = "chat_completion"
+model = "test_key"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+temperature = 1.0
+max_tokens = 100
+seed = 69
+
+[functions.basic_test.variants.anthropic]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-anthropic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.anthropic-extra-body]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-anthropic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.anthropic-extra-headers]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-anthropic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "x-api-key", value = "invalid_anthropic_auth" }]
+
+[functions.basic_test.variants.anthropic-dynamic]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-anthropic-dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.anthropic-shorthand]
+type = "chat_completion"
+model = "anthropic::claude-3-haiku-20240307"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.aws-bedrock]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-aws-bedrock"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.aws-bedrock-thinking]
+type = "chat_completion"
+model = "claude-3-7-sonnet-20250219-thinking-aws-bedrock"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
+thinking_budget_tokens = 1024
+
+[functions.basic_test.variants.aws-bedrock-deepseek-r1]
+type = "chat_completion"
+model = "deepseek-r1-aws-bedrock"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 500
+
+[functions.basic_test.variants.aws-bedrock-extra-body]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-aws-bedrock"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/inferenceConfig/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.aws-bedrock-extra-headers]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-aws-bedrock"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Content-Length", value = "2" }]
+
+[functions.basic_test.variants.aws-sagemaker-extra-body]
+type = "chat_completion"
+model = "gemma-3-1b-aws-sagemaker-openai"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.aws-sagemaker-extra-headers]
+type = "chat_completion"
+model = "gemma-3-1b-aws-sagemaker-openai"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "x-amz-security-token", value = "InvalidToken" }]
+
+[functions.basic_test.variants.aws-bedrock-us-east-1]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-us-east-1"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.aws-bedrock-uk-hogwarts-1]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-uk-hogwarts-1"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.aws-sagemaker-openai]
+type = "chat_completion"
+model = "gemma-3-1b-aws-sagemaker-openai"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.aws-sagemaker-tgi]
+type = "chat_completion"
+model = "gemma-3-1b-aws-sagemaker-tgi"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.azure]
+type = "chat_completion"
+model = "gpt-4o-mini-azure"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.azure-extra-body]
+type = "chat_completion"
+model = "gpt-4o-mini-azure"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.azure-extra-headers]
+type = "chat_completion"
+model = "gpt-4o-mini-azure"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "api-key", value = "invalid_azure_openai_auth" }]
+
+[functions.basic_test.variants.azure-dynamic]
+type = "chat_completion"
+model = "gpt-4o-mini-azure-dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.azure-ai-foundry]
+type = "chat_completion"
+model = "llama-3.3-70b-instruct-azure"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.azure-ai-foundry-extra-body]
+type = "chat_completion"
+model = "llama-3.3-70b-instruct-azure"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.azure-ai-foundry-extra-headers]
+type = "chat_completion"
+model = "llama-3.3-70b-instruct-azure"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "api-key", value = "invalid_azure_openai_auth" }]
+
+[functions.basic_test.variants.azure-ai-foundry-dynamic]
+type = "chat_completion"
+model = "llama-3.3-70b-instruct-azure-dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.fireworks]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 500
+
+[functions.basic_test.variants.fireworks-extra-body]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.fireworks-extra-headers]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/deepseek-r1-0528"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "invalid_fireworks_auth" }]
+
+[functions.basic_test.variants.fireworks-dynamic]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.fireworks-shorthand]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/llama-v3p1-8b-instruct"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.gcp-vertex-gemini-flash]
+type = "chat_completion"
+model = "gemini-2.0-flash-001"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.gcp-vertex-gemini-flash-extra-body]
+type = "chat_completion"
+model = "gemini-2.0-flash-001"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/generationConfig/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.gcp-vertex-gemini-flash-extra-headers]
+type = "chat_completion"
+model = "gemini-2.0-flash-001"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "invalid_gcp_vertex_auth" }]
+
+[functions.basic_test.variants.gcp-vertex-gemini-pro]
+type = "chat_completion"
+model = "gcp-gemini-2.5-pro"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 500
+
+[functions.basic_test.variants.gcp-vertex-gemini-flash-lite-tuned]
+type = "chat_completion"
+model = "gemini-2.0-flash-lite-tuned"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.gemini-bad-model-name]
+type = "chat_completion"
+model = "gemini-wrong-field"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.google-ai-studio-gemini-flash-8b]
+type = "chat_completion"
+model = "gemini-2.0-flash-lite"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.google-ai-studio-gemini-flash-8b-extra-body]
+type = "chat_completion"
+model = "gemini-2.0-flash-lite"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/generationConfig/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.google-ai-studio-gemini-flash-8b-extra-headers]
+type = "chat_completion"
+model = "gemini-2.0-flash-lite"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Content-Length", value = "2" }]
+
+[functions.basic_test.variants.google-ai-studio-gemini-flash-8b-dynamic]
+type = "chat_completion"
+model = "gemini-2.0-flash-lite-dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.google-ai-studio-gemini-flash-8b-shorthand]
+type = "chat_completion"
+model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.google-ai-studio-gemini-2_5-pro]
+type = "chat_completion"
+model = "gemini-2.5-pro"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 500
+
+[functions.basic_test.variants.google-ai-studio-gemini-2_5-pro-dynamic]
+type = "chat_completion"
+model = "gemini-2.5-pro-dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 500
+
+[functions.basic_test.variants.gcp-vertex-haiku]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-gcp-vertex"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.gcp-vertex-haiku-extra-body]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-gcp-vertex"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.gcp-vertex-haiku-extra-headers]
+type = "chat_completion"
+model = "claude-3-haiku-20240307-gcp-vertex"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Content-Length", value = "2" }]
+
+[functions.basic_test.variants.groq]
+type = "chat_completion"
+model = "groq-qwen"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 500
+
+[functions.basic_test.variants.groq-shorthand]
+type = "chat_completion"
+model = "groq::meta-llama/llama-4-scout-17b-16e-instruct"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.groq-extra-body]
+type = "chat_completion"
+model = "groq-qwen"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.groq-extra-headers]
+type = "chat_completion"
+model = "groq-qwen"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [
+    { name = "Authorization", value = "Bearer: invalid_openai_auth" },
+]
+
+[functions.basic_test.variants.groq-dynamic]
+type = "chat_completion"
+model = "groq-qwen-dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.mistral]
+type = "chat_completion"
+model = "open-mistral-nemo-2407"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.mistral-extra-body]
+type = "chat_completion"
+model = "open-mistral-nemo-2407"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.mistral-extra-headers]
+type = "chat_completion"
+model = "open-mistral-nemo-2407"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "invalid_mistral_auth" }]
+
+[functions.basic_test.variants.mistral-dynamic]
+type = "chat_completion"
+model = "open-mistral-nemo-2407-dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.mistral-shorthand]
+type = "chat_completion"
+model = "mistral::open-mistral-nemo-2407"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.openai]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.openai-responses]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.openai-extra-body]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [
+    { pointer = "/temperature", value = 0.123 },
+    { pointer = "/invalid-field-should-be-deleted", value = "Bad value" },
+    { pointer = "/invalid-field-should-be-deleted", delete = true },
+]
+
+[functions.basic_test.variants.openai-extra-body-provider-config]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18-extra-body"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [
+    { pointer = "/temperature", value = 0.123 },
+    { pointer = "/max_completion_tokens", value = 123 },
+]
+
+[functions.basic_test.variants.openai-extra-headers]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [
+    { name = "Authorization", value = "Bearer: invalid_openai_auth" },
+]
+
+[functions.basic_test.variants.openai-o1]
+type = "chat_completion"
+model = "o1-2024-12-17"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 1000
+
+[functions.basic_test.variants.openai-dynamic]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18-dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.openai-shorthand]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.gcp_vertex_gemini_shorthand]
+type = "chat_completion"
+model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-001"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.gcp_vertex_gemini_shorthand_endpoint]
+type = "chat_completion"
+model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/endpoints/945488740422254592"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+# Note - GCP doesn't allow fine-tuning any Anthropic models, so we just test the 'publishers/anthropic' shorthand
+[functions.basic_test.variants.gcp_vertex_anthropic_shorthand]
+type = "chat_completion"
+model = "gcp_vertex_anthropic::projects/tensorzero-public/locations/us-central1/publishers/anthropic/models/claude-3-haiku@20240307"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.o4-mini]
+type = "chat_completion"
+model = "o4-mini"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+
+[functions.basic_test.variants.o3-mini]
+type = "chat_completion"
+model = "o3-mini"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+reasoning_effort = "low"
+
+## OpenRouter
+
+[functions.basic_test.variants.openrouter]
+type = "chat_completion"
+model = "gpt_4_o_mini_openrouter"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.openrouter-extra-body]
+type = "chat_completion"
+model = "gpt_4_o_mini_openrouter"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.openrouter-extra-headers]
+type = "chat_completion"
+model = "gpt_4_o_mini_openrouter"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [
+    { name = "Authorization", value = "Bearer: invalid_openai_auth" },
+]
+
+[functions.basic_test.variants.openrouter-dynamic]
+type = "chat_completion"
+model = "gpt_4_o_mini_openrouter_dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.openrouter-shorthand]
+type = "chat_completion"
+model = "openrouter::openai/gpt-4o-mini"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.tgi]
+type = "chat_completion"
+model = "phi-3.5-mini-instruct-tgi"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.tgi-extra-body]
+type = "chat_completion"
+model = "phi-3.5-mini-instruct-tgi"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.tgi-extra-headers]
+type = "chat_completion"
+model = "phi-3.5-mini-instruct-tgi"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "invalid_tgi_auth" }]
+
+[functions.basic_test.variants.together]
+type = "chat_completion"
+model = "llama3.1-8b-instruct-together"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.together-extra-body]
+type = "chat_completion"
+model = "llama3.1-8b-instruct-together"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.together-extra-headers]
+type = "chat_completion"
+model = "llama3.1-8b-instruct-together"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [
+    { name = "Authorization", value = "Bearer invalid_together_auth" },
+]
+
+[functions.basic_test.variants.together-dynamic]
+type = "chat_completion"
+model = "llama3.1-8b-instruct-together-dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.together-shorthand]
+type = "chat_completion"
+model = "together::meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.together-tool]
+type = "chat_completion"
+model = "llama3.1-405b-instruct-turbo-together"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.sglang]
+type = "chat_completion"
+model = "Qwen/Qwen2.5-1.5B-Instruct"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.sglang-extra-body]
+type = "chat_completion"
+model = "Qwen/Qwen2.5-1.5B-Instruct"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.vllm]
+type = "chat_completion"
+model = "qwen2.5-0.5b-instruct-vllm"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.vllm-gpt-oss-20b]
+type = "chat_completion"
+model = "gpt-oss-20b-vllm"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.vllm-extra-body]
+type = "chat_completion"
+model = "qwen2.5-0.5b-instruct-vllm"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.vllm-extra-headers]
+type = "chat_completion"
+model = "qwen2.5-0.5b-instruct-vllm"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "invalid_vllm_auth" }]
+
+[functions.basic_test.variants.vllm-dynamic]
+type = "chat_completion"
+model = "qwen2.5-0.5b-instruct-vllm-dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.xai]
+type = "chat_completion"
+model = "grok_2_1212"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.xai-extra-body]
+type = "chat_completion"
+model = "grok_2_1212"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.xai-extra-headers]
+type = "chat_completion"
+model = "grok_2_1212"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "Bearer invalid_xai_auth" }]
+
+[functions.basic_test.variants.xai-dynamic]
+type = "chat_completion"
+model = "grok_2_1212-dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.xai-shorthand]
+type = "chat_completion"
+model = "xai::grok-2-1212"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.hyperbolic]
+type = "chat_completion"
+model = "meta-llama/Meta-Llama-3-70B-Instruct"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.hyperbolic-extra-body]
+type = "chat_completion"
+model = "meta-llama/Meta-Llama-3-70B-Instruct"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.hyperbolic-extra-headers]
+type = "chat_completion"
+model = "meta-llama/Meta-Llama-3-70B-Instruct"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [
+    { name = "Authorization", value = "Bearer invalid_hyperbolic_auth" },
+]
+
+[functions.basic_test.variants.hyperbolic-dynamic]
+type = "chat_completion"
+model = "meta-llama/Meta-Llama-3-70B-Instruct-dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.hyperbolic-shorthand]
+type = "chat_completion"
+model = "hyperbolic::meta-llama/Meta-Llama-3-70B-Instruct"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.deepseek-chat]
+type = "chat_completion"
+model = "deepseek-chat"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.deepseek-chat-extra-body]
+type = "chat_completion"
+model = "deepseek-chat"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.deepseek-chat-extra-headers]
+type = "chat_completion"
+model = "deepseek-chat"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+extra_headers = [{ name = "Authorization", value = "Bearer sk-bad-tensorzero" }]
+
+[functions.basic_test.variants.deepseek-reasoner]
+type = "chat_completion"
+model = "deepseek-reasoner"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
+[functions.basic_test.variants.together-deepseek-r1]
+type = "chat_completion"
+model = "together-deepseek-r1"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
+[functions.basic_test.variants.reasoner]
+type = "chat_completion"
+model = "reasoner"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
+[functions.basic_test.variants.deepseek-dynamic]
+type = "chat_completion"
+model = "deepseek-chat-dynamic"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.deepseek-shorthand]
+type = "chat_completion"
+model = "deepseek::deepseek-chat"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.fireworks-deepseek]
+type = "chat_completion"
+model = "deepseek-r1"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
+[functions.basic_test.variants.fireworks-gpt-oss-20b]
+type = "chat_completion"
+model = "gpt-oss-20b-fireworks"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 800
+
+[functions.basic_test.variants.flaky]
+type = "chat_completion"
+model = "flaky_basic_test"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+retries = { num_retries = 5, max_delay_s = 0.1 }
+
+[functions.basic_test.variants.err_in_stream]
+type = "chat_completion"
+model = "err_in_stream"
+system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.dicl]
+type = "experimental_dynamic_in_context_learning"
+model = "gpt-4o-mini-2024-07-18"
+embedding_model = "text-embedding-3-small"
+k = 3
+max_tokens = 100
+
+[functions.basic_test.variants.empty_dicl]
+type = "experimental_dynamic_in_context_learning"
+model = "gpt-4o-mini-2024-07-18"
+embedding_model = "text-embedding-3-small"
+k = 3
+max_tokens = 100
+
+[functions.basic_test.variants.empty_dicl_extra_body]
+type = "experimental_dynamic_in_context_learning"
+model = "gpt-4o-mini-2024-07-18"
+embedding_model = "text-embedding-3-small"
+k = 3
+max_tokens = 100
+extra_body = [{ pointer = "/temperature", value = 0.123 }]
+
+[functions.basic_test.variants.empty_dicl_shorthand]
+type = "experimental_dynamic_in_context_learning"
+model = "gpt-4o-mini-2024-07-18"
+embedding_model = "openai::text-embedding-3-small"
+k = 3
+max_tokens = 100
