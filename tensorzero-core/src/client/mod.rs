@@ -15,7 +15,6 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use std::fmt::Debug;
-use thiserror::Error;
 use tokio::time::error::Elapsed;
 use tokio_stream::StreamExt;
 use url::Url;
@@ -82,7 +81,7 @@ impl HTTPGateway {
                 TensorZeroError::RequestTimeout
             } else {
                 TensorZeroError::Other {
-                    source: crate::error::Error::new(ErrorDetails::JsonRequest {
+                    source: Error::new(ErrorDetails::JsonRequest {
                         message: format!(
                             "Error from server: {}",
                             DisplayOrDebug {
@@ -102,7 +101,7 @@ impl HTTPGateway {
             return Err(TensorZeroError::Http {
                 status_code,
                 text,
-                source: crate::error::Error::new(ErrorDetails::JsonRequest {
+                source: Error::new(ErrorDetails::JsonRequest {
                     message: format!(
                         "Request failed: {}",
                         DisplayOrDebug {
@@ -138,7 +137,7 @@ impl HTTPGateway {
             .json()
             .await
             .map_err(|e| TensorZeroError::Other {
-                source: crate::error::Error::new(ErrorDetails::Serialization {
+                source: Error::new(ErrorDetails::Serialization {
                     message: format!(
                         "Error deserializing response: {}",
                         DisplayOrDebug {
@@ -159,7 +158,7 @@ impl HTTPGateway {
             self.customize_builder(builder)
                 .eventsource()
                 .map_err(|e| TensorZeroError::Other {
-                    source: crate::error::Error::new(ErrorDetails::JsonRequest {
+                    source: Error::new(ErrorDetails::JsonRequest {
                         message: format!("Error constructing event stream: {e:?}"),
                     })
                     .into(),
@@ -176,10 +175,8 @@ impl HTTPGateway {
                 panic!("Peeked error but got non-err {res:?}");
             };
             let err_str = format!("Error in streaming response: {e:?}");
-            let inner_err = crate::error::Error::new(ErrorDetails::StreamError {
-                source: Box::new(crate::error::Error::new(ErrorDetails::Serialization {
-                    message: err_str,
-                })),
+            let inner_err = Error::new(ErrorDetails::StreamError {
+                source: Box::new(Error::new(ErrorDetails::Serialization { message: err_str })),
             });
             if let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = e {
                 return Err(TensorZeroError::Http {
@@ -189,7 +186,7 @@ impl HTTPGateway {
                 });
             }
             return Err(TensorZeroError::Other {
-                source: crate::error::Error::new(ErrorDetails::StreamError {
+                source: Error::new(ErrorDetails::StreamError {
                     source: Box::new(inner_err),
                 })
                 .into(),
@@ -203,8 +200,8 @@ impl HTTPGateway {
                         if matches!(e, reqwest_eventsource::Error::StreamEnded) {
                             break;
                         }
-                        yield Err(crate::error::Error::new(ErrorDetails::StreamError {
-                            source: Box::new(crate::error::Error::new(ErrorDetails::Serialization {
+                        yield Err(Error::new(ErrorDetails::StreamError {
+                            source: Box::new(Error::new(ErrorDetails::Serialization {
                                 message: format!("Error in streaming response: {}", DisplayOrDebug {
                                     val: e,
                                     debug: verbose_errors,
@@ -219,7 +216,7 @@ impl HTTPGateway {
                                 break;
                             }
                             let json: serde_json::Value = serde_json::from_str(&message.data).map_err(|e| {
-                                crate::error::Error::new(ErrorDetails::Serialization {
+                                Error::new(ErrorDetails::Serialization {
                                     message: format!("Error deserializing inference response chunk: {}", DisplayOrDebug {
                                         val: e,
                                         debug: verbose_errors,
@@ -227,8 +224,8 @@ impl HTTPGateway {
                                 })
                             })?;
                             if let Some(err) = json.get("error") {
-                                yield Err(crate::error::Error::new(ErrorDetails::StreamError {
-                                    source: Box::new(crate::error::Error::new(ErrorDetails::Serialization {
+                                yield Err(Error::new(ErrorDetails::StreamError {
+                                    source: Box::new(Error::new(ErrorDetails::Serialization {
                                         message: format!("Stream produced an error: {}", DisplayOrDebug {
                                             val: err,
                                             debug: verbose_errors,
@@ -238,7 +235,7 @@ impl HTTPGateway {
                             } else {
                                 let data: InferenceResponseChunk =
                                 serde_json::from_value(json).map_err(|e| {
-                                    crate::error::Error::new(ErrorDetails::Serialization {
+                                    Error::new(ErrorDetails::Serialization {
                                         message: format!("Error deserializing json value as InferenceResponseChunk: {}", DisplayOrDebug {
                                             val: e,
                                             debug: verbose_errors,
@@ -273,7 +270,7 @@ pub struct ClientBuilder {
 }
 
 /// An error type representing an error from within the TensorZero gateway
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
 pub enum TensorZeroError {
     #[error("HTTP Error (status code {status_code}): {text:?}")]
@@ -297,11 +294,11 @@ pub enum TensorZeroError {
     },
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 #[error("Internal TensorZero Error: {0}")]
-pub struct TensorZeroInternalError(#[from] crate::error::Error);
+pub struct TensorZeroInternalError(#[from] Error);
 
-#[derive(Error, Debug)]
+#[derive(thiserror::Error, Debug)]
 #[non_exhaustive]
 pub enum ClientBuilderError {
     #[error(
@@ -510,13 +507,10 @@ impl ClientBuilder {
                 let http_client = if self.http_client.is_some() {
                     return Err(ClientBuilderError::HTTPClientBuild(
                         TensorZeroError::Other {
-                            source: TensorZeroInternalError(crate::error::Error::new(
-                                ErrorDetails::AppState {
-                                    message:
-                                        "HTTP client cannot be provided in EmbeddedGateway mode"
-                                            .to_string(),
-                                },
-                            )),
+                            source: TensorZeroInternalError(Error::new(ErrorDetails::AppState {
+                                message: "HTTP client cannot be provided in EmbeddedGateway mode"
+                                    .to_string(),
+                            })),
                         },
                     ));
                 } else {
@@ -616,7 +610,7 @@ impl ClientBuilder {
                 .__force_allow_embedded_batch_writes
         {
             return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
-                source: crate::error::Error::new(ErrorDetails::Config {
+                source: Error::new(ErrorDetails::Config {
                     message: "`[gateway.observability.batch_writes]` is not yet supported in embedded gateway mode".to_string(),
                 })
                 .into(),
@@ -627,7 +621,7 @@ impl ClientBuilder {
         if config.gateway.auth.enabled {
             return Err(ClientBuilderError::AuthNotSupportedInEmbeddedMode(
                 TensorZeroError::Other {
-                    source: crate::error::Error::new(ErrorDetails::Config {
+                    source: Error::new(ErrorDetails::Config {
                         message: "`[gateway.auth]` is not supported in embedded gateway mode. Authentication is only available when using HTTP gateway mode. Please either disable authentication by setting `gateway.auth.enabled = false` or use HTTP mode instead.".to_string(),
                     })
                     .into(),
@@ -759,7 +753,7 @@ impl Client {
                     .base_url
                     .join("feedback")
                     .map_err(|e| TensorZeroError::Other {
-                        source: crate::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
                             message: format!(
                                 "Failed to join base URL with /feedback endpoint: {e}"
                             ),
@@ -799,7 +793,7 @@ impl Client {
                         .base_url
                         .join("inference")
                         .map_err(|e| TensorZeroError::Other {
-                            source: crate::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                            source: Error::new(ErrorDetails::InvalidBaseUrl {
                                 message: format!(
                                     "Failed to join base URL with /inference endpoint: {e}"
                                 ),
@@ -807,7 +801,7 @@ impl Client {
                             .into(),
                         })?;
                 let body = serde_json::to_string(&params).map_err(|e| TensorZeroError::Other {
-                    source: crate::error::Error::new(ErrorDetails::Serialization {
+                    source: Error::new(ErrorDetails::Serialization {
                         message: format!(
                             "Failed to serialize inference params: {}",
                             DisplayOrDebug {
@@ -883,7 +877,7 @@ impl Client {
                     .base_url
                     .join("internal/object_storage")
                     .map_err(|e| TensorZeroError::Other {
-                        source: crate::error::Error::new(
+                        source: Error::new(
                             ErrorDetails::InvalidBaseUrl {
                                 message: format!(
                                     "Failed to join base URL with /internal/object_storage endpoint: {e}"
@@ -894,7 +888,7 @@ impl Client {
                     })?;
                 let storage_path_json =
                     serde_json::to_string(&storage_path).map_err(|e| TensorZeroError::Other {
-                        source: crate::error::Error::new(ErrorDetails::Serialization {
+                        source: Error::new(ErrorDetails::Serialization {
                             message: format!("Failed to serialize storage path: {e}"),
                         })
                         .into(),
@@ -960,7 +954,7 @@ pub async fn get_config_no_verify_credentials(
 // errors for certain embedded gateway errors. For example, a config parsing error
 // should be `TensorZeroError::Other`, not `TensorZeroError::Http`.
 #[doc(hidden)]
-pub fn err_to_http(e: crate::error::Error) -> TensorZeroError {
+pub fn err_to_http(e: Error) -> TensorZeroError {
     TensorZeroError::Http {
         status_code: e.status_code().as_u16(),
         text: Some(serde_json::json!({"error": e.to_string()}).to_string()),
