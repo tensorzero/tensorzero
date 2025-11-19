@@ -626,8 +626,8 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    // Test deserialization of deprecated metadata field (#4725 / 2026.2+).
-    // When only the deprecated nested 'metadata' field is provided, it should be copied to 'metadata_new'.
+    // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
+    // When only the deprecated nested `metadata` field is provided, it should be copied to the flattened metadata fields.
     #[test]
     fn test_chat_deprecation_4725_metadata_only_deprecated() {
         let logs_contain = crate::utils::testing::capture_logs();
@@ -647,8 +647,8 @@ mod tests {
         assert!(logs_contain("The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"));
     }
 
-    // Test deserialization of deprecated metadata field (#4725 / 2026.2+).
-    // When only the new flattened 'name' field is provided, it should work normally.
+    // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
+    // When only the new flattened `name` field is provided, it should work normally.
     #[test]
     fn test_chat_deprecation_4725_metadata_only_new() {
         let json = json!({
@@ -664,8 +664,8 @@ mod tests {
         }
     }
 
-    // Test deserialization of deprecated metadata field (#4725 / 2026.2+).
-    // When both deprecated 'metadata' and new flattened fields are provided, it should error.
+    // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
+    // When both deprecated `metadata` and new flattened fields are provided, it should error.
     #[test]
     fn test_chat_deprecation_4725_metadata_both_provided() {
         let json = json!({
@@ -684,8 +684,8 @@ mod tests {
             .contains("Cannot specify both"));
     }
 
-    // Test deserialization of deprecated metadata field (#4725 / 2026.2+).
-    // When neither metadata field is provided, deserialization should succeed with defaults.
+    // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
+    // When neither `metadata` field is provided, deserialization should succeed with defaults.
     #[test]
     fn test_chat_deprecation_4725_metadata_neither_provided() {
         let json = json!({
@@ -700,8 +700,8 @@ mod tests {
         }
     }
 
-    // Test deserialization of deprecated tool_params field (#4725 / 2026.2+).
-    // When only the deprecated nested 'tool_params' field is provided, it should be copied to 'tool_params_new'.
+    // Test deserialization of deprecated `tool_params` field (#4725 / 2026.2+).
+    // When only the deprecated nested `tool_params` field is provided, it should be copied to the flattened tool parameter fields.
     #[test]
     fn test_chat_deprecation_4725_tool_params_only_deprecated() {
         let logs_contain = crate::utils::testing::capture_logs();
@@ -724,8 +724,8 @@ mod tests {
         assert!(logs_contain("The `tool_params` field is deprecated. Please use flattened tool parameter fields instead. (#4725)"));
     }
 
-    // Test deserialization of deprecated tool_params field (#4725 / 2026.2+).
-    // When only the new flattened 'allowed_tools' field is provided, it should work normally.
+    // Test deserialization of deprecated `tool_params` field (#4725 / 2026.2+).
+    // When only the new flattened `allowed_tools` field is provided, it should work normally.
     #[test]
     fn test_chat_deprecation_4725_tool_params_only_new() {
         let json = json!({
@@ -744,8 +744,8 @@ mod tests {
         }
     }
 
-    // Test deserialization of deprecated tool_params field (#4725 / 2026.2+).
-    // When both deprecated 'tool_params' and new flattened fields are provided, it should error.
+    // Test deserialization of deprecated `tool_params` field (#4725 / 2026.2+).
+    // When both deprecated `tool_params` and new flattened fields are provided, it should error.
     #[test]
     fn test_chat_deprecation_4725_tool_params_both_provided() {
         let json = json!({
@@ -764,8 +764,8 @@ mod tests {
             .contains("Cannot specify both"));
     }
 
-    // Test deserialization of deprecated tool_params field (#4725 / 2026.2+).
-    // When neither tool_params field is provided, deserialization should succeed with defaults.
+    // Test deserialization of deprecated `tool_params` field (#4725 / 2026.2+).
+    // When neither `tool_params` field is provided, deserialization should succeed with defaults.
     #[test]
     fn test_chat_deprecation_4725_tool_params_neither_provided() {
         let json = json!({
@@ -780,8 +780,8 @@ mod tests {
         }
     }
 
-    // Test deserialization of deprecated metadata field (#4725 / 2026.2+).
-    // When only the deprecated nested 'metadata' field is provided, it should be copied to 'metadata_new'.
+    // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
+    // When only the deprecated nested `metadata` field is provided, it should be copied to the flattened metadata fields.
     #[test]
     fn test_json_deprecation_4725_metadata_only_deprecated() {
         let logs_contain = crate::utils::testing::capture_logs();
@@ -801,8 +801,8 @@ mod tests {
         assert!(logs_contain("The `metadata` field is deprecated. Please use flattened metadata fields instead. (#4725)"));
     }
 
-    // Test deserialization of deprecated metadata field (#4725 / 2026.2+).
-    // When only the new flattened 'name' field is provided, it should work normally.
+    // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
+    // When only the new flattened `name` field is provided, it should work normally.
     #[test]
     fn test_json_deprecation_4725_metadata_only_new() {
         let json = json!({
@@ -818,8 +818,8 @@ mod tests {
         }
     }
 
-    // Test deserialization of deprecated metadata field (#4725 / 2026.2+).
-    // When both deprecated 'metadata' and new flattened fields are provided, it should error.
+    // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
+    // When both deprecated `metadata` and new flattened fields are provided, it should error.
     #[test]
     fn test_json_deprecation_4725_metadata_both_provided() {
         let json = json!({
@@ -838,8 +838,8 @@ mod tests {
             .contains("Cannot specify both"));
     }
 
-    // Test deserialization of deprecated metadata field (#4725 / 2026.2+).
-    // When neither metadata field is provided, deserialization should succeed with defaults.
+    // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
+    // When neither `metadata` field is provided, deserialization should succeed with defaults.
     #[test]
     fn test_json_deprecation_4725_metadata_neither_provided() {
         let json = json!({
@@ -854,8 +854,8 @@ mod tests {
         }
     }
 
-    // Test deserialization of deprecated tool_params field (#4725 / 2026.2+).
-    // Verify that empty deprecated metadata object is treated as default (not an error).
+    // Test deserialization of deprecated `metadata` field (#4725 / 2026.2+).
+    // Verify that empty deprecated `metadata` object is treated as default (not an error).
     #[test]
     fn test_chat_deprecation_4725_metadata_empty_deprecated() {
         let json = json!({
@@ -871,8 +871,8 @@ mod tests {
         }
     }
 
-    // Test deserialization of deprecated tool_params field (#4725 / 2026.2+).
-    // Verify that empty deprecated tool_params object is treated as default (not an error).
+    // Test deserialization of deprecated `tool_params` field (#4725 / 2026.2+).
+    // Verify that empty deprecated `tool_params` object is treated as default (not an error).
     #[test]
     fn test_chat_deprecation_4725_tool_params_empty_deprecated() {
         let json = json!({
@@ -888,8 +888,8 @@ mod tests {
         }
     }
 
-    // Test deserialization of deprecated metadata field (#4725 / 2026.2+).
-    // Verify that multiple tool_params fields can be provided in the deprecated nested form.
+    // Test deserialization of deprecated `tool_params` field (#4725 / 2026.2+).
+    // Verify that multiple `tool_params` fields can be provided in the deprecated nested form.
     #[test]
     fn test_chat_deprecation_4725_tool_params_multiple_fields_deprecated() {
         let logs_contain = crate::utils::testing::capture_logs();
