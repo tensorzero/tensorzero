@@ -66,7 +66,7 @@ pub async fn write_json_fixture_to_dataset(
 pub async fn get_tensorzero_client() -> Client {
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(PathBuf::from(&format!(
-            "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+            "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         ))),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
