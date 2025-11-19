@@ -269,7 +269,6 @@ __all__ = [
     "StorageKindS3Compatible",
     "StoragePath",
     "StoredInference",
-    "StoredInference",
     "StoredInferenceChat",
     "StoredInferenceJson",
     "StoredInput",
