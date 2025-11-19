@@ -21,7 +21,6 @@ import { Eye } from "lucide-react";
 
 export default function EpisodeInferenceTable({
   inferences,
-  onInferenceHover,
   onOpenSheet,
   onCloseSheet,
   getInferenceData,
@@ -30,7 +29,6 @@ export default function EpisodeInferenceTable({
   openSheetInferenceId,
 }: {
   inferences: InferenceByIdRow[];
-  onInferenceHover?: (inferenceId: string) => void;
   onOpenSheet?: (inferenceId: string) => void;
   onCloseSheet?: () => void;
   getInferenceData?: (inferenceId: string) => ParsedInferenceRow | null;
@@ -83,12 +81,11 @@ export default function EpisodeInferenceTable({
                   <TableItemTime timestamp={inference.timestamp} />
                 </TableCell>
                 <TableCell>
-                  {onOpenSheet && onInferenceHover && (
+                  {onOpenSheet && (
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => onOpenSheet(inference.id)}
-                      onMouseEnter={() => onInferenceHover(inference.id)}
                       aria-label="View inference details"
                     >
                       <Eye className="h-4 w-4" />

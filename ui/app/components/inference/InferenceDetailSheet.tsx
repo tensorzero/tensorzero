@@ -41,13 +41,13 @@ export function InferenceDetailSheet({
             </div>
           )}
 
-          {error && !inference && (
+          {error && (
             <div className="flex items-center justify-center py-12">
               <div className="text-destructive text-sm font-medium">{error}</div>
             </div>
           )}
 
-          {inference && (
+          {inference && !error && (
             <>
               <div className="space-y-2 border-b pb-4">
                 <div className="grid grid-cols-2 gap-4 text-sm">

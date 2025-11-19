@@ -36,7 +36,7 @@ import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
-import { useInferenceHover } from "~/hooks/use-inference-hover";
+import { useInferenceClick } from "~/hooks/use-inference-click";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 
 export const handle: RouteHandle = {
@@ -237,14 +237,13 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { 
-    handleInferenceHover, 
     handleOpenSheet,
     handleCloseSheet,
     getInferenceData, 
     isLoading,
     getError,
     openSheetInferenceId,
-  } = useInferenceHover(
+  } = useInferenceClick(
     `/observability/episodes/${episode_id}`
   );
 
@@ -360,7 +359,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           <SectionHeader heading="Inferences" count={num_inferences} />
           <EpisodeInferenceTable 
             inferences={inferences} 
-            onInferenceHover={handleInferenceHover}
             onOpenSheet={handleOpenSheet}
             onCloseSheet={handleCloseSheet}
             getInferenceData={getInferenceData}
