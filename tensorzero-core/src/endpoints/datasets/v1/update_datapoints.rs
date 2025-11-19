@@ -1888,11 +1888,11 @@ mod tests {
                 })),
                 output_schema: Some(new_schema.clone()),
                 tags: Some(new_tags.clone()),
-                metadata: DatapointMetadataUpdate::default(),
-                #[expect(deprecated)]
-                deprecated_do_not_use_metadata: Some(DatapointMetadataUpdate {
+                metadata: DatapointMetadataUpdate {
                     name: Some(Some("json_updated".to_string())),
-                }),
+                },
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
