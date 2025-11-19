@@ -78,8 +78,8 @@ pub mod dynamic {
     use tensorzero_derive::export_schema;
 
     #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+    #[ts(optional_fields)]
     #[export_schema]
-    #[ts(export)]
     #[serde(untagged, deny_unknown_fields)]
     pub enum ExtraHeader {
         #[schemars(title = "ProviderExtraHeader")]
