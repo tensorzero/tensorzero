@@ -61,7 +61,6 @@ async fn test_logging_rust_log_debug_on() {
 async fn test_log_early_drop_streaming(model_name: &str, expect_finish: bool) {
     let mut child_data = start_gateway_on_random_port(
         r"debug = true",
-        //Some("gateway=debug,tensorzero_core::observability=debug,warn"),
         Some("gateway=debug,tensorzero_core::observability=debug,warn"),
     )
     .await;
