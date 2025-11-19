@@ -316,11 +316,9 @@ impl ClientBuilder {
                             *verify_credentials,
                         )
                         .await
-                        .map_err(|e| {
-                            ClientBuilderError::ConfigParsing {
-                                error: TensorZeroError::Other { source: e.into() },
-                                glob,
-                            }
+                        .map_err(|e| ClientBuilderError::ConfigParsing {
+                            error: TensorZeroError::Other { source: e.into() },
+                            glob,
                         })?
                         .config,
                     )
@@ -329,11 +327,9 @@ impl ClientBuilder {
                     Arc::new(
                         Config::new_empty()
                             .await
-                            .map_err(|e| {
-                                ClientBuilderError::ConfigParsing {
-                                    error: TensorZeroError::Other { source: e.into() },
-                                    glob: ConfigFileGlob::new_empty(),
-                                }
+                            .map_err(|e| ClientBuilderError::ConfigParsing {
+                                error: TensorZeroError::Other { source: e.into() },
+                                glob: ConfigFileGlob::new_empty(),
                             })?
                             .config,
                     )
@@ -1115,7 +1111,8 @@ mod tests {
                 false,
             )
             .await
-            .unwrap(),
+            .unwrap()
+            .config,
         );
 
         // Create mock components
@@ -1165,7 +1162,8 @@ mod tests {
                 false,
             )
             .await
-            .unwrap(),
+            .unwrap()
+            .config,
         );
 
         // Create mock components

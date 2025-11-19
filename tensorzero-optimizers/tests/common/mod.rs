@@ -13,7 +13,7 @@ use tensorzero::{
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob},
+    config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob, ConfigLoadInfo},
     db::{
         clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo},
         postgres::PostgresConnectionInfo,
@@ -106,7 +106,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .clone();
 
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let config = Config::load_from_path_optional_verify_credentials(
+    let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )

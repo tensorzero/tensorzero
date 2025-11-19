@@ -206,6 +206,7 @@ mod tests {
         )
         .await
         .unwrap()
+        .config
     }
 
     fn create_test_input() -> Input {

@@ -447,6 +447,7 @@ mod tests {
         )
         .await
         .unwrap()
+        .config
     }
 
     #[tokio::test]

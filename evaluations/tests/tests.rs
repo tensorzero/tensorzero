@@ -2332,7 +2332,8 @@ async fn test_max_datapoints_parameter() {
             false,
         )
         .await
-        .unwrap(),
+        .unwrap()
+        .config,
     );
 
     let evaluation_run_id = Uuid::now_v7();
@@ -2403,7 +2404,8 @@ async fn test_precision_limits_parameter() {
             false,
         )
         .await
-        .unwrap(),
+        .unwrap()
+        .config,
     );
 
     let evaluation_run_id = Uuid::now_v7();

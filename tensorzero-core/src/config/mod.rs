@@ -1274,6 +1274,12 @@ pub struct UninitializedConfig {
     #[serde(default)]
     pub gateway: UninitializedGatewayConfig,
     #[serde(default)]
+    pub postgres: PostgresConfig,
+    #[serde(default)]
+    pub rate_limiting: UninitializedRateLimitingConfig,
+    pub object_storage: Option<StorageKind>,
+
+    #[serde(default)]
     pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]
     pub embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>, // embedding model name => embedding model config
@@ -1287,13 +1293,8 @@ pub struct UninitializedConfig {
     pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation
     #[serde(default)]
     pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
-    pub object_storage: Option<StorageKind>,
     #[serde(default)]
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>, // optimizer name => optimizer config
-    #[serde(default)]
-    pub postgres: PostgresConfig,
-    #[serde(default)]
-    pub rate_limiting: UninitializedRateLimitingConfig,
 }
 
 /// The result of parsing all of the globbed config files,
