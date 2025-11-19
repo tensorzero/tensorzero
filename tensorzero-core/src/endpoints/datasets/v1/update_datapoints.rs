@@ -12,8 +12,8 @@ use crate::db::datasets::{
     JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::{
-    validate_dataset_name, JsonInferenceDatapoint, StoredChatInferenceDatapoint, StoredDatapoint,
-    CLICKHOUSE_DATETIME_FORMAT,
+    validate_dataset_name, StoredChatInferenceDatapoint, StoredDatapoint,
+    StoredJsonInferenceDatapoint, CLICKHOUSE_DATETIME_FORMAT,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -262,7 +262,7 @@ async fn prepare_json_update(
     fetch_context: &FetchContext<'_>,
     dataset_name: &str,
     update: UpdateJsonDatapointRequest,
-    existing_datapoint: JsonInferenceDatapoint,
+    existing_datapoint: StoredJsonInferenceDatapoint,
     now_timestamp: &str,
 ) -> Result<PreparedUpdate, Error> {
     if existing_datapoint.dataset_name != dataset_name {
@@ -520,7 +520,7 @@ mod tests {
     use crate::endpoints::datasets::v1::types::{
         DatapointMetadataUpdate, JsonDatapointOutputUpdate,
     };
-    use crate::endpoints::datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
+    use crate::endpoints::datasets::StoredChatInferenceDatapoint;
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
@@ -748,8 +748,8 @@ mod tests {
         }
 
         /// Helper to create a sample JsonInferenceDatapoint
-        pub fn create_sample_json_datapoint(dataset_name: &str) -> JsonInferenceDatapoint {
-            JsonInferenceDatapoint {
+        pub fn create_sample_json_datapoint(dataset_name: &str) -> StoredJsonInferenceDatapoint {
+            StoredJsonInferenceDatapoint {
                 id: Uuid::now_v7(),
                 dataset_name: dataset_name.to_string(),
                 function_name: "test_json_function".to_string(),
@@ -890,8 +890,8 @@ mod tests {
         }
 
         /// Helper to create a sample JsonInferenceDatapoint
-        fn create_sample_json_datapoint(dataset_name: &str) -> JsonInferenceDatapoint {
-            JsonInferenceDatapoint {
+        fn create_sample_json_datapoint(dataset_name: &str) -> StoredJsonInferenceDatapoint {
+            StoredJsonInferenceDatapoint {
                 id: Uuid::now_v7(),
                 dataset_name: dataset_name.to_string(),
                 function_name: "test_json_function".to_string(),
