@@ -14,7 +14,7 @@ use tensorzero_core::{
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
-// Type aliases for cleaner score map signatures
+// Type aliases for cleaner score map signatures (TODO: will live next to evaluation code)
 pub type EvaluatorName = String;
 
 /// Unique identifier for a datapoint/example in a dataset
