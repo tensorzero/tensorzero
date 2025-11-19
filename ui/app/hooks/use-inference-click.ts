@@ -29,23 +29,26 @@ export function useInferenceClick(episodeRoute: string): {
   const handleOpenSheet = useCallback((inferenceId: string) => {
     setOpenSheetInferenceId(inferenceId);
     
-    const currentState = inferenceCache[inferenceId];
-    if (!currentState?.data && !currentState?.loading) {
-      setInferenceCache(prev => ({
-        ...prev,
-        [inferenceId]: { data: null, loading: true, error: null }
-      }));
-      
-      const formData = new FormData();
-      formData.append("_action", "fetchInference");
-      formData.append("inferenceId", inferenceId);
-      
-      fetcher.submit(formData, { 
-        method: "POST",
-        action: episodeRoute
-      });
-    }
-  }, [inferenceCache, episodeRoute, fetcher]);
+    setInferenceCache(prev => {
+      const currentState = prev[inferenceId];
+      if (!currentState?.data && !currentState?.loading) {
+        const formData = new FormData();
+        formData.append("_action", "fetchInference");
+        formData.append("inferenceId", inferenceId);
+        
+        fetcher.submit(formData, { 
+          method: "POST",
+          action: episodeRoute
+        });
+        
+        return {
+          ...prev,
+          [inferenceId]: { data: null, loading: true, error: null }
+        };
+      }
+      return prev;
+    });
+  }, [episodeRoute, fetcher]);
 
   const handleCloseSheet = useCallback(() => {
     setOpenSheetInferenceId(null);
