@@ -161,9 +161,9 @@ pub fn validate_gepa_config(
 /// - stored_output is JsonInferenceOutput with parsed is None
 /// - stored_output is ChatInferenceOutput with length 0
 /// - Any message has no content blocks (empty content list)
-/// - Any message contains FileUrl, ImageBase64, FileBase64, or ImageUrl
-/// - Any Text block has both text and arguments as None
-/// - Any ToolCall block has arguments is None or name is None
+/// - Any message contains a File block (StoredInputMessageContent::File(_))
+/// - Any Text block has empty text (text.is_empty())
+/// - Any ToolCall block has arguments as None or name as empty string
 /// - Any Thought block has both text and summary as None
 /// - Invalid stored_input.system (not None, Text, or object)
 ///
