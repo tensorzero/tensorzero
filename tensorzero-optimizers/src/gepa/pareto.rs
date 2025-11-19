@@ -40,6 +40,59 @@ pub struct ParetoFrontier {
     pub frequencies: HashMap<String, usize>,
 }
 
+/// Check if child improves over parent variant (summary statistic Pareto dominance)
+///
+/// Uses the evaluation config to determine objective directions (optimize: max/min).
+/// Returns true if child Pareto-dominates parent (better/equal on all, strictly better on ≥1 evaluator summary stats).
+pub fn is_improvement(
+    parent_stats: &HashMap<String, evaluations::EvaluatorStats>,
+    child_stats: &HashMap<String, evaluations::EvaluatorStats>,
+    evaluation_config: &InferenceEvaluationConfig,
+) -> bool {
+    // Get evaluators from the evaluation config
+    let evaluators = &evaluation_config.evaluators;
+
+    // Track whether child is better, worse, or equal on each metric
+    let mut strictly_better_on_at_least_one = false;
+    let mut worse_on_any = false;
+
+    // Compare on each metric
+    for (evaluator_name, evaluator_config) in evaluators {
+        // Get metric stats for both variants
+        let parent_stat = parent_stats.get(evaluator_name);
+        let child_stat = child_stats.get(evaluator_name);
+
+        // Skip if either variant doesn't have stats for this evaluator
+        let (parent_mean, child_mean) = match (parent_stat, child_stat) {
+            (Some(parent), Some(child)) => (parent.mean, child.mean),
+            _ => continue, // Skip this metric if either variant failed
+        };
+
+        // Determine if child is better based on optimization direction
+        let child_is_better = match evaluator_config.optimize() {
+            MetricConfigOptimize::Max => child_mean > parent_mean,
+            MetricConfigOptimize::Min => child_mean < parent_mean,
+        };
+
+        let child_is_worse = match evaluator_config.optimize() {
+            MetricConfigOptimize::Max => child_mean < parent_mean,
+            MetricConfigOptimize::Min => child_mean > parent_mean,
+        };
+
+        if child_is_better {
+            strictly_better_on_at_least_one = true;
+        }
+
+        if child_is_worse {
+            worse_on_any = true;
+            break; // No need to check further if worse on any metric
+        }
+    }
+
+    // Pareto dominance: better or equal on all metrics, strictly better on at least one
+    strictly_better_on_at_least_one && !worse_on_any
+}
+
 /// Updates the Pareto frontier based on instance-wise Pareto dominance
 ///
 /// Filters candidates to only include Pareto-optimal variants based on validation scores.
@@ -467,59 +520,6 @@ pub fn find_non_dominated_variants(
     }
 
     non_dominated
-}
-
-/// Check if child improves over parent variant (global Pareto dominance)
-///
-/// Uses the evaluation config to determine objective directions (optimize: max/min).
-/// Returns true if child Pareto-dominates parent (better/equal on all, strictly better on ≥1).
-pub fn is_improvement(
-    parent_stats: &HashMap<String, evaluations::EvaluatorStats>,
-    child_stats: &HashMap<String, evaluations::EvaluatorStats>,
-    evaluation_config: &InferenceEvaluationConfig,
-) -> bool {
-    // Get evaluators from the evaluation config
-    let evaluators = &evaluation_config.evaluators;
-
-    // Track whether child is better, worse, or equal on each metric
-    let mut strictly_better_on_at_least_one = false;
-    let mut worse_on_any = false;
-
-    // Compare on each metric
-    for (evaluator_name, evaluator_config) in evaluators {
-        // Get metric stats for both variants
-        let parent_stat = parent_stats.get(evaluator_name);
-        let child_stat = child_stats.get(evaluator_name);
-
-        // Skip if either variant doesn't have stats for this evaluator
-        let (parent_mean, child_mean) = match (parent_stat, child_stat) {
-            (Some(parent), Some(child)) => (parent.mean, child.mean),
-            _ => continue, // Skip this metric if either variant failed
-        };
-
-        // Determine if child is better based on optimization direction
-        let child_is_better = match evaluator_config.optimize() {
-            MetricConfigOptimize::Max => child_mean > parent_mean,
-            MetricConfigOptimize::Min => child_mean < parent_mean,
-        };
-
-        let child_is_worse = match evaluator_config.optimize() {
-            MetricConfigOptimize::Max => child_mean < parent_mean,
-            MetricConfigOptimize::Min => child_mean > parent_mean,
-        };
-
-        if child_is_better {
-            strictly_better_on_at_least_one = true;
-        }
-
-        if child_is_worse {
-            worse_on_any = true;
-            break; // No need to check further if worse on any metric
-        }
-    }
-
-    // Pareto dominance: better or equal on all metrics, strictly better on at least one
-    strictly_better_on_at_least_one && !worse_on_any
 }
 
 #[cfg(test)]
