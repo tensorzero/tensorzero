@@ -354,6 +354,14 @@ OrderDirection = Literal["ascending", "descending"]
 
 
 @dataclass(kw_only=True)
+class DatapointMetadataUpdate:
+    name: str | None | UnsetType = UNSET
+    """
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+
+
+@dataclass(kw_only=True)
 class UpdateDatapointMetadataRequest:
     id: str
     """
@@ -382,14 +390,6 @@ class CreateDatapointsResponse:
     ids: list[str]
     """
     The IDs of the newly-generated datapoints.
-    """
-
-
-@dataclass(kw_only=True)
-class DatapointMetadataUpdate:
-    name: str | None | UnsetType = UNSET
-    """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     """
 
 
@@ -632,34 +632,6 @@ OrderBy = OrderByTimestamp | OrderByMetric | OrderBySearchRelevance
 
 
 @dataclass(kw_only=True)
-class DynamicToolParams:
-    allowed_tools: list[str] | None = None
-    """
-    A subset of static tools configured for the function that the inference is allowed to use. Optional.
-    If not provided, all static tools are allowed.
-    """
-    additional_tools: list[FunctionTool] | None = None
-    """
-    Tools that the user provided at inference time (not in function config), in addition to the function-configured
-    tools, that are also allowed.
-    """
-    tool_choice: ToolChoice | None = None
-    """
-    User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
-    Optional.
-    """
-    parallel_tool_calls: bool | None = None
-    """
-    Whether to use parallel tool calls in the inference. Optional.
-    If provided during inference, it will override the function-configured parallel tool calls.
-    """
-    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
-    """
-    Provider-specific tool configurations
-    """
-
-
-@dataclass(kw_only=True)
 class UpdateDynamicToolParamsRequest:
     allowed_tools: list[str] | None | UnsetType = UNSET
     """
@@ -688,6 +660,34 @@ class UpdateDynamicToolParamsRequest:
     """
     Provider-specific tool configurations
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    """
+
+
+@dataclass(kw_only=True)
+class DynamicToolParams:
+    allowed_tools: list[str] | None = None
+    """
+    A subset of static tools configured for the function that the inference is allowed to use. Optional.
+    If not provided, all static tools are allowed.
+    """
+    additional_tools: list[FunctionTool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured
+    tools, that are also allowed.
+    """
+    tool_choice: ToolChoice | None = None
+    """
+    User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+    Optional.
+    """
+    parallel_tool_calls: bool | None = None
+    """
+    Whether to use parallel tool calls in the inference. Optional.
+    If provided during inference, it will override the function-configured parallel tool calls.
+    """
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
+    """
+    Provider-specific tool configurations
     """
 
 
@@ -980,6 +980,128 @@ class StoredJsonInference:
 
 
 @dataclass(kw_only=True)
+class UpdateChatDatapointRequest:
+    id: str
+    """
+    The ID of the datapoint to update. Required.
+    """
+    type: Literal["chat"] = "chat"
+    input: Input | None = None
+    """
+    Datapoint input. If omitted, it will be left unchanged.
+    """
+    output: list[ContentBlockChatOutput] | None = None
+    """
+    Chat datapoint output. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
+    it will overwrite the existing output.
+    """
+    allowed_tools: list[str] | None = None
+    """
+    A subset of static tools configured for the function that the inference is explicitly allowed to use.
+    If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
+    provided at inference time). If specified as a value, it will be set to the provided value.
+    """
+    additional_tools: list[FunctionTool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
+    Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
+    new tools or exclude removed tools.
+    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    """
+    tool_choice: ToolChoice | None = None
+    """
+    User-specified tool choice strategy.
+    If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
+    """
+    parallel_tool_calls: bool | None = None
+    """
+    Whether to use parallel tool calls in the inference.
+    If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    provider_tools: list[ProviderTool] | None = None
+    """
+    Provider-specific tool configurations
+    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    """
+    tool_params: UpdateDynamicToolParamsRequest | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Datapoint tool parameters.
+    Moving forward, don't nest these fields.
+    """
+    tags: dict[str, Any] | None = None
+    """
+    Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
+    it will be overwrite the existing tags.
+    """
+    name: str | None = None
+    """
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    metadata: DatapointMetadataUpdate | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
+    Moving forward, don't nest these fields.
+    """
+
+
+@dataclass(kw_only=True)
+class UpdateJsonDatapointRequest:
+    id: str
+    """
+    The ID of the datapoint to update. Required.
+    """
+    type: Literal["json"] = "json"
+    input: Input | None = None
+    """
+    Datapoint input. If omitted, it will be left unchanged.
+    """
+    output: JsonDatapointOutputUpdate | None = None
+    """
+    JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    This will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will
+    also be stored, because we allow invalid outputs in datapoints by design.
+    """
+    output_schema: Any | None = None
+    """
+    The output schema of the JSON datapoint. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    If not provided, the function's output schema will be used.
+    """
+    tags: dict[str, Any] | None = None
+    """
+    Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
+    it will be overwrite the existing tags.
+    """
+    name: str | None = None
+    """
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    metadata: DatapointMetadataUpdate | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
+    Moving forward, don't nest these fields.
+    """
+
+
+UpdateDatapointRequest = UpdateChatDatapointRequest | UpdateJsonDatapointRequest
+
+
+@dataclass(kw_only=True)
+class CreateDatapointsRequest:
+    datapoints: list[CreateDatapointRequest]
+    """
+    The datapoints to create.
+    """
+
+
+@dataclass(kw_only=True)
+class GetDatapointsResponse:
+    datapoints: list[Datapoint]
+    """
+    The retrieved datapoints.
+    """
+
+
+@dataclass(kw_only=True)
 class UpdateChatDatapointRequestInternal:
     id: str
     """
@@ -1022,6 +1144,11 @@ class UpdateChatDatapointRequestInternal:
     Provider-specific tool configurations
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
+    tool_params: UpdateDynamicToolParamsRequest | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Datapoint tool parameters.
+    Moving forward, don't nest these fields.
+    """
     tags: dict[str, Any] | None = None
     """
     Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
@@ -1030,6 +1157,19 @@ class UpdateChatDatapointRequestInternal:
     name: str | None | UnsetType = UNSET
     """
     Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    metadata: DatapointMetadataUpdate | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
+    Moving forward, don't nest these fields.
+    """
+
+
+@dataclass(kw_only=True)
+class UpdateDatapointsRequest:
+    datapoints: list[UpdateDatapointRequest]
+    """
+    The datapoints to update.
     """
 
 
@@ -1063,42 +1203,10 @@ class UpdateJsonDatapointRequestInternal:
     """
     Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     """
-
-
-@dataclass(kw_only=True)
-class UpdateChatDatapointRequest(UpdateChatDatapointRequestInternal):
-    type: Literal["chat"] = "chat"
-
-
-@dataclass(kw_only=True)
-class UpdateJsonDatapointRequest(UpdateJsonDatapointRequestInternal):
-    type: Literal["json"] = "json"
-
-
-UpdateDatapointRequest = UpdateChatDatapointRequest | UpdateJsonDatapointRequest
-
-
-@dataclass(kw_only=True)
-class CreateDatapointsRequest:
-    datapoints: list[CreateDatapointRequest]
+    metadata: DatapointMetadataUpdate | None = None
     """
-    The datapoints to create.
-    """
-
-
-@dataclass(kw_only=True)
-class GetDatapointsResponse:
-    datapoints: list[Datapoint]
-    """
-    The retrieved datapoints.
-    """
-
-
-@dataclass(kw_only=True)
-class UpdateDatapointsRequest:
-    datapoints: list[UpdateDatapointRequest]
-    """
-    The datapoints to update.
+    DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
+    Moving forward, don't nest these fields.
     """
 
 
