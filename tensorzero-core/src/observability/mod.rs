@@ -89,9 +89,9 @@ use crate::error::{Error, ErrorDetails};
 use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
 
 mod exporter_wrapper;
+pub mod request_logging;
 mod span_leak_detector;
 pub mod tracing_bug;
-pub mod warn_early_drop;
 
 #[derive(Clone, Debug, Default, ValueEnum)]
 pub enum LogFormat {
@@ -1042,8 +1042,7 @@ async fn wait_for_tasks_with_logging(
 /// This is used when `gateway.debug` is `false` and `RUST_LOG` is not set
 const DEFAULT_GATEWAY_NON_DEBUG_DIRECTIVES: &str = "warn,gateway=info,tensorzero_core=info";
 /// This is used when `gateway.debug` is `true` and `RUST_LOG` is not set
-const DEFAULT_GATEWAY_DEBUG_DIRECTIVES: &str =
-    "warn,gateway=debug,tensorzero_core=debug,tower_http::trace=debug";
+const DEFAULT_GATEWAY_DEBUG_DIRECTIVES: &str = "warn,gateway=debug,tensorzero_core=debug";
 
 /// Set up logging (including the necessary layers for OpenTelemetry exporting)
 ///
