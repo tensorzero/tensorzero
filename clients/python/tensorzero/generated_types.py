@@ -341,6 +341,50 @@ InferenceOutputSource = str
 
 
 @dataclass(kw_only=True)
+class InferenceExtraBodyProviderTypeProvider:
+    model_provider_name: str
+
+
+@dataclass(kw_only=True)
+class InferenceExtraBodyProviderTypeVariant:
+    variant_name: str
+
+
+@dataclass(kw_only=True)
+class InferenceExtraBodyProviderTypeModelProvider:
+    model_name: str
+    provider_name: str | None = None
+
+
+@dataclass(kw_only=True)
+class InferenceExtraBodyProviderTypeAlways:
+    always: bool
+
+
+InferenceExtraBodyProviderType = (
+    InferenceExtraBodyProviderTypeProvider
+    | InferenceExtraBodyProviderTypeVariant
+    | InferenceExtraBodyProviderTypeModelProvider
+    | InferenceExtraBodyProviderTypeAlways
+)
+
+
+@dataclass(kw_only=True)
+class InferenceExtraBodyReplacementKindValue:
+    value: Any
+    type: Literal["value"] = "value"
+
+
+@dataclass(kw_only=True)
+class InferenceExtraBodyReplacementKindDelete:
+    delete: bool
+    type: Literal["delete"] = "delete"
+
+
+InferenceExtraBodyReplacementKind = InferenceExtraBodyReplacementKindValue | InferenceExtraBodyReplacementKindDelete
+
+
+@dataclass(kw_only=True)
 class TagDatapointFilter(TagFilter):
     type: Literal["tag"] = "tag"
 
@@ -435,6 +479,13 @@ class GetInferencesRequest:
     Including this improves query performance since `function_name` is the first column
     in the ClickHouse primary key.
     """
+
+
+@dataclass(kw_only=True)
+class InferenceExtraBody:
+    pointer: str
+    provider_type: InferenceExtraBodyProviderType
+    replacement_kind: InferenceExtraBodyReplacementKind
 
 
 @dataclass(kw_only=True)

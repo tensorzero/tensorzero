@@ -151,6 +151,55 @@ pub struct UpdateJsonDatapointRequest {
     pub metadata: DatapointMetadataUpdate,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
+#[ts(export, optional_fields)]
+#[export_schema]
+#[serde(untagged)]
+pub enum InferenceExtraBodyProviderType {
+    #[schemars(title = "InferenceExtraBodyProviderTypeProvider")]
+    Provider { model_provider_name: String },
+
+    #[schemars(title = "InferenceExtraBodyProviderTypeVariant")]
+    Variant { variant_name: String },
+
+    #[schemars(title = "InferenceExtraBodyProviderTypeModelProvider")]
+    ModelProvider {
+        model_name: String,
+        provider_name: Option<String>,
+    },
+
+    #[schemars(title = "InferenceExtraBodyProviderTypeAlways")]
+    Always { always: bool },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
+#[ts(export, optional_fields)]
+#[export_schema]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InferenceExtraBodyReplacementKind {
+    /// Replaces the field with the given value.
+    #[schemars(title = "InferenceExtraBodyReplacementKindValue")]
+    Value { value: Value },
+
+    /// Deletes the field.
+    #[schemars(title = "InferenceExtraBodyReplacementKindDelete")]
+    Delete { delete: bool },
+}
+
+/// Attempt to figure out how to represent the type.
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
+#[ts(export, optional_fields)]
+#[export_schema]
+pub struct InferenceExtraBody {
+    pub pointer: String,
+
+    // #[serde(flatten)]
+    pub provider_type: InferenceExtraBodyProviderType,
+
+    // #[serde(flatten)]
+    pub replacement_kind: InferenceExtraBodyReplacementKind,
+}
+
 /// A request to update the output of a JSON datapoint.
 /// We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
 /// for users to run evals against them.
