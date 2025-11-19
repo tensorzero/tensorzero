@@ -35,7 +35,7 @@ use evaluations::stats::EvaluationInfo;
 #[derive(Debug, Clone, Serialize)]
 pub struct Inference {
     pub input: StoredInput,
-    pub output: InferenceResponse,
+    pub output: serde_json::Value,
 }
 
 /// Represents an analysis result with optional inference context
@@ -78,8 +78,14 @@ pub fn build_analyze_input(
         .map(|(name, config)| (name.clone(), config.path.data().to_string()))
         .collect();
 
-    // Serialize the inference output
-    let output = serialize_to_value(&eval_info.response, "inference response")?;
+    let output = match &eval_info.response {
+        InferenceResponse::Chat(chat_response) => {
+            serialize_to_value(&chat_response.content, "chat response content")?
+        }
+        InferenceResponse::Json(json_response) => {
+            serialize_to_value(&json_response.output, "json response output")?
+        }
+    };
 
     // Build evaluation_scores map with just the scores
     let mut evaluation_scores = serde_json::Map::new();
@@ -162,7 +168,6 @@ pub async fn analyze_inferences(
         max_concurrency
     );
 
-    // Create dynamic variant config for the analyze function using new template format
     let mut analyze_config = UninitializedChatCompletionConfig {
         model: analysis_model.clone().into(),
         weight: None,
@@ -171,7 +176,6 @@ pub async fn analyze_inferences(
         ..Default::default()
     };
 
-    // Populate templates.inner with the analyze function's templates
     analyze_config.templates.inner.insert(
         "system".to_string(),
         UninitializedChatTemplate {
@@ -216,7 +220,6 @@ pub async fn analyze_inferences(
                     })
                 })?;
 
-                // Build input for the analyze function (returns Arguments directly)
                 let arguments = build_analyze_input(
                     eval_info,
                     function_config,
@@ -316,9 +319,17 @@ pub async fn analyze_inferences(
 
                 // Conditionally include inference context based on config flag
                 let inference = if gepa_config.include_inference_for_mutation {
+                    let output = match &eval_info.response {
+                        InferenceResponse::Chat(chat_response) => {
+                            serialize_to_value(&chat_response.content, "chat response content")?
+                        }
+                        InferenceResponse::Json(json_response) => {
+                            serialize_to_value(&json_response.output, "json response output")?
+                        }
+                    };
                     Some(Inference {
                         input: eval_info.datapoint.input().clone(),
-                        output: eval_info.response.clone(),
+                        output,
                     })
                 } else {
                     None
@@ -626,11 +637,13 @@ mod tests {
             Some("test_function")
         );
 
-        // Verify output (inference response) is properly serialized
         let output = input.0.get("output").unwrap();
-        assert!(output.is_object());
-        let output_obj = output.as_object().unwrap();
-        assert!(output_obj.contains_key("content"));
+        assert!(
+            output.is_array(),
+            "Chat response content should be serialized as an array"
+        );
+        let output_arr = output.as_array().unwrap();
+        assert!(!output_arr.is_empty(), "Content array should not be empty");
 
         // Test with schemas
         let function_config_with_schemas = create_test_function_config_with_schemas();

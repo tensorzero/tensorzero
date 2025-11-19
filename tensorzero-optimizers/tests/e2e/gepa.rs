@@ -198,7 +198,6 @@ pub fn create_test_variant_config() -> UninitializedChatCompletionConfig {
         ..Default::default()
     };
 
-    // Use new format: populate templates.inner
     config.templates.inner.insert(
         "system".to_string(),
         UninitializedChatTemplate {
@@ -231,7 +230,6 @@ pub fn create_test_variant_config_with_templates_inner(
         ..Default::default()
     };
 
-    // Populate templates.inner with provided template map
     for (template_name, content) in template_map {
         config.templates.inner.insert(
             template_name.clone(),
@@ -754,31 +752,28 @@ async fn test_analyze_inferences_json_function() {
     let analyses = result.unwrap();
     assert_eq!(analyses.len(), 1, "Should return 1 analysis");
 
-    // Verify the inference is Some and contains Json response
+    // Verify the inference is Some and contains Json output
     let inference = analyses[0]
         .inference
         .as_ref()
         .expect("inference should be Some when include_inference_for_mutation is true");
-    match &inference.output {
-        InferenceResponse::Json(json_response) => {
-            assert_eq!(
-                json_response.variant_name, "test_variant",
-                "Should preserve variant name"
-            );
-            assert!(
-                json_response
-                    .output
-                    .parsed
-                    .as_ref()
-                    .and_then(|v| v.get("result"))
-                    .is_some(),
-                "Should have JSON output with 'result' field"
-            );
-        }
-        InferenceResponse::Chat(_) => {
-            panic!("Expected Json response, got Chat");
-        }
-    }
+
+    assert!(
+        inference.output.is_object(),
+        "JSON response output should be an object"
+    );
+
+    // Verify the output has the expected structure (parsed with 'result' field)
+    let output_obj = inference.output.as_object().unwrap();
+    assert!(
+        output_obj.get("parsed").is_some(),
+        "JSON output should have 'parsed' field"
+    );
+    let parsed = output_obj.get("parsed").unwrap();
+    assert!(
+        parsed.get("result").is_some(),
+        "Should have 'result' field in parsed JSON output"
+    );
 }
 
 // ============================================================================
@@ -825,21 +820,13 @@ async fn test_analyze_inferences_response_structure() {
         .inference
         .as_ref()
         .expect("inference should be Some when include_inference_for_mutation is true");
-    match &inference.output {
-        InferenceResponse::Chat(chat_response) => {
-            assert_eq!(
-                chat_response.variant_name, "test_variant",
-                "Should preserve original variant name"
-            );
-            assert!(
-                !chat_response.content.is_empty(),
-                "Should have response content"
-            );
-        }
-        InferenceResponse::Json(_) => {
-            panic!("Expected Chat response, got Json");
-        }
-    }
+
+    assert!(
+        inference.output.is_array(),
+        "Chat response content should be serialized as an array"
+    );
+    let content_array = inference.output.as_array().unwrap();
+    assert!(!content_array.is_empty(), "Should have response content");
 
     // Verify analysis field is populated with expected XML tags
     assert!(
