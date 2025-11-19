@@ -449,6 +449,168 @@ fn extract_role_text(payload: &Value, role: &str) -> String {
         .collect::<String>()
 }
 
+struct InputScenario {
+    eval_infos: Vec<EvaluationInfo>,
+    function_config: FunctionConfig,
+    static_tools: Option<HashMap<String, Arc<StaticToolConfig>>>,
+    eval_config: EvaluationConfig,
+    assert_fn: fn(&Value),
+}
+
+fn assert_schema_payload(payload: &Value) {
+    let user_message = extract_role_text(payload, "user");
+
+    assert!(
+        user_message.contains("<function_context>"),
+        "Should have function_context"
+    );
+    assert!(
+        user_message.contains("<function_config>"),
+        "Should have function_config"
+    );
+    assert!(
+        user_message.contains("<inference_context>"),
+        "Should have inference_context"
+    );
+    assert!(
+        user_message.contains("<inference_output>"),
+        "Should have inference_output"
+    );
+    assert!(
+        user_message.contains("<evaluation_config>"),
+        "Should have evaluation_config"
+    );
+    assert!(
+        user_message.contains("<evaluation_scores>"),
+        "Should have evaluation_scores"
+    );
+    assert!(
+        user_message.contains("schemas"),
+        "Should contain schemas in function_config JSON"
+    );
+    assert!(
+        user_message.contains("system") || user_message.contains("user"),
+        "Should contain schema role names (system/user)"
+    );
+    assert!(
+        user_message.contains("exact_match") && user_message.contains("fluency"),
+        "Should contain evaluator names"
+    );
+    assert!(
+        user_message.contains("llm_judge"),
+        "Should mention llm_judge evaluator type for fluency"
+    );
+    assert!(
+        user_message.contains("exact_match") && user_message.contains("0.85"),
+        "Should include exact_match score of 0.85"
+    );
+    assert!(
+        user_message.contains("fluency") && user_message.contains("0.92"),
+        "Should include fluency score of 0.92"
+    );
+}
+
+fn assert_static_tools_payload(payload: &Value) {
+    let user_message = extract_role_text(payload, "user");
+
+    assert!(
+        user_message.contains("<function_context>"),
+        "Should have function_context"
+    );
+    assert!(
+        user_message.contains("<tool_schemas>"),
+        "Should have tool_schemas section"
+    );
+    assert!(
+        user_message.contains("<evaluation_config>"),
+        "Should have evaluation_config"
+    );
+    assert!(
+        user_message.contains("<evaluation_scores>"),
+        "Should have evaluation_scores"
+    );
+    assert!(
+        user_message.contains("calculator") && user_message.contains("weather"),
+        "Should list both tools"
+    );
+    assert!(
+        user_message.contains("Evaluates mathematical expressions"),
+        "Should have calculator description"
+    );
+    assert!(
+        user_message.contains("Gets weather information"),
+        "Should have weather description"
+    );
+    assert!(
+        user_message.contains("expression") && user_message.contains("location"),
+        "Should include tool parameters"
+    );
+    assert!(
+        user_message.contains("exact_match") && user_message.contains("0.85"),
+        "Should include exact_match score"
+    );
+}
+
+fn assert_score_types_payload(payload: &Value) {
+    let user_message = extract_role_text(payload, "user");
+
+    assert!(
+        user_message.contains("<evaluation_scores>"),
+        "User message should contain evaluation_scores section"
+    );
+    assert!(
+        user_message.contains("numeric_score") && user_message.contains("0.85"),
+        "Should contain numeric_score with value 0.85"
+    );
+    assert!(
+        user_message.contains("bool_true")
+            && (user_message.contains("true") || user_message.contains("1")),
+        "Should contain bool_true with value true or 1"
+    );
+    assert!(
+        user_message.contains("null_value"),
+        "Should reference null_value evaluator"
+    );
+}
+
+fn assert_tags_payload(payload: &Value) {
+    let user_message = extract_role_text(payload, "user");
+
+    assert!(
+        user_message.contains("<datapoint>"),
+        "User message should contain datapoint section with tags inside JSON"
+    );
+    assert!(
+        user_message.contains("tags"),
+        "User message should contain tags field inside datapoint JSON"
+    );
+    assert!(
+        user_message.contains("environment") && user_message.contains("test"),
+        "User message should contain environment tag value"
+    );
+    assert!(
+        user_message.contains("user_id") && user_message.contains("12345"),
+        "User message should contain user_id tag value"
+    );
+    assert!(
+        user_message.contains("experiment_id") && user_message.contains("exp-001"),
+        "User message should contain experiment_id tag value"
+    );
+}
+
+fn assert_tool_params_payload(payload: &Value) {
+    let user_message = extract_role_text(payload, "user");
+
+    assert!(
+        user_message.contains("<tool_schemas>"),
+        "User message should contain <tool_schemas> section"
+    );
+    assert!(
+        user_message.contains("calculator"),
+        "User message should contain calculator tool (in allowed_tools)"
+    );
+}
+
 // ============================================================================
 // Basic Functionality Tests
 // ============================================================================
@@ -884,89 +1046,6 @@ async fn test_analyze_input_echo_helper(
     parse_echo_payload(&analyses[0].analysis)
 }
 
-/// Comprehensive test for input template with schemas
-/// Tests that schemas, required fields, and evaluation config all appear correctly in template
-#[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_input_with_schemas() {
-    let mut eval_info = create_test_evaluation_info("test_function", "Test input", "Test output");
-    eval_info
-        .evaluations
-        .insert("exact_match".to_string(), Some(serde_json::json!(0.85)));
-    eval_info
-        .evaluations
-        .insert("fluency".to_string(), Some(serde_json::json!(0.92)));
-
-    let function_config = create_test_function_config_with_schemas();
-    let payload = test_analyze_input_echo_helper(
-        vec![eval_info],
-        function_config,
-        None,
-        create_test_evaluation_config_with_evaluators(),
-    )
-    .await;
-    let user_message = extract_role_text(&payload, "user");
-
-    // Verify required template sections exist
-    assert!(
-        user_message.contains("<function_context>"),
-        "Should have function_context"
-    );
-    assert!(
-        user_message.contains("<function_config>"),
-        "Should have function_config"
-    );
-    assert!(
-        user_message.contains("<inference_context>"),
-        "Should have inference_context"
-    );
-    assert!(
-        user_message.contains("<inference_output>"),
-        "Should have inference_output"
-    );
-    assert!(
-        user_message.contains("<evaluation_config>"),
-        "Should have evaluation_config"
-    );
-    assert!(
-        user_message.contains("<evaluation_scores>"),
-        "Should have evaluation_scores"
-    );
-
-    // Verify schemas appear in function_config JSON
-    assert!(
-        user_message.contains(r#"\"schemas\""#) || user_message.contains("schemas"),
-        "Should contain schemas in function_config JSON"
-    );
-    assert!(
-        user_message.contains("system") || user_message.contains("user"),
-        "Should contain schema role names (system/user)"
-    );
-
-    // Verify evaluation config includes evaluator definitions
-    assert!(
-        user_message.contains("exact_match"),
-        "Should contain exact_match evaluator"
-    );
-    assert!(
-        user_message.contains("fluency"),
-        "Should contain fluency evaluator"
-    );
-    assert!(
-        user_message.contains("llm_judge"),
-        "Should mention llm_judge evaluator type for fluency"
-    );
-
-    // Verify evaluation scores appear
-    assert!(
-        user_message.contains("exact_match") && user_message.contains("0.85"),
-        "Should include exact_match score of 0.85"
-    );
-    assert!(
-        user_message.contains("fluency") && user_message.contains("0.92"),
-        "Should include fluency score of 0.92"
-    );
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_input_includes_system_template() {
     let payload = test_analyze_input_echo_helper(
@@ -995,287 +1074,118 @@ async fn test_analyze_input_includes_system_template() {
     );
 }
 
-/// Comprehensive test for input template with static tools
-/// Tests that tools, required fields, and evaluation config all appear correctly in template
 #[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_input_with_static_tools() {
-    let mut eval_info =
-        create_test_evaluation_info("test_function", "What is 2+2?", "The answer is 4.");
-    eval_info
+async fn test_analyze_input_format_scenarios() {
+    let mut schemas_eval =
+        create_test_evaluation_info("test_function", "Test input", "Test output");
+    schemas_eval
         .evaluations
         .insert("exact_match".to_string(), Some(serde_json::json!(0.85)));
+    schemas_eval
+        .evaluations
+        .insert("fluency".to_string(), Some(serde_json::json!(0.92)));
 
-    let (function_config, static_tools) = create_test_function_config_with_static_tools();
-    let payload = test_analyze_input_echo_helper(
-        vec![eval_info],
-        function_config,
-        static_tools,
-        create_test_evaluation_config_with_evaluators(),
-    )
-    .await;
-    let user_message = extract_role_text(&payload, "user");
+    let mut tools_eval =
+        create_test_evaluation_info("test_function", "What is 2+2?", "The answer is 4.");
+    tools_eval
+        .evaluations
+        .insert("exact_match".to_string(), Some(serde_json::json!(0.85)));
+    let (static_tools_function_config, static_tools_for_static) =
+        create_test_function_config_with_static_tools();
 
-    // Verify required template sections exist
-    assert!(
-        user_message.contains("<function_context>"),
-        "Should have function_context"
-    );
-    assert!(
-        user_message.contains("<tool_schemas>"),
-        "Should have tool_schemas section"
-    );
-    assert!(
-        user_message.contains("<evaluation_config>"),
-        "Should have evaluation_config"
-    );
-    assert!(
-        user_message.contains("<evaluation_scores>"),
-        "Should have evaluation_scores"
-    );
+    let mut eval_info_scores =
+        create_test_evaluation_info("test_function", "Test input", "Test output");
+    eval_info_scores
+        .evaluations
+        .insert("numeric_score".to_string(), Some(serde_json::json!(0.85)));
+    eval_info_scores
+        .evaluations
+        .insert("bool_true".to_string(), Some(serde_json::json!(true)));
+    eval_info_scores
+        .evaluations
+        .insert("null_value".to_string(), Some(serde_json::json!(null)));
 
-    // Verify both tools appear with their details
-    assert!(
-        user_message.contains("calculator"),
-        "Should contain calculator tool"
-    );
-    assert!(
-        user_message.contains("weather"),
-        "Should contain weather tool"
-    );
-    assert!(
-        user_message.contains("Evaluates mathematical expressions"),
-        "Should have calculator description"
-    );
-    assert!(
-        user_message.contains("Gets weather information"),
-        "Should have weather description"
-    );
-    assert!(
-        user_message.contains("expression"),
-        "Should have calculator parameter"
-    );
-    assert!(
-        user_message.contains("location"),
-        "Should have weather parameter"
-    );
+    let (tools_function_config_tool_params, static_tools_tool_params) =
+        create_test_function_config_with_static_tools();
 
-    // Verify evaluation config and scores
-    assert!(
-        user_message.contains("exact_match"),
-        "Should contain exact_match evaluator"
-    );
-    assert!(
-        user_message.contains("exact_match") && user_message.contains("0.85"),
-        "Should include exact_match score"
-    );
-}
+    let mut tags_eval =
+        create_test_evaluation_info("test_function", "Tagged input", "Tagged output");
+    if let StoredDatapoint::Chat(datapoint) = &mut tags_eval.datapoint {
+        datapoint.tags = Some(HashMap::from([
+            ("environment".to_string(), "test".to_string()),
+            ("user_id".to_string(), "12345".to_string()),
+            ("experiment_id".to_string(), "exp-001".to_string()),
+        ]));
+    }
 
-// ============================================================================
-// Tool Handling Tests - Custom datapoint construction
-// ============================================================================
+    let eval_info_tool_params = {
+        use tensorzero_core::tool::{
+            AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert,
+        };
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_input_with_datapoint_tool_params() {
-    use tensorzero_core::{
-        endpoints::datasets::StoredChatInferenceDatapoint,
-        tool::{AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert, ToolChoice},
-    };
+        let input = tensorzero_core::inference::types::Input {
+            messages: vec![],
+            system: None,
+        };
+        let stored_input = serde_json::from_value(serde_json::to_value(&input).unwrap()).unwrap();
 
-    // Setup: Create gateway client
-    let client = make_embedded_gateway().await;
-
-    // Use helper to get function config with static tools (calculator and weather)
-    let (function_config, static_tools) = create_test_function_config_with_static_tools();
-
-    // Create datapoint with tool_params that restricts to only calculator
-    let tool_params = ToolCallConfigDatabaseInsert::new_for_test(
-        vec![], // dynamic_tools
-        vec![], // dynamic_provider_tools
-        AllowedTools {
-            tools: vec!["calculator".to_string()],
-            choice: AllowedToolsChoice::Explicit,
-        },
-        ToolChoice::Required,
-        Some(false), // parallel_tool_calls
-    );
-
-    // Create a custom datapoint with tool_params
-    let input = tensorzero_core::inference::types::Input {
-        messages: vec![],
-        system: None,
-    };
-    let stored_input = serde_json::from_value(serde_json::to_value(&input).unwrap()).unwrap();
-
-    let datapoint = StoredChatInferenceDatapoint {
-        dataset_name: "test_dataset".to_string(),
-        function_name: "test_function".to_string(),
-        id: uuid::Uuid::now_v7(),
-        episode_id: Some(uuid::Uuid::now_v7()),
-        input: stored_input,
-        output: Some(vec![ContentBlockChatOutput::Text(
-            tensorzero_core::inference::types::Text {
-                text: "The answer is 4.".to_string(),
+        let tool_params = ToolCallConfigDatabaseInsert::new_for_test(
+            vec![], // dynamic_tools
+            vec![], // dynamic_provider_tools
+            AllowedTools {
+                tools: vec!["calculator".to_string()],
+                choice: AllowedToolsChoice::Explicit,
             },
-        )]),
-        tool_params: Some(tool_params),
-        tags: Some(HashMap::new()),
-        auxiliary: String::new(),
-        is_deleted: false,
-        is_custom: false,
-        source_inference_id: None,
-        staled_at: None,
-        updated_at: "2025-01-01T00:00:00Z".to_string(),
-        name: None,
-    };
+            tensorzero_core::tool::ToolChoice::Required,
+            Some(false), // parallel_tool_calls
+        );
 
-    let response = InferenceResponse::Chat(
-        tensorzero_core::endpoints::inference::ChatInferenceResponse {
-            inference_id: uuid::Uuid::now_v7(),
-            episode_id: uuid::Uuid::now_v7(),
-            variant_name: "test_variant".to_string(),
-            content: vec![ContentBlockChatOutput::Text(
+        let datapoint = tensorzero_core::endpoints::datasets::StoredChatInferenceDatapoint {
+            dataset_name: "test_dataset".to_string(),
+            function_name: "test_function".to_string(),
+            id: uuid::Uuid::now_v7(),
+            episode_id: Some(uuid::Uuid::now_v7()),
+            input: stored_input,
+            output: Some(vec![ContentBlockChatOutput::Text(
                 tensorzero_core::inference::types::Text {
                     text: "The answer is 4.".to_string(),
                 },
-            )],
-            usage: tensorzero_core::inference::types::Usage::default(),
-            original_response: None,
-            finish_reason: Some(tensorzero_core::inference::types::FinishReason::Stop),
-        },
-    );
+            )]),
+            tool_params: Some(tool_params),
+            tags: Some(HashMap::new()),
+            auxiliary: String::new(),
+            is_deleted: false,
+            is_custom: false,
+            source_inference_id: None,
+            staled_at: None,
+            updated_at: "2025-01-01T00:00:00Z".to_string(),
+            name: None,
+        };
 
-    let eval_info = evaluations::stats::EvaluationInfo {
-        datapoint: tensorzero_core::endpoints::datasets::StoredDatapoint::Chat(datapoint),
-        response,
-        evaluations: HashMap::new(),
-        evaluator_errors: HashMap::new(),
-    };
-
-    let eval_infos = vec![eval_info];
-
-    let variant_config = create_test_variant_config();
-    let gepa_config = create_test_gepa_config_echo(); // Use echo model
-
-    // Execute
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &function_config,
-        &static_tools,
-        &variant_config,
-        &gepa_config,
-        &create_test_evaluation_config(),
-    )
-    .await;
-
-    // Assert: Should succeed
-    assert!(
-        result.is_ok(),
-        "analyze_inferences should succeed with datapoint tool_params. Error: {:?}",
-        result.as_ref().err()
-    );
-    let analyses = result.unwrap();
-    assert_eq!(analyses.len(), 1, "Should return 1 analysis");
-
-    let payload = parse_echo_payload(&analyses[0].analysis);
-    let user_message = extract_role_text(&payload, "user");
-
-    // Verify tools section appears (renamed from <available_tools> to <tool_schemas>)
-    assert!(
-        user_message.contains("<tool_schemas>"),
-        "User message should contain <tool_schemas> section"
-    );
-
-    // Verify calculator is included (it's in allowed_tools)
-    assert!(
-        user_message.contains("calculator"),
-        "User message should contain calculator tool (in allowed_tools)"
-    );
-
-    // Note: The exact behavior of whether weather tool appears depends on into_tool_call_config
-    // The tool_params restricts to only calculator, so weather should not appear
-    // However, this depends on the implementation details of ToolCallConfig serialization
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_input_evaluation_score_types() {
-    use tensorzero_core::{
-        endpoints::datasets::{StoredChatInferenceDatapoint, StoredDatapoint},
-        endpoints::inference::ChatInferenceResponse,
-    };
-
-    // Setup: Create gateway client
-    let client = make_embedded_gateway().await;
-
-    let function_config = create_test_function_config();
-    let variant_config = create_test_variant_config();
-
-    // Create a datapoint with different evaluation score types
-    let input = tensorzero_core::inference::types::Input {
-        messages: vec![],
-        system: None,
-    };
-    let stored_input = serde_json::from_value(serde_json::to_value(&input).unwrap()).unwrap();
-
-    let datapoint = StoredChatInferenceDatapoint {
-        dataset_name: "test_dataset".to_string(),
-        function_name: "test_function".to_string(),
-        id: uuid::Uuid::now_v7(),
-        episode_id: Some(uuid::Uuid::now_v7()),
-        input: stored_input,
-        output: Some(vec![ContentBlockChatOutput::Text(
-            tensorzero_core::inference::types::Text {
-                text: "Test output".to_string(),
+        let response = InferenceResponse::Chat(
+            tensorzero_core::endpoints::inference::ChatInferenceResponse {
+                inference_id: uuid::Uuid::now_v7(),
+                episode_id: uuid::Uuid::now_v7(),
+                variant_name: "test_variant".to_string(),
+                content: vec![ContentBlockChatOutput::Text(
+                    tensorzero_core::inference::types::Text {
+                        text: "The answer is 4.".to_string(),
+                    },
+                )],
+                usage: tensorzero_core::inference::types::Usage::default(),
+                original_response: None,
+                finish_reason: Some(tensorzero_core::inference::types::FinishReason::Stop),
             },
-        )]),
-        tool_params: None,
-        tags: Some(HashMap::new()),
-        auxiliary: String::new(),
-        is_deleted: false,
-        is_custom: false,
-        source_inference_id: None,
-        staled_at: None,
-        updated_at: "2025-01-01T00:00:00Z".to_string(),
-        name: None,
+        );
+
+        evaluations::stats::EvaluationInfo {
+            datapoint: tensorzero_core::endpoints::datasets::StoredDatapoint::Chat(datapoint),
+            response,
+            evaluations: HashMap::new(),
+            evaluator_errors: HashMap::new(),
+        }
     };
 
-    let response = InferenceResponse::Chat(ChatInferenceResponse {
-        inference_id: uuid::Uuid::now_v7(),
-        episode_id: uuid::Uuid::now_v7(),
-        variant_name: "test_variant".to_string(),
-        content: vec![ContentBlockChatOutput::Text(
-            tensorzero_core::inference::types::Text {
-                text: "Test output".to_string(),
-            },
-        )],
-        usage: tensorzero_core::inference::types::Usage::default(),
-        original_response: None,
-        finish_reason: Some(tensorzero_core::inference::types::FinishReason::Stop),
-    });
-
-    // Create evaluations with different types
-    let mut evaluations = HashMap::new();
-    evaluations.insert(
-        "numeric_score".to_string(),
-        Some(serde_json::json!(0.85)), // numeric value
-    );
-    evaluations.insert(
-        "bool_true".to_string(),
-        Some(serde_json::json!(true)), // boolean value
-    );
-    evaluations.insert("null_value".to_string(), Some(serde_json::json!(null))); // null value
-
-    let eval_info = evaluations::stats::EvaluationInfo {
-        datapoint: StoredDatapoint::Chat(datapoint),
-        response,
-        evaluations,
-        evaluator_errors: HashMap::new(),
-    };
-
-    let eval_infos = vec![eval_info];
-    let gepa_config = create_test_gepa_config_echo(); // Use echo model
-
-    // Create evaluation config with score type evaluators for this test
     let mut evaluators = HashMap::new();
     evaluators.insert(
         "numeric_score".to_string(),
@@ -1313,174 +1223,58 @@ async fn test_analyze_input_evaluation_score_types() {
             cutoff: None,
         }),
     );
-    let eval_config = EvaluationConfig::Inference(InferenceEvaluationConfig {
+    let score_eval_config = EvaluationConfig::Inference(InferenceEvaluationConfig {
         evaluators,
         function_name: "test_function".to_string(),
     });
 
-    // Execute
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &function_config,
-        &None,
-        &variant_config,
-        &gepa_config,
-        &eval_config,
-    )
-    .await;
-
-    // Assert: Should succeed
-    assert!(
-        result.is_ok(),
-        "analyze_inferences should succeed with various evaluation types: {:?}",
-        result.as_ref().err()
-    );
-    let analyses = result.unwrap();
-    assert_eq!(analyses.len(), 1);
-
-    let payload = parse_echo_payload(&analyses[0].analysis);
-    let user_message = extract_role_text(&payload, "user");
-
-    // Verify evaluation_scores section appears
-    assert!(
-        user_message.contains("<evaluation_scores>"),
-        "User message should contain evaluation_scores section"
-    );
-
-    // Verify numeric score appears with correct value
-    assert!(
-        user_message.contains("numeric_score") && user_message.contains("0.85"),
-        "User message should contain numeric_score with value 0.85"
-    );
-
-    // Verify boolean value appears (as true or 1)
-    assert!(
-        user_message.contains("bool_true")
-            && (user_message.contains("true") || user_message.contains("1")),
-        "User message should contain bool_true with value true or 1"
-    );
-
-    // Verify null value is handled (appears as null or is filtered out)
-    // We just check that the evaluator name appears in the message
-    assert!(
-        user_message.contains("null_value"),
-        "User message should reference null_value evaluator"
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_analyze_input_with_tags() {
-    use tensorzero_core::endpoints::datasets::{StoredChatInferenceDatapoint, StoredDatapoint};
-
-    // Setup: Create gateway client
-    let client = make_embedded_gateway().await;
-
-    let function_config = create_test_function_config();
-    let variant_config = create_test_variant_config();
-
-    // Create a datapoint with tags
-    let input = tensorzero_core::inference::types::Input {
-        messages: vec![],
-        system: None,
-    };
-    let stored_input = serde_json::from_value(serde_json::to_value(&input).unwrap()).unwrap();
-
-    let mut tags = HashMap::new();
-    tags.insert("environment".to_string(), "test".to_string());
-    tags.insert("user_id".to_string(), "12345".to_string());
-    tags.insert("experiment_id".to_string(), "exp-001".to_string());
-
-    let datapoint = StoredChatInferenceDatapoint {
-        dataset_name: "test_dataset".to_string(),
-        function_name: "test_function".to_string(),
-        id: uuid::Uuid::now_v7(),
-        episode_id: Some(uuid::Uuid::now_v7()),
-        input: stored_input,
-        output: Some(vec![ContentBlockChatOutput::Text(
-            tensorzero_core::inference::types::Text {
-                text: "Test output".to_string(),
-            },
-        )]),
-        tool_params: None,
-        tags: Some(tags),
-        auxiliary: String::new(),
-        is_deleted: false,
-        is_custom: false,
-        source_inference_id: None,
-        staled_at: None,
-        updated_at: "2025-01-01T00:00:00Z".to_string(),
-        name: None,
-    };
-
-    let response = InferenceResponse::Chat(
-        tensorzero_core::endpoints::inference::ChatInferenceResponse {
-            inference_id: uuid::Uuid::now_v7(),
-            episode_id: uuid::Uuid::now_v7(),
-            variant_name: "test_variant".to_string(),
-            content: vec![ContentBlockChatOutput::Text(
-                tensorzero_core::inference::types::Text {
-                    text: "Test output".to_string(),
-                },
-            )],
-            usage: tensorzero_core::inference::types::Usage::default(),
-            original_response: None,
-            finish_reason: Some(tensorzero_core::inference::types::FinishReason::Stop),
+    let scenarios = vec![
+        InputScenario {
+            eval_infos: vec![schemas_eval],
+            function_config: create_test_function_config_with_schemas(),
+            static_tools: None,
+            eval_config: create_test_evaluation_config_with_evaluators(),
+            assert_fn: assert_schema_payload,
         },
-    );
+        InputScenario {
+            eval_infos: vec![tools_eval],
+            function_config: static_tools_function_config,
+            static_tools: static_tools_for_static,
+            eval_config: create_test_evaluation_config_with_evaluators(),
+            assert_fn: assert_static_tools_payload,
+        },
+        InputScenario {
+            eval_infos: vec![eval_info_scores],
+            function_config: create_test_function_config(),
+            static_tools: None,
+            eval_config: score_eval_config,
+            assert_fn: assert_score_types_payload,
+        },
+        InputScenario {
+            eval_infos: vec![tags_eval],
+            function_config: create_test_function_config(),
+            static_tools: None,
+            eval_config: create_test_evaluation_config(),
+            assert_fn: assert_tags_payload,
+        },
+        InputScenario {
+            eval_infos: vec![eval_info_tool_params],
+            function_config: tools_function_config_tool_params,
+            static_tools: static_tools_tool_params,
+            eval_config: create_test_evaluation_config(),
+            assert_fn: assert_tool_params_payload,
+        },
+    ];
 
-    let eval_info = evaluations::stats::EvaluationInfo {
-        datapoint: StoredDatapoint::Chat(datapoint),
-        response,
-        evaluations: HashMap::new(),
-        evaluator_errors: HashMap::new(),
-    };
+    for scenario in scenarios {
+        let payload = test_analyze_input_echo_helper(
+            scenario.eval_infos,
+            scenario.function_config,
+            scenario.static_tools,
+            scenario.eval_config,
+        )
+        .await;
 
-    let eval_infos = vec![eval_info];
-    let gepa_config = create_test_gepa_config_echo(); // Use echo model
-
-    // Execute
-    let result = analyze_inferences(
-        &client,
-        &eval_infos,
-        &function_config,
-        &None,
-        &variant_config,
-        &gepa_config,
-        &create_test_evaluation_config(),
-    )
-    .await;
-
-    // Assert: Should succeed
-    assert!(
-        result.is_ok(),
-        "analyze_inferences should succeed with tags"
-    );
-    let analyses = result.unwrap();
-    assert_eq!(analyses.len(), 1);
-
-    let payload = parse_echo_payload(&analyses[0].analysis);
-    let user_message = extract_role_text(&payload, "user");
-
-    // Verify tags appear inside the datapoint JSON (not in a separate metadata section)
-    assert!(
-        user_message.contains("<datapoint>"),
-        "User message should contain datapoint section with tags inside JSON"
-    );
-    assert!(
-        user_message.contains(r#"\"tags\""#) || user_message.contains("tags"),
-        "User message should contain tags field inside datapoint JSON"
-    );
-    assert!(
-        user_message.contains("environment") && user_message.contains("test"),
-        "User message should contain environment tag value"
-    );
-    assert!(
-        user_message.contains("user_id") && user_message.contains("12345"),
-        "User message should contain user_id tag value"
-    );
-    assert!(
-        user_message.contains("experiment_id") && user_message.contains("exp-001"),
-        "User message should contain experiment_id tag value"
-    );
+        (scenario.assert_fn)(&payload);
+    }
 }
