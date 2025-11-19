@@ -376,6 +376,11 @@ function EvaluationForm({
           type="hidden"
           name="precision_targets"
           value={
+            // Serialize precision targets to JSON for form submission.
+            // Precision targets enable adaptive stopping: an evaluator stops running
+            // once both sides of its 95% confidence interval are within the specified
+            // threshold of the mean. Only positive values are submitted: setting to 0.0
+            // disables adaptive stopping for that evaluator.
             Object.keys(precisionTargets).length > 0
               ? JSON.stringify(
                   Object.fromEntries(
