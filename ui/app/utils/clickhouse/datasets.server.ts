@@ -150,6 +150,7 @@ export async function getAdjacentDatapointIds(
 export async function datapointToParsedDatasetRow(
   datapoint: Datapoint,
 ): Promise<ParsedDatasetRow> {
+  // Resolve any files with object storage pointers into data.
   const resolvedInput = await resolveStoredInput(datapoint.input);
 
   if (datapoint.type === "chat") {

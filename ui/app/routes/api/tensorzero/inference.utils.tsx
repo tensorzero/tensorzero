@@ -37,9 +37,9 @@ import type { InferenceResponse } from "~/utils/tensorzero";
 import { logger } from "~/utils/logger";
 import type {
   ClientInferenceParams,
-  StoredInput as TensorZeroStoredInput,
-  StoredInputMessage as TensorZeroStoredInputMessage,
-  StoredInputMessageContent as TensorZeroStoredInputMessageContent,
+  Input as TensorZeroStoredInput,
+  InputMessage as TensorZeroStoredInputMessage,
+  InputMessageContent as TensorZeroStoredInputMessageContent,
   ContentBlockChatOutput,
   JsonInferenceOutput,
 } from "~/types/tensorzero";
@@ -217,37 +217,38 @@ function tensorZeroStoredContentToInputContent(
   content: TensorZeroStoredInputMessageContent,
 ): InputMessageContent {
   switch (content.type) {
-    case "text":
-      return {
-        type: "text",
-        value: content.text,
-      };
-    case "template":
     case "raw_text":
+    case "template":
+    case "text":
+    case "thought":
+    case "tool_result":
+    case "unknown":
       return content;
     case "tool_call":
-      return {
-        type: "tool_call",
-        id: content.id,
-        name: content.name,
-        arguments: content.arguments,
-      };
-    case "tool_result":
-      return {
-        type: "tool_result",
-        id: content.id,
-        name: content.name,
-        result: content.result,
-      };
-    case "thought":
-      return {
-        type: "thought",
-        text: content.text,
-        _internal_provider_type: content._internal_provider_type,
-        signature: content.signature,
-      };
+      if ("raw_arguments" in content) {
+        // This is an InferenceResponseToolCall.
+        return {
+          type: "tool_call",
+          name: content.raw_name,
+          arguments: content.raw_arguments,
+          id: content.id,
+        };
+      } else {
+        return {
+          type: "tool_call",
+          name: content.name,
+          arguments: content.arguments,
+          id: content.id,
+        };
+      }
     case "file": {
       // Handle the StoragePath conversion properly
+      if (content.file_type === "url" || content.file_type === "base64") {
+        // The file should've been stored, but here they are not. This shouldn't happen.
+        throw new Error(
+          "URL and base64 files should not be passed to `tensorZeroStoredContentToInputContent`. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
+        );
+      }
       const storageKind = content.storage_path.kind;
       let convertedKind;
 
@@ -273,12 +274,6 @@ function tensorZeroStoredContentToInputContent(
         },
       };
     }
-    case "unknown":
-      return {
-        type: "unknown",
-        data: content.data,
-        model_provider_name: content.model_provider_name,
-      };
   }
 }
 
