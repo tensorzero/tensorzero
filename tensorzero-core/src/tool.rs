@@ -69,7 +69,9 @@ use strum::AsRefStr;
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum Tool {
+    #[schemars(title = "ToolClientSideFunction")]
     ClientSideFunction(FunctionTool),
+    #[schemars(title = "ToolOpenAICustom")]
     #[serde(rename = "openai_custom")]
     OpenAICustom(OpenAICustomTool),
 }

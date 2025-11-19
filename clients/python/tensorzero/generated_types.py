@@ -174,7 +174,7 @@ class InferenceResponseToolCall:
 
 
 @dataclass(kw_only=True)
-class Tool1:
+class ToolClientSideFunction:
     description: str
     parameters: Any
     name: str
@@ -723,14 +723,14 @@ class StoredInputMessage:
 
 
 @dataclass(kw_only=True)
-class Tool2:
+class ToolOpenAICustom:
     name: str
     type: Literal["openai_custom"] = "openai_custom"
     description: str | None = None
     format: OpenAICustomToolFormat | None = None
 
 
-Tool = Tool1 | Tool2
+Tool = ToolClientSideFunction | ToolOpenAICustom
 
 
 @dataclass(kw_only=True)
