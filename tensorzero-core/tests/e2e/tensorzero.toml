@@ -3377,6 +3377,12 @@ weight = 1
 model = "qwen2.5-0.5b-instruct-vllm"
 system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 
+[functions.weather_helper_parallel.variants.gcp-vertex-haiku]
+type = "chat_completion"
+weight = 1
+model = "claude-3-haiku-20240307-gcp-vertex"
+system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+
 
 [functions.required_tool]
 type = "chat"

@@ -28,16 +28,19 @@ use crate::inference::types::{
 };
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
 use crate::model::{Credential, EndpointLocation, ModelProvider};
+use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::providers::openai::OpenAIMessagesConfig;
 
+use super::chat_completions::{
+    ChatCompletionAllowedToolsChoice, ChatCompletionSpecificToolChoice, ChatCompletionTool,
+    ChatCompletionToolChoice, ChatCompletionToolChoiceString,
+};
 use super::openai::{
-    handle_openai_error, prepare_openai_messages, prepare_openai_tools, stream_openai,
-    AllowedToolsChoice, OpenAIEmbeddingUsage, OpenAIRequestMessage, OpenAIResponse,
-    OpenAIResponseChoice, OpenAITool, OpenAIToolChoice, OpenAIToolChoiceString, SpecificToolChoice,
-    SystemOrDeveloper,
+    handle_openai_error, prepare_openai_messages, stream_openai, OpenAIEmbeddingUsage,
+    OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, SystemOrDeveloper,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
 
@@ -552,8 +555,8 @@ fn into_embedding_provider_response(
 #[serde(untagged)]
 enum AzureToolChoice<'a> {
     String(AzureToolChoiceString),
-    Specific(SpecificToolChoice<'a>),
-    AllowedTools(AllowedToolsChoice<'a>),
+    Specific(ChatCompletionSpecificToolChoice<'a>),
+    AllowedTools(ChatCompletionAllowedToolsChoice<'a>),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -564,25 +567,26 @@ pub(super) enum AzureToolChoiceString {
     // Note: Azure doesn't support required tool choice.
 }
 
-impl<'a> From<OpenAIToolChoice<'a>> for AzureToolChoice<'a> {
-    fn from(tool_choice: OpenAIToolChoice<'a>) -> Self {
+impl<'a> From<ChatCompletionToolChoice<'a>> for AzureToolChoice<'a> {
+    fn from(tool_choice: ChatCompletionToolChoice<'a>) -> Self {
         match tool_choice {
-            OpenAIToolChoice::String(tool_choice) => {
-                match tool_choice {
-                    OpenAIToolChoiceString::None => {
-                        AzureToolChoice::String(AzureToolChoiceString::None)
-                    }
-                    OpenAIToolChoiceString::Auto => {
-                        AzureToolChoice::String(AzureToolChoiceString::Auto)
-                    }
-                    OpenAIToolChoiceString::Required => {
-                        AzureToolChoice::String(AzureToolChoiceString::Auto)
-                    } // Azure doesn't support required
+            ChatCompletionToolChoice::String(tool_choice) => match tool_choice {
+                ChatCompletionToolChoiceString::None => {
+                    AzureToolChoice::String(AzureToolChoiceString::None)
                 }
+                ChatCompletionToolChoiceString::Auto => {
+                    AzureToolChoice::String(AzureToolChoiceString::Auto)
+                }
+                ChatCompletionToolChoiceString::Required => {
+                    AzureToolChoice::String(AzureToolChoiceString::Auto)
+                } // Azure doesn't support required
+            },
+            ChatCompletionToolChoice::Specific(tool_choice) => {
+                AzureToolChoice::Specific(tool_choice)
             }
-            OpenAIToolChoice::Specific(tool_choice) => AzureToolChoice::Specific(tool_choice),
-            OpenAIToolChoice::AllowedTools(allowed_tools) => {
-                AzureToolChoice::AllowedTools(allowed_tools)
+            ChatCompletionToolChoice::AllowedTools(allowed_tools_choice) => {
+                // Convert from common ChatCompletionAllowedToolsChoice to Azure/OpenAI AllowedToolsChoice
+                AzureToolChoice::AllowedTools(allowed_tools_choice)
             }
         }
     }
@@ -615,7 +619,7 @@ struct AzureRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<AzureResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    tools: Option<Vec<OpenAITool<'a>>>,
+    tools: Option<Vec<ChatCompletionTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<AzureToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -687,7 +691,7 @@ impl<'a> AzureRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _) = prepare_openai_tools(request);
+        let (tools, tool_choice, _) = prepare_chat_completion_tools(request, true);
         let mut azure_request = AzureRequest {
             messages,
             temperature: request.temperature,
@@ -700,6 +704,7 @@ impl<'a> AzureRequest<'a> {
             response_format,
             seed: request.seed,
             tools,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             tool_choice: tool_choice.map(AzureToolChoice::from),
             reasoning_effort: None,
             service_tier: None, // handled below
@@ -851,9 +856,12 @@ mod tests {
         FinishReason, FunctionType, ModelInferenceRequestJsonMode, RequestMessage, Role,
     };
     use crate::model::EndpointLocation;
+    use crate::providers::chat_completions::{
+        ChatCompletionSpecificToolChoice, ChatCompletionSpecificToolFunction,
+        ChatCompletionToolChoice, ChatCompletionToolChoiceString, ChatCompletionToolType,
+    };
     use crate::providers::openai::{
-        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIToolType,
-        OpenAIUsage, SpecificToolFunction,
+        OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
     };
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
 
@@ -897,12 +905,14 @@ mod tests {
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             azure_request.tool_choice,
-            Some(AzureToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+            Some(AzureToolChoice::Specific(
+                ChatCompletionSpecificToolChoice {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionSpecificToolFunction {
+                        name: WEATHER_TOOL.name(),
+                    }
                 }
-            }))
+            ))
         );
 
         let request_with_tools = ModelInferenceRequest {
@@ -949,19 +959,22 @@ mod tests {
         assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
         assert_eq!(
             azure_request.tool_choice,
-            Some(AzureToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
-                    name: WEATHER_TOOL.name(),
+            Some(AzureToolChoice::Specific(
+                ChatCompletionSpecificToolChoice {
+                    r#type: ChatCompletionToolType::Function,
+                    function: ChatCompletionSpecificToolFunction {
+                        name: WEATHER_TOOL.name(),
+                    }
                 }
-            }))
+            ))
         );
     }
 
     #[test]
     fn test_azure_tool_choice_from() {
         // Required is converted to Auto
-        let tool_choice = OpenAIToolChoice::String(OpenAIToolChoiceString::Required);
+        let tool_choice =
+            ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::Required);
         let azure_tool_choice = AzureToolChoice::from(tool_choice);
         assert_eq!(
             azure_tool_choice,
@@ -969,25 +982,27 @@ mod tests {
         );
 
         // Specific tool choice is converted to Specific
-        let specific_tool_choice = OpenAIToolChoice::Specific(SpecificToolChoice {
-            r#type: OpenAIToolType::Function,
-            function: SpecificToolFunction {
-                name: "test_function",
-            },
-        });
+        let specific_tool_choice =
+            ChatCompletionToolChoice::Specific(ChatCompletionSpecificToolChoice {
+                r#type: ChatCompletionToolType::Function,
+                function: ChatCompletionSpecificToolFunction {
+                    name: "test_function",
+                },
+            });
         let azure_specific_tool_choice = AzureToolChoice::from(specific_tool_choice);
         assert_eq!(
             azure_specific_tool_choice,
-            AzureToolChoice::Specific(SpecificToolChoice {
-                r#type: OpenAIToolType::Function,
-                function: SpecificToolFunction {
+            AzureToolChoice::Specific(ChatCompletionSpecificToolChoice {
+                r#type: ChatCompletionToolType::Function,
+                function: ChatCompletionSpecificToolFunction {
                     name: "test_function",
                 }
             })
         );
 
         // None is converted to None
-        let none_tool_choice = OpenAIToolChoice::String(OpenAIToolChoiceString::None);
+        let none_tool_choice =
+            ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::None);
         let azure_none_tool_choice = AzureToolChoice::from(none_tool_choice);
         assert_eq!(
             azure_none_tool_choice,
@@ -995,7 +1010,8 @@ mod tests {
         );
 
         // Auto is converted to Auto
-        let auto_tool_choice = OpenAIToolChoice::String(OpenAIToolChoiceString::Auto);
+        let auto_tool_choice =
+            ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::Auto);
         let azure_auto_tool_choice = AzureToolChoice::from(auto_tool_choice);
         assert_eq!(
             azure_auto_tool_choice,
@@ -1191,6 +1207,7 @@ mod tests {
             stream: false,
             response_format: None,
             tools: None,
+            // allowed_tools is now part of tool_choice (AllowedToolsChoice variant)
             tool_choice: None,
             reasoning_effort: None,
             service_tier: None,
