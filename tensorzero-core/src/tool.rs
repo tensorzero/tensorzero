@@ -272,7 +272,9 @@ impl std::fmt::Display for OpenAICustomTool {
 #[ts(export)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAICustomToolFormat {
+    #[schemars(title = "OpenAICustomToolFormatText")]
     Text,
+    #[schemars(title = "OpenAICustomToolFormatGrammar")]
     Grammar { grammar: OpenAIGrammarDefinition },
 }
 
