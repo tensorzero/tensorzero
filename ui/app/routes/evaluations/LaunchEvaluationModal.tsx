@@ -489,7 +489,8 @@ function getFromLocalStorage() {
 
   const data = parsed as Record<string, unknown>;
 
-  // Handle precision_targets: convert old JSON string format to Record<string, string>
+  // Parse precision_targets from stored JSON string format to object,
+  // and convert numeric values to strings for form inputs
   if (typeof data.precision_targets === "string" && data.precision_targets) {
     try {
       const parsedLimits = JSON.parse(data.precision_targets);
