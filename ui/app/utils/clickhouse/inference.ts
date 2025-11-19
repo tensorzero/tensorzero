@@ -76,19 +76,6 @@ export const inferenceExtraBodySchema = z.union([
 ]);
 export type InferenceExtraBody = z.infer<typeof inferenceExtraBodySchema>;
 
-export const inferenceByIdRowSchema = z
-  .object({
-    id: z.string().uuid(),
-    function_name: z.string(),
-    variant_name: z.string(),
-    episode_id: z.string().uuid(),
-    function_type: z.enum(["chat", "json"]),
-    timestamp: z.string().datetime(),
-  })
-  .strict();
-
-export type InferenceByIdRow = z.infer<typeof inferenceByIdRowSchema>;
-
 export const chatInferenceRowSchema = z.object({
   id: z.string().uuid(),
   function_name: z.string(),

@@ -2,7 +2,6 @@ import {
   CountSchema,
   modelInferenceInputMessageSchema,
   ZodJsonValueSchema,
-  type ZodTableBounds,
 } from "./common";
 import {
   contentBlockOutputSchema,
@@ -15,15 +14,14 @@ import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
   TableBoundsWithCount,
+  InternalInferenceMetadata,
 } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
 import {
-  inferenceByIdRowSchema,
   modelInferenceRowSchema,
   parsedModelInferenceRowSchema,
   parseInferenceOutput,
-  type InferenceByIdRow,
   type InferenceRow,
   type ModelInferenceRow,
   type ParsedInferenceRow,
@@ -37,8 +35,8 @@ import { getTensorZeroClient } from "../tensorzero.server";
 
 /**
  * Query a table of at most `limit` Inferences from ChatInference or JsonInference that are
- * before the given `before` ID or after the given `after` ID. If `episode_id` is provided,
- * we only return rows from that specific episode.
+ * before the given `before` ID or after the given `after` ID. Optional filters can be applied
+ * for function_name, variant_name, and episode_id.
  *
  * - If `before` and `after` are both not provided, returns the most recent `limit` Inferences.
  * - If `before` and `after` are both provided, throw an error.
@@ -53,127 +51,30 @@ export async function queryInferenceTable(params: {
   limit: number;
   before?: string; // UUIDv7 string
   after?: string; // UUIDv7 string
-  /**
-   * Extra WHERE clauses, e.g. ["episode_id = {episode_id:UUID}", "variant_name = {variant:String}"]
-   * Use param placeholders if you want to avoid manual string interpolation.
-   */
-  extraWhere?: string[];
-  /**
-   * Extra query parameters, mapping placeholders (like "episode_id") => actual values
-   */
-  extraParams?: Record<string, string | number>;
-}): Promise<InferenceByIdRow[]> {
-  const { limit, before, after, extraWhere, extraParams } = params;
+  function_name?: string;
+  variant_name?: string;
+  episode_id?: string;
+}): Promise<InternalInferenceMetadata[]> {
+  const { limit, before, after, function_name, variant_name, episode_id } =
+    params;
 
   if (before && after) {
     throw new Error("Cannot specify both 'before' and 'after' parameters");
   }
 
-  // We'll build up WHERE clauses incrementally
-  const whereClauses: string[] = [];
-
-  // Base query params
-  const query_params: Record<string, string | number> = {
-    limit,
-  };
-
-  // Add the built-in before/after logic
-  if (before) {
-    whereClauses.push("id_uint < toUInt128(toUUID({before:String}))");
-    query_params.before = before;
-  }
-  if (after) {
-    whereClauses.push("id_uint > toUInt128(toUUID({after:String}))");
-    query_params.after = after;
-  }
-
-  // Merge in caller-supplied where clauses
-  if (extraWhere && extraWhere.length) {
-    whereClauses.push(...extraWhere);
-  }
-
-  // Merge in caller-supplied params
-  if (extraParams) {
-    Object.entries(extraParams).forEach(([key, value]) => {
-      query_params[key] = value;
-    });
-  }
-
-  // We'll build the actual WHERE portion here (if any).
-  const combinedWhere = whereClauses.length
-    ? `WHERE ${whereClauses.join(" AND ")}`
-    : "";
-
-  let query: string;
-  if (!before && !after) {
-    // No "before"/"after" => get the most recent limit items
-    query = `
-      SELECT
-        uint_to_uuid(id_uint) as id,
-        function_name,
-        variant_name,
-        episode_id,
-        function_type,
-        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-      FROM InferenceById FINAL
-      ${combinedWhere}
-      ORDER BY id_uint DESC
-      LIMIT {limit:UInt32}
-    `;
-  } else if (before) {
-    // "Most recent" limit before given ID
-    query = `
-      SELECT
-        uint_to_uuid(id_uint) as id,
-        function_name,
-        variant_name,
-        episode_id,
-        function_type,
-        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-      FROM InferenceById FINAL
-      ${combinedWhere}
-      ORDER BY id_uint DESC
-      LIMIT {limit:UInt32}
-    `;
-  } else {
-    // "Earliest" limit after given ID => subselect ascending, then reorder descending
-    query = `
-      SELECT
-        id,
-        function_name,
-        variant_name,
-        episode_id,
-        function_type,
-        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-      FROM
-      (
-        SELECT
-          uint_to_uuid(id_uint) as id,
-          id_uint,
-          function_name,
-          variant_name,
-          episode_id,
-          function_type,
-          formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-        FROM InferenceById FINAL
-        ${combinedWhere}
-        ORDER BY id_uint ASC
-        LIMIT {limit:UInt32}
-      )
-      ORDER BY id_uint DESC
-    `;
-  }
-
   try {
-    const resultSet = await getClickhouseClient().query({
-      query,
-      format: "JSONEachRow",
-      query_params,
+    const client = getTensorZeroClient();
+    const result = await client.internalListInferencesById({
+      limit,
+      before,
+      after,
+      function_name,
+      variant_name,
+      episode_id,
     });
-    const rows = await resultSet.json<InferenceByIdRow>();
-    return z.array(inferenceByIdRowSchema).parse(rows);
+    return result.inferences;
   } catch (error) {
-    logger.error(error);
+    logger.error("Failed to query inference table:", error);
     throw data("Error querying inference table", { status: 500 });
   }
 }
@@ -198,84 +99,6 @@ export async function queryInferenceTableBounds(params?: {
     logger.error("Failed to query inference table bounds:", error);
     throw data("Error querying inference table bounds", { status: 500 });
   }
-}
-
-export async function queryInferenceTableByEpisodeId(params: {
-  episode_id: string;
-  limit: number;
-  before?: string;
-  after?: string;
-}): Promise<InferenceByIdRow[]> {
-  return queryInferenceTable({
-    limit: params.limit,
-    before: params.before,
-    after: params.after,
-    extraWhere: ["episode_id = {episode_id:String}"],
-    extraParams: { episode_id: params.episode_id },
-  });
-}
-
-export async function queryInferenceTableBoundsByEpisodeId(params: {
-  episode_id: string;
-}): Promise<ZodTableBounds> {
-  return queryInferenceTableBounds({
-    episode_id: params.episode_id,
-  });
-}
-
-export async function queryInferenceTableByFunctionName(params: {
-  function_name: string;
-  limit: number;
-  before?: string;
-  after?: string;
-}): Promise<InferenceByIdRow[]> {
-  return queryInferenceTable({
-    limit: params.limit,
-    before: params.before,
-    after: params.after,
-    extraWhere: ["function_name = {function_name:String}"],
-    extraParams: { function_name: params.function_name },
-  });
-}
-
-export async function queryInferenceTableBoundsByFunctionName(params: {
-  function_name: string;
-}): Promise<ZodTableBounds> {
-  return queryInferenceTableBounds({
-    function_name: params.function_name,
-  });
-}
-
-export async function queryInferenceTableByVariantName(params: {
-  function_name: string;
-  variant_name: string;
-  limit: number;
-  before?: string;
-  after?: string;
-}): Promise<InferenceByIdRow[]> {
-  return queryInferenceTable({
-    limit: params.limit,
-    before: params.before,
-    after: params.after,
-    extraWhere: [
-      "function_name = {function_name:String}",
-      "variant_name = {variant_name:String}",
-    ],
-    extraParams: {
-      function_name: params.function_name,
-      variant_name: params.variant_name,
-    },
-  });
-}
-
-export async function queryInferenceTableBoundsByVariantName(params: {
-  function_name: string;
-  variant_name: string;
-}): Promise<ZodTableBounds> {
-  return queryInferenceTableBounds({
-    function_name: params.function_name,
-    variant_name: params.variant_name,
-  });
 }
 
 export async function countInferencesForFunction(
