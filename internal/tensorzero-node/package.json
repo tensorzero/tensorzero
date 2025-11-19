@@ -44,7 +44,7 @@
     "artifacts": "napi artifacts",
     "build-bindings": "./build-bindings.sh",
     "build": "napi build --platform --release --js index.cjs && tsc",
-    "build:debug": "napi build --platform && tsc",
+    "build:debug": "napi build --platform --js index.cjs && tsc",
     "build:ts": "tsc",
     "check-exports": "cd lib && node check-exports.js",
     "prepublishOnly": "napi prepublish -t npm",
