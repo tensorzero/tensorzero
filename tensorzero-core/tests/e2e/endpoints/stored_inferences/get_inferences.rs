@@ -626,3 +626,164 @@ pub async fn test_get_by_ids_duplicate_ids() {
     let returned_id = Uuid::parse_str(res[0]["inference_id"].as_str().unwrap()).unwrap();
     assert_eq!(returned_id, id);
 }
+
+// Tests for search_query_experimental
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_search_query_simple_search() {
+    let request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 10,
+        // We arbitrarily choose a query term in the data fixture
+        "search_query_experimental": "formamide"
+    });
+
+    let res = list_inferences(request).await.unwrap();
+    assert!(
+        !res.is_empty(),
+        "Expected at least one result for 'formamide' query"
+    );
+
+    for inference in &res {
+        assert_eq!(
+            inference["function_name"], "write_haiku",
+            "Function name filter should be applied"
+        );
+        let input_string = serde_json::to_string(&inference["input"])
+            .unwrap()
+            .to_lowercase();
+        let output_string = serde_json::to_string(&inference["output"])
+            .unwrap()
+            .to_lowercase();
+        assert!(
+            input_string.contains("formamide") || output_string.contains("formamide"),
+            "Input or output should contain 'formamide'"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_search_query_case_insensitive() {
+    let request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "search_query_experimental": "FORMAMIDE"
+    });
+
+    let res = list_inferences(request).await.unwrap();
+
+    assert!(!res.is_empty(), "Expected results for 'FORMAMIDE' query");
+
+    // There is no inference with all-caps 'FORMAMIDE', but there are ones with lowercase ones.
+    for inference in &res {
+        let input_string = serde_json::to_string(&inference["input"]).unwrap();
+        let output_string = serde_json::to_string(&inference["output"]).unwrap();
+        assert!(
+            !input_string.contains("FORMAMIDE") && !output_string.contains("FORMAMIDE"),
+            "Input or output should not contain all-caps 'FORMAMIDE'"
+        );
+        assert!(
+            input_string.to_lowercase().contains("formamide")
+                || output_string.to_lowercase().contains("formamide"),
+            "Input or output should contain 'formamide' in a case-insensitive match"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_search_query_no_results() {
+    // Search for something that definitely doesn't exist
+    let request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 10,
+        "search_query_experimental": "xyzzyqwertyzzznonexistent"
+    });
+
+    let res = list_inferences(request).await.unwrap();
+    assert_eq!(res.len(), 0, "Expected no results for non-existent term");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_search_query_with_other_filters() {
+    // Test that text query works in combination with other filters
+    let request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 5,
+        "search_query_experimental": "nature",
+        "filter": {
+            "type": "time",
+            "time": "2023-01-01T00:00:00Z",
+            "comparison_operator": ">"
+        }
+    });
+
+    let res = list_inferences(request).await.unwrap();
+
+    // Should only return results that match both the text query AND the time filter
+    for inference in &res {
+        assert_eq!(inference["function_name"], "write_haiku");
+
+        let input_string = serde_json::to_string(&inference["input"])
+            .unwrap()
+            .to_lowercase();
+        let output_string = serde_json::to_string(&inference["output"])
+            .unwrap()
+            .to_lowercase();
+        assert!(
+            input_string.contains("nature") || output_string.contains("nature"),
+            "Input or output should contain 'nature'"
+        );
+
+        let timestamp = inference["timestamp"].as_str().unwrap();
+        assert!(
+            timestamp > "2023-01-01T00:00:00Z",
+            "Timestamp should be after filter"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_search_query_order_by_search_relevance() {
+    // Test ordering by term frequency in descending order
+    let request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "limit": 10,
+        "search_query_experimental": "formamide",
+        "order_by": [
+            {
+                "by": "search_relevance",
+                "direction": "descending"
+            }
+        ]
+    });
+
+    let res = list_inferences(request).await.unwrap();
+
+    assert!(!res.is_empty(), "Expected results for 'formamide' query");
+
+    // Verify that results are ordered by search relevance (currently term frequency) in descending order
+    let mut prev_relevance = None;
+    for inference in &res {
+        assert_eq!(inference["function_name"], "write_haiku");
+        let input_string = serde_json::to_string(&inference["input"])
+            .unwrap()
+            .to_lowercase();
+        let output_string = serde_json::to_string(&inference["output"])
+            .unwrap()
+            .to_lowercase();
+        let relevance =
+            input_string.matches("formamide").count() + output_string.matches("formamide").count();
+        if let Some(prev) = &prev_relevance {
+            assert!(
+                relevance <= *prev,
+                "Search relevance should be in descending order. Got: {relevance} > {prev}"
+            );
+            prev_relevance = Some(relevance);
+        }
+    }
+}

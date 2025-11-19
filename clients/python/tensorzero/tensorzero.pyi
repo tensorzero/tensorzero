@@ -56,6 +56,7 @@ from .generated_types import (
     InferenceFilter,
     ListDatapointsRequest,
     ListInferencesRequest,
+    StoredInference,
     UpdateDatapointMetadataRequest,
     UpdateDatapointRequest,
     UpdateDatapointsResponse,
@@ -160,65 +161,6 @@ class AsyncEvaluationJobHandler:
     def __repr__(self) -> str: ...
 
 @final
-class StoredInference:
-    Chat: Type["StoredInference"]
-    Json: Type["StoredInference"]
-
-    def __init__(
-        self,
-        type: str,
-        function_name: str,
-        variant_name: str,
-        input: Any,
-        output: Any,
-        episode_id: UUID,
-        inference_id: UUID,
-        timestamp: str,
-        allowed_tools: Optional[List[str]] = None,
-        additional_tools: Optional[List[Any]] = None,
-        tool_choice: Optional[str] = None,
-        parallel_tool_calls: Optional[bool] = None,
-        provider_tools: Optional[List[Any]] = None,
-        output_schema: Optional[Any] = None,
-        # Dispreferred outputs are lists because there may be several of them in the future.
-        dispreferred_outputs: Union[List[ChatInferenceOutput], List[JsonInferenceOutput]] = [],
-        tags: Dict[str, str] = {},
-    ) -> None: ...
-    def __repr__(self) -> str: ...
-    @property
-    def function_name(self) -> str: ...
-    @property
-    def variant_name(self) -> str: ...
-    @property
-    def input(self) -> ResolvedInput: ...
-    @property
-    def output(self) -> Any: ...
-    @property
-    def episode_id(self) -> Optional[UUID]: ...
-    @property
-    def inference_id(self) -> Optional[UUID]: ...
-    @property
-    def allowed_tools(self) -> Optional[List[str]]: ...
-    @property
-    def additional_tools(self) -> Optional[List[Any]]: ...
-    @property
-    def parallel_tool_calls(self) -> Optional[bool]: ...
-    @property
-    def provider_tools(self) -> Optional[List[Any]]: ...
-    @property
-    def output_schema(self) -> Optional[Any]: ...
-    @property
-    def type(self) -> str: ...
-    @property
-    def timestamp(self) -> str: ...
-    @property
-    def dispreferred_outputs(
-        self,
-    ) -> Union[List[ChatInferenceOutput], List[JsonInferenceOutput]]: ...
-    @property
-    def tags(self) -> Dict[str, str]: ...
-
-@final
 class RenderedSample:
     function_name: str
     input: ModelInput
@@ -248,6 +190,7 @@ class OptimizationJobHandle:
     FireworksSFT: Type["OptimizationJobHandle"]
     GCPVertexGeminiSFT: Type["OptimizationJobHandle"]
     TogetherSFT: Type["OptimizationJobHandle"]
+    GEPA: Type["OptimizationJobHandle"]
 
 @final
 class OptimizationJobStatus:
@@ -263,6 +206,7 @@ class OptimizationJobInfo:
     FireworksSFT: Type["OptimizationJobInfo"]
     GCPVertexGeminiSFT: Type["OptimizationJobInfo"]
     TogetherSFT: Type["OptimizationJobInfo"]
+    GEPA: Type["OptimizationJobInfo"]
     @property
     def message(self) -> str: ...
     @property
@@ -1028,6 +972,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         concurrency: int = 1,
         inference_cache: str = "on",
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        max_datapoints: Optional[int] = None,
+        adaptive_stopping: Optional[Dict[str, Dict[str, float]]] = None,
     ) -> EvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -1039,6 +985,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
         :param internal_dynamic_variant_config: Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
+        :param max_datapoints: Maximum number of datapoints to evaluate from the dataset
+        :param adaptive_stopping: Optional dict configuring adaptive stopping behavior. Example: {"precision": {"exact_match": 0.2, "llm_judge": 0.15}}. The "precision" field maps evaluator names to CI half-width thresholds.
         :return: An EvaluationJobHandler for iterating over evaluation results
         """
         ...
@@ -1565,6 +1513,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         concurrency: int = 1,
         inference_cache: str = "on",
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        max_datapoints: Optional[int] = None,
+        adaptive_stopping: Optional[Dict[str, Dict[str, float]]] = None,
     ) -> AsyncEvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -1576,6 +1526,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
         :param internal_dynamic_variant_config: Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
+        :param max_datapoints: Maximum number of datapoints to evaluate from the dataset
+        :param adaptive_stopping: Optional dict configuring adaptive stopping behavior. Example: {"precision": {"exact_match": 0.2, "llm_judge": 0.15}}. The "precision" field maps evaluator names to CI half-width thresholds.
         :return: An AsyncEvaluationJobHandler for iterating over evaluation results
         """
         ...
@@ -1635,7 +1587,6 @@ __all__ = [
     "RenderedSample",
     "ResolvedInput",
     "ResolvedInputMessage",
-    "StoredInference",
     "TensorZeroGateway",
     "TogetherSFTConfig",
     "VariantsConfig",

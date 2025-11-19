@@ -15,7 +15,7 @@ use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use std::fmt::Debug;
 use thiserror::Error;
-use tokio::{sync::Mutex, time::error::Elapsed};
+use tokio::time::error::Elapsed;
 use tokio_stream::StreamExt;
 use url::Url;
 
@@ -66,31 +66,6 @@ impl Debug for ClientMode {
 pub struct HTTPGateway {
     pub base_url: Url,
     pub http_client: reqwest::Client,
-    pub gateway_version: Mutex<Option<String>>, // Needs interior mutability so it can be set on every request
-}
-
-impl HTTPGateway {
-    /// Sets the gateway version on the HTTPGateway struct.
-    /// This should be called if the HTTPGateway is constructed within an async context.
-    pub async fn discover_initialize_gateway_version(
-        &self,
-        client: &Client,
-    ) -> Result<(), ClientBuilderError> {
-        let status_url = self.base_url.join("status").map_err(|_| {
-            ClientBuilderError::GatewayVersion("Failed to construct /status URL".to_string())
-        })?;
-        // If the client is initialized and the ping for version fails, we simply don't set it.
-        let status_response = match self.http_client.get(status_url).send().await {
-            Ok(status_response) => status_response,
-            Err(_) => return Ok(()),
-        };
-
-        client
-            .update_gateway_version_from_headers(status_response.headers())
-            .await;
-
-        Ok(())
-    }
 }
 
 pub struct EmbeddedGateway {
@@ -290,9 +265,6 @@ impl ClientBuilder {
         match &self.mode {
             ClientBuilderMode::HTTPGateway { .. } => {
                 let client = self.build_http()?;
-                if let ClientMode::HTTPGateway(mode) = &*client.mode {
-                    mode.discover_initialize_gateway_version(&client).await?;
-                }
                 Ok(client)
             }
             ClientBuilderMode::EmbeddedGateway {
@@ -565,7 +537,6 @@ impl ClientBuilder {
             mode: Arc::new(ClientMode::HTTPGateway(HTTPGateway {
                 base_url: url,
                 http_client,
-                gateway_version: Mutex::new(None),
             })),
             verbose_errors: self.verbose_errors,
             #[cfg(feature = "e2e_tests")]
@@ -580,7 +551,7 @@ pub struct Client {
     mode: Arc<ClientMode>,
     pub verbose_errors: bool,
     #[cfg(feature = "e2e_tests")]
-    pub last_body: Arc<Mutex<Option<String>>>,
+    pub last_body: Arc<tokio::sync::Mutex<Option<String>>>,
 }
 
 impl StoragePathResolver for Client {
@@ -805,9 +776,6 @@ impl Client {
             }
         })?;
 
-        self.update_gateway_version_from_headers(resp.headers())
-            .await;
-
         if let Err(e) = resp.error_for_status_ref() {
             let status_code = resp.status().as_u16();
             let text = resp.text().await.ok();
@@ -943,46 +911,6 @@ impl Client {
                 }
             }
         }))
-    }
-
-    async fn update_gateway_version_from_headers(&self, headers: &HeaderMap) {
-        let mut version = headers
-            .get("x-tensorzero-gateway-version")
-            .and_then(|v| v.to_str().ok())
-            .map(str::to_string);
-        if cfg!(feature = "e2e_tests") {
-            if let Ok(version_override) = env::var("TENSORZERO_E2E_GATEWAY_VERSION_OVERRIDE") {
-                version = Some(version_override);
-            }
-        };
-        if let Some(version) = version {
-            self.update_gateway_version(version).await;
-        }
-    }
-
-    async fn update_gateway_version(&self, version: String) {
-        match &*self.mode {
-            ClientMode::HTTPGateway(client) => {
-                // Acquire the lock on the gateway version
-                let mut gateway_version = client.gateway_version.lock().await;
-                *gateway_version = Some(version);
-            }
-            // Should never be called
-            ClientMode::EmbeddedGateway { .. } => {}
-        }
-    }
-
-    #[cfg(feature = "e2e_tests")]
-    pub async fn e2e_update_gateway_version(&self, version: String) {
-        self.update_gateway_version(version).await;
-    }
-
-    #[cfg(feature = "e2e_tests")]
-    pub async fn get_gateway_version(&self) -> Option<String> {
-        match &*self.mode {
-            ClientMode::HTTPGateway(client) => client.gateway_version.lock().await.clone(),
-            ClientMode::EmbeddedGateway { .. } => None,
-        }
     }
 }
 

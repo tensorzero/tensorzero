@@ -12,7 +12,7 @@ pub use crate::db::clickhouse::query_builder::{
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
-use crate::tool::DynamicToolParams;
+use crate::tool::{DynamicToolParams, FunctionTool, ProviderTool, ToolChoice};
 
 /// Request to update one or more datapoints in a dataset.
 #[derive(Debug, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
@@ -61,10 +61,9 @@ pub struct UpdateChatDatapointRequest {
     #[serde(default)]
     pub output: Option<Vec<ContentBlockChatOutput>>,
 
-    /// Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    #[serde(default, deserialize_with = "deserialize_double_option")]
-    #[schemars(extend("x-double-option" = true))]
-    pub tool_params: Option<Option<DynamicToolParams>>,
+    /// Datapoint tool parameters.
+    #[serde(flatten)]
+    pub tool_params: UpdateDynamicToolParamsRequest,
 
     /// Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     /// it will be overwrite the existing tags.
@@ -74,6 +73,41 @@ pub struct UpdateChatDatapointRequest {
     /// Metadata fields to update.
     #[serde(flatten)]
     pub metadata: DatapointMetadataUpdate,
+}
+
+/// A request to update the dynamic tool parameters of a datapoint.
+#[derive(Debug, Serialize, Deserialize, Default, Clone, JsonSchema, ts_rs::TS)]
+#[ts(export, optional_fields)]
+#[export_schema]
+pub struct UpdateDynamicToolParamsRequest {
+    /// A subset of static tools configured for the function that the inference is explicitly allowed to use.
+    /// If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
+    /// provided at inference time). If specified as a value, it will be set to the provided value.
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
+    pub allowed_tools: Option<Option<Vec<String>>>,
+
+    /// Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
+    /// Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
+    /// new tools or exclude removed tools.
+    /// If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    pub additional_tools: Option<Vec<FunctionTool>>,
+
+    /// User-specified tool choice strategy.
+    /// If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
+    pub tool_choice: Option<Option<ToolChoice>>,
+
+    /// Whether to use parallel tool calls in the inference.
+    /// If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
+    pub parallel_tool_calls: Option<Option<bool>>,
+
+    /// Provider-specific tool configurations
+    /// If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    pub provider_tools: Option<Vec<ProviderTool>>,
 }
 
 /// An update request for a JSON datapoint.
