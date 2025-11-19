@@ -13,7 +13,7 @@ use tensorzero_core::client::input_handling::resolved_input_to_client_input;
 use tensorzero_core::db::clickhouse::test_helpers::{
     select_inference_evaluation_human_feedback_clickhouse, select_model_inferences_clickhouse,
 };
-use tensorzero_core::endpoints::datasets::StoredDatapoint;
+use tensorzero_core::endpoints::datasets::{StoredDatapoint, StoredJsonInferenceDatapoint};
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_core::function::{FunctionConfig, FunctionConfigJson};
 use tensorzero_core::inference::types::{
@@ -48,7 +48,7 @@ use tensorzero_core::{
 };
 use tensorzero_core::{
     endpoints::{
-        datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint},
+        datasets::StoredChatInferenceDatapoint,
         inference::{ChatInferenceResponse, JsonInferenceResponse},
     },
     evaluations::{LLMJudgeIncludeConfig, LLMJudgeOptimize},
@@ -1462,7 +1462,7 @@ async fn test_run_llm_judge_evaluator_json() {
         },
         variant_name: "test_variant".to_string(),
     });
-    let datapoint = StoredDatapoint::Json(JsonInferenceDatapoint {
+    let datapoint = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
