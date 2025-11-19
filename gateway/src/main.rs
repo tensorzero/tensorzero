@@ -22,6 +22,7 @@ use tensorzero_core::error;
 use tensorzero_core::observability::{self, LogFormat};
 use tensorzero_core::utils::gateway;
 
+mod router;
 mod routes;
 
 #[global_allocator]
@@ -245,7 +246,7 @@ async fn main() {
     }
     let base_path = base_path.trim_end_matches("/");
 
-    let (router, in_flight_requests_counter) = routes::build_axum_router(
+    let (router, in_flight_requests_counter) = router::build_axum_router(
         base_path,
         delayed_log_config.otel_tracer.clone(),
         gateway_handle.app_state.clone(),

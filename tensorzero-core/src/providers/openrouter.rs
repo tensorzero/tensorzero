@@ -47,14 +47,21 @@ use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
+use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::helpers::{
     convert_stream_error, inject_extra_request_data_and_send,
     inject_extra_request_data_and_send_eventsource, warn_cannot_forward_url_if_missing_mime_type,
 };
 
+use super::chat_completions::{
+    ChatCompletionAllowedToolsMode, ChatCompletionTool, ChatCompletionToolChoice,
+    ChatCompletionToolChoiceString,
+};
 // Import unified OpenAI types for allowed_tools support
 use super::openai::{
-    prepare_allowed_tools_constraint, AllowedToolsChoice as OpenAIAllowedToolsChoice,
+    AllowedToolsChoice as OpenAIAllowedToolsChoice,
+    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode, OpenAIToolType,
+    SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
 };
 
 use crate::inference::types::extra_body::FullExtraBodyConfig;
@@ -883,26 +890,19 @@ pub(super) async fn prepare_openrouter_messages<'a>(
 pub(super) fn prepare_openrouter_tools<'a>(
     request: &'a ModelInferenceRequest,
 ) -> PreparedOpenRouterToolsResult<'a> {
-    match &request.tool_config {
-        None => (None, None, None),
-        Some(tool_config) => {
-            if !tool_config.any_tools_available() {
-                return (None, None, None);
-            }
-            let tools = Some(tool_config.tools_available().map(Into::into).collect());
-            let parallel_tool_calls = tool_config.parallel_tool_calls;
+    let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(request, true);
 
-            let tool_choice =
-                if let Some(allowed_tools_choice) = prepare_allowed_tools_constraint(tool_config) {
-                    Some(OpenRouterToolChoice::AllowedTools(allowed_tools_choice))
-                } else {
-                    // No allowed_tools constraint, use regular tool_choice
-                    Some((&tool_config.tool_choice).into())
-                };
+    // Convert from ChatCompletionTool to OpenRouterTool
+    let openrouter_tools = tools.map(|t| t.into_iter().map(OpenRouterTool::from).collect());
 
-            (tools, tool_choice, parallel_tool_calls)
-        }
-    }
+    // Convert from ChatCompletionToolChoice to OpenRouterToolChoice
+    let openrouter_tool_choice = tool_choice.map(OpenRouterToolChoice::from);
+
+    (
+        openrouter_tools,
+        openrouter_tool_choice,
+        parallel_tool_calls,
+    )
 }
 
 /// This function is complicated only by the fact that OpenRouter and Azure require
@@ -1270,6 +1270,20 @@ impl<'a> From<&'a ToolConfig> for OpenRouterTool<'a> {
     }
 }
 
+impl<'a> From<ChatCompletionTool<'a>> for OpenRouterTool<'a> {
+    fn from(tool: ChatCompletionTool<'a>) -> Self {
+        OpenRouterTool {
+            r#type: OpenRouterToolType::Function,
+            function: OpenRouterFunction {
+                name: tool.function.name,
+                description: tool.function.description,
+                parameters: tool.function.parameters,
+            },
+            strict: tool.strict,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(untagged)]
 pub(super) enum OpenRouterToolChoice<'a> {
@@ -1315,6 +1329,55 @@ impl<'a> From<&'a ToolChoice> for OpenRouterToolChoice<'a> {
                 r#type: OpenRouterToolType::Function,
                 function: SpecificToolFunction { name: tool_name },
             }),
+        }
+    }
+}
+
+impl<'a> From<ChatCompletionToolChoice<'a>> for OpenRouterToolChoice<'a> {
+    fn from(tool_choice: ChatCompletionToolChoice<'a>) -> Self {
+        match tool_choice {
+            ChatCompletionToolChoice::String(tc_string) => match tc_string {
+                ChatCompletionToolChoiceString::None => {
+                    OpenRouterToolChoice::String(OpenRouterToolChoiceString::None)
+                }
+                ChatCompletionToolChoiceString::Auto => {
+                    OpenRouterToolChoice::String(OpenRouterToolChoiceString::Auto)
+                }
+                ChatCompletionToolChoiceString::Required => {
+                    OpenRouterToolChoice::String(OpenRouterToolChoiceString::Required)
+                }
+            },
+            ChatCompletionToolChoice::Specific(specific) => {
+                OpenRouterToolChoice::Specific(SpecificToolChoice {
+                    r#type: OpenRouterToolType::Function,
+                    function: SpecificToolFunction {
+                        name: specific.function.name,
+                    },
+                })
+            }
+            ChatCompletionToolChoice::AllowedTools(allowed_tools) => {
+                // Convert from common ChatCompletionAllowedToolsChoice to OpenAI AllowedToolsChoice
+                OpenRouterToolChoice::AllowedTools(OpenAIAllowedToolsChoice {
+                    r#type: allowed_tools.r#type,
+                    allowed_tools: OpenAIAllowedToolsConstraint {
+                        mode: match allowed_tools.allowed_tools.mode {
+                            ChatCompletionAllowedToolsMode::Auto => AllowedToolsMode::Auto,
+                            ChatCompletionAllowedToolsMode::Required => AllowedToolsMode::Required,
+                        },
+                        tools: allowed_tools
+                            .allowed_tools
+                            .tools
+                            .into_iter()
+                            .map(|tool_ref| ToolReference {
+                                r#type: OpenAIToolType::Function,
+                                function: OpenAISpecificToolFunction {
+                                    name: tool_ref.function.name,
+                                },
+                            })
+                            .collect(),
+                    },
+                })
+            }
         }
     }
 }

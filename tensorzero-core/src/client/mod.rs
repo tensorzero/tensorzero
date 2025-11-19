@@ -19,7 +19,7 @@ use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use std::fmt::Debug;
 use thiserror::Error;
-use tokio::{sync::Mutex, time::error::Elapsed};
+use tokio::time::error::Elapsed;
 use tokio_stream::StreamExt;
 use url::Url;
 
@@ -73,45 +73,9 @@ pub struct HTTPGateway {
     headers: HeaderMap,
     timeout: Option<Duration>,
     verbose_errors: bool,
-    pub gateway_version: Mutex<Option<String>>, // Needs interior mutability so it can be set on every request
 }
 
 impl HTTPGateway {
-    /// Sets the gateway version on the HTTPGateway struct.
-    /// This should be called if the HTTPGateway is constructed within an async context.
-    pub async fn discover_initialize_gateway_version(&self) -> Result<(), ClientBuilderError> {
-        let status_url = self.base_url.join("status").map_err(|_| {
-            ClientBuilderError::GatewayVersion("Failed to construct /status URL".to_string())
-        })?;
-        // If the client is initialized and the ping for version fails, we simply don't set it.
-        let status_response = match self.http_client.get(status_url).send().await {
-            Ok(status_response) => status_response,
-            Err(_) => return Ok(()),
-        };
-
-        self.update_gateway_version_from_headers(status_response.headers())
-            .await;
-
-        Ok(())
-    }
-
-    async fn update_gateway_version_from_headers(&self, headers: &HeaderMap) {
-        let mut version = headers
-            .get("x-tensorzero-gateway-version")
-            .and_then(|v| v.to_str().ok())
-            .map(str::to_string);
-        if cfg!(feature = "e2e_tests") {
-            if let Ok(version_override) = env::var("TENSORZERO_E2E_GATEWAY_VERSION_OVERRIDE") {
-                version = Some(version_override);
-            }
-        };
-        if let Some(version) = version {
-            // Acquire the lock on the gateway version
-            let mut gateway_version = self.gateway_version.lock().await;
-            *gateway_version = Some(version);
-        }
-    }
-
     pub async fn check_http_response(
         &self,
         resp: Result<reqwest::Response, reqwest::Error>,
@@ -134,9 +98,6 @@ impl HTTPGateway {
                 }
             }
         })?;
-
-        self.update_gateway_version_from_headers(resp.headers())
-            .await;
 
         if let Err(e) = resp.error_for_status_ref() {
             let status_code = resp.status().as_u16();
@@ -387,9 +348,6 @@ impl ClientBuilder {
         match &self.mode {
             ClientBuilderMode::HTTPGateway { .. } => {
                 let client = self.build_http()?;
-                if let ClientMode::HTTPGateway(mode) = &*client.mode {
-                    mode.discover_initialize_gateway_version().await?;
-                }
                 Ok(client)
             }
             ClientBuilderMode::EmbeddedGateway {
@@ -644,7 +602,6 @@ impl ClientBuilder {
             mode: Arc::new(ClientMode::HTTPGateway(HTTPGateway {
                 base_url: url,
                 http_client,
-                gateway_version: Mutex::new(None),
                 headers,
                 timeout: self.timeout,
                 verbose_errors: self.verbose_errors,
@@ -662,7 +619,7 @@ pub struct Client {
     mode: Arc<ClientMode>,
     pub verbose_errors: bool,
     #[cfg(feature = "e2e_tests")]
-    pub last_body: Arc<Mutex<Option<String>>>,
+    pub last_body: Arc<tokio::sync::Mutex<Option<String>>>,
 }
 
 impl StoragePathResolver for Client {
@@ -956,14 +913,6 @@ impl Client {
                 }
             }
         }))
-    }
-
-    #[cfg(feature = "e2e_tests")]
-    pub async fn get_gateway_version(&self) -> Option<String> {
-        match &*self.mode {
-            ClientMode::HTTPGateway(client) => client.gateway_version.lock().await.clone(),
-            ClientMode::EmbeddedGateway { .. } => None,
-        }
     }
 }
 
