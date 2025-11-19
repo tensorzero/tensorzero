@@ -14,8 +14,8 @@ from pytest import FixtureRequest
 from tensorzero import (
     AsyncTensorZeroGateway,
     ChatDatapointInsert,
-    ClientSideFunctionTool,
     ContentBlockChatOutputText,
+    FunctionTool,
     JsonDatapointInsert,
     JsonInferenceOutput,
     RenderedSample,
@@ -124,7 +124,7 @@ def mixed_rendered_samples(
         inference_id=str(uuid7()),
         timestamp=datetime.now(timezone.utc).isoformat(),
         additional_tools=[
-            ClientSideFunctionTool(
+            FunctionTool(
                 name="test",
                 description="test",
                 parameters={

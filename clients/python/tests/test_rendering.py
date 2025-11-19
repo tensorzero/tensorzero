@@ -3,9 +3,9 @@ from datetime import datetime, timezone
 import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
-    ClientSideFunctionTool,
     ContentBlockChatOutputText,
     FileBase64,
+    FunctionTool,
     JsonInferenceOutput,
     StorageKindS3Compatible,
     StoragePath,
@@ -89,7 +89,7 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
                 additional_tools=[
-                    ClientSideFunctionTool(
+                    FunctionTool(
                         name="test",
                         description="test",
                         parameters={"foo": "bar"},
@@ -446,7 +446,7 @@ async def test_async_render_samples_success(
                 episode_id=str(uuid7()),
                 inference_id=str(uuid7()),
                 additional_tools=[
-                    ClientSideFunctionTool(
+                    FunctionTool(
                         name="test",
                         description="test",
                         parameters={"foo": "bar"},
