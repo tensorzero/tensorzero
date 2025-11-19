@@ -754,6 +754,10 @@ model = "responses-gpt-4o-mini-2024-07-18"
 type = "chat_completion"
 model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite"
 
+[functions.pdf_test.variants.gcp_vertex_anthropic]
+type = "chat_completion"
+model = "gcp_vertex_anthropic::projects/tensorzero-public/locations/global/publishers/anthropic/models/claude-sonnet-4-5@20250929"
+
 [functions.pdf_test.variants.google_ai_studio]
 type = "chat_completion"
 model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
@@ -9128,7 +9132,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         },
         stream: Some(false),
         dynamic_tool_params: tensorzero::DynamicToolParams {
-            additional_tools: Some(vec![tensorzero::ClientSideFunctionTool {
+            additional_tools: Some(vec![tensorzero::FunctionTool {
                 name: "get_temperature".to_string(),
                 description: "Get the current temperature in a given location".to_string(),
                 parameters: json!({
@@ -9437,7 +9441,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         },
         stream: Some(true),
         dynamic_tool_params: tensorzero::DynamicToolParams {
-            additional_tools: Some(vec![tensorzero::ClientSideFunctionTool {
+            additional_tools: Some(vec![tensorzero::FunctionTool {
                 name: "get_temperature".to_string(),
                 description: "Get the current temperature in a given location".to_string(),
                 parameters: json!({

@@ -75,7 +75,7 @@ from uuid_utils import uuid7
 
 TEST_CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "../../../tensorzero-core/tests/e2e/tensorzero.toml",
+    "../../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
 )
 
 # Test image with File block
@@ -2819,7 +2819,7 @@ def test_patch_openai_client_with_config():
     client = OpenAI()
     tensorzero.patch_openai_client(
         client,
-        config_file="../../tensorzero-core/tests/e2e/tensorzero.toml",
+        config_file="../../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         async_setup=False,
     )
     response = client.chat.completions.create(

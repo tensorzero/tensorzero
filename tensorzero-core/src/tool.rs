@@ -49,12 +49,12 @@ use strum::AsRefStr;
  */
 
 /// `Tool` is the generic form for all tools that TensorZero itself manages.
-/// Today, this is only ClientSideFunctionTools (the original kind), but soon we'll
+/// Today, this is only FunctionTools (the original kind), but soon we'll
 /// implement OpenAI's custom tools standard, MCP, and potentially more.
 /// We store this type (serialized) in the Array(String) in the `dynamic_tools` column
 /// in the ChatInference, ChatInferenceDatapoint, and BatchModelInference tables.
 /// Most likely, this will eventually become the wire type too with a custom deserializer
-/// so that folks can specify ClientSideFunctionTools without tags but then can
+/// so that folks can specify FunctionTools without tags but then can
 /// add tags and specify other kinds of tool.
 ///
 /// Notably, provider tools (like OpenAI websearch) are not part of this enum
@@ -65,7 +65,7 @@ use strum::AsRefStr;
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum Tool {
-    ClientSideFunction(ClientSideFunctionTool),
+    ClientSideFunction(FunctionTool),
 }
 
 impl std::fmt::Display for Tool {
@@ -143,7 +143,7 @@ impl Tool {
     }
 }
 
-/// `ClientSideFunctionTool` is a particular kind of tool that relies
+/// `FunctionTool` is a particular kind of tool that relies
 /// on the client to execute a function on their side (a ToolCall content block)
 /// and return the result on the next turn (a ToolCallResult).
 /// Notably, we assume there is a JSON schema `parameters` that specifies the
@@ -153,7 +153,7 @@ impl Tool {
 #[serde(deny_unknown_fields)]
 #[export_schema]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-pub struct ClientSideFunctionTool {
+pub struct FunctionTool {
     pub description: String,
     pub parameters: Value,
     pub name: String,
@@ -166,7 +166,7 @@ pub struct ClientSideFunctionTool {
     pub strict: bool,
 }
 
-impl std::fmt::Display for ClientSideFunctionTool {
+impl std::fmt::Display for FunctionTool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -175,7 +175,7 @@ impl std::fmt::Display for ClientSideFunctionTool {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl ClientSideFunctionTool {
+impl FunctionTool {
     #[getter]
     pub fn get_parameters<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         serialize_to_dict(py, self.parameters.clone()).map(|x| x.into_bound(py))
@@ -1135,7 +1135,7 @@ impl ToolCallConfigDatabaseInsert {
             .iter()
             .filter_map(|tool_name| {
                 config.tools.get(tool_name).map(|static_tool| {
-                    Tool::ClientSideFunction(ClientSideFunctionTool {
+                    Tool::ClientSideFunction(FunctionTool {
                         description: static_tool.description.clone(),
                         parameters: static_tool.parameters.value.clone(),
                         name: static_tool.name.clone(),
@@ -1212,7 +1212,7 @@ pub fn apply_dynamic_tool_params_update_to_tool_call_config(
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct LegacyToolCallConfigDatabaseInsert {
     /// All tools available for this inference (merged static + dynamic tools)
-    pub tools_available: Vec<ClientSideFunctionTool>,
+    pub tools_available: Vec<FunctionTool>,
     /// The tool choice strategy
     pub tool_choice: ToolChoice,
     // TODO: decide what we want the Python interface to be for ToolChoice
@@ -1301,7 +1301,7 @@ pub struct DynamicToolParams {
     /// Tools that the user provided at inference time (not in function config), in addition to the function-configured
     /// tools, that are also allowed.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub additional_tools: Option<Vec<ClientSideFunctionTool>>,
+    pub additional_tools: Option<Vec<FunctionTool>>,
 
     /// User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
     /// Optional.
@@ -1334,7 +1334,7 @@ impl DynamicToolParams {
     }
 
     #[getter]
-    pub fn additional_tools(&self) -> Option<Vec<ClientSideFunctionTool>> {
+    pub fn additional_tools(&self) -> Option<Vec<FunctionTool>> {
         self.additional_tools.clone()
     }
 
@@ -1404,7 +1404,7 @@ impl From<ToolCallConfigDatabaseInsert> for DynamicToolParams {
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct BatchDynamicToolParams {
     pub allowed_tools: Option<Vec<Option<Vec<String>>>>,
-    pub additional_tools: Option<Vec<Option<Vec<ClientSideFunctionTool>>>>,
+    pub additional_tools: Option<Vec<Option<Vec<FunctionTool>>>>,
     pub tool_choice: Option<Vec<Option<ToolChoice>>>,
     pub parallel_tool_calls: Option<Vec<Option<bool>>>,
     pub provider_tools: Option<Vec<Option<Vec<ProviderTool>>>>,
@@ -1734,9 +1734,9 @@ fn tool_call_config_to_legacy_tool_database_insert(
 }
 
 // For now, this is required to convert to LegacyToolCallConfigDatabaseInsert for writing to the databse
-impl From<ToolConfig> for ClientSideFunctionTool {
+impl From<ToolConfig> for FunctionTool {
     fn from(tool_config: ToolConfig) -> Self {
-        ClientSideFunctionTool {
+        FunctionTool {
             description: tool_config.description().to_string(),
             parameters: tool_config.parameters().clone(),
             name: tool_config.name().to_string(),
@@ -1774,7 +1774,7 @@ impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
 
 impl From<ToolConfig> for Tool {
     fn from(tool_config: ToolConfig) -> Self {
-        Self::ClientSideFunction(ClientSideFunctionTool {
+        Self::ClientSideFunction(FunctionTool {
             description: tool_config.description().to_string(),
             parameters: tool_config.parameters().clone(),
             name: tool_config.name().to_string(),
@@ -2099,7 +2099,7 @@ mod tests {
         // All function tools are still included, plus the dynamic tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![ClientSideFunctionTool {
+            additional_tools: Some(vec![FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({}),
@@ -2132,7 +2132,7 @@ mod tests {
         // All function tools are still included, plus the dynamic tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![ClientSideFunctionTool {
+            additional_tools: Some(vec![FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({}),
@@ -2167,7 +2167,7 @@ mod tests {
         // All function tools are still included, plus the dynamic tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![ClientSideFunctionTool {
+            additional_tools: Some(vec![FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({}),
@@ -2278,7 +2278,7 @@ mod tests {
             Some(true),
             &TOOLS,
             DynamicToolParams {
-                additional_tools: Some(vec![ClientSideFunctionTool {
+                additional_tools: Some(vec![FunctionTool {
                     name: "establish_campground".to_string(),
                     description: "Establish a campground".to_string(),
                     parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}),
@@ -2417,7 +2417,7 @@ mod tests {
     async fn test_duplicate_tool_names_error() {
         // Test case where dynamic tool params add a tool with the same name as a static tool
         let dynamic_tool_params = DynamicToolParams {
-            additional_tools: Some(vec![ClientSideFunctionTool {
+            additional_tools: Some(vec![FunctionTool {
                 name: "get_temperature".to_string(), // Same name as static tool
                 description: "Another temperature tool".to_string(),
                 parameters: json!({
@@ -2515,7 +2515,7 @@ mod tests {
                 "get_temperature".to_string(),
                 "establish_campground".to_string(),
             ]),
-            additional_tools: Some(vec![ClientSideFunctionTool {
+            additional_tools: Some(vec![FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
@@ -2570,7 +2570,7 @@ mod tests {
                 "get_temperature".to_string(),
                 "nonexistent_tool".to_string(),
             ]),
-            additional_tools: Some(vec![ClientSideFunctionTool {
+            additional_tools: Some(vec![FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({"type": "object"}),
@@ -2603,7 +2603,7 @@ mod tests {
         // when allowed_tools is explicitly set (AllAllowedTools mode)
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![ClientSideFunctionTool {
+            additional_tools: Some(vec![FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
@@ -3301,7 +3301,7 @@ mod tests {
                 "query_articles".to_string(),       // config-only
                 "establish_campground".to_string(), // dynamic
             ]),
-            additional_tools: Some(vec![ClientSideFunctionTool {
+            additional_tools: Some(vec![FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
@@ -3361,8 +3361,8 @@ mod tests {
     mod tool_params_conversion_tests {
         use super::*;
 
-        fn create_test_tool(name: &str, strict: bool) -> ClientSideFunctionTool {
-            ClientSideFunctionTool {
+        fn create_test_tool(name: &str, strict: bool) -> FunctionTool {
+            FunctionTool {
                 name: name.to_string(),
                 description: format!("Description for {name}"),
                 parameters: json!({"type": "object", "properties": {"input": {"type": "string"}}}),
@@ -3538,7 +3538,7 @@ mod tests {
 
         #[test]
         fn test_tool_metadata_preservation() {
-            let tool = ClientSideFunctionTool {
+            let tool = FunctionTool {
                 name: "test_tool".to_string(),
                 description: "A detailed description".to_string(),
                 parameters: json!({

@@ -790,7 +790,7 @@ mod tests {
     mod prepare_update_tests {
         use crate::{
             endpoints::datasets::v1::types::UpdateDynamicToolParamsRequest,
-            tool::{ClientSideFunctionTool, Tool},
+            tool::{FunctionTool, Tool},
         };
 
         use super::*;
@@ -1130,7 +1130,7 @@ mod tests {
             // Create DynamicToolParams directly instead of round-tripping through database_insert_to_dynamic_tool_params
             // This represents a user setting allowed_tools to an empty list with tool_choice None
             // When there are no tools available, the result should be None (tools disabled)
-            let new_client_side_function_tool = ClientSideFunctionTool {
+            let new_client_side_function_tool = FunctionTool {
                 name: "test_tool".to_string(),
                 description: "Test tool".to_string(),
                 parameters: json!({}),

@@ -108,7 +108,7 @@ services:
       VLLM_API_KEY: ${VLLM_API_KEY:-}
       VOYAGE_API_KEY: ${VOYAGE_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
-    command: [--config-file, tensorzero-core/tests/e2e/tensorzero.toml]
+    command: [--config-file, tensorzero-core/tests/e2e/config/tensorzero.*.toml]
     volumes:
       # Mount the e2e directory so the config path exists inside the container
       - ./:/app/tensorzero-core/tests/e2e:ro
@@ -230,7 +230,7 @@ services:
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
     volumes:
       - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
-      - ./tensorzero.toml:/app/tensorzero-core/tests/e2e/tensorzero.toml:ro
+      - ./config:/app/tensorzero-core/tests/e2e/config:ro
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
       - ../../../target/nextest:/app/target/nextest

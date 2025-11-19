@@ -191,6 +191,7 @@ class OptimizationJobHandle:
     FireworksSFT: Type["OptimizationJobHandle"]
     GCPVertexGeminiSFT: Type["OptimizationJobHandle"]
     TogetherSFT: Type["OptimizationJobHandle"]
+    GEPA: Type["OptimizationJobHandle"]
 
 @final
 class OptimizationJobStatus:
@@ -206,6 +207,7 @@ class OptimizationJobInfo:
     FireworksSFT: Type["OptimizationJobInfo"]
     GCPVertexGeminiSFT: Type["OptimizationJobInfo"]
     TogetherSFT: Type["OptimizationJobInfo"]
+    GEPA: Type["OptimizationJobInfo"]
     @property
     def message(self) -> str: ...
     @property
@@ -971,6 +973,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         concurrency: int = 1,
         inference_cache: str = "on",
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        max_datapoints: Optional[int] = None,
+        adaptive_stopping: Optional[Dict[str, Dict[str, float]]] = None,
     ) -> EvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -982,6 +986,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
         :param internal_dynamic_variant_config: Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
+        :param max_datapoints: Maximum number of datapoints to evaluate from the dataset
+        :param adaptive_stopping: Optional dict configuring adaptive stopping behavior. Example: {"precision": {"exact_match": 0.2, "llm_judge": 0.15}}. The "precision" field maps evaluator names to CI half-width thresholds.
         :return: An EvaluationJobHandler for iterating over evaluation results
         """
         ...
@@ -1508,6 +1514,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         concurrency: int = 1,
         inference_cache: str = "on",
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
+        max_datapoints: Optional[int] = None,
+        adaptive_stopping: Optional[Dict[str, Dict[str, float]]] = None,
     ) -> AsyncEvaluationJobHandler:
         """
         Run an evaluation for a specific variant on a dataset.
@@ -1519,6 +1527,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
         :param internal_dynamic_variant_config: Optional dynamic variant configuration [INTERNAL: This field is unstable and may change without notice.]
+        :param max_datapoints: Maximum number of datapoints to evaluate from the dataset
+        :param adaptive_stopping: Optional dict configuring adaptive stopping behavior. Example: {"precision": {"exact_match": 0.2, "llm_judge": 0.15}}. The "precision" field maps evaluator names to CI half-width thresholds.
         :return: An AsyncEvaluationJobHandler for iterating over evaluation results
         """
         ...

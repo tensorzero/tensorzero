@@ -40,7 +40,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
     let datapoint_id = Uuid::now_v7();
 
     // Define custom dynamic tool (same as inference tests for consistency)
-    let custom_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let custom_tool = tensorzero_core::tool::FunctionTool {
         name: "custom_weather_tool".to_string(),
         description: "A custom tool added dynamically".to_string(),
         parameters: serde_json::from_value(json!({
@@ -56,7 +56,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
     };
 
     // Get the static tool from function config to create proper ToolCallConfigDatabaseInsert
-    let get_temp_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let get_temp_tool = tensorzero_core::tool::FunctionTool {
         name: "get_temperature".to_string(),
         description: "Get the current temperature in a given location".to_string(),
         parameters: serde_json::from_value(json!({
@@ -197,7 +197,7 @@ async fn test_datapoint_update_tool_params() {
     let original_id = Uuid::now_v7();
 
     // Create original datapoint with initial tool_params
-    let get_temp_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let get_temp_tool = tensorzero_core::tool::FunctionTool {
         name: "get_temperature".to_string(),
         description: "Get the current temperature in a given location".to_string(),
         parameters: serde_json::from_value(json!({
@@ -355,7 +355,7 @@ async fn test_list_datapoints_with_tool_params() {
     let dp2_id = Uuid::now_v7();
     let dp3_id = Uuid::now_v7();
 
-    let base_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let base_tool = tensorzero_core::tool::FunctionTool {
         name: "get_temperature".to_string(),
         description: "Get temperature".to_string(),
         parameters: serde_json::from_value(json!({
@@ -367,7 +367,7 @@ async fn test_list_datapoints_with_tool_params() {
         strict: false,
     };
 
-    let custom_tool_1 = tensorzero_core::tool::ClientSideFunctionTool {
+    let custom_tool_1 = tensorzero_core::tool::FunctionTool {
         name: "tool_1".to_string(),
         description: "First tool".to_string(),
         parameters: serde_json::from_value(json!({
@@ -378,7 +378,7 @@ async fn test_list_datapoints_with_tool_params() {
         strict: false,
     };
 
-    let custom_tool_2 = tensorzero_core::tool::ClientSideFunctionTool {
+    let custom_tool_2 = tensorzero_core::tool::FunctionTool {
         name: "tool_2".to_string(),
         description: "Second tool".to_string(),
         parameters: serde_json::from_value(json!({
@@ -571,7 +571,7 @@ async fn test_datapoint_only_static_tools() {
     let dataset_name = format!("test-dp-static-{}", Uuid::now_v7());
     let datapoint_id = Uuid::now_v7();
 
-    let static_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let static_tool = tensorzero_core::tool::FunctionTool {
         name: "get_temperature".to_string(),
         description: "Get temperature".to_string(),
         parameters: serde_json::from_value(json!({
@@ -660,7 +660,7 @@ async fn test_datapoint_only_dynamic_tools() {
     let datapoint_id = Uuid::now_v7();
 
     // Include both static tool from config AND dynamic tool in storage
-    let static_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let static_tool = tensorzero_core::tool::FunctionTool {
         name: "get_temperature".to_string(),
         description: "Get temperature".to_string(),
         parameters: serde_json::from_value(json!({
@@ -672,7 +672,7 @@ async fn test_datapoint_only_dynamic_tools() {
         strict: false,
     };
 
-    let dynamic_tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let dynamic_tool = tensorzero_core::tool::FunctionTool {
         name: "runtime_tool".to_string(),
         description: "A tool only available at runtime".to_string(),
         parameters: serde_json::from_value(json!({
@@ -767,7 +767,7 @@ async fn test_datapoint_tool_params_three_states() {
 
     // Create datapoint with tool_params
     let original_id = Uuid::now_v7();
-    let tool = tensorzero_core::tool::ClientSideFunctionTool {
+    let tool = tensorzero_core::tool::FunctionTool {
         name: "get_temperature".to_string(),
         description: "Get temperature".to_string(),
         parameters: serde_json::from_value(json!({
