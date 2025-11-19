@@ -16,7 +16,7 @@ use crate::inference::types::pyo3_helpers::{
 };
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{
-    ContentBlockChatOutput, Input, JsonInferenceOutput, ModelInput, RequestMessage, ResolvedInput,
+    ContentBlockChatOutput, JsonInferenceOutput, ModelInput, RequestMessage, ResolvedInput,
     ResolvedRequestMessage, Text,
 };
 use crate::tool::{
@@ -471,16 +471,8 @@ impl RenderedSample {
     ///
     /// The type discrimination (Chat vs JSON) is based on the stored_output enum variant.
     pub fn into_create_datapoint_request(self) -> Result<CreateDatapointRequest, Error> {
-        // Convert StoredInput to Input via JSON round-trip
-        // This is necessary because StoredInput is the database representation
-        // while Input is the API representation
-        let input: Input = serde_json::to_value(&self.stored_input)
-            .and_then(serde_json::from_value)
-            .map_err(|e| {
-                Error::new(ErrorDetails::InternalError {
-                    message: format!("Failed to convert stored input to input: {e}"),
-                })
-            })?;
+        // Convert StoredInput to Input
+        let input = self.stored_input.into_input();
 
         // Use stored_output to determine whether this is a Chat or JSON datapoint
         match self.stored_output {
