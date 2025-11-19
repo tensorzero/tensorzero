@@ -108,7 +108,7 @@ pub async fn test_dicl_optimization_chat() {
         .unwrap();
 
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("../tensorzero-core/tests/e2e/tensorzero.toml");
+    config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
     let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
@@ -392,7 +392,7 @@ pub async fn test_dicl_optimization_json() {
         .unwrap();
 
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("../tensorzero-core/tests/e2e/tensorzero.toml");
+    config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
     let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
