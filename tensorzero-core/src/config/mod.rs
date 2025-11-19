@@ -88,7 +88,7 @@ pub fn skip_credential_validation() -> bool {
 #[cfg_attr(any(test, feature = "e2e_tests"), derive(Default))]
 pub struct Config {
     pub gateway: GatewayConfig,
-    pub models: Arc<ModelTable>, // model name => model config
+    pub models: Arc<ModelTable>, // model name => model confi
     pub embedding_models: Arc<EmbeddingModelTable>, // embedding model name => embedding model config
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
     pub metrics: HashMap<String, MetricConfig>,     // metric name => metric config
