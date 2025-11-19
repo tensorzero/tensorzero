@@ -31,7 +31,10 @@ import { Output } from "~/components/inference/Output";
 import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import { formatMetricSummaryValue } from "~/utils/config/feedback";
+import {
+  formatMetricSummaryValue,
+  formatConfidenceInterval,
+} from "~/utils/config/feedback";
 import type {
   EvaluatorConfig,
   MetricConfig,
@@ -792,12 +795,12 @@ const EvaluatorProperties = ({
                 ></div>
                 <span>
                   {formatMetricSummaryValue(stat.mean_metric, metricConfig)}
-                  {stat.stderr_metric ? (
+                  {stat.ci_lower != null && stat.ci_upper != null ? (
                     <>
                       {" "}
-                      ±{" "}
-                      {formatMetricSummaryValue(
-                        stat.stderr_metric,
+                      {formatConfidenceInterval(
+                        stat.ci_lower,
+                        stat.ci_upper,
                         metricConfig,
                       )}
                     </>

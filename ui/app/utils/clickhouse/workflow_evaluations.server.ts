@@ -1,6 +1,11 @@
 import { getClickhouseClient } from "./client.server";
 import { CountSchema } from "./common";
-import { waldConfidenceInterval, wilsonConfidenceInterval } from "./helpers";
+import {
+  waldConfidenceIntervalLower,
+  waldConfidenceIntervalUpper,
+  wilsonConfidenceIntervalLower,
+  wilsonConfidenceIntervalUpper,
+} from "./helpers";
 import {
   workflowEvaluationProjectSchema,
   workflowEvaluationRunEpisodeWithFeedbackSchema,
@@ -258,7 +263,8 @@ export async function getWorkflowEvaluationRunStatisticsByMetricName(
       toUInt32(count()) as count,
       avg(value) as avg_metric,
       stddevSamp(value) as stdev,
-      ${waldConfidenceInterval("value")} AS ci_error
+      ${waldConfidenceIntervalLower("value")} AS ci_lower,
+      ${waldConfidenceIntervalUpper("value")} AS ci_upper
     FROM FloatMetricFeedbackByTargetId
     WHERE target_id IN (
       SELECT uint_to_uuid(episode_id_uint) FROM episodes
@@ -271,7 +277,8 @@ export async function getWorkflowEvaluationRunStatisticsByMetricName(
       toUInt32(count()) as count,
       avg(value) as avg_metric,
       stddevSamp(value) as stdev,
-      ${wilsonConfidenceInterval("value")} AS ci_error
+      ${wilsonConfidenceIntervalLower("value")} AS ci_lower,
+      ${wilsonConfidenceIntervalUpper("value")} AS ci_upper
     FROM BooleanMetricFeedbackByTargetId
     WHERE target_id IN (
       SELECT uint_to_uuid(episode_id_uint) FROM episodes

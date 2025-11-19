@@ -305,14 +305,19 @@ describe("getEvaluationStatistics", () => {
     );
     expect(statistics[0].datapoint_count).toBe(77);
     expect(statistics[0].mean_metric).toBeCloseTo(0);
-    expect(statistics[0].stderr_metric).toBeCloseTo(0);
+    // With mean = 0 and Wilson CI, bounds should be around 0
+    expect(statistics[0].ci_lower).toBe(0);
+    expect(statistics[0].ci_upper).toBeGreaterThan(0);
+    expect(statistics[0].ci_upper).toBeLessThan(0.1);
     expect(statistics[1].evaluation_run_id).toBe(evaluation_run_id);
     expect(statistics[1].metric_name).toBe(
       "tensorzero::evaluation_name::haiku::evaluator_name::topic_starts_with_f",
     );
     expect(statistics[1].datapoint_count).toBe(77);
     expect(statistics[1].mean_metric).toBeCloseTo(0.064);
-    expect(statistics[1].stderr_metric).toBeCloseTo(0.028);
+    // CI bounds should bracket the mean
+    expect(statistics[1].ci_lower).toBeLessThan(statistics[1].mean_metric);
+    expect(statistics[1].ci_upper).toBeGreaterThan(statistics[1].mean_metric);
   });
 
   test("should return correct statistics for entity_extraction evaluation", async () => {
@@ -334,7 +339,9 @@ describe("getEvaluationStatistics", () => {
     );
     expect(statistics[0].datapoint_count).toBe(41);
     expect(statistics[0].mean_metric).toBeCloseTo(0.78);
-    expect(statistics[0].stderr_metric).toBeCloseTo(0.07);
+    // CI bounds should bracket the mean
+    expect(statistics[0].ci_lower).toBeLessThan(statistics[0].mean_metric);
+    expect(statistics[0].ci_upper).toBeGreaterThan(statistics[0].mean_metric);
 
     expect(statistics[1].evaluation_run_id).toBe(evaluation_run_id1);
     expect(statistics[1].metric_name).toBe(
@@ -342,7 +349,9 @@ describe("getEvaluationStatistics", () => {
     );
     expect(statistics[1].datapoint_count).toBe(41);
     expect(statistics[1].mean_metric).toBeCloseTo(0.1);
-    expect(statistics[1].stderr_metric).toBeCloseTo(0.05);
+    // CI bounds should bracket the mean
+    expect(statistics[1].ci_lower).toBeLessThan(statistics[1].mean_metric);
+    expect(statistics[1].ci_upper).toBeGreaterThan(statistics[1].mean_metric);
 
     expect(statistics[2].evaluation_run_id).toBe(evaluation_run_id2);
     expect(statistics[2].metric_name).toBe(
@@ -350,7 +359,9 @@ describe("getEvaluationStatistics", () => {
     );
     expect(statistics[2].datapoint_count).toBe(42);
     expect(statistics[2].mean_metric).toBeCloseTo(0.762);
-    expect(statistics[2].stderr_metric).toBeCloseTo(0.0665);
+    // CI bounds should bracket the mean
+    expect(statistics[2].ci_lower).toBeLessThan(statistics[2].mean_metric);
+    expect(statistics[2].ci_upper).toBeGreaterThan(statistics[2].mean_metric);
 
     expect(statistics[3].evaluation_run_id).toBe(evaluation_run_id2);
     expect(statistics[3].metric_name).toBe(
@@ -358,7 +369,9 @@ describe("getEvaluationStatistics", () => {
     );
     expect(statistics[3].datapoint_count).toBe(42);
     expect(statistics[3].mean_metric).toBeCloseTo(0.524);
-    expect(statistics[3].stderr_metric).toBeCloseTo(0.08);
+    // CI bounds should bracket the mean
+    expect(statistics[3].ci_lower).toBeLessThan(statistics[3].mean_metric);
+    expect(statistics[3].ci_upper).toBeGreaterThan(statistics[3].mean_metric);
   });
 });
 

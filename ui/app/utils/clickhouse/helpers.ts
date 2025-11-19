@@ -88,31 +88,43 @@ export function getStaledWindowQuery(run_timestamps: Date[]): string {
 }
 
 /**
- * Generates a ClickHouse SQL expression for computing the 95% Wald confidence interval half-width.
- * Wald CI uses the normal approximation: 1.96 * (stddev / sqrt(n))
+ * Generates a ClickHouse SQL expression for computing the lower bound of a 95% Wald confidence interval.
+ * Wald CI uses the normal approximation: mean ± 1.96 * (stddev / sqrt(n))
+ *
+ * Use this for float-valued metrics in evaluators.
+ *
+ * @param valueExpr - SQL expression for the values to compute CI over (e.g., "value", "f.value")
+ * @returns SQL expression that computes the CI lower bound (suitable for use in SELECT)
+ */
+export function waldConfidenceIntervalLower(valueExpr: string): string {
+  return `avg(${valueExpr}) - 1.96 * (stddevSamp(${valueExpr}) / sqrt(count()))`;
+}
+
+/**
+ * Generates a ClickHouse SQL expression for computing the upper bound of a 95% Wald confidence interval.
+ * Wald CI uses the normal approximation: mean ± 1.96 * (stddev / sqrt(n))
  *
  * Use this for float-valued metrics.
  *
  * @param valueExpr - SQL expression for the values to compute CI over (e.g., "value", "f.value")
- * @returns SQL expression that computes the CI half-width (suitable for use in SELECT)
+ * @returns SQL expression that computes the CI upper bound (suitable for use in SELECT)
  */
-export function waldConfidenceInterval(valueExpr: string): string {
-  return `1.96 * (stddevSamp(${valueExpr}) / sqrt(count()))`;
+export function waldConfidenceIntervalUpper(valueExpr: string): string {
+  return `avg(${valueExpr}) + 1.96 * (stddevSamp(${valueExpr}) / sqrt(count()))`;
 }
 
 /**
- * Generates a ClickHouse SQL expression for computing the 95% Wilson confidence interval half-width.
+ * Generates a ClickHouse SQL expression for computing the lower bound of a 95% Wilson confidence interval.
  * Wilson CI is more accurate for binary/Bernoulli data, especially with extreme proportions.
  *
  * Use this for boolean-valued metrics (values that are 0 or 1).
  *
- * Formula: max(|p - lower|, |upper - p|) where lower and upper are the Wilson interval bounds
  * Wilson interval: (p̂ + z²/(2n) ± z·√[p̂(1-p̂)/n + z²/(4n²)]) / (1 + z²/n)
  *
  * @param valueExpr - SQL expression for the values (should be 0 or 1 for boolean metrics)
- * @returns SQL expression that computes the CI half-width (suitable for use in SELECT)
+ * @returns SQL expression that computes the CI lower bound, clamped to [0, 1] (suitable for use in SELECT)
  */
-export function wilsonConfidenceInterval(valueExpr: string): string {
+export function wilsonConfidenceIntervalLower(valueExpr: string): string {
   const z = 1.96;
   const zSquared = z * z;
 
@@ -126,15 +138,41 @@ export function wilsonConfidenceInterval(valueExpr: string): string {
   // center = p + z²/(2n)
   const center = `${p} + ${zSquared} / (2.0 * ${n})`;
 
-  // margin = z * sqrt(p(1-p)/n + z²/(4n²)) / 2
+  // margin = z * sqrt(p(1-p)/n + z²/(4n²))
   const margin = `${z} * sqrt((${p} * (1.0 - ${p})) / ${n} + ${zSquared} / (4.0 * ${n} * ${n}))`;
 
   // lower = (center - margin) * scale, clamped to [0, 1]
-  const lower = `greatest(0.0, least(1.0, (${center} - ${margin}) * ${scale}))`;
+  return `greatest(0.0, least(1.0, (${center} - ${margin}) * ${scale}))`;
+}
+
+/**
+ * Generates a ClickHouse SQL expression for computing the upper bound of a 95% Wilson confidence interval.
+ * Wilson CI is more accurate for binary/Bernoulli data, especially with extreme proportions.
+ *
+ * Use this for boolean-valued metrics (values that are 0 or 1).
+ *
+ * Wilson interval: (p̂ + z²/(2n) ± z·√[p̂(1-p̂)/n + z²/(4n²)]) / (1 + z²/n)
+ *
+ * @param valueExpr - SQL expression for the values (should be 0 or 1 for boolean metrics)
+ * @returns SQL expression that computes the CI upper bound, clamped to [0, 1] (suitable for use in SELECT)
+ */
+export function wilsonConfidenceIntervalUpper(valueExpr: string): string {
+  const z = 1.96;
+  const zSquared = z * z;
+
+  // Build the Wilson interval formula step by step for readability
+  const p = `avg(${valueExpr})`;
+  const n = "count()";
+
+  // scale = 1 / (1 + z²/n)
+  const scale = `1.0 / (1.0 + ${zSquared} / ${n})`;
+
+  // center = p + z²/(2n)
+  const center = `${p} + ${zSquared} / (2.0 * ${n})`;
+
+  // margin = z * sqrt(p(1-p)/n + z²/(4n²))
+  const margin = `${z} * sqrt((${p} * (1.0 - ${p})) / ${n} + ${zSquared} / (4.0 * ${n} * ${n}))`;
 
   // upper = (center + margin) * scale, clamped to [0, 1]
-  const upper = `least(1.0, greatest(0.0, (${center} + ${margin}) * ${scale}))`;
-
-  // CI half-width = max(|p - lower|, |upper - p|)
-  return `greatest(${p} - (${lower}), (${upper}) - ${p})`;
+  return `least(1.0, greatest(0.0, (${center} + ${margin}) * ${scale}))`;
 }
