@@ -154,6 +154,124 @@ pub fn validate_gepa_config(
     })
 }
 
+/// Validates the stored_output field of a RenderedSample
+///
+/// Returns Ok(()) if valid, Err(reason) if invalid
+fn validate_stored_output(stored_output: &Option<StoredOutput>) -> Result<(), String> {
+    // Check if stored_output is None
+    if stored_output.is_none() {
+        return Err("stored_output is None".to_string());
+    }
+
+    // Check if stored_output is JsonInferenceOutput with parsed is None
+    if let Some(StoredOutput::Json(json_output)) = stored_output {
+        if json_output.parsed.is_none() {
+            return Err("JsonInferenceOutput.parsed is None".to_string());
+        }
+    }
+
+    // Check if stored_output is a Chat output
+    if let Some(StoredOutput::Chat(chat_output)) = stored_output {
+        // Check if ChatInferenceOutput is empty
+        if chat_output.is_empty() {
+            return Err("stored_output (ChatInferenceOutput) has length 0".to_string());
+        }
+
+        // Validate each content block in the chat output
+        for (content_idx, content_block) in chat_output.iter().enumerate() {
+            match content_block {
+                // Check Text block
+                ContentBlockChatOutput::Text(text) => {
+                    if text.text.is_empty() {
+                        return Err(format!(
+                            "stored_output[{content_idx}] Text block has empty text"
+                        ));
+                    }
+                }
+                // Check ToolCall block
+                ContentBlockChatOutput::ToolCall(tool_call) => {
+                    if tool_call.name.is_none() {
+                        return Err(format!(
+                            "stored_output[{content_idx}] ToolCall block has name as None"
+                        ));
+                    }
+                }
+                // Check Thought block
+                ContentBlockChatOutput::Thought(thought) => {
+                    if thought.text.is_none() && thought.summary.is_none() {
+                        return Err(format!(
+                            "stored_output[{content_idx}] Thought block has both text and summary as None"
+                        ));
+                    }
+                }
+                // Unknown is fine (we'll let it through)
+                ContentBlockChatOutput::Unknown { .. } => {}
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Validates the stored_input.messages field of a RenderedSample
+///
+/// Returns Ok(()) if valid, Err(reason) if invalid
+fn validate_stored_input_messages(
+    messages: &[tensorzero_core::inference::types::StoredInputMessage],
+) -> Result<(), String> {
+    for (msg_idx, message) in messages.iter().enumerate() {
+        // Check if message has no content blocks
+        if message.content.is_empty() {
+            return Err(format!(
+                "stored_input.messages[{msg_idx}] has no content blocks"
+            ));
+        }
+
+        // Validate each content block in the message
+        for (content_idx, content_block) in message.content.iter().enumerate() {
+            match content_block {
+                // Check for unsupported media types (File includes images/files)
+                StoredInputMessageContent::File(_) => {
+                    return Err(format!(
+                        "stored_input.messages[{msg_idx}].content[{content_idx}] contains File (unsupported media type)"
+                    ));
+                }
+                // Check Text block
+                StoredInputMessageContent::Text(text) => {
+                    if text.text.is_empty() {
+                        return Err(format!(
+                            "stored_input.messages[{msg_idx}].content[{content_idx}] Text block has empty text"
+                        ));
+                    }
+                }
+                // Check ToolCall block
+                StoredInputMessageContent::ToolCall(tool_call) => {
+                    if tool_call.name.is_empty() {
+                        return Err(format!(
+                            "stored_input.messages[{msg_idx}].content[{content_idx}] ToolCall block has name as empty"
+                        ));
+                    }
+                }
+                // Check Thought block
+                StoredInputMessageContent::Thought(thought) => {
+                    if thought.text.is_none() && thought.summary.is_none() {
+                        return Err(format!(
+                            "stored_input.messages[{msg_idx}].content[{content_idx}] Thought block has both text and summary as None"
+                        ));
+                    }
+                }
+                // These are fine for GEPA
+                StoredInputMessageContent::ToolResult(_) => {}
+                StoredInputMessageContent::Template(_) => {}
+                StoredInputMessageContent::RawText(_) => {}
+                StoredInputMessageContent::Unknown(_) => {}
+            }
+        }
+    }
+
+    Ok(())
+}
+
 /// Validates and filters examples for GEPA optimization
 ///
 /// Filters out examples with:
@@ -168,150 +286,35 @@ pub fn validate_gepa_config(
 /// - Invalid stored_input.system (not None, Text, or object)
 ///
 /// Returns filtered list of valid examples, or error if all examples are dropped
-pub fn validate_examples(examples: &[RenderedSample]) -> Result<Vec<RenderedSample>, Error> {
+pub fn validate_examples(examples: Vec<RenderedSample>) -> Result<Vec<RenderedSample>, Error> {
     if examples.is_empty() {
         return Err(Error::new(ErrorDetails::Config {
             message: "Cannot run GEPA optimization with zero examples".to_string(),
         }));
     }
 
+    let total_examples = examples.len();
     let mut valid_examples = Vec::new();
     let mut drop_reasons: HashMap<String, usize> = HashMap::new();
 
     for sample in examples {
-        let mut drop_reason: Option<String> = None;
+        // Validate stored_output and stored_input.messages
+        let validation_result = validate_stored_output(&sample.stored_output)
+            .and_then(|()| validate_stored_input_messages(&sample.stored_input.messages));
 
-        // Check if stored_output is None
-        if sample.stored_output.is_none() {
-            drop_reason = Some("stored_output is None".to_string());
-        }
-        // Check if stored_output is JsonInferenceOutput with parsed is None
-        else if let Some(StoredOutput::Json(json_output)) = &sample.stored_output {
-            if json_output.parsed.is_none() {
-                drop_reason = Some("JsonInferenceOutput.parsed is None".to_string());
-            }
-        }
-
-        // Check stored_output if it's a Chat output (list) - typically shorter, so check first
-        if drop_reason.is_none() {
-            if let Some(StoredOutput::Chat(chat_output)) = &sample.stored_output {
-                // Check if ChatInferenceOutput is empty
-                if chat_output.is_empty() {
-                    drop_reason =
-                        Some("stored_output (ChatInferenceOutput) has length 0".to_string());
-                } else {
-                    for (content_idx, content_block) in chat_output.iter().enumerate() {
-                        match content_block {
-                            // Check Text block
-                            ContentBlockChatOutput::Text(text) => {
-                                if text.text.is_empty() {
-                                    drop_reason = Some(format!(
-                                        "stored_output[{content_idx}] Text block has empty text"
-                                    ));
-                                    break;
-                                }
-                            }
-                            // Check ToolCall block
-                            ContentBlockChatOutput::ToolCall(tool_call) => {
-                                if tool_call.name.is_none() {
-                                    drop_reason = Some(format!(
-                                        "stored_output[{content_idx}] ToolCall block has name as None"
-                                    ));
-                                    break;
-                                }
-                            }
-                            // Check Thought block
-                            ContentBlockChatOutput::Thought(thought) => {
-                                if thought.text.is_none() && thought.summary.is_none() {
-                                    drop_reason = Some(format!(
-                                        "stored_output[{content_idx}] Thought block has both text and summary as None"
-                                    ));
-                                    break;
-                                }
-                            }
-                            // Unknown is fine (we'll let it through)
-                            ContentBlockChatOutput::Unknown { .. } => {}
-                        }
-                    }
-                }
-            }
-        }
-
-        // Check stored_input messages - typically longer conversation history
-        if drop_reason.is_none() {
-            for (msg_idx, message) in sample.stored_input.messages.iter().enumerate() {
-                // Check if message has no content blocks
-                if message.content.is_empty() {
-                    drop_reason = Some(format!(
-                        "stored_input.messages[{msg_idx}] has no content blocks"
-                    ));
-                    break;
-                }
-
-                for (content_idx, content_block) in message.content.iter().enumerate() {
-                    match content_block {
-                        // Check for unsupported media types (File includes images/files)
-                        StoredInputMessageContent::File(_) => {
-                            drop_reason = Some(format!(
-                                "stored_input.messages[{msg_idx}].content[{content_idx}] contains File (unsupported media type)"
-                            ));
-                            break;
-                        }
-                        // Check Text block
-                        StoredInputMessageContent::Text(text) => {
-                            if text.text.is_empty() {
-                                drop_reason = Some(format!(
-                                    "stored_input.messages[{msg_idx}].content[{content_idx}] Text block has empty text"
-                                ));
-                                break;
-                            }
-                        }
-                        // Check ToolCall block
-                        StoredInputMessageContent::ToolCall(tool_call) => {
-                            if tool_call.name.is_empty() {
-                                drop_reason = Some(format!(
-                                    "stored_input.messages[{msg_idx}].content[{content_idx}] ToolCall block has name as empty"
-                                ));
-                                break;
-                            }
-                        }
-                        // Check Thought block
-                        StoredInputMessageContent::Thought(thought) => {
-                            if thought.text.is_none() && thought.summary.is_none() {
-                                drop_reason = Some(format!(
-                                    "stored_input.messages[{msg_idx}].content[{content_idx}] Thought block has both text and summary as None"
-                                ));
-                                break;
-                            }
-                        }
-                        // These are fine for GEPA
-                        StoredInputMessageContent::ToolResult(_) => {}
-                        StoredInputMessageContent::Template(_) => {}
-                        StoredInputMessageContent::RawText(_) => {}
-                        StoredInputMessageContent::Unknown(_) => {}
-                    }
-                }
-
-                if drop_reason.is_some() {
-                    break;
-                }
-            }
-        }
-
-        if let Some(reason) = drop_reason {
-            *drop_reasons.entry(reason).or_insert(0) += 1;
-        } else {
-            valid_examples.push(sample.clone());
+        match validation_result {
+            Ok(()) => valid_examples.push(sample),
+            Err(reason) => *drop_reasons.entry(reason).or_insert(0) += 1,
         }
     }
 
     // Log summary of dropped examples
-    let total_dropped = examples.len() - valid_examples.len();
+    let total_dropped = total_examples - valid_examples.len();
     if total_dropped > 0 {
         tracing::warn!(
             "Dropped {}/{} examples during validation:",
             total_dropped,
-            examples.len()
+            total_examples
         );
 
         // Sort by count (descending) for better readability
@@ -331,7 +334,7 @@ pub fn validate_examples(examples: &[RenderedSample]) -> Result<Vec<RenderedSamp
                 Reasons: {:?}",
                 valid_examples.len(),
                 MIN_EXAMPLES,
-                examples.len(),
+                total_examples,
                 total_dropped,
                 drop_reasons
             ),
@@ -361,24 +364,24 @@ pub fn initialize_pareto_frontier(
                 })
             })?;
 
-            if let Some(chat_config) = extract_chat_completion_from_variant_info(
+            if let Some(uninitialized_chat_config) = extract_chat_completion_from_variant_info(
                 variant_info,
                 variant_name,
                 config.retries,
             ) {
-                frontier.insert(variant_name.clone(), chat_config);
+                frontier.insert(variant_name.clone(), uninitialized_chat_config);
                 tracing::info!("Using initial variant: {}", variant_name);
             }
         }
     } else {
         // Use all ChatCompletion variants from the function
         for (variant_name, variant_info) in variants {
-            if let Some(chat_config) = extract_chat_completion_from_variant_info(
+            if let Some(uninitialized_chat_config) = extract_chat_completion_from_variant_info(
                 variant_info,
                 variant_name,
                 config.retries,
             ) {
-                frontier.insert(variant_name.clone(), chat_config);
+                frontier.insert(variant_name.clone(), uninitialized_chat_config);
             }
         }
 
@@ -526,15 +529,27 @@ fn extract_chat_completion_from_variant_info(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{HashMap, HashSet};
+    use std::sync::Arc;
     use tensorzero_core::{
-        config::Config,
+        config::{path::ResolvedTomlPathData, Config, ErrorContext, SchemaData, TimeoutsConfig},
+        evaluations::{EvaluationConfig, InferenceEvaluationConfig},
+        experimentation::ExperimentationConfig,
+        function::{FunctionConfig, FunctionConfigChat},
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
             StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
         },
         optimization::gepa::GEPAConfig,
         stored_inference::{RenderedSample, StoredOutput},
-        tool::DynamicToolParams,
+        tool::{DynamicToolParams, ToolChoice},
+        utils::retries::RetryConfig,
+        variant::{
+            chat_completion::{
+                ChatCompletionConfig, UninitializedChatCompletionConfig, UninitializedChatTemplates,
+            },
+            VariantConfig, VariantInfo,
+        },
     };
     use uuid::Uuid;
 
@@ -585,7 +600,7 @@ mod tests {
     #[test]
     fn test_validate_examples_empty_input() {
         let examples: Vec<RenderedSample> = vec![];
-        let result = validate_examples(&examples);
+        let result = validate_examples(examples);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err
@@ -599,7 +614,7 @@ mod tests {
         sample.stored_output = None;
 
         let examples = vec![sample; 15]; // Need at least MIN_EXAMPLES
-        let result = validate_examples(&examples);
+        let result = validate_examples(examples);
 
         // All examples should be dropped, resulting in error
         assert!(result.is_err());
@@ -613,7 +628,7 @@ mod tests {
         sample.stored_output = Some(StoredOutput::Chat(vec![]));
 
         let examples = vec![sample; 15];
-        let result = validate_examples(&examples);
+        let result = validate_examples(examples);
 
         // All examples should be dropped
         assert!(result.is_err());
@@ -629,7 +644,7 @@ mod tests {
         )]));
 
         let examples = vec![sample; 15];
-        let result = validate_examples(&examples);
+        let result = validate_examples(examples);
 
         // All examples should be dropped
         assert!(result.is_err());
@@ -641,7 +656,7 @@ mod tests {
         sample.stored_input.messages[0].content = vec![];
 
         let examples = vec![sample; 15];
-        let result = validate_examples(&examples);
+        let result = validate_examples(examples);
 
         // All examples should be dropped
         assert!(result.is_err());
@@ -655,7 +670,7 @@ mod tests {
         })];
 
         let examples = vec![sample; 15];
-        let result = validate_examples(&examples);
+        let result = validate_examples(examples);
 
         // All examples should be dropped
         assert!(result.is_err());
@@ -665,7 +680,7 @@ mod tests {
     fn test_validate_examples_insufficient_valid() {
         // Create fewer than MIN_EXAMPLES valid samples
         let examples = vec![create_valid_rendered_sample(); MIN_EXAMPLES - 1];
-        let result = validate_examples(&examples);
+        let result = validate_examples(examples);
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -676,7 +691,7 @@ mod tests {
     fn test_validate_examples_minimum_valid() {
         // Create exactly MIN_EXAMPLES valid samples
         let examples = vec![create_valid_rendered_sample(); MIN_EXAMPLES];
-        let result = validate_examples(&examples);
+        let result = validate_examples(examples);
 
         assert!(result.is_ok());
         let valid = result.unwrap();
@@ -693,7 +708,7 @@ mod tests {
         examples[1].stored_output = None;
         examples[2].stored_output = Some(StoredOutput::Chat(vec![]));
 
-        let result = validate_examples(&examples);
+        let result = validate_examples(examples);
 
         assert!(result.is_ok());
         let valid = result.unwrap();
@@ -763,30 +778,252 @@ mod tests {
         // Verify the constant value is as expected
         assert_eq!(MIN_EXAMPLES, 4);
     }
-}
-
-#[cfg(test)]
-mod initialize_pareto_frontier_tests {
-    use super::*;
-    use std::collections::{HashMap, HashSet};
-    use std::sync::Arc;
-    use tensorzero_core::{
-        config::{path::ResolvedTomlPathData, ErrorContext, SchemaData, TimeoutsConfig},
-        evaluations::{EvaluationConfig, InferenceEvaluationConfig},
-        experimentation::ExperimentationConfig,
-        function::{FunctionConfig, FunctionConfigChat},
-        tool::ToolChoice,
-        utils::retries::RetryConfig,
-        variant::{
-            chat_completion::{
-                ChatCompletionConfig, UninitializedChatCompletionConfig, UninitializedChatTemplates,
-            },
-            VariantConfig, VariantInfo,
-        },
-    };
 
     // ============================================================================
-    // Helper Functions
+    // Unit tests for validate_stored_output
+    // ============================================================================
+
+    #[test]
+    fn test_validate_stored_output_none() {
+        let result = validate_stored_output(&None);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "stored_output is None");
+    }
+
+    #[test]
+    fn test_validate_stored_output_json_with_none_parsed() {
+        use tensorzero_core::inference::types::JsonInferenceOutput;
+
+        let output = Some(StoredOutput::Json(JsonInferenceOutput {
+            raw: None,
+            parsed: None,
+        }));
+
+        let result = validate_stored_output(&output);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "JsonInferenceOutput.parsed is None");
+    }
+
+    #[test]
+    fn test_validate_stored_output_chat_empty() {
+        let output = Some(StoredOutput::Chat(vec![]));
+
+        let result = validate_stored_output(&output);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "stored_output (ChatInferenceOutput) has length 0"
+        );
+    }
+
+    #[test]
+    fn test_validate_stored_output_chat_text_empty() {
+        let output = Some(StoredOutput::Chat(vec![ContentBlockChatOutput::Text(
+            Text {
+                text: String::new(),
+            },
+        )]));
+
+        let result = validate_stored_output(&output);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Text block has empty text"));
+    }
+
+    #[test]
+    fn test_validate_stored_output_chat_toolcall_no_name() {
+        use tensorzero_core::tool::InferenceResponseToolCall;
+
+        let output = Some(StoredOutput::Chat(vec![ContentBlockChatOutput::ToolCall(
+            InferenceResponseToolCall {
+                name: None,
+                arguments: Some(serde_json::json!({})),
+                raw_arguments: "{}".to_string(),
+                raw_name: String::new(),
+                id: "test".to_string(),
+            },
+        )]));
+
+        let result = validate_stored_output(&output);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("ToolCall block has name as None"));
+    }
+
+    #[test]
+    fn test_validate_stored_output_chat_thought_both_none() {
+        use tensorzero_core::inference::types::Thought;
+
+        let output = Some(StoredOutput::Chat(vec![ContentBlockChatOutput::Thought(
+            Thought {
+                text: None,
+                summary: None,
+                provider_type: None,
+                signature: None,
+            },
+        )]));
+
+        let result = validate_stored_output(&output);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Thought block has both text and summary as None"));
+    }
+
+    #[test]
+    fn test_validate_stored_output_chat_valid() {
+        let output = Some(StoredOutput::Chat(vec![ContentBlockChatOutput::Text(
+            Text {
+                text: "Valid text".to_string(),
+            },
+        )]));
+
+        let result = validate_stored_output(&output);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_stored_output_chat_unknown_block() {
+        let output = Some(StoredOutput::Chat(vec![ContentBlockChatOutput::Unknown {
+            data: serde_json::Value::Null,
+            model_provider_name: None,
+        }]));
+
+        // Unknown blocks should be accepted
+        let result = validate_stored_output(&output);
+        assert!(result.is_ok());
+    }
+
+    // ============================================================================
+    // Unit tests for validate_stored_input_messages
+    // ============================================================================
+
+    #[test]
+    fn test_validate_stored_input_messages_empty_message() {
+        let messages = vec![StoredInputMessage {
+            role: Role::User,
+            content: vec![],
+        }];
+
+        let result = validate_stored_input_messages(&messages);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("has no content blocks"));
+    }
+
+    // Note: File content validation is covered by integration tests
+    // File is an enum variant, not a struct, making unit testing complex
+
+    #[test]
+    fn test_validate_stored_input_messages_text_empty() {
+        let messages = vec![StoredInputMessage {
+            role: Role::User,
+            content: vec![StoredInputMessageContent::Text(Text {
+                text: String::new(),
+            })],
+        }];
+
+        let result = validate_stored_input_messages(&messages);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Text block has empty text"));
+    }
+
+    #[test]
+    fn test_validate_stored_input_messages_toolcall_empty_name() {
+        use tensorzero_core::tool::ToolCall;
+
+        let messages = vec![StoredInputMessage {
+            role: Role::Assistant,
+            content: vec![StoredInputMessageContent::ToolCall(ToolCall {
+                name: String::new(),
+                arguments: "{}".to_string(),
+                id: "test".to_string(),
+            })],
+        }];
+
+        let result = validate_stored_input_messages(&messages);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("ToolCall block has name as empty"));
+    }
+
+    #[test]
+    fn test_validate_stored_input_messages_thought_both_none() {
+        use tensorzero_core::inference::types::Thought;
+
+        let messages = vec![StoredInputMessage {
+            role: Role::Assistant,
+            content: vec![StoredInputMessageContent::Thought(Thought {
+                text: None,
+                summary: None,
+                provider_type: None,
+                signature: None,
+            })],
+        }];
+
+        let result = validate_stored_input_messages(&messages);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("Thought block has both text and summary as None"));
+    }
+
+    #[test]
+    fn test_validate_stored_input_messages_valid() {
+        let messages = vec![StoredInputMessage {
+            role: Role::User,
+            content: vec![StoredInputMessageContent::Text(Text {
+                text: "Valid message".to_string(),
+            })],
+        }];
+
+        let result = validate_stored_input_messages(&messages);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_stored_input_messages_toolresult_allowed() {
+        use tensorzero_core::tool::ToolResult;
+
+        let messages = vec![StoredInputMessage {
+            role: Role::User, // Tool role doesn't exist, use User
+            content: vec![StoredInputMessageContent::ToolResult(ToolResult {
+                name: "test_tool".to_string(),
+                result: "success".to_string(),
+                id: "tool_id".to_string(),
+            })],
+        }];
+
+        // ToolResult is allowed
+        let result = validate_stored_input_messages(&messages);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_stored_input_messages_multiple_messages() {
+        let messages = vec![
+            StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "First message".to_string(),
+                })],
+            },
+            StoredInputMessage {
+                role: Role::Assistant,
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Second message".to_string(),
+                })],
+            },
+        ];
+
+        let result = validate_stored_input_messages(&messages);
+        assert!(result.is_ok());
+    }
+
+    // Note: Early exit behavior and File content validation are covered by integration tests
+
+    // ============================================================================
+    // Helper Functions for initialize_pareto_frontier tests
     // ============================================================================
 
     /// Creates a minimal UninitializedChatCompletionConfig for testing

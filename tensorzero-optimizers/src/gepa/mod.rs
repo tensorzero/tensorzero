@@ -54,8 +54,8 @@ impl Optimizer for GEPAConfig {
         })?;
 
         // Validate both train and validation examples (this filters invalid examples)
-        let train_examples = validate_examples(&train_examples)?;
-        let val_examples = validate_examples(&val_examples)?;
+        let train_examples = validate_examples(train_examples)?;
+        let val_examples = validate_examples(val_examples)?;
 
         tracing::info!(
             "Starting GEPA optimization for function '{}' with {} train examples and {} val examples",
