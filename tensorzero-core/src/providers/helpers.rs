@@ -859,6 +859,8 @@ impl<T> UrlParseErrExt<T> for Result<T, url::ParseError> {
 mod tests {
     use std::time::Duration;
 
+    use serde_json::json;
+
     use crate::inference::types::{
         extra_body::{ExtraBodyConfig, ExtraBodyReplacement, FilteredInferenceExtraBody},
         extra_headers::{DynamicExtraHeader, ExtraHeadersConfig, FilteredInferenceExtraHeaders},
@@ -1560,8 +1562,6 @@ mod tests {
 
     #[test]
     fn test_inject_extra_body_model_provider_without_shorthand() {
-        use serde_json::json;
-
         let mut body = serde_json::json!({});
         let config = FullExtraBodyConfig {
             extra_body: None,
@@ -1595,8 +1595,6 @@ mod tests {
 
     #[test]
     fn test_inject_extra_body_model_provider_wrong_prefix() {
-        use serde_json::json;
-
         let mut body = serde_json::json!({});
         let config = FullExtraBodyConfig {
             extra_body: None,
@@ -1630,8 +1628,6 @@ mod tests {
 
     #[test]
     fn test_inject_extra_body_model_provider_external_model_with_colons() {
-        use serde_json::json;
-
         let mut body = serde_json::json!({});
         let config = FullExtraBodyConfig {
             extra_body: None,

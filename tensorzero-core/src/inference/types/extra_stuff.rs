@@ -109,6 +109,7 @@ fn validate_variant_filter(variant_name: &str, function: &FunctionConfig) -> Res
 /// "tensorzero::model_name::X::provider_name::Y"
 ///
 /// Deprecated: Use separate `model_name` and `provider_name` fields instead.
+#[deprecated]
 fn validate_provider_filter(model_provider_name: &str) -> Result<(), Error> {
     tracing::warn!(
         "Deprecation Warning: Please provide `model_name` and `provider_name` fields instead of `model_provider_name` when specifying `extra_body` or `extra_headers` in the request. Alternatively, you can skip the filter altogether to match any model inference in your request."
@@ -253,6 +254,7 @@ mod tests {
 
     #[test]
     fn test_validate_provider_filter_fully_qualified_valid() {
+        #[expect(deprecated)]
         let result = validate_provider_filter(
             "tensorzero::model_name::test-model::provider_name::test-provider",
         );
