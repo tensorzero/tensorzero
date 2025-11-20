@@ -717,22 +717,7 @@ mod tests {
 
     #[test]
     fn test_validate_gepa_config_function_not_found() {
-        let config = GEPAConfig {
-            function_name: "nonexistent_function".to_string(),
-            evaluation_name: "test_evaluation".to_string(),
-            initial_variants: None,
-            variant_prefix: None,
-            batch_size: 5,
-            max_iterations: 1,
-            max_concurrency: 10,
-            analysis_model: "openai::gpt-5-mini".to_string(),
-            mutation_model: "openai::gpt-5".to_string(),
-            seed: None,
-            timeout: 300,
-            include_inference_input_for_mutation: false,
-            retries: tensorzero_core::utils::retries::RetryConfig::default(),
-            max_tokens: Some(16_384),
-        };
+        let config = create_gepa_config("nonexistent_function", None, None);
 
         let tensorzero_config = create_minimal_config();
         let result = validate_gepa_config(&config, &tensorzero_config);
@@ -1147,6 +1132,23 @@ mod tests {
         }
     }
 
+    /// Creates a HashMap of test variants for pareto frontier tests
+    fn create_test_variants(count: usize) -> HashMap<String, Arc<VariantInfo>> {
+        let models = [
+            "openai::gpt-4",
+            "anthropic::claude-3-5-sonnet-20241022",
+            "openai::gpt-3.5-turbo",
+        ];
+        (0..count)
+            .map(|i| {
+                let variant_name = format!("variant{}", i + 1);
+                let model = models[i % models.len()];
+                let prompt = format!("System prompt {}", i + 1);
+                (variant_name, create_variant_info(model, Some(&prompt)))
+            })
+            .collect()
+    }
+
     // ============================================================================
     // Tests for initialize_pareto_frontier
     // ============================================================================
@@ -1154,22 +1156,7 @@ mod tests {
     #[test]
     fn test_initialize_pareto_frontier_with_all_variants() {
         // Setup: Create function with multiple ChatCompletion variants
-        let mut variants = HashMap::new();
-        variants.insert(
-            "variant1".to_string(),
-            create_variant_info("openai::gpt-4", Some("System prompt 1")),
-        );
-        variants.insert(
-            "variant2".to_string(),
-            create_variant_info(
-                "anthropic::claude-3-5-sonnet-20241022",
-                Some("System prompt 2"),
-            ),
-        );
-        variants.insert(
-            "variant3".to_string(),
-            create_variant_info("openai::gpt-3.5-turbo", Some("System prompt 3")),
-        );
+        let variants = create_test_variants(3);
 
         let function_context = create_function_context(variants);
         let config = create_gepa_config("test_function", None, None);
@@ -1188,22 +1175,7 @@ mod tests {
     #[test]
     fn test_initialize_pareto_frontier_with_initial_variants() {
         // Setup: Create function with multiple variants
-        let mut variants = HashMap::new();
-        variants.insert(
-            "variant1".to_string(),
-            create_variant_info("openai::gpt-4", Some("System prompt 1")),
-        );
-        variants.insert(
-            "variant2".to_string(),
-            create_variant_info(
-                "anthropic::claude-3-5-sonnet-20241022",
-                Some("System prompt 2"),
-            ),
-        );
-        variants.insert(
-            "variant3".to_string(),
-            create_variant_info("openai::gpt-3.5-turbo", Some("System prompt 3")),
-        );
+        let variants = create_test_variants(3);
 
         let function_context = create_function_context(variants);
 
