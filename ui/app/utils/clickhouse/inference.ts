@@ -23,7 +23,9 @@ import type {
 // This is safe because the transform always adds the 'type' field to the output.
 export const toolSchema = z
   .object({
-    type: z.literal("function").optional(),
+    type: z
+      .union([z.literal("function"), z.literal("client_side_function")])
+      .optional(),
     description: z.string(),
     parameters: JsonValueSchema,
     name: z.string(),
