@@ -96,19 +96,6 @@ export function getDefaultFunctionConfigWithVariant(
   };
   return functionConfig;
 }
-/*
-weight: number | null;
-model: string;
-templates: ChatTemplates;
-temperature: number | null;
-top_p: number | null;
-max_tokens: number | null;
-presence_penalty: number | null;
-frequency_penalty: number | null;
-seed: number | null;
-stop_sequences: Array<string> | null;
-json_mode: JsonMode | null;
-retries: RetryConfig;*/
 
 export async function getConfig() {
   const now = Date.now();
