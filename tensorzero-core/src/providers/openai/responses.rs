@@ -8,7 +8,7 @@ use crate::{
         },
         ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
     },
-    tool::{OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarSyntax},
+    tool::{OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarSyntax, ToolConfigRef},
 };
 
 const PROVIDER_NAME: &str = "OpenAI Responses";
@@ -400,21 +400,18 @@ impl<'a> OpenAIResponsesRequest<'a> {
             .as_ref()
             .map(|tool_config| {
                 tool_config
-                    .tools_available()
-                    .map(|tool| OpenAITool::from(tool).into_openai_responses_tool())
+                    .tools_available_with_openai_custom()
+                    .map(|tool_ref| match tool_ref {
+                        ToolConfigRef::Function(func) => {
+                            OpenAITool::from(func).into_openai_responses_tool()
+                        }
+                        ToolConfigRef::OpenAICustom(custom) => {
+                            OpenAIResponsesTool::Custom(custom.into())
+                        }
+                    })
                     .collect()
             })
             .unwrap_or_default();
-        // If we have custom tools we should extend with those also
-        if let Some(tool_config) = request.tool_config.as_ref() {
-            tools.extend(
-                tool_config
-                    .openai_custom_tools
-                    .iter()
-                    .map(Into::into)
-                    .map(OpenAIResponsesTool::Custom),
-            );
-        }
         // If we have built_in_tools we should extend the list with them
         tools.extend(built_in_tools.iter().map(OpenAIResponsesTool::BuiltIn));
         if let Some(tc) = request.tool_config.as_ref() {

@@ -869,7 +869,7 @@ impl<'a> GeminiRequest<'a> {
             .into_iter()
             .filter(|m| !m.parts.is_empty())
             .collect();
-        let (tools, tool_config) = prepare_tools(request);
+        let (tools, tool_config) = prepare_tools(request)?;
         let (response_mime_type, response_schema) = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 match request.output_schema {
@@ -917,27 +917,30 @@ impl<'a> GeminiRequest<'a> {
 
 fn prepare_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
-) -> (
-    Option<Vec<GeminiTool<'a>>>,
-    Option<GoogleAIStudioGeminiToolConfig<'a>>,
-) {
+) -> Result<
+    (
+        Option<Vec<GeminiTool<'a>>>,
+        Option<GoogleAIStudioGeminiToolConfig<'a>>,
+    ),
+    Error,
+> {
     match &request.tool_config {
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None);
+                return Ok((None, None));
             }
             let tools = Some(vec![GeminiTool {
                 function_declarations: tool_config
-                    .tools_available()
+                    .tools_available()?
                     .map(GeminiFunctionDeclaration::from_tool_config)
                     .collect(),
             }]);
             let tool_config_converted = Some(GoogleAIStudioGeminiToolConfig::from_tool_config(
                 tool_config,
             ));
-            (tools, tool_config_converted)
+            Ok((tools, tool_config_converted))
         }
-        None => (None, None),
+        None => Ok((None, None)),
     }
 }
 
@@ -1615,7 +1618,8 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&FunctionToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
+        let tools_vec: Vec<&FunctionToolConfig> =
+            MULTI_TOOL_CONFIG.tools_available().unwrap().collect();
         let tool = GeminiTool {
             function_declarations: tools_vec
                 .iter()
@@ -2321,7 +2325,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools);
+        let (tools, tool_choice) = prepare_tools(&request_with_tools).unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -2364,7 +2368,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools);
+        let (tools, tool_choice) = prepare_tools(&request_with_tools).unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         // Flash models do not support function calling mode Any

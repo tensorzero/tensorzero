@@ -8,6 +8,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::error::Error;
 use crate::inference::types::ModelInferenceRequest;
 use crate::tool::{FunctionTool, FunctionToolConfig, ToolChoice};
 
@@ -190,12 +191,12 @@ fn prepare_chat_completion_allowed_tools_constraint<'a>(
 pub fn prepare_chat_completion_tools<'a>(
     request: &'a ModelInferenceRequest,
     supports_allowed_tools: bool,
-) -> PreparedChatCompletionToolsResult<'a> {
+) -> Result<PreparedChatCompletionToolsResult<'a>, Error> {
     match &request.tool_config {
-        None => (None, None, None),
+        None => Ok((None, None, None)),
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None, None);
+                return Ok((None, None, None));
             }
 
             let parallel_tool_calls = tool_config.parallel_tool_calls;
@@ -203,7 +204,7 @@ pub fn prepare_chat_completion_tools<'a>(
             if supports_allowed_tools {
                 // Provider supports OpenAI's allowed_tools constraint
                 // Send all tools and use allowed_tools in tool_choice if needed
-                let tools = Some(tool_config.tools_available().map(Into::into).collect());
+                let tools = Some(tool_config.tools_available()?.map(Into::into).collect());
 
                 let tool_choice = if let Some(allowed_tools_choice) =
                     prepare_chat_completion_allowed_tools_constraint(tool_config)
@@ -214,20 +215,20 @@ pub fn prepare_chat_completion_tools<'a>(
                     Some((&tool_config.tool_choice).into())
                 };
 
-                (tools, tool_choice, parallel_tool_calls)
+                Ok((tools, tool_choice, parallel_tool_calls))
             } else {
                 // Provider doesn't support allowed_tools constraint
                 // Filter tools using strict_tools_available and use regular tool_choice
                 let tools = Some(
                     tool_config
-                        .strict_tools_available()
+                        .strict_tools_available()?
                         .map(Into::into)
                         .collect(),
                 );
 
                 let tool_choice = Some((&tool_config.tool_choice).into());
 
-                (tools, tool_choice, parallel_tool_calls)
+                Ok((tools, tool_choice, parallel_tool_calls))
             }
         }
     }
@@ -611,7 +612,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true);
+        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel.is_none());
@@ -637,7 +638,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true);
+        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel.is_none());
@@ -663,7 +664,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true);
+        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
         assert!(tools.is_some());
         assert_eq!(tools.unwrap().len(), 1);
         assert!(tool_choice.is_some());
@@ -696,7 +697,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true);
+        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
         assert_eq!(parallel, Some(false));
@@ -734,7 +735,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, false);
+        let (tools, tool_choice, parallel) =
+            prepare_chat_completion_tools(&request, false).unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
         assert!(parallel.is_none());
@@ -766,7 +768,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, false);
+        let (tools, tool_choice, parallel) =
+            prepare_chat_completion_tools(&request, false).unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
         assert_eq!(parallel, Some(true));
@@ -816,7 +819,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, _) = prepare_chat_completion_tools(&request, true);
+        let (tools, tool_choice, _) = prepare_chat_completion_tools(&request, true).unwrap();
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, "tool1");
@@ -846,7 +849,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, _) = prepare_chat_completion_tools(&request, true);
+        let (tools, tool_choice, _) = prepare_chat_completion_tools(&request, true).unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
 

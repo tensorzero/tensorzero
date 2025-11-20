@@ -579,8 +579,8 @@ pub(super) async fn prepare_groq_messages<'a>(
 /// NOTE: parallel tool calls are unreliable, and specific tool choice doesn't work
 pub(super) fn prepare_groq_tools<'a>(
     request: &'a ModelInferenceRequest,
-) -> PreparedToolsResult<'a> {
-    let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(request, true);
+) -> Result<PreparedToolsResult<'a>, Error> {
+    let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(request, true)?;
 
     // Convert from ChatCompletionTool to GroqTool
     let groq_tools = tools.map(|t| t.into_iter().map(GroqTool::from).collect());
@@ -588,7 +588,7 @@ pub(super) fn prepare_groq_tools<'a>(
     // Convert from ChatCompletionToolChoice to GroqToolChoice
     let groq_tool_choice = tool_choice.map(GroqToolChoice::from);
 
-    (groq_tools, groq_tool_choice, parallel_tool_calls)
+    Ok((groq_tools, groq_tool_choice, parallel_tool_calls))
 }
 
 /// If ModelInferenceRequestJsonMode::On and the system message or instructions does not contain "JSON"
@@ -1146,7 +1146,7 @@ impl<'a> GroqRequest<'a> {
         };
         let mut messages = prepare_groq_messages(request).await?;
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(request)?;
 
         if model.to_lowercase().starts_with("o1-mini") {
             if let Some(GroqRequestMessage::System(_)) = messages.first() {
@@ -2141,7 +2141,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request_with_tools);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_groq_tools(&request_with_tools).unwrap();
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -2183,7 +2184,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request_without_tools);
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_groq_tools(&request_without_tools).unwrap();
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());
@@ -2229,7 +2231,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_groq_tools(&request).unwrap();
 
         // Verify tools are returned
         let tools = tools.unwrap();

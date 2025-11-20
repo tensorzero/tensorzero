@@ -491,16 +491,16 @@ impl<'a> From<&'a FunctionToolConfig> for MistralTool<'a> {
 /// Otherwise convert the tool choice and tools to Mistral format
 pub(super) fn prepare_mistral_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
-) -> PreparedMistralToolsResult<'a> {
+) -> Result<PreparedMistralToolsResult<'a>, Error> {
     match &request.tool_config {
-        None => (None, None, None),
+        None => Ok((None, None, None)),
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None, None);
+                return Ok((None, None, None));
             }
             let tools = Some(
                 tool_config
-                    .strict_tools_available()
+                    .strict_tools_available()?
                     .map(Into::into)
                     .collect(),
             );
@@ -508,7 +508,7 @@ pub(super) fn prepare_mistral_tools<'a>(
 
             // Mistral does not support allowed_tools constraint, use regular tool_choice
             let tool_choice = Some((&tool_config.tool_choice).into());
-            (tools, tool_choice, parallel_tool_calls)
+            Ok((tools, tool_choice, parallel_tool_calls))
         }
     }
 }
@@ -596,7 +596,7 @@ impl<'a> MistralRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _) = prepare_mistral_tools(request);
+        let (tools, tool_choice, _) = prepare_mistral_tools(request)?;
 
         let mut mistral_request = MistralRequest {
             messages,
@@ -971,7 +971,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
 
         // Verify only allowed tools are returned (strict_tools_available respects allowed_tools)
         let tools = tools.unwrap();
@@ -1024,7 +1024,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
 
         // Verify tools
         let tools = tools.unwrap();
@@ -1077,7 +1077,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
 
         // Verify tools
         let tools = tools.unwrap();
@@ -1128,7 +1128,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
 
         // Verify tools are still returned
         let tools = tools.unwrap();
@@ -1169,7 +1169,7 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
 
         // Verify tools
         let tools = tools.unwrap();

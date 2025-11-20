@@ -787,17 +787,14 @@ impl<'a> AnthropicRequestBody<'a> {
         // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
         // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
         // request payload to achieve the same effect.
-        let tools = request.tool_config.as_ref().and_then(|c| {
-            if matches!(c.tool_choice, ToolChoice::None) {
-                None
-            } else {
-                Some(
-                    c.strict_tools_available()
-                        .map(Into::into)
-                        .collect::<Vec<_>>(),
-                )
-            }
-        });
+        let tools = match &request.tool_config {
+            Some(c) if !matches!(c.tool_choice, ToolChoice::None) => Some(
+                c.strict_tools_available()?
+                    .map(Into::into)
+                    .collect::<Vec<_>>(),
+            ),
+            _ => None,
+        };
 
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
@@ -3405,6 +3402,7 @@ mod tests {
         // Convert to Anthropic tools
         let tools: Vec<AnthropicTool> = tool_config
             .strict_tools_available()
+            .unwrap()
             .map(AnthropicTool::from)
             .collect();
 

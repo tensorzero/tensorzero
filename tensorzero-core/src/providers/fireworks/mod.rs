@@ -390,16 +390,16 @@ type PreparedFireworksToolsResult<'a> = (
 /// Otherwise convert the tool choice and tools to Fireworks format
 pub(super) fn prepare_fireworks_tools<'a>(
     request: &'a ModelInferenceRequest,
-) -> PreparedFireworksToolsResult<'a> {
+) -> Result<PreparedFireworksToolsResult<'a>, Error> {
     match &request.tool_config {
-        None => (None, None, None),
+        None => Ok((None, None, None)),
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None, None);
+                return Ok((None, None, None));
             }
             let tools = Some(
                 tool_config
-                    .strict_tools_available()
+                    .strict_tools_available()?
                     .map(Into::into)
                     .collect(),
             );
@@ -407,7 +407,7 @@ pub(super) fn prepare_fireworks_tools<'a>(
 
             // Fireworks does not support allowed_tools constraint, use regular tool_choice
             let tool_choice = Some((&tool_config.tool_choice).into());
-            (tools, tool_choice, parallel_tool_calls)
+            Ok((tools, tool_choice, parallel_tool_calls))
         }
     }
 }
@@ -470,7 +470,7 @@ impl<'a> FireworksRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _) = prepare_fireworks_tools(request);
+        let (tools, tool_choice, _) = prepare_fireworks_tools(request)?;
 
         let mut fireworks_request = FireworksRequest {
             messages,

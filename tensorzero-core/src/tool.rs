@@ -504,6 +504,13 @@ pub enum AllowedToolsChoice {
     Explicit,
 }
 
+/// Reference to either a function tool config or an OpenAI custom tool.
+/// Used by the OpenAI provider to iterate over all available tools.
+pub enum ToolConfigRef<'a> {
+    Function(&'a FunctionToolConfig),
+    OpenAICustom(&'a OpenAICustomTool),
+}
+
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
@@ -758,20 +765,61 @@ impl ToolCallConfig {
         Ok(tool_call_config_option)
     }
 
-    pub fn tools_available(&self) -> Box<dyn Iterator<Item = &FunctionToolConfig> + '_> {
-        Box::new(
+    /// Returns an iterator over all available tools (function tools only).
+    /// Returns an error if OpenAI custom tools are present, as they are not compatible
+    /// with standard function tool iteration.
+    pub fn tools_available(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = &FunctionToolConfig> + '_>, Error> {
+        if !self.openai_custom_tools.is_empty() {
+            return Err(Error::new(ErrorDetails::IncompatibleTool {
+                message: "OpenAI custom tools are not supported by this provider".to_string(),
+            }));
+        }
+        Ok(Box::new(
             self.static_tools_available
                 .iter()
                 .chain(self.dynamic_tools_available.iter()),
+        ))
+    }
+
+    /// Returns an iterator over all available tools including OpenAI custom tools.
+    /// This method is intended for the OpenAI provider only.
+    pub fn tools_available_with_openai_custom(
+        &self,
+    ) -> Box<dyn Iterator<Item = ToolConfigRef<'_>> + '_> {
+        Box::new(
+            self.static_tools_available
+                .iter()
+                .map(ToolConfigRef::Function)
+                .chain(
+                    self.dynamic_tools_available
+                        .iter()
+                        .map(ToolConfigRef::Function),
+                )
+                .chain(
+                    self.openai_custom_tools
+                        .iter()
+                        .map(ToolConfigRef::OpenAICustom),
+                ),
         )
     }
 
     /// Returns tools filtered by allowed_tools list and tool type filter.
+    /// Returns an error if OpenAI custom tools are present, as they are not compatible
+    /// with standard function tool filtering.
     ///
     /// # Behavior
     /// - For FunctionDefault and DynamicAllowedTools modes: returns tools based on type filter
     /// - For Explicit mode: applies allowed_tools filtering first, then tool type filtering
-    pub fn strict_tools_available(&self) -> Box<dyn Iterator<Item = &FunctionToolConfig> + '_> {
+    pub fn strict_tools_available(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = &FunctionToolConfig> + '_>, Error> {
+        if !self.openai_custom_tools.is_empty() {
+            return Err(Error::new(ErrorDetails::IncompatibleTool {
+                message: "OpenAI custom tools are not supported by this provider".to_string(),
+            }));
+        }
         match self.allowed_tools.choice {
             #[expect(deprecated)] // DynamicAllowedTools
             AllowedToolsChoice::FunctionDefault | AllowedToolsChoice::DynamicAllowedTools => {
@@ -780,12 +828,12 @@ impl ToolCallConfig {
             }
             AllowedToolsChoice::Explicit => {
                 // Filter by allowed_tools list, then apply type filter
-                Box::new(
+                Ok(Box::new(
                     self.static_tools_available
                         .iter()
                         .chain(self.dynamic_tools_available.iter())
                         .filter(|tool| self.allowed_tools.tools.iter().any(|t| t == tool.name())),
-                )
+                ))
             }
         }
     }
@@ -796,12 +844,15 @@ impl ToolCallConfig {
 
     /// This only gets Function tools and skips OpenAI tools
     pub fn get_function_tool(&self, name: &str) -> Option<&FunctionToolConfig> {
-        self.tools_available().find(|tool_cfg| match tool_cfg {
-            FunctionToolConfig::Static(config) => config.name == name,
-            FunctionToolConfig::Dynamic(config) => config.name == name,
-            FunctionToolConfig::Implicit(_config) => false,
-            FunctionToolConfig::DynamicImplicit(_config) => false,
-        })
+        self.static_tools_available
+            .iter()
+            .chain(self.dynamic_tools_available.iter())
+            .find(|tool_cfg| match tool_cfg {
+                FunctionToolConfig::Static(config) => config.name == name,
+                FunctionToolConfig::Dynamic(config) => config.name == name,
+                FunctionToolConfig::Implicit(_config) => false,
+                FunctionToolConfig::DynamicImplicit(_config) => false,
+            })
     }
 
     #[cfg(test)]
@@ -2231,17 +2282,20 @@ mod tests {
         ))
         .unwrap()
         .unwrap();
-        assert_eq!(tool_call_config.tools_available().count(), 2);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 2);
 
         // strict_tools_available should return all tools (FunctionDefault mode)
-        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            2
+        );
         assert!(matches!(
             tool_call_config.allowed_tools.choice,
             AllowedToolsChoice::FunctionDefault
         ));
         assert_eq!(tool_call_config.tool_choice, ToolChoice::Auto);
         assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
-        let tools: Vec<_> = tool_call_config.tools_available().collect();
+        let tools: Vec<_> = tool_call_config.tools_available().unwrap().collect();
         assert!(tools[0].strict());
         assert!(!tools[1].strict());
 
@@ -2280,7 +2334,7 @@ mod tests {
         ))
         .unwrap()
         .unwrap();
-        assert_eq!(tool_call_config.tools_available().count(), 2);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 2);
         assert_eq!(
             tool_call_config.tool_choice,
             ToolChoice::Specific("get_temperature".to_string())
@@ -2330,15 +2384,18 @@ mod tests {
         .unwrap()
         .unwrap();
         // Should have all function tools (get_temperature, query_articles) + dynamic tool (establish_campground)
-        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "get_temperature"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "query_articles"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "establish_campground"));
 
         // We pass a list of a single allowed tool and then configure a new tool
@@ -2364,15 +2421,18 @@ mod tests {
         .unwrap()
         .unwrap();
         // Should have all function tools + dynamic tool
-        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "get_temperature"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "query_articles"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "establish_campground"));
         assert_eq!(tool_call_config.parallel_tool_calls, Some(false));
 
@@ -2399,9 +2459,10 @@ mod tests {
         .unwrap()
         .unwrap();
         // Should have all function tools + dynamic tool
-        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "establish_campground"));
         assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
         assert_eq!(
@@ -2941,28 +3002,36 @@ mod tests {
         // Should have all function tools plus dynamic tools
         // function_tools: get_temperature, query_articles
         // dynamic tools: establish_campground
-        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
 
         // Verify the static tools are included
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "get_temperature"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "query_articles"));
 
         // Verify the dynamic tool is included
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "establish_campground"));
 
         // strict_tools_available should filter to only allowed_tools (AllAllowedTools mode)
-        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            2
+        );
         assert!(tool_call_config
             .strict_tools_available()
+            .unwrap()
             .any(|t| t.name() == "get_temperature"));
         assert!(tool_call_config
             .strict_tools_available()
+            .unwrap()
             .any(|t| t.name() == "establish_campground"));
     }
 
@@ -3029,15 +3098,18 @@ mod tests {
         // All tool definitions should be available (sent to provider)
         // function_tools: get_temperature, query_articles
         // dynamic tools: establish_campground
-        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "get_temperature"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "query_articles"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "establish_campground"));
 
         // But only get_temperature should be in allowed_tools
@@ -3052,9 +3124,13 @@ mod tests {
         ));
 
         // strict_tools_available should filter to only allowed_tools (AllAllowedTools mode)
-        assert_eq!(tool_call_config.strict_tools_available().count(), 1);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            1
+        );
         assert!(tool_call_config
             .strict_tools_available()
+            .unwrap()
             .any(|t| t.name() == "get_temperature"));
     }
 
@@ -3553,7 +3629,7 @@ mod tests {
             allowed_tools: AllowedTools::default(), // FunctionDefault
         };
 
-        let tools: Vec<_> = config.strict_tools_available().collect();
+        let tools: Vec<_> = config.strict_tools_available().unwrap().collect();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].name(), "get_temperature");
         assert_eq!(tools[1].name(), "query_articles");
@@ -3578,7 +3654,7 @@ mod tests {
             },
         };
 
-        let tools: Vec<_> = config.strict_tools_available().collect();
+        let tools: Vec<_> = config.strict_tools_available().unwrap().collect();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].name(), "get_temperature");
     }
@@ -3611,13 +3687,17 @@ mod tests {
         .unwrap();
 
         // Should have 2 tools available (both get_temperature and query_articles)
-        assert_eq!(tool_call_config.tools_available().count(), 2);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 2);
 
         // Both should be in strict_tools_available since they're in allowed_tools
-        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            2
+        );
 
         let tool_names: Vec<_> = tool_call_config
             .tools_available()
+            .unwrap()
             .map(|t| t.name())
             .collect();
         assert!(tool_names.contains(&"get_temperature"));
@@ -3651,8 +3731,11 @@ mod tests {
         .unwrap();
 
         // Should have 2 tools available (both from config via allowed_tools)
-        assert_eq!(tool_call_config.tools_available().count(), 2);
-        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 2);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            2
+        );
     }
 
     #[tokio::test]
@@ -3681,8 +3764,11 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(tool_call_config.tools_available().count(), 2);
-        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 2);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            2
+        );
 
         // Verify choice is AllAllowedTools
         assert!(matches!(
@@ -3723,11 +3809,15 @@ mod tests {
         .unwrap();
 
         // Should have 3 tools: get_temperature (function), query_articles (config-only), establish_campground (dynamic)
-        assert_eq!(tool_call_config.tools_available().count(), 3);
-        assert_eq!(tool_call_config.strict_tools_available().count(), 3);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            3
+        );
 
         let tool_names: Vec<_> = tool_call_config
             .tools_available()
+            .unwrap()
             .map(|t| t.name())
             .collect();
         assert!(tool_names.contains(&"get_temperature"));
@@ -3750,8 +3840,11 @@ mod tests {
         .unwrap();
 
         // Should have all function tools
-        assert_eq!(tool_call_config.tools_available().count(), 2);
-        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 2);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            2
+        );
 
         // Should be FunctionDefault mode
         assert!(matches!(
@@ -3963,7 +4056,9 @@ mod tests {
         let result = serde_json::from_value::<Tool>(completely_invalid);
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
-        assert!(error_msg.contains("Failed to parse as Tool (tagged) or FunctionTool (untagged)"));
+        assert!(
+            error_msg.contains("Failed to parse as `Tool` (tagged) or `FunctionTool` (untagged)")
+        );
 
         // Test that missing required fields in both formats produces an error
         let missing_name = json!({
@@ -4204,12 +4299,12 @@ mod tests {
         .unwrap();
 
         // Verify we have both function and custom tools
-        let function_tools_count = tool_call_config.tools_available().count();
+        // tools_available() should error when custom tools are present
+        assert!(tool_call_config.tools_available().is_err());
         let custom_tools_count = tool_call_config.openai_custom_tools.len();
-        assert_eq!(function_tools_count, 3); // get_temperature, query_articles, dynamic_func
         assert_eq!(custom_tools_count, 1); // dynamic_custom
 
-        // Verify the function tool is accessible by name
+        // Verify the function tool is still accessible by name even with custom tools present
         let func_tool = tool_call_config.get_function_tool("dynamic_func").unwrap();
         assert_eq!(func_tool.name(), "dynamic_func");
 
@@ -4246,11 +4341,8 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        // strict_tools_available() should return only allowed function tools
-        let strict_function_tools: Vec<_> = tool_call_config.strict_tools_available().collect();
-        assert_eq!(strict_function_tools.len(), 1); // get_temperature
-        let names: Vec<_> = strict_function_tools.iter().map(|t| t.name()).collect();
-        assert!(names.contains(&"get_temperature"));
+        // strict_tools_available() should error when custom tools are present
+        assert!(tool_call_config.strict_tools_available().is_err());
 
         // Custom tools are separate - check that the custom tool is in the list
         assert_eq!(tool_call_config.openai_custom_tools.len(), 1);
@@ -4510,8 +4602,8 @@ mod tests {
         );
 
         // Verify no function tools are present
-        let function_tools: Vec<_> = tool_call_config.tools_available().collect();
-        assert_eq!(function_tools.len(), 0, "Should have no function tools");
+        // tools_available() should error when custom tools are present
+        assert!(tool_call_config.tools_available().is_err());
 
         // Verify tool choice and parallel_tool_calls are set correctly
         assert!(matches!(
@@ -4519,5 +4611,281 @@ mod tests {
             ToolChoice::Auto | ToolChoice::Required
         ));
         assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
+    }
+
+    /// Test that tools_available() returns an error when custom tools are present
+    #[tokio::test]
+    async fn test_tools_available_errors_with_custom_tools() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: Some(vec!["get_temperature".to_string()]),
+            additional_tools: Some(vec![Tool::OpenAICustom(OpenAICustomTool {
+                name: "custom_tool".to_string(),
+                description: Some("A custom tool".to_string()),
+                format: Some(OpenAICustomToolFormat::Text),
+            })]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &["get_temperature".to_string()],
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // tools_available() should error
+        let result = tool_call_config.tools_available();
+        assert!(result.is_err());
+
+        let err = match result {
+            Err(e) => e,
+            Ok(_) => panic!("Expected error, got Ok"),
+        };
+        assert!(matches!(
+            err.get_details(),
+            ErrorDetails::IncompatibleTool { .. }
+        ));
+
+        // Check error message
+        if let ErrorDetails::IncompatibleTool { message } = err.get_details() {
+            assert!(message.contains("OpenAI custom tools are not supported by this provider"));
+        }
+    }
+
+    /// Test that strict_tools_available() returns an error when custom tools are present
+    #[tokio::test]
+    async fn test_strict_tools_available_errors_with_custom_tools() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: Some(vec!["get_temperature".to_string()]),
+            additional_tools: Some(vec![Tool::OpenAICustom(OpenAICustomTool {
+                name: "custom_tool".to_string(),
+                description: Some("A custom tool".to_string()),
+                format: Some(OpenAICustomToolFormat::Text),
+            })]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &["get_temperature".to_string()],
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // strict_tools_available() should error
+        let result = tool_call_config.strict_tools_available();
+        assert!(result.is_err());
+
+        let err = match result {
+            Err(e) => e,
+            Ok(_) => panic!("Expected error, got Ok"),
+        };
+        assert!(matches!(
+            err.get_details(),
+            ErrorDetails::IncompatibleTool { .. }
+        ));
+    }
+
+    /// Test that tools_available_with_openai_custom() works correctly with only function tools
+    #[tokio::test]
+    async fn test_tools_available_with_openai_custom_function_tools_only() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "query_articles".to_string(),
+            ]),
+            additional_tools: None, // No custom tools
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &["get_temperature".to_string()],
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Should have 2 function tools
+        let tools: Vec<_> = tool_call_config
+            .tools_available_with_openai_custom()
+            .collect();
+        assert_eq!(tools.len(), 2);
+
+        // All should be function tools
+        for tool_ref in tools {
+            assert!(matches!(tool_ref, ToolConfigRef::Function(_)));
+        }
+    }
+
+    /// Test that tools_available_with_openai_custom() works correctly with only custom tools
+    #[tokio::test]
+    async fn test_tools_available_with_openai_custom_custom_tools_only() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: Some(vec![
+                Tool::OpenAICustom(OpenAICustomTool {
+                    name: "custom_1".to_string(),
+                    description: Some("First custom tool".to_string()),
+                    format: Some(OpenAICustomToolFormat::Text),
+                }),
+                Tool::OpenAICustom(OpenAICustomTool {
+                    name: "custom_2".to_string(),
+                    description: Some("Second custom tool".to_string()),
+                    format: Some(OpenAICustomToolFormat::Text),
+                }),
+            ]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &EMPTY_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Should have 2 custom tools
+        let tools: Vec<_> = tool_call_config
+            .tools_available_with_openai_custom()
+            .collect();
+        assert_eq!(tools.len(), 2);
+
+        // All should be custom tools
+        for tool_ref in tools {
+            assert!(matches!(tool_ref, ToolConfigRef::OpenAICustom(_)));
+        }
+    }
+
+    /// Test that tools_available_with_openai_custom() works correctly with both function and custom tools
+    #[tokio::test]
+    async fn test_tools_available_with_openai_custom_mixed_tools() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "query_articles".to_string(),
+            ]),
+            additional_tools: Some(vec![Tool::OpenAICustom(OpenAICustomTool {
+                name: "custom_1".to_string(),
+                description: Some("Custom tool".to_string()),
+                format: Some(OpenAICustomToolFormat::Text),
+            })]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &["get_temperature".to_string()],
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Should have 3 tools total (2 function + 1 custom)
+        let tools: Vec<_> = tool_call_config
+            .tools_available_with_openai_custom()
+            .collect();
+        assert_eq!(tools.len(), 3);
+
+        // First 2 should be function tools, last should be custom
+        let mut function_count = 0;
+        let mut custom_count = 0;
+
+        for tool_ref in tools {
+            match tool_ref {
+                ToolConfigRef::Function(_) => function_count += 1,
+                ToolConfigRef::OpenAICustom(_) => custom_count += 1,
+            }
+        }
+
+        assert_eq!(function_count, 2);
+        assert_eq!(custom_count, 1);
+    }
+
+    /// Test that tools_available() succeeds when no custom tools are present
+    #[tokio::test]
+    async fn test_tools_available_succeeds_without_custom_tools() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "query_articles".to_string(),
+            ]),
+            additional_tools: None, // No custom tools
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &["get_temperature".to_string()],
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // tools_available() should succeed when no custom tools
+        let result = tool_call_config.tools_available();
+        assert!(result.is_ok());
+
+        let tools: Vec<_> = result.unwrap().collect();
+        assert_eq!(tools.len(), 2);
+    }
+
+    /// Test that strict_tools_available() succeeds when no custom tools are present
+    #[tokio::test]
+    async fn test_strict_tools_available_succeeds_without_custom_tools() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "query_articles".to_string(),
+            ]),
+            additional_tools: None, // No custom tools
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &["get_temperature".to_string()],
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // strict_tools_available() should succeed when no custom tools
+        let result = tool_call_config.strict_tools_available();
+        assert!(result.is_ok());
+
+        let tools: Vec<_> = result.unwrap().collect();
+        assert_eq!(tools.len(), 2);
     }
 }

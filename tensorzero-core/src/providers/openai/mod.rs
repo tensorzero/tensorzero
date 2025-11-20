@@ -60,7 +60,7 @@ use crate::providers::openai::responses::{
 };
 use crate::tool::{
     FunctionTool, FunctionToolConfig, OpenAICustomTool, ToolCall, ToolCallChunk, ToolCallConfig,
-    ToolChoice,
+    ToolChoice, ToolConfigRef,
 };
 
 use crate::providers::helpers::{
@@ -1572,15 +1572,11 @@ fn prepare_openai_tools<'a>(request: &'a ModelInferenceRequest) -> PreparedOpenA
             // This is the only place where we add OpenAI custom tools
             let tools = Some(
                 tool_config
-                    .tools_available()
-                    .map(Into::into)
-                    // VERY IMPORTANT
-                    .chain(
-                        tool_config
-                            .openai_custom_tools
-                            .iter()
-                            .map(|custom| OpenAITool::Custom { custom }),
-                    )
+                    .tools_available_with_openai_custom()
+                    .map(|tool_ref| match tool_ref {
+                        ToolConfigRef::Function(func) => func.into(),
+                        ToolConfigRef::OpenAICustom(custom) => OpenAITool::Custom { custom },
+                    })
                     .collect(),
             );
             let parallel_tool_calls = tool_config.parallel_tool_calls;

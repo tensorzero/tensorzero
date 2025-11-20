@@ -537,6 +537,9 @@ pub enum ErrorDetails {
     ToolNotLoaded {
         name: String,
     },
+    IncompatibleTool {
+        message: String,
+    },
     TypeConversion {
         message: String,
     },
@@ -700,6 +703,7 @@ impl ErrorDetails {
             ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ToolNotLoaded { .. } => tracing::Level::ERROR,
+            ErrorDetails::IncompatibleTool { .. } => tracing::Level::WARN,
             ErrorDetails::TypeConversion { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownCandidate { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownFunction { .. } => tracing::Level::WARN,
@@ -849,6 +853,7 @@ impl ErrorDetails {
             ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::IncompatibleTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownFunction { .. } => StatusCode::NOT_FOUND,
@@ -1485,6 +1490,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::TypeConversion { message } => write!(f, "{message}"),
             ErrorDetails::ToolNotFound { name } => write!(f, "Tool not found: {name}"),
             ErrorDetails::ToolNotLoaded { name } => write!(f, "Tool not loaded: {name}"),
+            ErrorDetails::IncompatibleTool { message } => write!(f, "{message}"),
             ErrorDetails::UnknownCandidate { name } => {
                 write!(f, "Unknown candidate variant: {name}")
             }

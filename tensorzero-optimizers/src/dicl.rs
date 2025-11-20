@@ -218,17 +218,14 @@ fn validate_function_config(
         }
         FunctionConfig::Json(json_config) => {
             // JSON functions should have exactly one implicit tool for schema validation
-            if json_config
+            let tools_count = json_config
                 .implicit_tool_call_config
-                .tools_available()
-                .count()
-                != 1
-            {
+                .tools_available()?
+                .count();
+            if tools_count != 1 {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
-                        "DICL optimization expected JSON function '{}' to have exactly 1 implicit tool, but found {}. This indicates a configuration issue.",
-                        function_name,
-                        json_config.implicit_tool_call_config.tools_available().count()
+                        "DICL optimization expected JSON function '{function_name}' to have exactly 1 implicit tool, but found {tools_count}. This indicates a configuration issue."
                     ),
                 }));
             }

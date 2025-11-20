@@ -347,16 +347,16 @@ type PreparedVLLMToolsResult<'a> = (
 /// Otherwise convert the tool choice and tools to vLLM format
 pub(super) fn prepare_vllm_tools<'a>(
     request: &'a ModelInferenceRequest,
-) -> PreparedVLLMToolsResult<'a> {
+) -> Result<PreparedVLLMToolsResult<'a>, Error> {
     match &request.tool_config {
-        None => (None, None, None),
+        None => Ok((None, None, None)),
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None, None);
+                return Ok((None, None, None));
             }
             let tools = Some(
                 tool_config
-                    .strict_tools_available()
+                    .strict_tools_available()?
                     .map(Into::into)
                     .collect(),
             );
@@ -364,7 +364,7 @@ pub(super) fn prepare_vllm_tools<'a>(
 
             // vLLM does not support allowed_tools constraint, use regular tool_choice
             let tool_choice = Some((&tool_config.tool_choice).into());
-            (tools, tool_choice, parallel_tool_calls)
+            Ok((tools, tool_choice, parallel_tool_calls))
         }
     }
 }
@@ -427,7 +427,7 @@ impl<'a> VLLMRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_vllm_tools(request);
+        let (tools, tool_choice, parallel_tool_calls) = prepare_vllm_tools(request)?;
 
         let mut vllm_request = VLLMRequest {
             messages,
