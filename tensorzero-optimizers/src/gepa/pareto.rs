@@ -191,11 +191,9 @@ pub fn update_pareto_frontier(
         // Collect scores for this datapoint across all variants
         let mut instance_scores: Vec<(String, HashMap<String, Option<f32>>)> = Vec::new();
 
-        for variant_name in val_scores_map.keys() {
-            if let Some(variant_scores) = val_scores_map.get(variant_name) {
-                if let Some(scores) = variant_scores.get(datapoint_id) {
-                    instance_scores.push((variant_name.clone(), scores.clone()));
-                }
+        for (variant_name, variant_scores) in val_scores_map {
+            if let Some(scores) = variant_scores.get(datapoint_id) {
+                instance_scores.push((variant_name.clone(), scores.clone()));
             }
         }
 
@@ -242,6 +240,12 @@ pub fn update_pareto_frontier(
     // Step 3: Global filtering - check dominance over all (D×E) objectives
     tracing::debug!("Step 3: Global Pareto filtering across all objectives");
 
+    // Note: This has O(n² × D × E) complexity where:
+    // - n = size of candidate_set (number of variants)
+    // - D = number of datapoints
+    // - E = number of evaluators
+    // The n² term dominates: acceptable for typical GEPA workloads (n < 100)
+    // but could become a bottleneck for large variant populations (n > 100).
     let mut non_dominated = candidate_set.clone();
 
     for variant_a in &candidate_set {
@@ -1297,7 +1301,7 @@ mod tests {
 
         let frontier = result.unwrap();
 
-        // A dominates B on dp2 (only comparable point)
+        // A dominates B globally: Pareto-optimal on dp1 (only variant) and dp2 (0.8 > 0.6)
         assert_eq!(frontier.variants.len(), 1);
         assert!(frontier.variants.contains_key("variant_a"));
     }
