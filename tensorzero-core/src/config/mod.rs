@@ -792,7 +792,7 @@ impl Config {
         // Recursively walk the TOML table, sort all tables in place
         // Serialize to a string, use that for ConfigSnapshot
         // Continue parsing the table afterwards.
-        let table = prepare_table_for_snapshot(table);
+        let table = prepare_table_for_snapshot(&table);
         // Write the prepared table back to a string so that we can hash + store it in the snapshot
         let serialized_table = toml::to_string(&table).map_err(|e| {
             Error::new(ErrorDetails::Serialization {
