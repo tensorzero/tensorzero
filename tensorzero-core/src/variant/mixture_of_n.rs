@@ -73,6 +73,18 @@ impl MixtureOfNConfig {
     pub fn fuser(&self) -> &FuserConfig {
         &self.fuser
     }
+
+    /// Converts this initialized config back to its uninitialized form.
+    pub fn into_uninitialized(self) -> UninitializedMixtureOfNConfig {
+        UninitializedMixtureOfNConfig {
+            weight: self.weight,
+            timeout_s: self.timeout_s,
+            candidates: self.candidates,
+            fuser: UninitializedFuserConfig {
+                inner: self.fuser.inner.into_uninitialized(),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -1801,6 +1813,127 @@ mod tests {
                 raw_response: "My raw response".to_string(),
                 finish_reason: Some(FinishReason::Length),
             })),]
+        );
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_basic_fields() {
+        let uninitialized = UninitializedMixtureOfNConfig {
+            weight: Some(1.0),
+            timeout_s: 60.0,
+            candidates: vec!["variant1".to_string(), "variant2".to_string()],
+            fuser: UninitializedFuserConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-4".into(),
+                    temperature: Some(0.3),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.weight, Some(1.0));
+        assert_eq!(exported.timeout_s, 60.0);
+        assert_eq!(
+            exported.candidates,
+            vec!["variant1".to_string(), "variant2".to_string()]
+        );
+        assert_eq!(exported.fuser.inner.model, "gpt-4".into());
+        assert_eq!(exported.fuser.inner.temperature, Some(0.3));
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_nested_fuser() {
+        let uninitialized = UninitializedMixtureOfNConfig {
+            weight: None,
+            timeout_s: 300.0,
+            candidates: vec!["v1".to_string()],
+            fuser: UninitializedFuserConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "fuser-model".into(),
+                    temperature: Some(0.1),
+                    max_tokens: Some(50),
+                    seed: Some(99),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.fuser.inner.model, "fuser-model".into());
+        assert_eq!(exported.fuser.inner.temperature, Some(0.1));
+        assert_eq!(exported.fuser.inner.max_tokens, Some(50));
+        assert_eq!(exported.fuser.inner.seed, Some(99));
+    }
+
+    #[test]
+    fn test_into_uninitialized_with_empty_candidates() {
+        let uninitialized = UninitializedMixtureOfNConfig {
+            weight: None,
+            timeout_s: 300.0,
+            candidates: vec![],
+            fuser: UninitializedFuserConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-4".into(),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert!(exported.candidates.is_empty());
+    }
+
+    #[test]
+    fn test_into_uninitialized_serialization_round_trip() {
+        let original = UninitializedMixtureOfNConfig {
+            weight: Some(0.7),
+            timeout_s: 120.0,
+            candidates: vec!["a".to_string(), "b".to_string()],
+            fuser: UninitializedFuserConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-3.5-turbo".into(),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = original
+            .clone()
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&exported).unwrap();
+        let deserialized: UninitializedMixtureOfNConfig = serde_json::from_str(&json).unwrap();
+
+        // Should be able to load again
+        let reloaded = deserialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        assert_eq!(reloaded.weight(), Some(0.7));
+        assert_eq!(reloaded.timeout_s(), 120.0);
+        assert_eq!(
+            reloaded.candidates(),
+            &vec!["a".to_string(), "b".to_string()]
         );
     }
 }

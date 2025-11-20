@@ -50,6 +50,15 @@ impl UninitializedChainOfThoughtConfig {
     }
 }
 
+impl ChainOfThoughtConfig {
+    /// Converts this initialized config back to its uninitialized form.
+    pub fn into_uninitialized(self) -> UninitializedChainOfThoughtConfig {
+        UninitializedChainOfThoughtConfig {
+            inner: self.inner.into_uninitialized(),
+        }
+    }
+}
+
 impl Variant for ChainOfThoughtConfig {
     async fn infer(
         &self,
@@ -408,5 +417,85 @@ mod tests {
                 provider_type: None,
             })
         );
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_basic_fields() {
+        let uninitialized = UninitializedChainOfThoughtConfig {
+            inner: UninitializedChatCompletionConfig {
+                model: "gpt-4".into(),
+                weight: Some(0.8),
+                temperature: Some(0.7),
+                max_tokens: Some(150),
+                seed: Some(42),
+                ..Default::default()
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.inner.model, "gpt-4".into());
+        assert_eq!(exported.inner.weight, Some(0.8));
+        assert_eq!(exported.inner.temperature, Some(0.7));
+        assert_eq!(exported.inner.max_tokens, Some(150));
+        assert_eq!(exported.inner.seed, Some(42));
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_none_values() {
+        let uninitialized = UninitializedChainOfThoughtConfig {
+            inner: UninitializedChatCompletionConfig {
+                model: "gpt-4".into(),
+                weight: None,
+                temperature: None,
+                stop_sequences: None,
+                ..Default::default()
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.inner.weight, None);
+        assert_eq!(exported.inner.temperature, None);
+        assert_eq!(exported.inner.stop_sequences, None);
+    }
+
+    #[test]
+    fn test_into_uninitialized_serialization_round_trip() {
+        let original = UninitializedChainOfThoughtConfig {
+            inner: UninitializedChatCompletionConfig {
+                model: "gpt-4".into(),
+                weight: Some(0.5),
+                temperature: Some(0.9),
+                ..Default::default()
+            },
+        };
+
+        let config = original
+            .clone()
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&exported).unwrap();
+        let deserialized: UninitializedChainOfThoughtConfig = serde_json::from_str(&json).unwrap();
+
+        // Should be able to load again
+        let reloaded = deserialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        assert_eq!(reloaded.inner.model(), &Arc::from("gpt-4"));
+        assert_eq!(reloaded.inner.weight(), Some(0.5));
     }
 }
