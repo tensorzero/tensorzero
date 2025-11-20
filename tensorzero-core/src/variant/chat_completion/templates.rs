@@ -61,6 +61,13 @@ impl ChatTemplates {
     pub fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         self.templates.values().map(|t| &t.template).collect()
     }
+
+    /// Returns an iterator over all templates (name, template_with_schema pairs)
+    pub(super) fn iter_templates(
+        &self,
+    ) -> impl Iterator<Item = (&String, &Arc<TemplateWithSchema>)> {
+        self.templates.iter()
+    }
 }
 
 impl ChatTemplates {

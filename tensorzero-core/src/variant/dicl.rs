@@ -157,6 +157,37 @@ impl DiclConfig {
     pub fn max_distance(&self) -> Option<f32> {
         self.max_distance
     }
+
+    /// Converts this initialized config back to its uninitialized form.
+    /// Note: The original file path for system_instructions is not preserved;
+    /// a synthetic path is created with the content.
+    pub fn into_uninitialized(self) -> UninitializedDiclConfig {
+        UninitializedDiclConfig {
+            weight: self.weight,
+            embedding_model: self.embedding_model.to_string(),
+            k: self.k,
+            model: self.model.to_string(),
+            system_instructions: Some(ResolvedTomlPathData::new_fake_path(
+                "<system_instructions>".to_string(),
+                self.system_instructions,
+            )),
+            temperature: self.temperature,
+            top_p: self.top_p,
+            stop_sequences: self.stop_sequences.clone(),
+            presence_penalty: self.presence_penalty,
+            frequency_penalty: self.frequency_penalty,
+            max_tokens: self.max_tokens,
+            seed: self.seed,
+            reasoning_effort: self.inference_params_v2.reasoning_effort.clone(),
+            thinking_budget_tokens: self.inference_params_v2.thinking_budget_tokens,
+            verbosity: self.inference_params_v2.verbosity.clone(),
+            json_mode: self.json_mode,
+            extra_body: self.extra_body.clone(),
+            retries: self.retries,
+            extra_headers: self.extra_headers.clone(),
+            max_distance: self.max_distance,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -1786,5 +1817,150 @@ mod tests {
             }
             _ => panic!("Expected Text content after template stringification"),
         }
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_basic_fields() {
+        let uninitialized = UninitializedDiclConfig {
+            weight: Some(0.9),
+            embedding_model: "text-embedding-ada-002".to_string(),
+            k: 5,
+            model: "gpt-4".to_string(),
+            system_instructions: Some(ResolvedTomlPathData::new_fake_path(
+                "test.txt".to_string(),
+                "Custom instructions".to_string(),
+            )),
+            temperature: Some(0.7),
+            top_p: Some(0.9),
+            max_tokens: Some(150),
+            seed: Some(42),
+            stop_sequences: Some(vec!["STOP".to_string()]),
+            max_distance: Some(0.8),
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.weight, Some(0.9));
+        assert_eq!(exported.embedding_model, "text-embedding-ada-002");
+        assert_eq!(exported.k, 5);
+        assert_eq!(exported.model, "gpt-4");
+        assert_eq!(exported.temperature, Some(0.7));
+        assert_eq!(exported.top_p, Some(0.9));
+        assert_eq!(exported.max_tokens, Some(150));
+        assert_eq!(exported.seed, Some(42));
+        assert_eq!(exported.stop_sequences, Some(vec!["STOP".to_string()]));
+        assert_eq!(exported.max_distance, Some(0.8));
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_system_instructions_content() {
+        let instructions_content = "These are system instructions";
+        let uninitialized = UninitializedDiclConfig {
+            embedding_model: "embed-model".to_string(),
+            k: 3,
+            model: "gpt-3.5-turbo".to_string(),
+            system_instructions: Some(ResolvedTomlPathData::new_fake_path(
+                "test.txt".to_string(),
+                instructions_content.to_string(),
+            )),
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.into_uninitialized();
+
+        // Verify content is preserved (path will be synthetic)
+        assert_eq!(
+            exported.system_instructions.unwrap().data(),
+            instructions_content
+        );
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_inference_params_v2() {
+        let uninitialized = UninitializedDiclConfig {
+            embedding_model: "embed".to_string(),
+            k: 1,
+            model: "gpt-4".to_string(),
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1000),
+            verbosity: Some("verbose".to_string()),
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.reasoning_effort, Some("high".to_string()));
+        assert_eq!(exported.thinking_budget_tokens, Some(1000));
+        assert_eq!(exported.verbosity, Some("verbose".to_string()));
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_none_values() {
+        let uninitialized = UninitializedDiclConfig {
+            embedding_model: "embed".to_string(),
+            k: 1,
+            model: "gpt-4".to_string(),
+            system_instructions: None,
+            weight: None,
+            temperature: None,
+            max_tokens: None,
+            stop_sequences: None,
+            max_distance: None,
+            reasoning_effort: None,
+            thinking_budget_tokens: None,
+            verbosity: None,
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.weight, None);
+        assert_eq!(exported.temperature, None);
+        assert_eq!(exported.max_tokens, None);
+        assert_eq!(exported.stop_sequences, None);
+        assert_eq!(exported.max_distance, None);
+        assert_eq!(exported.reasoning_effort, None);
+        assert_eq!(exported.thinking_budget_tokens, None);
+        assert_eq!(exported.verbosity, None);
+        // system_instructions will be Some(<system_instructions>) due to default
+        assert!(exported.system_instructions.is_some());
+    }
+
+    #[test]
+    fn test_into_uninitialized_serialization_round_trip() {
+        let original = UninitializedDiclConfig {
+            weight: Some(0.6),
+            embedding_model: "ada-002".to_string(),
+            k: 10,
+            model: "gpt-3.5-turbo".to_string(),
+            temperature: Some(0.5),
+            ..Default::default()
+        };
+
+        let config = original.clone().load().unwrap();
+
+        let exported = config.into_uninitialized();
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&exported).unwrap();
+        let deserialized: UninitializedDiclConfig = serde_json::from_str(&json).unwrap();
+
+        // Should be able to load again
+        let reloaded = deserialized.load().unwrap();
+
+        assert_eq!(reloaded.weight(), Some(0.6));
+        assert_eq!(reloaded.embedding_model(), &Arc::from("ada-002"));
+        assert_eq!(reloaded.k(), 10);
+        assert_eq!(reloaded.model(), &Arc::from("gpt-3.5-turbo"));
+        assert_eq!(reloaded.temperature(), Some(0.5));
     }
 }
