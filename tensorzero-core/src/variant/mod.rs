@@ -911,7 +911,7 @@ mod tests {
     #[tokio::test]
     async fn test_prepare_model_inference_request() {
         // Setup common variables
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         let stream = false;
 
         // Define a dummy tool config for testing
@@ -1162,7 +1162,7 @@ mod tests {
                 api_key_public_id: None,
             },
         };
-        let templates = Arc::new(get_test_template_config());
+        let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
             templates,
@@ -1468,7 +1468,7 @@ mod tests {
                 api_key_public_id: None,
             },
         };
-        let templates = Arc::new(get_test_template_config());
+        let templates = Arc::new(get_test_template_config().await);
         let inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
             templates,

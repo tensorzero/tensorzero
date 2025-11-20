@@ -393,7 +393,7 @@ pub fn deserialize_from_stored_sample<'a>(
                 )))
             }
             Datapoint::Json(json_wire) => Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
-                json_wire,
+                json_wire.into_storage(),
             ))),
         };
     }
