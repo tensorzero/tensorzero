@@ -1,5 +1,3 @@
-//! Shared test helpers for GEPA e2e tests
-
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::missing_panics_doc)]
 
 use std::collections::HashMap;
