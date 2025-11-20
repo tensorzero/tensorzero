@@ -49,6 +49,47 @@ pub struct Analysis {
     pub analysis: Vec<ContentBlockChatOutput>,
 }
 
+/// Create the variant configuration for the analyze function
+///
+/// Builds an uninitialized chat completion config with embedded templates
+/// for the GEPA analyze function using settings from GEPAConfig.
+///
+/// # Arguments
+/// * `gepa_config` - GEPA configuration containing analysis_model, retries, and max_tokens
+///
+/// # Returns
+/// * Configured UninitializedChatCompletionConfig with system and user templates
+fn create_analyze_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatCompletionConfig {
+    let mut analyze_config = UninitializedChatCompletionConfig {
+        model: gepa_config.analysis_model.clone().into(),
+        weight: None,
+        retries: gepa_config.retries,
+        max_tokens: gepa_config.max_tokens,
+        ..Default::default()
+    };
+
+    analyze_config.templates.inner.insert(
+        "system".to_string(),
+        UninitializedChatTemplate {
+            path: ResolvedTomlPathData::new_fake_path(
+                "gepa/analyze/system.minijinja".to_string(),
+                include_str!("functions/analyze/system_template.minijinja").to_string(),
+            ),
+        },
+    );
+    analyze_config.templates.inner.insert(
+        "user".to_string(),
+        UninitializedChatTemplate {
+            path: ResolvedTomlPathData::new_fake_path(
+                "gepa/analyze/user.minijinja".to_string(),
+                include_str!("functions/analyze/user_template.minijinja").to_string(),
+            ),
+        },
+    );
+
+    analyze_config
+}
+
 /// Build the input JSON for the analyze function
 ///
 /// Passes high-level objects to the template for serialization rather than extracting individual fields.
@@ -165,32 +206,7 @@ pub async fn analyze_inferences(
         max_concurrency
     );
 
-    let mut analyze_config = UninitializedChatCompletionConfig {
-        model: analysis_model.clone().into(),
-        weight: None,
-        retries: gepa_config.retries,
-        max_tokens: gepa_config.max_tokens,
-        ..Default::default()
-    };
-
-    analyze_config.templates.inner.insert(
-        "system".to_string(),
-        UninitializedChatTemplate {
-            path: ResolvedTomlPathData::new_fake_path(
-                "gepa/analyze/system.minijinja".to_string(),
-                include_str!("functions/analyze/system_template.minijinja").to_string(),
-            ),
-        },
-    );
-    analyze_config.templates.inner.insert(
-        "user".to_string(),
-        UninitializedChatTemplate {
-            path: ResolvedTomlPathData::new_fake_path(
-                "gepa/analyze/user.minijinja".to_string(),
-                include_str!("functions/analyze/user_template.minijinja").to_string(),
-            ),
-        },
-    );
+    let analyze_config = create_analyze_variant_config(gepa_config);
 
     let analyze_variant_config = Arc::new(UninitializedVariantInfo {
         inner: UninitializedVariantConfig::ChatCompletion(analyze_config),
@@ -581,6 +597,78 @@ mod tests {
             evaluators: HashMap::new(),
             function_name: "test_function".to_string(),
         })
+    }
+
+    // ============================================================================
+    // Unit Tests for create_analyze_variant_config
+    // ============================================================================
+
+    #[test]
+    fn test_create_analyze_variant_config() {
+        use tensorzero_core::optimization::gepa::GEPAConfig;
+        use tensorzero_core::utils::retries::RetryConfig;
+
+        // Create a test GEPAConfig with specific values
+        let gepa_config = GEPAConfig {
+            analysis_model: "test-analysis-model".to_string(),
+            retries: RetryConfig {
+                num_retries: 5,
+                max_delay_s: 30.0,
+            },
+            max_tokens: Some(1000),
+            max_concurrency: 10,
+            include_inference_for_mutation: true,
+            ..Default::default()
+        };
+
+        let config = create_analyze_variant_config(&gepa_config);
+
+        // Verify model is set correctly
+        assert_eq!(&*config.model, "test-analysis-model");
+
+        // Verify retries is set correctly
+        assert_eq!(config.retries.num_retries, 5);
+        assert_eq!(config.retries.max_delay_s, 30.0);
+
+        // Verify max_tokens is set correctly
+        assert_eq!(config.max_tokens, Some(1000));
+
+        // Verify weight is None (default)
+        assert_eq!(config.weight, None);
+
+        // Verify templates are created
+        assert_eq!(config.templates.inner.len(), 2);
+        assert!(config.templates.inner.contains_key("system"));
+        assert!(config.templates.inner.contains_key("user"));
+
+        // Verify system template path and content
+        let system_template = config.templates.inner.get("system").unwrap();
+        assert!(system_template
+            .path
+            .get_template_key()
+            .ends_with("system.minijinja"));
+        let system_content = system_template.path.data();
+        assert!(system_content.contains("You are an expert in diagnosing quality issues"));
+        assert!(system_content.contains("## Context"));
+        assert!(system_content.contains("## Your Task"));
+        assert!(system_content.contains("These response types are mutually exclusive"));
+        assert!(system_content.contains("<report_error>"));
+        assert!(system_content.contains("<report_improvement>"));
+        assert!(system_content.contains("<report_optimal>"));
+
+        // Verify user template path and content
+        let user_template = config.templates.inner.get("user").unwrap();
+        assert!(user_template
+            .path
+            .get_template_key()
+            .ends_with("user.minijinja"));
+        let user_content = user_template.path.data();
+        assert!(user_content.contains("<function_context>"));
+        assert!(user_content.contains("<inference_context>"));
+        assert!(user_content.contains("{{function_config"));
+        assert!(user_content.contains("{{evaluation_scores"));
+        assert!(user_content.contains("tojson(indent=2)"));
+        assert!(user_content.contains("Analyze the inference_output given the"));
     }
 
     // ============================================================================

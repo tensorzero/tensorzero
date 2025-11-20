@@ -35,7 +35,7 @@ fn default_include_inference_for_mutation() -> bool {
 /// GEPA is a multi-objective optimization algorithm that maintains a Pareto frontier
 /// of high-performing variants. It uses genetic programming techniques to evolve
 /// prompt templates based on evaluation results.
-#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[derive(Debug, Default, Clone, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 pub struct GEPAConfig {
     /// Name of the function being optimized
