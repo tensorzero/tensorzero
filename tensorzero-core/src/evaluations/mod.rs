@@ -112,6 +112,7 @@ pub struct LLMJudgeConfig {
     pub output_type: LLMJudgeOutputType,
     pub include: LLMJudgeIncludeConfig,
     pub optimize: LLMJudgeOptimize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cutoff: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -372,7 +373,7 @@ struct UninitializedLLMJudgeConfig {
     include: LLMJudgeIncludeConfig,
     #[serde(default)]
     cutoff: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     description: Option<String>,
 }
 
