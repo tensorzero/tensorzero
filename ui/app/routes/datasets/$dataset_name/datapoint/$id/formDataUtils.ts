@@ -51,7 +51,7 @@ export const UpdateDatapointFormDataSchema = z.object({
   input: z.custom<Input>((val) => val !== null && typeof val === "object", {
     message: "Input must be a valid object",
   }),
-  // TODO: this could be discrimated over type to be more type-safe but it's progress...
+  // TODO: this could be discriminated over `type` to be more type-safe but it's progress...
   output: z
     .custom<
       ContentBlockChatOutput[] | JsonInferenceOutput
