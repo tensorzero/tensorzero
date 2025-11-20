@@ -102,8 +102,6 @@ impl EvaluatorConfig {
 pub struct ExactMatchConfig {
     #[serde(default)]
     pub cutoff: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -1170,10 +1168,7 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig {
-                    cutoff: Some(0.4),
-                    description: Some("exact match description".to_string()),
-                }),
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.4) }),
             );
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
@@ -1193,13 +1188,7 @@ mod tests {
             );
             assert_eq!(config.evaluators.len(), 1);
             match config.evaluators.get("em_evaluator").unwrap() {
-                EvaluatorConfig::ExactMatch(params) => {
-                    assert_eq!(params.cutoff, Some(0.4));
-                    assert_eq!(
-                        params.description.as_deref(),
-                        Some("exact match description")
-                    );
-                }
+                EvaluatorConfig::ExactMatch(params) => assert_eq!(params.cutoff, Some(0.4)),
                 EvaluatorConfig::LLMJudge(_) => panic!("Expected ExactMatch evaluator"),
             }
             // No additional function configs for exact match
@@ -1489,10 +1478,7 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig {
-                    cutoff: None,
-                    description: None,
-                }),
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
@@ -1514,10 +1500,7 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "em_evaluator".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig {
-                    cutoff: None,
-                    description: None,
-                }),
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
@@ -1669,10 +1652,7 @@ mod tests {
             let mut evaluators = HashMap::new();
             evaluators.insert(
                 "foo::invalid_name".to_string(),
-                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig {
-                    cutoff: None,
-                    description: None,
-                }),
+                UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
             let uninitialized_config = UninitializedInferenceEvaluationConfig {
