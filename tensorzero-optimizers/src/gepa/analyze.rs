@@ -244,8 +244,6 @@ pub async fn analyze_inferences(
                 // Create ClientInferenceParams for the analyze function
                 let params = ClientInferenceParams {
                     function_name: Some("tensorzero::optimization::gepa::analyze".to_string()),
-                    model_name: None,
-                    episode_id: None,
                     input: ClientInput {
                         messages: vec![ClientInputMessage {
                             role: Role::User,
@@ -256,21 +254,10 @@ pub async fn analyze_inferences(
                         }],
                         system: None,
                     },
-                    stream: None,
-                    params: Default::default(),
-                    variant_name: None,
                     dryrun: Some(true), // Required when using internal_dynamic_variant_config
                     internal: true,
-                    tags: HashMap::new(),
-                    dynamic_tool_params: Default::default(),
-                    output_schema: None,
-                    credentials: HashMap::new(),
-                    cache_options: Default::default(),
-                    include_original_response: false,
-                    extra_body: Default::default(),
-                    extra_headers: Default::default(),
                     internal_dynamic_variant_config: Some((*analyze_variant_config).clone()),
-                    otlp_traces_extra_headers: HashMap::new(),
+                    ..Default::default()
                 };
 
                 // Call the inference API
@@ -438,7 +425,9 @@ mod tests {
         function::{FunctionConfig, FunctionConfigChat},
         inference::types::{ContentBlockChatOutput, Input, Text, Usage},
         jsonschema_util::{SchemaWithMetadata, StaticJSONSchema},
+        optimization::gepa::GEPAConfig,
         tool::StaticToolConfig,
+        utils::retries::RetryConfig,
     };
     use uuid::Uuid;
 
@@ -605,9 +594,6 @@ mod tests {
 
     #[test]
     fn test_create_analyze_variant_config() {
-        use tensorzero_core::optimization::gepa::GEPAConfig;
-        use tensorzero_core::utils::retries::RetryConfig;
-
         // Create a test GEPAConfig with specific values
         let gepa_config = GEPAConfig {
             analysis_model: "test-analysis-model".to_string(),
