@@ -24,8 +24,10 @@ use tensorzero_core::{
 
 use crate::{JobHandle, Optimizer};
 
+mod evaluate;
 mod pareto;
 // TODO: do not re-export
+pub use evaluate::create_evaluation_dataset;
 pub use pareto::{is_improvement, update_pareto_frontier};
 
 #[async_trait]
