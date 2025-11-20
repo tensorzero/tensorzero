@@ -9,7 +9,9 @@ use tensorzero_core::db::clickhouse::{
     test_helpers::{get_clickhouse, CLICKHOUSE_URL},
     TableName,
 };
-use tensorzero_core::endpoints::datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
+use tensorzero_core::endpoints::datasets::{
+    StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint,
+};
 use uuid::Uuid;
 
 /// Takes a chat fixture as a path to a JSONL file and writes the fixture to the dataset.
@@ -46,10 +48,10 @@ pub async fn write_json_fixture_to_dataset(
 ) {
     let fixture = std::fs::read_to_string(fixture_path).unwrap();
     let fixture = fixture.trim();
-    let mut datapoints: Vec<JsonInferenceDatapoint> = Vec::new();
+    let mut datapoints: Vec<StoredJsonInferenceDatapoint> = Vec::new();
     // Iterate over the lines in the string
     for line in fixture.lines() {
-        let mut datapoint: JsonInferenceDatapoint = serde_json::from_str(line).unwrap();
+        let mut datapoint: StoredJsonInferenceDatapoint = serde_json::from_str(line).unwrap();
         datapoint.id = Uuid::now_v7();
         if let Some(dataset_name) = dataset_name_mapping.get(&datapoint.dataset_name) {
             datapoint.dataset_name = dataset_name.to_string();

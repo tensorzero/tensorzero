@@ -1354,7 +1354,7 @@ impl TensorZeroGateway {
         concurrency: usize,
         inference_cache: String,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
-        max_datapoints: Option<usize>,
+        max_datapoints: Option<u32>,
         adaptive_stopping: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
@@ -2533,7 +2533,7 @@ impl AsyncTensorZeroGateway {
         concurrency: usize,
         inference_cache: String,
         internal_dynamic_variant_config: Option<&Bound<'py, PyDict>>,
-        max_datapoints: Option<usize>,
+        max_datapoints: Option<u32>,
         adaptive_stopping: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();

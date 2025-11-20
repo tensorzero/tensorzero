@@ -4,7 +4,6 @@
 )]
 mod common;
 use clap::Parser;
-use evaluations::dataset::query_dataset;
 use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEvaluatorParams};
 use evaluations::stopping::MIN_DATAPOINTS;
 use evaluations::Clients;
@@ -14,9 +13,11 @@ use tensorzero_core::client::input_handling::resolved_input_to_client_input;
 use tensorzero_core::db::clickhouse::test_helpers::{
     select_inference_evaluation_human_feedback_clickhouse, select_model_inferences_clickhouse,
 };
-use tensorzero_core::endpoints::datasets::{StoredDatapoint, StoredJsonInferenceDatapoint};
+use tensorzero_core::endpoints::datasets::{
+    v1::{list_datapoints, types::ListDatapointsRequest},
+    ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
+};
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
-use tensorzero_core::function::{FunctionConfig, FunctionConfigJson};
 use tensorzero_core::inference::types::{
     StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
 };
@@ -37,7 +38,8 @@ use tensorzero_core::client::{
     ClientBuilder, ClientBuilderMode, FeedbackParams, InferenceResponse, Role,
 };
 use tensorzero_core::config::{
-    path::ResolvedTomlPathData, Config, UninitializedVariantConfig, UninitializedVariantInfo,
+    path::ResolvedTomlPathData, Config, ConfigFileGlob, UninitializedVariantConfig,
+    UninitializedVariantInfo,
 };
 use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig;
 use tensorzero_core::{
@@ -48,10 +50,7 @@ use tensorzero_core::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Usage},
 };
 use tensorzero_core::{
-    endpoints::{
-        datasets::StoredChatInferenceDatapoint,
-        inference::{ChatInferenceResponse, JsonInferenceResponse},
-    },
+    endpoints::inference::{ChatInferenceResponse, JsonInferenceResponse},
     evaluations::{LLMJudgeIncludeConfig, LLMJudgeOptimize},
 };
 use uuid::Uuid;
@@ -1304,7 +1303,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         },
         variant_name: "test_variant".to_string(),
     });
-    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
@@ -1324,7 +1323,7 @@ async fn test_run_llm_judge_evaluator_chat() {
             text: "Hello, world!".to_string(),
         })]),
         tags: None,
-        tool_params: None,
+        tool_params: Default::default(),
         source_inference_id: None,
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
@@ -1414,7 +1413,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     assert_eq!(result.value, json!(1));
 
     // Try without output
-    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
@@ -1432,7 +1431,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         function_name: "test_function".to_string(),
         output: None,
         tags: None,
-        tool_params: None,
+        tool_params: Default::default(),
         source_inference_id: None,
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
@@ -1479,7 +1478,7 @@ async fn test_run_llm_judge_evaluator_json() {
         },
         variant_name: "test_variant".to_string(),
     });
-    let datapoint = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
+    let datapoint = Datapoint::Json(JsonInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
@@ -1590,7 +1589,7 @@ async fn test_run_llm_judge_evaluator_json() {
     assert_eq!(result.value, json!(1));
 
     // Try without output
-    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
@@ -1608,7 +1607,7 @@ async fn test_run_llm_judge_evaluator_json() {
         function_name: "test_function".to_string(),
         output: None,
         tags: None,
-        tool_params: None,
+        tool_params: Default::default(),
         source_inference_id: None,
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
@@ -2225,15 +2224,30 @@ async fn test_query_skips_staled_datapoints() {
     )
     .await;
 
-    let dataset = query_dataset(
-        &clickhouse,
-        &dataset_name,
-        "extract_entities",
-        &FunctionConfig::Json(FunctionConfigJson::default()),
-        None, // No limit
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let config = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new_from_path(&config_path).unwrap(),
+        false,
     )
     .await
     .unwrap();
+
+    #[expect(deprecated)]
+    let request = ListDatapointsRequest {
+        function_name: Some("extract_entities".to_string()),
+        limit: Some(u32::MAX), // Get all datapoints
+        page_size: None,       // deprecated but required
+        offset: Some(0),
+        filter: None,
+    };
+    let dataset = list_datapoints(&clickhouse, &config, dataset_name.clone(), request)
+        .await
+        .unwrap()
+        .datapoints;
+
     // This ID should not be returned
     let staled_id = Uuid::parse_str("01957bbb-44a8-7490-bfe7-32f8ed2fc797").unwrap();
     let staled_datapoint = dataset.iter().find(|dp| dp.id() == staled_id);

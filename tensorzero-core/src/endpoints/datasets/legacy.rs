@@ -1200,6 +1200,13 @@ impl Datapoint {
             Datapoint::Json(_) => None,
         }
     }
+
+    pub fn output_schema(&self) -> Option<&serde_json::Value> {
+        match self {
+            Datapoint::Chat(_datapoint) => None,
+            Datapoint::Json(datapoint) => Some(&datapoint.output_schema),
+        }
+    }
 }
 
 impl StoredDatapoint {
