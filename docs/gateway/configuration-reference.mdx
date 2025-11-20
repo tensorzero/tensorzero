@@ -591,6 +591,26 @@ api_base = "https://example.com/v1/messages"
 # ...
 ```
 
+##### `beta_structured_outputs`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Enables Anthropic's beta structured outputs feature, which provides native support for strict JSON schema validation and strict tool parameter validation.
+
+When enabled:
+
+- Adds the `anthropic-beta: structured-outputs-2025-11-13` header to requests
+- For JSON functions with `json_mode = "strict"`, forwards the output schema in the `output_format` field
+- For tools with `strict = true`, forwards the `strict` parameter to enable strict validation
+
+```toml title="tensorzero.toml"
+[models.claude_structured.providers.anthropic]
+type = "anthropic"
+model_name = "claude-sonnet-4-5-20250929"
+beta_structured_outputs = true
+```
+
 </Accordion>
 
 <Accordion title='type: "aws_bedrock"'>

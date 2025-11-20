@@ -36,7 +36,8 @@ For example, certain providers don't support `tool_choice: required`; in these c
 TensorZero Gateway will coerce the request to `tool_choice: auto` under the hood.
 
 Currently, Fireworks AI and OpenAI are the only providers that support `parallel_tool_calls`.
-Additionally, TensorZero Gateway only supports `strict` (commonly referred to as Structured Outputs, Guided Decoding, or similar names) for Azure, GCP Vertex AI Gemini, Google AI Studio, OpenAI, Together AI, vLLM, and xAI.
+Additionally, TensorZero Gateway supports `strict` (commonly referred to as Structured Outputs, Guided Decoding, or similar names) for Azure, GCP Vertex AI Gemini, Google AI Studio, OpenAI, Together AI, vLLM, and xAI.
+You can also enable `strict` for Anthropic with `beta_structured_outputs = true`.
 
 Below are the known limitations for each supported model provider.
 
@@ -44,6 +45,7 @@ Below are the known limitations for each supported model provider.
   - The Anthropic API doesn't support consecutive messages from the same role.
   - The Anthropic API doesn't support `tool_choice: none`.
   - The Anthropic API doesn't support `seed`.
+  - Structured Outputs (strict mode) requires enabling `beta_structured_outputs = true` in the provider configuration.
 - **AWS Bedrock**
   - The TensorZero Gateway currently doesn't support AWS Bedrock guardrails and traces.
   - The TensorZero Gateway uses a non-standard structure for storing `ModelInference.raw_response` for AWS Bedrock inference requests.
