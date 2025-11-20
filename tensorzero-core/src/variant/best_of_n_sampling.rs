@@ -25,7 +25,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
-use crate::tool::create_implicit_tool_call_config_with_allowed_tools;
+use crate::tool::create_json_mode_tool_call_config_with_allowed_tools;
 use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
 use crate::utils::unbounded_recursion_wrapper;
 use crate::variant::mixture_of_n::stream_inference_from_non_stream;
@@ -144,8 +144,8 @@ lazy_static! {
         }))
         .expect("Failed to create schema for evaluator output")
     };
-    static ref IMPLICIT_TOOL_CALL_CONFIG: ToolCallConfig = {
-        create_implicit_tool_call_config_with_allowed_tools(
+    static ref JSON_MODE_TOOL_CALL_CONFIG: ToolCallConfig = {
+        create_json_mode_tool_call_config_with_allowed_tools(
             EVALUATOR_OUTPUT_SCHEMA.clone(),
             AllowedTools {
                 tools: [IMPLICIT_TOOL_NAME.to_string()].into_iter().collect(),
@@ -755,7 +755,7 @@ impl BestOfNEvaluatorConfig {
             .or_else(|| self.inner.json_mode().cloned())
             .unwrap_or(JsonMode::Strict);
         let tool_config = match json_mode {
-            JsonMode::ImplicitTool => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
+            JsonMode::Tool => Some(Cow::Borrowed(&*JSON_MODE_TOOL_CALL_CONFIG)),
             JsonMode::Off | JsonMode::On | JsonMode::Strict => None,
         };
         if !inference_config.extra_body.is_empty() {
@@ -1088,6 +1088,7 @@ mod tests {
                 None,
                 InferenceParams::default(),
                 None,
+                None,
             )
             .await,
         );
@@ -1123,6 +1124,7 @@ mod tests {
                 vec![model_inference_response2],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,
@@ -1290,6 +1292,7 @@ mod tests {
                 None,
                 InferenceParams::default(),
                 None,
+                None,
             )
             .await,
         );
@@ -1325,6 +1328,7 @@ mod tests {
                 vec![model_inference_response1],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,

@@ -6,4 +6,4 @@
  * we support coercing tool calls into JSON mode.
  * This is represented as a tool config in the
  */
-export type JsonMode = "off" | "on" | "strict" | "implicit_tool";
+export type JsonMode = "off" | "on" | "strict" | "tool";

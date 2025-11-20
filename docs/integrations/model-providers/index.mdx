@@ -74,6 +74,6 @@ Below are the known limitations for each supported model provider.
 - **Together AI**
   - The Together AI API doesn't seem to respect `tool_choice` in many cases.
 - **xAI**
-  - The xAI provider doesn't support JSON mode. JSON functions are supported with `json_mode = "implicit_tool"` (recommended) or `json_mode = "off"`.
+  - The xAI provider doesn't support JSON mode. JSON functions are supported with `json_mode = "tool"` (recommended) or `json_mode = "off"`.
   - The xAI API has issues with multi-turn tool use ([bug report](https://gist.github.com/GabrielBianconi/47a4247cfd8b6689e7228f654806272d)).
   - The xAI API has issues with `tool_choice: none` ([bug report](https://gist.github.com/GabrielBianconi/2199022d0ea8518e06d366fb613c5bb5)).

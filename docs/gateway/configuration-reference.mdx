@@ -2639,7 +2639,7 @@ The supported modes are:
 - `off`: Make a chat completion request without any special JSON handling (not recommended).
 - `on`: Make a chat completion request with JSON mode (if supported by the provider).
 - `strict`: Make a chat completion request with strict JSON mode (if supported by the provider). For example, the TensorZero Gateway uses Structured Outputs for OpenAI.
-- `implicit_tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
+- `tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
@@ -3372,7 +3372,7 @@ The supported modes are:
 - `off`: Make a chat completion request without any special JSON handling (not recommended).
 - `on`: Make a chat completion request with JSON mode (if supported by the provider).
 - `strict`: Make a chat completion request with strict JSON mode (if supported by the provider). For example, the TensorZero Gateway uses Structured Outputs for OpenAI.
-- `implicit_tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
+- `tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]

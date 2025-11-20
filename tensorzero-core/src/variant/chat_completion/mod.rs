@@ -666,6 +666,19 @@ impl Variant for ChatCompletionConfig {
                 ),
             })
         })?;
+
+        // Validate that json_mode = "tool" is not used with chat functions that have tools configured
+        if let Some(JsonMode::Tool) = self.json_mode {
+            if function.tools().next().is_some() {
+                return Err(ErrorDetails::Config {
+                    message: format!(
+                        "`functions.{function_name}.variants.{variant_name}`: Cannot use `json_mode = \"tool\"` with chat functions that have tools configured. Please remove tools from the function or use a JSON function instead."
+                    ),
+                }
+                .into());
+            }
+        }
+
         Ok(())
     }
 
@@ -1767,7 +1780,7 @@ mod tests {
             "required": ["answer"],
             "additionalProperties": false
         });
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
@@ -1781,7 +1794,7 @@ mod tests {
             )
             .unwrap(),
             output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1955,7 +1968,7 @@ mod tests {
             "required": ["response"],
             "additionalProperties": false
         });
-        let implicit_tool_call_config =
+        let json_mode_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
             StaticJSONSchema::from_value(hardcoded_output_schema).unwrap();
@@ -1971,7 +1984,7 @@ mod tests {
             )
             .unwrap(),
             output_schema: hardcoded_output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -2088,7 +2101,7 @@ mod tests {
             "required": ["answer"],
             "additionalProperties": false
         });
-        let implicit_tool_call_config =
+        let json_mode_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
             StaticJSONSchema::from_value(hardcoded_output_schema).unwrap();
@@ -2104,7 +2117,7 @@ mod tests {
             )
             .unwrap(),
             output_schema: hardcoded_output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),

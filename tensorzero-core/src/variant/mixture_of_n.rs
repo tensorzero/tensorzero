@@ -1162,6 +1162,7 @@ mod tests {
                 None,
                 InferenceParams::default(),
                 None,
+                None,
             )
             .await,
         );
@@ -1194,6 +1195,7 @@ mod tests {
                 vec![model_inference_response2],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,
@@ -1326,7 +1328,7 @@ mod tests {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
-            implicit_tool_call_config: ToolCallConfig::default(),
+            json_mode_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1361,6 +1363,7 @@ mod tests {
                 None,
                 InferenceParams::default(),
                 None,
+                None,
             )
             .await,
         );
@@ -1393,6 +1396,7 @@ mod tests {
                 vec![model_inference_response1],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,

@@ -22,7 +22,7 @@ use crate::{
         extra_headers::ExtraHeadersConfig,
     },
     jsonschema_util::StaticJSONSchema,
-    tool::create_implicit_tool_call_config,
+    tool::create_json_mode_tool_call_config,
     variant::{
         best_of_n_sampling::{
             UninitializedBestOfNEvaluatorConfig, UninitializedBestOfNSamplingConfig,
@@ -416,8 +416,8 @@ impl UninitializedEvaluatorConfig {
                         })
                     })?;
                 let output_schema = StaticJSONSchema::from_value(output_schema_value)?;
-                let implicit_tool_call_config =
-                    create_implicit_tool_call_config(output_schema.clone());
+                let json_mode_tool_call_config =
+                    create_json_mode_tool_call_config(output_schema.clone());
 
                 let mut variants = params
                     .variants
@@ -498,7 +498,7 @@ impl UninitializedEvaluatorConfig {
                         &format!("tensorzero::evaluator::{evaluator_name}"),
                     )?,
                     output_schema,
-                    implicit_tool_call_config,
+                    json_mode_tool_call_config,
                     description: None,
                     all_explicit_template_names: all_template_names,
                     experimentation,
@@ -1146,7 +1146,7 @@ mod tests {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema: create_test_schema(),
-            implicit_tool_call_config: create_implicit_tool_call_config(create_test_schema()),
+            json_mode_tool_call_config: create_json_mode_tool_call_config(create_test_schema()),
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
@@ -1216,7 +1216,7 @@ mod tests {
                             presence_penalty: None,
                             frequency_penalty: None,
                             seed: None,
-                            json_mode: JsonMode::ImplicitTool,
+                            json_mode: JsonMode::Tool,
                             retries: RetryConfig::default(),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
@@ -1344,7 +1344,7 @@ mod tests {
                             presence_penalty: None,
                             frequency_penalty: None,
                             seed: None,
-                            json_mode: JsonMode::ImplicitTool,
+                            json_mode: JsonMode::Tool,
                             retries: RetryConfig::default(),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
@@ -1499,7 +1499,7 @@ mod tests {
                             presence_penalty: None,
                             frequency_penalty: None,
                             seed: None,
-                            json_mode: JsonMode::ImplicitTool,
+                            json_mode: JsonMode::Tool,
                             retries: RetryConfig::default(),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
@@ -1531,7 +1531,7 @@ mod tests {
                             presence_penalty: None,
                             frequency_penalty: None,
                             seed: None,
-                            json_mode: JsonMode::ImplicitTool,
+                            json_mode: JsonMode::Tool,
                             retries: RetryConfig::default(),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
@@ -1599,7 +1599,7 @@ mod tests {
                     variants: HashMap::new(),
                     output_schema: create_test_schema(),
                     schemas: SchemaData::default(),
-                    implicit_tool_call_config: create_implicit_tool_call_config(
+                    json_mode_tool_call_config: create_json_mode_tool_call_config(
                         create_test_schema(),
                     ),
                     description: None,
@@ -1652,7 +1652,7 @@ mod tests {
                             presence_penalty: None,
                             frequency_penalty: None,
                             seed: None,
-                            json_mode: JsonMode::ImplicitTool,
+                            json_mode: JsonMode::Tool,
                             retries: RetryConfig::default(),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
@@ -1727,7 +1727,7 @@ mod tests {
                             presence_penalty: None,
                             frequency_penalty: None,
                             seed: None,
-                            json_mode: JsonMode::ImplicitTool,
+                            json_mode: JsonMode::Tool,
                             retries: RetryConfig::default(),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
@@ -1804,7 +1804,7 @@ mod tests {
                             presence_penalty: None,
                             frequency_penalty: None,
                             seed: None,
-                            json_mode: JsonMode::ImplicitTool,
+                            json_mode: JsonMode::Tool,
                             retries: RetryConfig::default(),
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
@@ -1860,7 +1860,7 @@ mod tests {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema: create_test_schema(),
-            implicit_tool_call_config: create_implicit_tool_call_config(create_test_schema()),
+            json_mode_tool_call_config: create_json_mode_tool_call_config(create_test_schema()),
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),

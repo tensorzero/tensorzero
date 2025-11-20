@@ -15,7 +15,7 @@ export const jsonSchema7Validator = z.custom<JSONSchema7>((val) => {
   }
 }, "Must be a valid JSON Schema Draft 7 schema");
 
-export const jsonModeSchema = z.enum(["off", "on", "strict", "implicit_tool"]);
+export const jsonModeSchema = z.enum(["off", "on", "strict", "tool"]);
 export type JsonMode = z.infer<typeof jsonModeSchema>;
 
 export const RetryConfigSchema = z.object({
