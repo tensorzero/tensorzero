@@ -6,10 +6,10 @@
 //! - Handling analysis results with optional inference context for mutation
 //!
 //! # Main Components
-//! - [`Inference`]: Represents an inference input/output pair
-//! - [`Analysis`]: Represents an analysis result with optional inference context
-//! - [`analyze_inferences`]: Main function to analyze multiple inferences in parallel
-//! - [`build_analyze_input`]: Builds template arguments for the analyze function
+//! - `Inference`: Represents an inference input/output pair
+//! - `Analysis`: Represents an analysis result with optional inference context
+//! - `analyze_inferences`: Main function to analyze multiple inferences in parallel
+//! - `build_analyze_input`: Builds template arguments for the analyze function
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -40,7 +40,7 @@ use evaluations::stats::EvaluationInfo;
 /// Represents an inference input and output pair
 ///
 /// This struct is used to pass inference context to the mutation phase of GEPA.
-/// It is conditionally included in [`Analysis`] based on the
+/// It is conditionally included in `Analysis` based on the
 /// `include_inference_for_mutation` config flag.
 #[derive(Debug, Clone, Serialize)]
 pub struct Inference {
@@ -52,7 +52,7 @@ pub struct Inference {
 
 /// Represents an analysis result with optional inference context
 ///
-/// This struct is returned by [`analyze_inferences`] and contains the analysis
+/// This struct is returned by `analyze_inferences` and contains the analysis
 /// feedback from the GEPA analyze function, along with optional inference context
 /// for the mutation phase.
 #[derive(Debug, Clone, Serialize)]
@@ -120,7 +120,7 @@ fn create_analyze_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatC
 /// * `evaluation_config` - Evaluation config (serialized as `evaluation_config` in template)
 ///
 /// # Returns
-/// * [`Arguments`] containing template variables:
+/// * `Arguments` containing template variables:
 ///   - `function_config`: Function configuration
 ///   - `static_tools`: Static tool definitions
 ///   - `evaluation_config`: Evaluation configuration
@@ -204,7 +204,7 @@ pub fn build_analyze_input(
 /// * `evaluation_config` - Evaluation configuration for the function being optimized
 ///
 /// # Returns
-/// * Vector of [`Analysis`] containing successful analyses. Each analysis includes:
+/// * Vector of `Analysis` containing successful analyses. Each analysis includes:
 ///   - The analysis feedback text (typically XML-formatted)
 ///   - Optional inference context (input/output) if `include_inference_for_mutation` is enabled
 ///
