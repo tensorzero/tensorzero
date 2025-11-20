@@ -107,6 +107,7 @@ pub mod batch;
 pub mod chat_completion_inference_params;
 pub mod extra_body;
 pub mod extra_headers;
+pub mod extra_stuff;
 pub mod file;
 mod input_message;
 #[cfg(feature = "pyo3")]
