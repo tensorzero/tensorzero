@@ -8,6 +8,34 @@ use async_trait::async_trait;
 
 const MIGRATION_ID: &str = "0043";
 
+/// Tables that track snapshot_hash for configuration versioning
+const SNAPSHOT_TRACKED_TABLES: &[&str] = &[
+    "BatchModelInference",
+    "BatchRequest",
+    "BooleanMetricFeedback",
+    "BooleanMetricFeedbackByTargetId",
+    "BooleanMetricFeedbackByVariant",
+    "ChatInference",
+    "ChatInferenceDatapoint",
+    "CommentFeedback",
+    "CommentFeedbackByTargetId",
+    "DemonstrationFeedback",
+    "DemonstrationFeedbackByInferenceId",
+    "DynamicEvaluationRun",
+    "DynamicEvaluationRunByProjectName",
+    "DynamicEvaluationRunEpisode",
+    "FeedbackTag",
+    "FloatMetricFeedback",
+    "FloatMetricFeedbackByTargetId",
+    "InferenceByEpisodeId",
+    "InferenceById",
+    "InferenceTag",
+    "JsonInference",
+    "JsonInferenceDatapoint",
+    "ModelInference",
+    "TagInference",
+];
+
 /// TODO
 pub struct Migration0043<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
@@ -26,34 +54,7 @@ impl<'a> Migration for Migration0043<'a> {
         }
 
         // Check if any of the tables is missing the snapshot_hash column
-        let tables = [
-            "BatchModelInference",
-            "BatchRequest",
-            "BooleanMetricFeedback",
-            "BooleanMetricFeedbackByTargetId",
-            "BooleanMetricFeedbackByVariant",
-            "ChatInference",
-            "ChatInferenceDatapoint",
-            "CommentFeedback",
-            "CommentFeedbackByTargetId",
-            "DemonstrationFeedback",
-            "DemonstrationFeedbackByInferenceId",
-            "DynamicEvaluationRun",
-            "DynamicEvaluationRunByProjectName",
-            "DynamicEvaluationRunEpisode",
-            "FeedbackTag",
-            "FloatMetricFeedback",
-            "FloatMetricFeedbackByTargetId",
-            "InferenceByEpisodeId",
-            "InferenceById",
-            "InferenceTag",
-            "JsonInference",
-            "JsonInferenceDatapoint",
-            "ModelInference",
-            "TagInference",
-        ];
-
-        for table in tables {
+        for table in SNAPSHOT_TRACKED_TABLES {
             if !check_column_exists(self.clickhouse, table, "snapshot_hash", MIGRATION_ID).await? {
                 return Ok(true);
             }
@@ -80,34 +81,7 @@ impl<'a> Migration for Migration0043<'a> {
             .await?;
 
         // Add snapshot_hash column to existing tables
-        let tables = [
-            "BatchModelInference",
-            "BatchRequest",
-            "BooleanMetricFeedback",
-            "BooleanMetricFeedbackByTargetId",
-            "BooleanMetricFeedbackByVariant",
-            "ChatInference",
-            "ChatInferenceDatapoint",
-            "CommentFeedback",
-            "CommentFeedbackByTargetId",
-            "DemonstrationFeedback",
-            "DemonstrationFeedbackByInferenceId",
-            "DynamicEvaluationRun",
-            "DynamicEvaluationRunByProjectName",
-            "DynamicEvaluationRunEpisode",
-            "FeedbackTag",
-            "FloatMetricFeedback",
-            "FloatMetricFeedbackByTargetId",
-            "InferenceByEpisodeId",
-            "InferenceById",
-            "InferenceTag",
-            "JsonInference",
-            "JsonInferenceDatapoint",
-            "ModelInference",
-            "TagInference",
-        ];
-
-        for table in tables {
+        for table in SNAPSHOT_TRACKED_TABLES {
             let query = format!(
                 "ALTER TABLE {table} ADD COLUMN IF NOT EXISTS snapshot_hash Nullable(UInt256)"
             );
@@ -388,34 +362,7 @@ impl<'a> Migration for Migration0043<'a> {
     fn rollback_instructions(&self) -> String {
         let mut instructions = String::from("DROP TABLE ConfigSnapshot;\n");
 
-        let tables = [
-            "BatchModelInference",
-            "BatchRequest",
-            "BooleanMetricFeedback",
-            "BooleanMetricFeedbackByTargetId",
-            "BooleanMetricFeedbackByVariant",
-            "ChatInference",
-            "ChatInferenceDatapoint",
-            "CommentFeedback",
-            "CommentFeedbackByTargetId",
-            "DemonstrationFeedback",
-            "DemonstrationFeedbackByInferenceId",
-            "DynamicEvaluationRun",
-            "DynamicEvaluationRunByProjectName",
-            "DynamicEvaluationRunEpisode",
-            "FeedbackTag",
-            "FloatMetricFeedback",
-            "FloatMetricFeedbackByTargetId",
-            "InferenceByEpisodeId",
-            "InferenceById",
-            "InferenceTag",
-            "JsonInference",
-            "JsonInferenceDatapoint",
-            "ModelInference",
-            "TagInference",
-        ];
-
-        for table in tables {
+        for table in SNAPSHOT_TRACKED_TABLES {
             instructions.push_str(&format!("ALTER TABLE {table} DROP COLUMN snapshot_hash;\n"));
         }
 
