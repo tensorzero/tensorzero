@@ -281,9 +281,8 @@ fn validate_stored_input_messages(
 /// - Any message has no content blocks (empty content list)
 /// - Any message contains a File block (StoredInputMessageContent::File(_))
 /// - Any Text block has empty text (text.is_empty())
-/// - Any ToolCall block has arguments as None or name as empty string
+/// - Any ToolCall block has name as None/empty
 /// - Any Thought block has both text and summary as None
-/// - Invalid stored_input.system (not None, Text, or object)
 ///
 /// Returns filtered list of valid examples, or error if all examples are dropped
 pub fn validate_examples(examples: Vec<RenderedSample>) -> Result<Vec<RenderedSample>, Error> {
@@ -364,6 +363,8 @@ pub fn initialize_pareto_frontier(
                 })
             })?;
 
+            // Note: All variants in initial_variants have been validated as ChatCompletion type
+            // by validate_gepa_config, so this extraction should always succeed
             if let Some(uninitialized_chat_config) = extract_chat_completion_from_variant_info(
                 variant_info,
                 variant_name,
