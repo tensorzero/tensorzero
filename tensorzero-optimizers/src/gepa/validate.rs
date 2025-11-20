@@ -445,13 +445,11 @@ fn extract_chat_completion_config(
         // Use serde to construct UninitializedChatTemplates from HashMap
         // The #[serde(flatten)] attribute makes this work correctly
         #[expect(clippy::expect_used)]
-        {
-            serde_json::from_value(
-                serde_json::to_value(&inner)
-                    .expect("Failed to serialize inner HashMap for UninitializedChatTemplates"),
-            )
+        let inner_value = serde_json::to_value(&inner)
+            .expect("Failed to serialize inner HashMap for UninitializedChatTemplates");
+        #[expect(clippy::expect_used)]
+        serde_json::from_value(inner_value)
             .expect("Failed to deserialize UninitializedChatTemplates from serialized HashMap")
-        }
     };
 
     // Extract inference_params_v2 fields
