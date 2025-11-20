@@ -76,6 +76,13 @@ pub struct E2ETestProvider {
     pub supports_batch_inference: bool,
 }
 
+impl E2ETestProvider {
+    /// Returns true if the provider is vLLM or SGLang (which typically require Modal headers)
+    pub fn is_modal_provider(&self) -> bool {
+        self.model_provider_name == "vllm" || self.model_provider_name == "sglang"
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ModelTestProvider {
     pub provider_type: String,
@@ -1917,12 +1924,11 @@ pub async fn test_extra_body_with_provider(provider: E2ETestProvider) {
 
 pub async fn test_extra_body_with_provider_and_stream(provider: &E2ETestProvider, stream: bool) {
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2101,12 +2107,11 @@ pub async fn test_inference_extra_body_with_provider_and_stream(
             }
         ])
     };
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2274,12 +2279,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
     stream: bool,
 ) {
     // Inject randomness to prevent this from being cached, since provider-proxy will ignore the (invalid) auth header
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -2543,12 +2547,11 @@ pub async fn test_warn_ignored_thought_block_with_provider(
 
 pub async fn test_simple_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -3484,12 +3487,11 @@ pub async fn check_simple_image_inference_response(
 
 pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvider) {
     // A top_p of -100 and temperature of -100 should produce errors on all providers
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -3597,12 +3599,11 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
     check_cache: bool,
     include_original_response: bool,
 ) -> String {
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -3889,12 +3890,11 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
         return;
     }
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -4136,12 +4136,11 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         return;
     }
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,
@@ -4406,12 +4405,11 @@ pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -4793,12 +4791,11 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "weather_helper",
@@ -5156,12 +5153,11 @@ pub async fn test_tool_use_tool_choice_auto_unused_inference_request_with_provid
     provider: E2ETestProvider,
 ) {
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -5423,12 +5419,11 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -5733,12 +5728,11 @@ pub async fn test_tool_use_tool_choice_required_inference_request_with_provider(
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -6037,12 +6031,11 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -6403,12 +6396,11 @@ pub async fn test_tool_use_tool_choice_none_inference_request_with_provider(
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "weather_helper",
         "episode_id": episode_id,
@@ -6665,12 +6657,11 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
         return;
     }
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "weather_helper",
@@ -6971,12 +6962,11 @@ pub async fn test_tool_use_tool_choice_specific_inference_request_with_provider(
         return;
     }
 
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let episode_id = Uuid::now_v7();
 
@@ -7315,12 +7305,11 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     // Groq tool requests aren't always sent with the correct schema
     let prompt: String = if provider.model_provider_name == "groq" {
@@ -7732,12 +7721,11 @@ pub async fn test_tool_use_allowed_tools_inference_request_with_provider(
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "basic_test",
@@ -8014,12 +8002,11 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "episode_id": episode_id,
@@ -8423,7 +8410,7 @@ pub async fn test_tool_multi_turn_inference_request_with_provider(provider: E2ET
             ]},
         "variant_name": provider.variant_name,
         "stream": false,
-        "extra_headers": if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
+        "extra_headers": if provider.is_modal_provider() { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
     });
 
     let response = Client::new()
@@ -8667,7 +8654,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
     let payload = json!({
        "function_name": "weather_helper",
         "episode_id": episode_id,
-        "extra_headers": if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
+        "extra_headers": if provider.is_modal_provider() { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
         "input":{
             "system": {"assistant_name": "Dr. Mehta"},
             "messages": [
@@ -8971,12 +8958,11 @@ pub async fn test_stop_sequences_inference_request_with_provider(
         return;
     }
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let response = client
         .inference(tensorzero::ClientInferenceParams {
@@ -9796,7 +9782,7 @@ pub async fn test_parallel_tool_use_inference_request_with_provider(provider: E2
         "parallel_tool_calls": true,
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
+        "extra_headers": if provider.is_modal_provider() { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
     });
 
     let response = Client::new()
@@ -10173,7 +10159,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
         "parallel_tool_calls": true,
         "stream": true,
         "variant_name": provider.variant_name,
-        "extra_headers": if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
+        "extra_headers": if provider.is_modal_provider() { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
     });
 
     let mut event_source = Client::new()
@@ -10582,12 +10568,11 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
 
 pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "json_success",
         "variant_name": provider.variant_name,
@@ -10833,12 +10818,11 @@ pub async fn check_json_mode_inference_response(
 
 pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let output_schema = json!({
       "type": "object",
       "properties": {
@@ -11110,12 +11094,11 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
     }
 
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "json_success",
         "variant_name": provider.variant_name,
@@ -11411,12 +11394,11 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
     };
 
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     // Include randomness in the prompt to force a cache miss for the first request
     let randomness = Uuid::now_v7();
@@ -11746,7 +11728,7 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
             ]},
         "parallel_tool_calls": true,
         "stream": false,
-        "extra_headers": if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
+        "extra_headers": if provider.is_modal_provider() { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
         "variant_name": provider.variant_name,
     });
 
@@ -12050,7 +12032,7 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
         "parallel_tool_calls": true,
         "stream": false,
         "variant_name": provider.variant_name,
-        "extra_headers": if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
+        "extra_headers": if provider.is_modal_provider() { get_modal_extra_headers() } else { UnfilteredInferenceExtraHeaders::default() },
     });
 
     let response = Client::new()
@@ -12380,12 +12362,11 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
 
 pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "json_success",
@@ -12546,12 +12527,11 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
 
 pub async fn test_multiple_text_blocks_in_message_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
     let payload = json!({
         "function_name": "basic_test",
         "variant_name": provider.variant_name,

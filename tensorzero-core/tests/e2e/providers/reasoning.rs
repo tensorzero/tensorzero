@@ -21,12 +21,11 @@ use uuid::Uuid;
 
 pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "basic_test",
@@ -269,12 +268,11 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
 
     let episode_id = Uuid::now_v7();
     let tag_value = Uuid::now_v7().to_string();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "basic_test",
@@ -548,12 +546,11 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
 
 pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: E2ETestProvider) {
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "json_success",
@@ -765,12 +762,11 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
         return;
     }
     let episode_id = Uuid::now_v7();
-    let extra_headers =
-        if provider.model_provider_name == "vllm" || provider.model_provider_name == "sglang" {
-            get_modal_extra_headers()
-        } else {
-            UnfilteredInferenceExtraHeaders::default()
-        };
+    let extra_headers = if provider.is_modal_provider() {
+        get_modal_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders::default()
+    };
 
     let payload = json!({
         "function_name": "json_success",
