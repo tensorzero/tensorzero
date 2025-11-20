@@ -89,6 +89,46 @@ pub struct Args {
 
     #[arg(long, default_value = "on")]
     pub inference_cache: CacheEnabledMode,
+
+    /// Maximum number of datapoints to evaluate from the dataset.
+    #[arg(long)]
+    pub max_datapoints: Option<usize>,
+
+    /// Per-evaluator precision targets for adaptive stopping.
+    /// Format: evaluator_name=precision_target, comma-separated for multiple evaluators.
+    /// Example: --adaptive-stopping-precision exact_match=0.13,llm_judge=0.16
+    /// Evaluator stops when confidence interval (CI) half-width (or the maximum width of the two
+    /// halves of the CI in the case of asymmetric CIs) <= precision_target.
+    #[arg(long = "adaptive-stopping-precision", value_parser = parse_precision_target, value_delimiter = ',', num_args = 0..)]
+    pub precision_targets: Vec<(String, f32)>,
+}
+
+/// Parse a single precision target in format "evaluator_name=precision_target"
+fn parse_precision_target(s: &str) -> Result<(String, f32), String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err("Precision target cannot be empty".to_string());
+    }
+
+    let parts: Vec<&str> = s.splitn(2, '=').collect();
+    if parts.len() != 2 {
+        return Err(format!(
+            "Invalid precision format: '{s}'. Expected format: evaluator_name=precision_target"
+        ));
+    }
+
+    let evaluator_name = parts[0].to_string();
+    let precision_target = parts[1]
+        .parse::<f32>()
+        .map_err(|e| format!("Invalid precision value '{}': {e}", parts[1]))?;
+
+    if precision_target < 0.0 {
+        return Err(format!(
+            "Precision value must be non-negative, got {precision_target}"
+        ));
+    }
+
+    Ok((evaluator_name, precision_target))
 }
 
 pub struct Clients {
@@ -241,8 +281,12 @@ pub async fn run_evaluation(
         concurrency: args.concurrency,
     };
 
+    // Convert Vec<(String, f32)> to HashMap<String, f32> for precision_targets
+    let precision_targets: HashMap<String, f32> = args.precision_targets.into_iter().collect();
+
     let output_format = args.format.clone();
-    let result = run_evaluation_core_streaming(core_args, None, HashMap::new()).await?; // No adaptive stopping
+    let result =
+        run_evaluation_core_streaming(core_args, args.max_datapoints, precision_targets).await?;
 
     let mut receiver = result.receiver;
     let dataset_len = result.run_info.num_datapoints;
@@ -351,8 +395,8 @@ pub async fn run_evaluation(
 /// **`max_datapoints`**: When `Some(max)`, limits dataset to at most `max` datapoints.
 ///
 /// **`precision_targets`**: When non-empty, enables adaptive stopping:
-/// - Per-evaluator CI half-width thresholds (HashMap<String, f32>)
-/// - Evaluator k stops when the larger of the two halves of the CI has width ≤ threshold_k`
+/// - Per-evaluator CI half-width precision_targets (HashMap<String, f32>)
+/// - Evaluator k stops when the larger of the two halves of the CI has width ≤ precision_target_k`
 /// - Only checked after min_datapoints (hardcoded to 20) have been completed
 /// - Evaluators not in the map run on all datapoints (up to max_datapoints)
 /// - All datapoint tasks are spawned upfront for maximum concurrency

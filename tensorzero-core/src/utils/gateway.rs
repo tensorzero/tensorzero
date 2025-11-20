@@ -456,6 +456,12 @@ where
 }
 
 // We hold on to these fields so that their Drop impls run when `ShutdownHandle` is dropped
+// IMPORTANT: The 'sender' field must come first in the struct definition, so that Rust will
+// drop it first: https://doc.rust-lang.org/reference/destructors.html#r-destructors.operation
+// This triggers graceful shutdown of the Axum server first, and then waits for the server to
+// exit in the `Drop` impl for `GatewayHandle`.
+// Declaring these fields in the opposite order will cause a deadlock, since we'll wait on
+// an Axum server to shutdown without triggering graceful shutdown first.
 pub struct ShutdownHandle {
     #[expect(dead_code)]
     sender: Sender<()>,
@@ -513,9 +519,10 @@ pub async fn start_openai_compatible_gateway(
         let _ = recv.await;
     };
 
-    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-    #[expect(clippy::disallowed_methods)]
-    tokio::spawn(
+    // Note - this will cause `gateway_handle` to block on the Axum server shutting down
+    // when `gateway_handle` is dropped.
+    // See the comment on `ShutdownHandle` for more details.
+    gateway_handle.app_state.deferred_tasks.spawn(
         axum::serve(listener, router)
             .with_graceful_shutdown(shutdown_fut)
             .into_future(),
