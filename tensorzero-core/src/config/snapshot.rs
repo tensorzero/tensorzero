@@ -37,7 +37,11 @@ impl ConfigSnapshot {
 /// Recursively sorts every sub-table of the toml::Table so that the config is
 /// stable to rearranging on disk.
 /// This should be done prior to hashing.
-pub(super) fn prepare_table_for_snapshot(raw_config: &toml::Table) -> toml::Table {
+pub fn prepare_table_for_snapshot(raw_config: toml::Table) -> toml::Table {
+    internal_prepare_table_for_snapshot(&raw_config)
+}
+
+fn internal_prepare_table_for_snapshot(raw_config: &toml::Table) -> toml::Table {
     let mut sorted_table = toml::Table::new();
 
     // Collect and sort keys
@@ -50,7 +54,7 @@ pub(super) fn prepare_table_for_snapshot(raw_config: &toml::Table) -> toml::Tabl
             let processed_value = match value {
                 toml::Value::Table(table) => {
                     // Recursively sort nested tables
-                    toml::Value::Table(prepare_table_for_snapshot(table))
+                    toml::Value::Table(internal_prepare_table_for_snapshot(table))
                 }
                 toml::Value::Array(array) => {
                     // Process array elements, recursively sorting any tables within
@@ -58,7 +62,7 @@ pub(super) fn prepare_table_for_snapshot(raw_config: &toml::Table) -> toml::Tabl
                         .iter()
                         .map(|element| match element {
                             toml::Value::Table(table) => {
-                                toml::Value::Table(prepare_table_for_snapshot(table))
+                                toml::Value::Table(internal_prepare_table_for_snapshot(table))
                             }
                             other => other.clone(),
                         })
@@ -86,7 +90,7 @@ mod tests {
         table.insert("alpha".to_string(), toml::Value::String("a".to_string()));
         table.insert("beta".to_string(), toml::Value::String("b".to_string()));
 
-        let sorted = prepare_table_for_snapshot(&table);
+        let sorted = prepare_table_for_snapshot(table);
 
         let keys: Vec<_> = sorted.keys().collect();
         assert_eq!(keys, vec!["alpha", "beta", "zebra"]);
@@ -103,7 +107,7 @@ mod tests {
         outer_table.insert("zebra".to_string(), toml::Value::Table(inner_table));
         outer_table.insert("alpha".to_string(), toml::Value::Integer(42));
 
-        let sorted = prepare_table_for_snapshot(&outer_table);
+        let sorted = prepare_table_for_snapshot(outer_table);
 
         // Check outer keys are sorted
         let outer_keys: Vec<_> = sorted.keys().collect();
@@ -133,7 +137,7 @@ mod tests {
         let mut outer_table = Table::new();
         outer_table.insert("items".to_string(), toml::Value::Array(array));
 
-        let sorted = prepare_table_for_snapshot(&outer_table);
+        let sorted = prepare_table_for_snapshot(outer_table);
 
         if let Some(toml::Value::Array(arr)) = sorted.get("items") {
             // Check first table in array is sorted
@@ -167,7 +171,7 @@ mod tests {
         table.insert("float".to_string(), toml::Value::Float(2.71));
         table.insert("boolean".to_string(), toml::Value::Boolean(true));
 
-        let sorted = prepare_table_for_snapshot(&table);
+        let sorted = prepare_table_for_snapshot(table);
 
         // Check keys are sorted
         let keys: Vec<_> = sorted.keys().collect();
@@ -186,7 +190,7 @@ mod tests {
     #[test]
     fn test_prepare_table_for_snapshot_empty_table() {
         let table = Table::new();
-        let sorted = prepare_table_for_snapshot(&table);
+        let sorted = prepare_table_for_snapshot(table);
         assert_eq!(sorted.len(), 0);
     }
 
@@ -195,7 +199,7 @@ mod tests {
         let mut table = Table::new();
         table.insert("only".to_string(), toml::Value::String("one".to_string()));
 
-        let sorted = prepare_table_for_snapshot(&stable);
+        let sorted = prepare_table_for_snapshot(table);
 
         assert_eq!(sorted.len(), 1);
         assert_eq!(
@@ -218,7 +222,7 @@ mod tests {
         level1.insert("z1".to_string(), toml::Value::Table(level2));
         level1.insert("a1".to_string(), toml::Value::Integer(1));
 
-        let sorted = prepare_table_for_snapshot(&level1);
+        let sorted = prepare_table_for_snapshot(level1);
 
         // Check level 1
         let keys1: Vec<_> = sorted.keys().collect();
@@ -276,7 +280,7 @@ mod tests {
             ]),
         );
 
-        let sorted = prepare_table_for_snapshot(&config);
+        let sorted = prepare_table_for_snapshot(config);
 
         // Check top-level sorting
         let keys: Vec<_> = sorted.keys().collect();
@@ -314,8 +318,8 @@ mod tests {
         table2.insert("c".to_string(), toml::Value::Integer(3));
         table2.insert("a".to_string(), toml::Value::Integer(1));
 
-        let sorted1 = prepare_table_for_snapshot(&table1);
-        let sorted2 = prepare_table_for_snapshot(&table2);
+        let sorted1 = prepare_table_for_snapshot(table1);
+        let sorted2 = prepare_table_for_snapshot(table2);
 
         // Both should produce the same key order
         let keys1: Vec<_> = sorted1.keys().collect();
