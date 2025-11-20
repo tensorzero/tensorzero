@@ -2631,7 +2631,7 @@ def test_sync_timeout_invalid():
 # if the target URL is unreachable.
 @contextmanager
 def without_env_tensorzero_e2e_proxy():
-    old_value = os.environ.pop("TENSORZERO_E2E_PROXY")
+    old_value = os.environ.pop("TENSORZERO_E2E_PROXY", None)
     try:
         yield
     finally:
