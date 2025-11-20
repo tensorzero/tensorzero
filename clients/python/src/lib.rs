@@ -65,7 +65,7 @@ use tensorzero_core::{
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
-    Datapoint, DynamicTool, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
+    Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
     InferenceStream, LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams,
     OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
     WorkflowEvaluationRunParams,
@@ -438,14 +438,12 @@ impl BaseTensorZeroGateway {
             None
         };
 
-        let additional_tools: Option<Vec<DynamicTool>> = if let Some(tools) = additional_tools {
+        let additional_tools: Option<Vec<Tool>> = if let Some(tools) = additional_tools {
             Some(
                 tools
                     .into_iter()
-                    .map(|key_vals| {
-                        parse_tool(py, key_vals).map(|t| DynamicTool(Tool::ClientSideFunction(t)))
-                    })
-                    .collect::<Result<Vec<DynamicTool>, PyErr>>()?,
+                    .map(|key_vals| parse_tool(py, key_vals).map(Tool::ClientSideFunction))
+                    .collect::<Result<Vec<Tool>, PyErr>>()?,
             )
         } else {
             None

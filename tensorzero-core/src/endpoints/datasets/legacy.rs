@@ -35,7 +35,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
-use crate::tool::{DynamicTool, LegacyToolCallConfigDatabaseInsert, Tool};
+use crate::tool::{LegacyToolCallConfigDatabaseInsert, Tool};
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
@@ -399,7 +399,7 @@ pub async fn update_datapoint_handler(
                         legacy
                             .tools_available
                             .iter()
-                            .map(|t| DynamicTool(Tool::ClientSideFunction(t.clone())))
+                            .map(|t| Tool::ClientSideFunction(t.clone()))
                             .collect(),
                     ), // All legacy tools as dynamic
                     tool_choice: Some(legacy.tool_choice.clone()),
@@ -1331,8 +1331,7 @@ impl Datapoint {
             Datapoint::Chat(datapoint) => datapoint
                 .tool_params
                 .additional_tools
-                .as_ref()
-                .map(|tools| tools.iter().map(|dt| dt.0.clone()).collect::<Vec<_>>())
+                .clone()
                 .into_bound_py_any(py),
             Datapoint::Json(_) => Ok(py.None().into_bound(py)),
         }

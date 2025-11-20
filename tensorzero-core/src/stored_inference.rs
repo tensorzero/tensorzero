@@ -551,8 +551,7 @@ impl RenderedSample {
     pub fn get_additional_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         self.tool_params
             .additional_tools
-            .as_ref()
-            .map(|tools| tools.iter().map(|dt| dt.0.clone()).collect::<Vec<_>>())
+            .clone()
             .into_bound_py_any(py)
     }
 

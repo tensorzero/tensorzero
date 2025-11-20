@@ -790,7 +790,7 @@ mod tests {
     mod prepare_update_tests {
         use crate::{
             endpoints::datasets::v1::types::UpdateDynamicToolParamsRequest,
-            tool::{DynamicTool, FunctionTool, Tool, ToolChoice},
+            tool::{FunctionTool, Tool, ToolChoice},
         };
 
         use super::*;
@@ -1158,9 +1158,9 @@ mod tests {
                 output: None,
                 tool_params: UpdateDynamicToolParamsRequest {
                     allowed_tools: Some(Some(vec!["test_tool".to_string()])),
-                    additional_tools: Some(vec![DynamicTool(Tool::ClientSideFunction(
+                    additional_tools: Some(vec![Tool::ClientSideFunction(
                         new_client_side_function_tool.clone(),
-                    ))]),
+                    )]),
                     tool_choice: Some(Some(ToolChoice::None)),
                     parallel_tool_calls: Some(Some(false)),
                     provider_tools: Some(vec![]),

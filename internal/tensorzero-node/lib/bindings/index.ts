@@ -73,7 +73,6 @@ export * from "./DiclOptimizationJobHandle";
 export * from "./DummyProvider";
 export * from "./DynamicImplicitToolConfig";
 export * from "./DynamicJSONSchema";
-export * from "./DynamicTool";
 export * from "./DynamicToolConfig";
 export * from "./DynamicToolParams";
 export * from "./EmbeddingModelConfig";
