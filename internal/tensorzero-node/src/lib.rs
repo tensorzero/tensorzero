@@ -115,7 +115,7 @@ pub struct RunEvaluationStreamingParams {
     pub config_path: String,
     pub evaluation_name: String,
     pub dataset_name: Option<String>,
-    pub datapoint_ids: Vec<String>,
+    pub datapoint_ids: Option<Vec<String>>,
     pub variant_name: String,
     pub concurrency: u32,
     pub inference_cache: String,
@@ -186,6 +186,7 @@ pub async fn run_evaluation_streaming(
 
     let datapoint_ids: Vec<Uuid> = params
         .datapoint_ids
+        .unwrap_or_default()
         .iter()
         .map(|s| {
             Uuid::parse_str(s).map_err(|e| {
