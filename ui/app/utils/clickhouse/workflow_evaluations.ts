@@ -54,7 +54,8 @@ export const workflowEvaluationRunStatisticsByMetricNameSchema = z.object({
   count: z.number(),
   avg_metric: z.number(),
   stdev: z.number().nullable(),
-  ci_error: z.number().nullable(),
+  ci_lower: z.number().nullable(),
+  ci_upper: z.number().nullable(),
 });
 
 export type WorkflowEvaluationRunStatisticsByMetricName = z.infer<

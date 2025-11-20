@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use tensorzero_core::endpoints::datasets::{
-    JsonInferenceDatapoint, StoredChatInferenceDatapoint, StoredDatapoint,
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredJsonInferenceDatapoint,
 };
 use tensorzero_core::{db::clickhouse::ClickHouseConnectionInfo, function::FunctionConfig};
 use tracing::{debug, info, instrument};
@@ -81,7 +81,7 @@ pub async fn query_dataset(
         FunctionConfig::Json(_) => {
             debug!("Parsing as JSON datapoints");
             let json_value: serde_json::Value = serde_json::from_str(&result.response)?;
-            let json_datapoints: Vec<JsonInferenceDatapoint> =
+            let json_datapoints: Vec<StoredJsonInferenceDatapoint> =
                 serde_json::from_value(json_value["data"].clone())?;
             let datapoints: Vec<StoredDatapoint> = json_datapoints
                 .into_iter()

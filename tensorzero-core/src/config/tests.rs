@@ -3125,3 +3125,33 @@ async fn test_built_in_and_user_functions_coexist() {
     assert!(config.functions.contains_key("tensorzero::hello_json"));
     assert!(config.functions.contains_key("generate_draft"));
 }
+
+/// Test that the deprecated `gateway.template_filesystem_access.enabled` option
+/// is still accepted and emits a deprecation warning
+#[tokio::test]
+async fn test_deprecated_template_filesystem_access_enabled() {
+    let logs_contain = crate::utils::testing::capture_logs();
+    let tempfile = NamedTempFile::new().unwrap();
+    write!(
+        &tempfile,
+        r"
+            [gateway.template_filesystem_access]
+            enabled = true
+
+            [functions]"
+    )
+    .unwrap();
+
+    // Should successfully load config despite deprecated field
+    let _config = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new_from_path(tempfile.path()).unwrap(),
+        false,
+    )
+    .await
+    .unwrap();
+
+    // Should emit deprecation warning
+    assert!(logs_contain(
+        "The `gateway.template_filesystem_access.enabled` flag is deprecated"
+    ));
+}

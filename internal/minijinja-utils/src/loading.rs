@@ -131,34 +131,6 @@ fn collect_template_loads_with_config(
     Ok(collector.loads)
 }
 
-/// Collects template loads from a template in an environment using that environment's settings.
-///
-/// This extracts the template's source and parser configuration from the environment,
-/// then delegates to `collect_template_loads_with_config`. This ensures we parse the
-/// template with the same settings that MiniJinja uses at runtime.
-fn collect_template_loads_from_env(
-    env: &Environment<'_>,
-    template_name: &str,
-) -> Result<Vec<TemplateLoad>, Error> {
-    let template = env.get_template(template_name)?;
-    let compiled = machinery::get_compiled_template(&template);
-
-    // Extract whitespace configuration from environment
-    let whitespace_config = WhitespaceConfig {
-        keep_trailing_newline: env.keep_trailing_newline(),
-        trim_blocks: env.trim_blocks(),
-        lstrip_blocks: env.lstrip_blocks(),
-    };
-
-    // Parse with the same configuration the template was compiled with
-    collect_template_loads_with_config(
-        template.source(),
-        template.name(),
-        compiled.syntax_config.clone(),
-        whitespace_config,
-    )
-}
-
 /// AST visitor that collects all template load operations from a parsed MiniJinja template.
 ///
 /// This struct implements the visitor pattern to walk through the MiniJinja Abstract Syntax Tree
@@ -578,6 +550,13 @@ pub fn collect_all_template_paths(
 
     to_visit.push_back(template_name.to_string());
 
+    // Extract configuration from environment
+    let whitespace_config = WhitespaceConfig {
+        keep_trailing_newline: env.keep_trailing_newline(),
+        trim_blocks: env.trim_blocks(),
+        lstrip_blocks: env.lstrip_blocks(),
+    };
+
     while let Some(current_template) = to_visit.pop_front() {
         if visited.contains(&current_template) {
             continue;
@@ -587,16 +566,33 @@ pub fn collect_all_template_paths(
         // Add the template name as a path
         all_paths.insert(PathBuf::from(&current_template));
 
-        // Get the template to access its source for error reporting
-        let template = env.get_template(&current_template)?;
+        // Try to get the template from the environment
+        // If it doesn't exist, skip it (it may be missing or have an unsafe path)
+        let source = match env.get_template(&current_template) {
+            Ok(template) => template.source().to_string(),
+            Err(e) => {
+                // Template doesn't exist in environment - skip analysis of this template
+                // The missing template will be handled later (e.g., at render time)
+                tracing::warn!(
+                    "Could not load referenced template `{}` from environment: {}. Skipping recursive analysis.",
+                    current_template,
+                    e
+                );
+                continue;
+            }
+        };
 
         // Analyze the template for loads
-        let loads = collect_template_loads_from_env(env, &current_template)?;
+        let loads = collect_template_loads_with_config(
+            &source,
+            &current_template,
+            Default::default(), // Use default syntax config
+            whitespace_config,
+        )?;
 
         for load in loads {
             if !load.value.complete {
                 // Found a dynamic load - record it
-                let source = template.source();
                 let span = load.value.span.unwrap_or(Span {
                     start_line: 1,
                     start_col: 1,
@@ -605,7 +601,7 @@ pub fn collect_all_template_paths(
                     end_col: 1,
                     end_offset: 0,
                 });
-                let source_quote = extract_source_quote(source, span);
+                let source_quote = extract_source_quote(&source, span);
 
                 dynamic_loads.push(DynamicLoadLocation {
                     template_name: current_template.clone(),
