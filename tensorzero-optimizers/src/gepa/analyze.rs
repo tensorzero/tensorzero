@@ -103,6 +103,23 @@ fn create_analyze_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatC
     analyze_config
 }
 
+/// Serializes inference output to JSON Value.
+///
+/// Extracts the output from either Chat or Json inference responses.
+///
+/// Returns the serialized output as a JSON Value.
+fn serialize_inference_output(response: &InferenceResponse) -> Result<Value, Error> {
+    match response {
+        InferenceResponse::Chat(chat_response) => to_value(&chat_response.content),
+        InferenceResponse::Json(json_response) => to_value(&json_response.output),
+    }
+    .map_err(|e| {
+        Error::new(ErrorDetails::Inference {
+            message: format!("Failed to serialize inference output: {e}"),
+        })
+    })
+}
+
 /// Builds input JSON for the analyze function.
 ///
 /// Passes high-level objects to the template for serialization.
@@ -129,10 +146,7 @@ pub fn build_analyze_input(
         .map(|(name, config)| (name.clone(), config.path.data().to_string()))
         .collect();
 
-    let output = match &eval_info.response {
-        InferenceResponse::Chat(chat_response) => to_value(&chat_response.content)?,
-        InferenceResponse::Json(json_response) => to_value(&json_response.output)?,
-    };
+    let output = serialize_inference_output(&eval_info.response)?;
 
     // Build evaluation_scores map with just the scores
     let mut evaluation_scores = Map::new();
@@ -264,13 +278,9 @@ async fn analyze_inference(
 
     // Conditionally include inference context based on config flag
     let inference = if gepa_config.include_inference_for_mutation {
-        let output = match &eval_info.response {
-            InferenceResponse::Chat(chat_response) => to_value(&chat_response.content)?,
-            InferenceResponse::Json(json_response) => to_value(&json_response.output)?,
-        };
         Some(Inference {
             input: eval_info.datapoint.input().clone(),
-            output,
+            output: serialize_inference_output(&eval_info.response)?,
         })
     } else {
         None
