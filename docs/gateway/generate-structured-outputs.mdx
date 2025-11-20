@@ -345,7 +345,7 @@ curl -X POST "http://localhost:3000/inference" \
 
 ## Generate structured outputs with a dynamic schema
 
-While we recommend specifying a fixed schema whenever possible, you can provide the output schema dynamically at inference time if your use case demands it.
+While we recommend specifying a fixed schema in the configuration whenever possible, you can provide the output schema dynamically at inference time if your use case demands it.
 
 See `output_schema` in the [Inference API Reference](/gateway/api-reference/inference#output-schema) or `response_format` in the [Inference (OpenAI) API Reference](/gateway/api-reference/inference-openai-compatible#json-function-with-dynamic-output-schema).
 
@@ -477,9 +477,9 @@ Refer to the [Google documentation](https://ai.google.dev/gemini-api/docs/struct
 
 ### Lack of native support (e.g. AWS Bedrock)
 
-Some model providers (e.g. OpenAI, Google, Anthropic) support strictly enforcing output schemas natively, but others (e.g. AWS Bedrock) do not.
+Some model providers (e.g. OpenAI, Google) support strictly enforcing output schemas natively, but others (e.g. AWS Bedrock) do not.
 
-For providers without native support (or if you prefer not to use beta features), you can still generate structured outputs with `json_mode = "tool"`.
+For providers without native support, you can still generate structured outputs with `json_mode = "tool"`.
 TensorZero converts your output schema into a [tool](/gateway/guides/tool-use) call, then transforms the tool response back into JSON output.
 
 You can set `json_mode = "tool"` in your configuration file or at inference time.

@@ -244,6 +244,14 @@ pub static DUMMY_STREAMING_TOOL_RESPONSE: [&str; 5] = [
     r#""}"#,
 ];
 
+pub static DUMMY_STREAMING_GOOD_TOOL_RESPONSE: [&str; 5] = [
+    r#"{"sentiment""#,
+    r#":"positive""#,
+    r#","confidence""#,
+    r":0.95",
+    r"}",
+];
+
 pub static DUMMY_STREAMING_JSON_RESPONSE: [&str; 5] =
     [r#"{"name""#, r#":"John""#, r#","age""#, r":30", r"}"];
 
@@ -681,6 +689,7 @@ impl InferenceProvider for DummyProvider {
 
         let (content_chunks, is_tool_call) = match self.model_name.as_str() {
             "tool" | "tool_split_name" => (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true),
+            "good_tool" => (DUMMY_STREAMING_GOOD_TOOL_RESPONSE.to_vec(), true),
             "reasoner" => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
             _ => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
         };

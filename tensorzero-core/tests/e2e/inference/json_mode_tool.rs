@@ -9,17 +9,23 @@
 //! 3. Chat functions WITH tools configured → ERROR
 //! 4. Chat functions with dynamic tool params → ERROR
 //! 5. Direct model calls (model_name) → SUCCESS with output_schema
-//! 6. JSON functions (baseline) → SUCCESS (no regression)
+//! 6. Direct model calls without output_schema → ERROR
+//! 7. E2E chat non-streaming test (verifies tool call → text conversion)
+//! 7b. E2E chat streaming test (verifies streaming tool call → text chunks conversion)
+//! 8. JSON function non-streaming baseline → SUCCESS (no regression)
+//! 8b. JSON function streaming test (verifies JSON streaming with json_mode="tool")
+//! 9. Real OpenAI test (verifies schema enforcement over conflicting prompts)
 
 use serde_json::{json, Value};
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, InferenceOutput, InferenceResponse,
-    Role,
+    InferenceResponseChunk, Role,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
 use tensorzero_core::inference::types::TextKind;
 use tensorzero_core::tool::{DynamicToolParams, FunctionTool};
 use tensorzero_core::variant::JsonMode;
+use tokio_stream::StreamExt;
 
 // Reusable output schema for tests
 fn simple_output_schema() -> Value {
@@ -474,6 +480,121 @@ model = "dummy::good_tool"
     assert_eq!(parsed_json["confidence"], 0.95);
 }
 
+/// Test 7b: Chat function with json_mode="tool" - E2E streaming verification
+///
+/// Verifies the streaming flow with json_mode="tool":
+/// - Tool call sent to provider
+/// - Tool response chunks received as tool_call chunks from provider
+/// - Chunks converted to TEXT chunks before being sent to users
+/// - Users receive text chunks containing the JSON (not tool_call chunks)
+/// This ensures streaming behavior matches non-streaming (both return text, not tool calls).
+#[tokio::test(flavor = "multi_thread")]
+async fn test_chat_function_tool_mode_e2e_streaming() {
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(
+        r#"
+[functions.test_chat_tool_mode]
+type = "chat"
+
+[functions.test_chat_tool_mode.variants.baseline]
+type = "chat_completion"
+model = "dummy::good_tool"
+"#,
+    )
+    .await;
+
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("test_chat_tool_mode".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                        TextKind::Text {
+                            text: "Analyze sentiment".to_string(),
+                        },
+                    )],
+                }],
+            },
+            params: tensorzero::InferenceParams {
+                chat_completion: ChatCompletionInferenceParams {
+                    json_mode: Some(JsonMode::Tool),
+                    ..Default::default()
+                },
+            },
+            output_schema: Some(simple_output_schema()),
+            stream: Some(true),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    // Should get a streaming response
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming inference response");
+    };
+
+    // With the streaming fix, chunks now come through as TEXT chunks (not tool_call chunks)
+    // The conversion happens in InferenceResponseChunk::new() before chunks are sent to users
+    let mut accumulated_text = String::new();
+    let mut chunk_count = 0;
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result.expect("Chunk should not be an error");
+        chunk_count += 1;
+
+        // Verify we're getting chat chunks
+        let InferenceResponseChunk::Chat(chat_chunk) = chunk else {
+            panic!("Expected chat response chunk");
+        };
+
+        // With json_mode="tool", tool call chunks are converted to text chunks before being sent
+        for content in &chat_chunk.content {
+            // Serialize to check type
+            let content_json =
+                serde_json::to_value(content).expect("Should be able to serialize content");
+
+            // Chunks should be TEXT type (converted from tool_call)
+            assert_eq!(
+                content_json["type"], "text",
+                "Content block chunk should be type 'text' (converted from tool_call)"
+            );
+
+            // Extract and accumulate the text (JSON content)
+            if let Some(text) = content_json["text"].as_str() {
+                accumulated_text.push_str(text);
+            }
+        }
+    }
+
+    // Verify we got at least one chunk
+    assert!(chunk_count > 0, "Should have received at least one chunk");
+
+    // Verify the accumulated text is not empty
+    assert!(
+        !accumulated_text.is_empty(),
+        "Should have accumulated some text"
+    );
+
+    // Verify the accumulated text is valid JSON matching our output schema
+    let parsed_json: Value =
+        serde_json::from_str(&accumulated_text).expect("Accumulated text should be valid JSON");
+
+    // Verify schema structure
+    assert!(
+        parsed_json.get("sentiment").is_some(),
+        "Should have 'sentiment' field"
+    );
+    assert!(
+        parsed_json.get("confidence").is_some(),
+        "Should have 'confidence' field"
+    );
+
+    // Verify the actual values from dummy provider
+    assert_eq!(parsed_json["sentiment"], "positive");
+    assert_eq!(parsed_json["confidence"], 0.95);
+}
+
 /// Test 8: JSON function baseline → SUCCESS (no regression)
 ///
 /// Verifies that existing JSON function behavior with `json_mode="tool"` still works.
@@ -544,6 +665,121 @@ json_mode = "tool"
     assert!(!response.inference_id().to_string().is_empty());
 }
 
+/// Test 8b: JSON function with json_mode="tool" - Streaming verification
+///
+/// Verifies that JSON functions properly stream with `json_mode="tool"`.
+/// JSON functions automatically extract tool call arguments as text in the `raw` field.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_json_function_json_mode_tool_streaming() {
+    // Create temp directory and write output schema
+    let temp_dir = tempfile::tempdir().unwrap();
+    let output_schema_path = temp_dir.path().join("output_schema.json");
+    std::fs::write(
+        &output_schema_path,
+        r#"{
+            "type": "object",
+            "properties": {
+                "sentiment": {
+                    "type": "string",
+                    "enum": ["positive", "negative", "neutral"]
+                },
+                "confidence": {
+                    "type": "number"
+                }
+            },
+            "required": ["sentiment", "confidence"],
+            "additionalProperties": false
+        }"#,
+    )
+    .unwrap();
+
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&format!(
+        r#"
+[functions.test_json_stream]
+type = "json"
+output_schema = "{}"
+
+[functions.test_json_stream.variants.baseline]
+type = "chat_completion"
+model = "dummy::good_tool"
+json_mode = "tool"
+"#,
+        output_schema_path.display()
+    ))
+    .await;
+
+    let response = client
+        .inference(ClientInferenceParams {
+            function_name: Some("test_json_stream".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![tensorzero::ClientInputMessageContent::Text(
+                        TextKind::Text {
+                            text: "Analyze sentiment".to_string(),
+                        },
+                    )],
+                }],
+            },
+            stream: Some(true),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    // Should get a streaming response
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming inference response");
+    };
+
+    // Accumulate JSON text from chunks
+    let mut accumulated_json = String::new();
+    let mut chunk_count = 0;
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result.expect("Chunk should not be an error");
+        chunk_count += 1;
+
+        // Verify we're getting JSON chunks
+        let InferenceResponseChunk::Json(json_chunk) = chunk else {
+            panic!("Expected JSON response chunk");
+        };
+
+        // JSON functions extract tool call arguments to the `raw` field
+        if !json_chunk.raw.is_empty() {
+            accumulated_json.push_str(&json_chunk.raw);
+        }
+    }
+
+    // Verify we got at least one chunk
+    assert!(chunk_count > 0, "Should have received at least one chunk");
+
+    // Verify the accumulated JSON is not empty
+    assert!(
+        !accumulated_json.is_empty(),
+        "Should have accumulated some JSON"
+    );
+
+    // Verify the accumulated JSON is valid and matches our output schema
+    let parsed_json: Value =
+        serde_json::from_str(&accumulated_json).expect("Accumulated JSON should be valid");
+
+    // Verify schema structure
+    assert!(
+        parsed_json.get("sentiment").is_some(),
+        "Should have 'sentiment' field"
+    );
+    assert!(
+        parsed_json.get("confidence").is_some(),
+        "Should have 'confidence' field"
+    );
+
+    // Verify the actual values from dummy provider
+    assert_eq!(parsed_json["sentiment"], "positive");
+    assert_eq!(parsed_json["confidence"], 0.95);
+}
+
 /// Test 9: Real OpenAI model with json_mode="tool" - Schema enforcement
 ///
 /// Verifies that output_schema takes precedence over prompt instructions.
@@ -554,11 +790,11 @@ async fn test_model_name_openai_schema_enforcement() {
 
     // Prompt asks for a DIFFERENT schema (person info)
     let conflicting_prompt = r#"Please analyze the following text and return a JSON object with these exact fields:
-- "name": the persons name (string)
-- "age": the persons age (number)
-- "occupation": the persons job (string)
+- "name": the person's name (string)
+- "age": the person's age (number)
+- "occupation": the person's job (string)
 
-Text: \"My name is Megumin. I love my job as a archmage.\""#;
+Text: \"My name is Megumin. I love my job as an archmage.\""#;
 
     // But output_schema specifies sentiment + confidence
     let output_schema = simple_output_schema(); // {"sentiment": string, "confidence": number}
