@@ -1,15 +1,7 @@
-//! Inference analysis functions for GEPA optimization
+//! Inference analysis for GEPA optimization.
 //!
-//! This module provides functionality for analyzing inference outputs during GEPA optimization:
-//! - Analyzing inference outputs to identify errors, improvements, and optimal patterns
-//! - Building inputs for the built-in `tensorzero::optimization::gepa::analyze` function
-//! - Handling analysis results with optional inference context for mutation
-//!
-//! # Main Components
-//! - `Inference`: Represents an inference input/output pair
-//! - `Analysis`: Represents an analysis result with optional inference context
-//! - `analyze_inferences`: Main function to analyze multiple inferences in parallel
-//! - `build_analyze_input`: Builds template arguments for the analyze function
+//! Analyzes inference outputs to identify errors, improvements, and optimal patterns.
+//! Builds inputs for the analyze function and handles results with optional inference context.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -37,46 +29,49 @@ use tensorzero_core::{
 
 use evaluations::stats::EvaluationInfo;
 
-/// Represents an inference input and output pair
+/// Inference input/output pair for GEPA mutation phase.
 ///
-/// This struct is used to pass inference context to the mutation phase of GEPA.
-/// It is conditionally included in `Analysis` based on the
-/// `include_inference_for_mutation` config flag.
+/// Conditionally included in Analysis via include_inference_for_mutation config flag.
 #[derive(Debug, Clone, Serialize)]
 pub struct Inference {
-    /// The inference input (messages, system prompt, etc.)
+    /// Inference input (messages, system prompt, etc.)
     pub input: StoredInput,
-    /// The inference output serialized as JSON (chat content blocks or JSON output)
+    /// Inference output as JSON (chat content blocks or JSON output)
     pub output: Value,
 }
 
-/// Represents an analysis result with optional inference context
+/// Analysis result with optional inference context.
 ///
-/// This struct is returned by `analyze_inferences` and contains the analysis
-/// feedback from the GEPA analyze function, along with optional inference context
-/// for the mutation phase.
+/// Contains analysis feedback from the analyze function and optional inference context for mutation.
 #[derive(Debug, Clone, Serialize)]
 pub struct Analysis {
-    /// Optional inference context (only included if `include_inference_for_mutation` is true).
-    /// Flattened during serialization so `input`/`output` appear at top level.
-    /// Skipped during serialization if `None` to avoid bloating the mutate function input.
+    /// Optional inference context (included if include_inference_for_mutation is true).
+    /// Flattened during serialization so input/output appear at top level.
+    /// Skipped if None to avoid bloating mutate function input.
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub inference: Option<Inference>,
-    /// The analysis feedback text from the analyze function.
-    /// Typically contains XML-formatted reports (error, improvement, or optimal).
+    /// Analysis feedback text from the analyze function.
+    /// Typically XML-formatted reports (error, improvement, or optimal).
     pub analysis: String,
 }
 
-/// Create the variant configuration for the analyze function
+/// Function and evaluation configuration context.
 ///
-/// Builds an uninitialized chat completion config with embedded templates
-/// for the GEPA analyze function using settings from GEPAConfig.
+/// Groups function configuration, tools, and evaluation settings for analysis.
+pub struct FunctionContext<'a> {
+    /// Configuration of the function being optimized
+    pub function_config: &'a FunctionConfig,
+    /// Static tool configurations available to the function
+    pub static_tools: &'a Option<HashMap<String, Arc<StaticToolConfig>>>,
+    /// Evaluation configuration for scoring
+    pub evaluation_config: &'a EvaluationConfig,
+}
+
+/// Creates variant configuration for the analyze function.
 ///
-/// # Arguments
-/// * `gepa_config` - GEPA configuration containing analysis_model, retries, and max_tokens
+/// Builds uninitialized chat completion config with embedded templates using GEPAConfig settings.
 ///
-/// # Returns
-/// * Configured UninitializedChatCompletionConfig with system and user templates
+/// Returns configured UninitializedChatCompletionConfig with system and user templates.
 fn create_analyze_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatCompletionConfig {
     let mut analyze_config = UninitializedChatCompletionConfig {
         model: gepa_config.analysis_model.clone().into(),
@@ -108,36 +103,24 @@ fn create_analyze_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatC
     analyze_config
 }
 
-/// Build the input JSON for the analyze function
+/// Builds input JSON for the analyze function.
 ///
-/// Passes high-level objects to the template for serialization rather than extracting individual fields.
+/// Passes high-level objects to the template for serialization.
 ///
-/// # Arguments
-/// * `eval_info` - Evaluation information containing the datapoint and inference response
-/// * `function_config` - Function configuration (serialized as `function_config` in template)
-/// * `static_tools` - Static tools from `Config.tools` (serialized as `static_tools` in template)
-/// * `variant_config` - Variant configuration used to extract templates
-/// * `evaluation_config` - Evaluation config (serialized as `evaluation_config` in template)
+/// Returns Arguments with template variables: function_config, static_tools, evaluation_config,
+/// templates_map, datapoint, output, and evaluation_scores.
 ///
-/// # Returns
-/// * `Arguments` containing template variables:
-///   - `function_config`: Function configuration
-///   - `static_tools`: Static tool definitions
-///   - `evaluation_config`: Evaluation configuration
-///   - `templates_map`: Map of template names to template content
-///   - `datapoint`: The evaluation datapoint (input)
-///   - `output`: The inference output
-///   - `evaluation_scores`: Map of evaluator names to scores (numeric, boolean, or null)
-///
-/// # Errors
-/// Returns an error if serialization of any component fails.
+/// Returns error if serialization fails.
 pub fn build_analyze_input(
     eval_info: &EvaluationInfo,
-    function_config: &FunctionConfig,
-    static_tools: &Option<HashMap<String, Arc<StaticToolConfig>>>,
+    function_context: &FunctionContext,
     variant_config: &UninitializedChatCompletionConfig,
-    evaluation_config: &EvaluationConfig,
 ) -> Result<Arguments, Error> {
+    // Extract fields from function context
+    let function_config = function_context.function_config;
+    let static_tools = function_context.static_tools;
+    let evaluation_config = function_context.evaluation_config;
+
     // Extract templates map from variant config
     let templates_map: HashMap<String, String> = variant_config
         .templates
@@ -182,46 +165,136 @@ pub fn build_analyze_input(
     Ok(Arguments(map))
 }
 
-/// Analyze inference outputs using the GEPA analyze function
+/// Analyzes a single inference using the analyze function.
 ///
-/// Calls the built-in `tensorzero::optimization::gepa::analyze` function in parallel
-/// with controlled concurrency (up to `gepa_config.max_concurrency` concurrent API calls).
+/// Returns Analysis with feedback and optional inference context.
 ///
-/// # Behavior
-/// - Returns immediately with an empty vector if `evaluation_infos` is empty
-/// - Executes analyses in parallel with semaphore-based concurrency control
-/// - Implements graceful degradation: successful analyses are returned even if some fail
-/// - Logs progress every 10 analyses and provides a summary at completion
-/// - Conditionally includes inference context in results based on `include_inference_for_mutation` config flag
+/// Returns error if semaphore acquisition, input building, API call, or response parsing fails.
+async fn analyze_inference(
+    semaphore: Arc<Semaphore>,
+    gateway_client: &Client,
+    function_context: &FunctionContext<'_>,
+    variant_config: &UninitializedChatCompletionConfig,
+    gepa_config: &GEPAConfig,
+    eval_info: &EvaluationInfo,
+) -> Result<Analysis, Error> {
+    // Acquire semaphore permit for concurrency control
+    let _permit = semaphore.acquire().await.map_err(|e| {
+        Error::new(ErrorDetails::Inference {
+            message: format!("Failed to acquire semaphore: {e}"),
+        })
+    })?;
+
+    // Create analyze variant configuration
+    let analyze_config = create_analyze_variant_config(gepa_config);
+    let analyze_variant_config = UninitializedVariantInfo {
+        inner: UninitializedVariantConfig::ChatCompletion(analyze_config),
+        timeouts: None,
+    };
+
+    let arguments = build_analyze_input(eval_info, function_context, variant_config)?;
+
+    // Create ClientInferenceParams for the analyze function
+    let params = ClientInferenceParams {
+        function_name: Some("tensorzero::optimization::gepa::analyze".to_string()),
+        input: ClientInput {
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Template(Template {
+                    name: "user".to_string(),
+                    arguments,
+                })],
+            }],
+            system: None,
+        },
+        dryrun: Some(true), // Required when using internal_dynamic_variant_config
+        internal: true,
+        internal_dynamic_variant_config: Some(analyze_variant_config.clone()),
+        ..Default::default()
+    };
+
+    // Call the inference API
+    let inference_output = gateway_client.inference(params).await.map_err(|e| {
+        Error::new(ErrorDetails::Inference {
+            message: format!("Failed to call analyze function: {e}"),
+        })
+    })?;
+
+    // Extract the response
+    let InferenceOutput::NonStreaming(response) = inference_output else {
+        return Err(Error::new(ErrorDetails::Inference {
+            message: "Expected NonStreaming response but got Streaming".to_string(),
+        }));
+    };
+
+    // Extract text content from the response
+    let InferenceResponse::Chat(chat_response) = &response else {
+        return Err(Error::new(ErrorDetails::Inference {
+            message: "analyze function is defined as Chat, cannot return JSON".to_string(),
+        }));
+    };
+
+    // Warn if response has more than 1 content block
+    if chat_response.content.len() > 1 {
+        tracing::warn!(
+            "Analyze function returned {} content blocks, expected 1. Using first Text block.",
+            chat_response.content.len()
+        );
+    }
+
+    // Find the first Text content block
+    let text_block = chat_response.content.iter().find_map(|block| {
+        if let ContentBlockChatOutput::Text(text) = block {
+            Some(text.clone())
+        } else {
+            None
+        }
+    });
+
+    let analysis = match text_block {
+        Some(text) => text.text,
+        None => {
+            return Err(Error::new(ErrorDetails::Inference {
+                message:
+                    "Expected at least one Text content block from analyze function, found none"
+                        .to_string(),
+            }))
+        }
+    };
+
+    // Conditionally include inference context based on config flag
+    let inference = if gepa_config.include_inference_for_mutation {
+        let output = match &eval_info.response {
+            InferenceResponse::Chat(chat_response) => to_value(&chat_response.content)?,
+            InferenceResponse::Json(json_response) => to_value(&json_response.output)?,
+        };
+        Some(Inference {
+            input: eval_info.datapoint.input().clone(),
+            output,
+        })
+    } else {
+        None
+    };
+
+    Ok(Analysis {
+        inference,
+        analysis,
+    })
+}
+
+/// Analyzes inference outputs using the analyze function in parallel.
 ///
-/// # Arguments
-/// * `gateway_client` - TensorZero gateway client for making inference requests
-/// * `evaluation_infos` - Evaluation results containing datapoints and their inference responses
-/// * `function_config` - Configuration of the function being optimized
-/// * `static_tools` - Static tools from `Config.tools` referenced by the function
-/// * `variant_config` - Configuration of the variant being analyzed
-/// * `gepa_config` - GEPA configuration containing `analysis_model`, `max_concurrency`, and `include_inference_for_mutation` settings
-/// * `evaluation_config` - Evaluation configuration for the function being optimized
+/// Executes analyses with controlled concurrency and graceful degradation for failures.
 ///
-/// # Returns
-/// * Vector of `Analysis` containing successful analyses. Each analysis includes:
-///   - The analysis feedback text (typically XML-formatted)
-///   - Optional inference context (input/output) if `include_inference_for_mutation` is enabled
+/// Returns successful analyses with feedback and optional inference context.
 ///
-/// # Errors
-/// * Returns an error if ALL analyses fail (with details about the first failure)
-/// * Returns an error if semaphore acquisition fails
-/// * Returns an error if inference API calls fail
-/// * Returns an error if response format is unexpected (e.g., streaming instead of non-streaming, JSON instead of Chat)
-/// * Individual analysis failures are logged as warnings but don't cause the entire function to fail
+/// Returns error only if all analyses fail.
 pub async fn analyze_inferences(
     gateway_client: &Client,
     evaluation_infos: &[EvaluationInfo],
-    function_config: &FunctionConfig,
-    static_tools: &Option<HashMap<String, Arc<StaticToolConfig>>>,
+    function_context: &FunctionContext<'_>,
     variant_config: &UninitializedChatCompletionConfig,
     gepa_config: &GEPAConfig,
-    evaluation_config: &EvaluationConfig,
 ) -> Result<Vec<Analysis>, Error> {
     // Early return for empty input - nothing to analyze
     if evaluation_infos.is_empty() {
@@ -239,140 +312,23 @@ pub async fn analyze_inferences(
         max_concurrency
     );
 
-    let analyze_config = create_analyze_variant_config(gepa_config);
-
-    let analyze_variant_config = Arc::new(UninitializedVariantInfo {
-        inner: UninitializedVariantConfig::ChatCompletion(analyze_config),
-        timeouts: None,
-    });
-
     // Create semaphore for concurrency control
     let semaphore = Arc::new(Semaphore::new(max_concurrency));
 
     // Create futures for parallel execution
     let analysis_futures: Vec<_> = evaluation_infos
         .iter()
-        .enumerate()
-        .map(|(index, eval_info)| {
+        .map(|eval_info| {
             let semaphore = Arc::clone(&semaphore);
-            let analyze_variant_config = Arc::clone(&analyze_variant_config);
-            let gateway_client = gateway_client.clone();
 
-            async move {
-                // Acquire semaphore permit for concurrency control
-                let _permit = semaphore.acquire().await.map_err(|e| {
-                    Error::new(ErrorDetails::Inference {
-                        message: format!("Failed to acquire semaphore: {e}"),
-                    })
-                })?;
-
-                let arguments = build_analyze_input(
-                    eval_info,
-                    function_config,
-                    static_tools,
-                    variant_config,
-                    evaluation_config,
-                )?;
-
-                // Create ClientInferenceParams for the analyze function
-                let params = ClientInferenceParams {
-                    function_name: Some("tensorzero::optimization::gepa::analyze".to_string()),
-                    input: ClientInput {
-                        messages: vec![ClientInputMessage {
-                            role: Role::User,
-                            content: vec![ClientInputMessageContent::Template(Template {
-                                name: "user".to_string(),
-                                arguments,
-                            })],
-                        }],
-                        system: None,
-                    },
-                    dryrun: Some(true), // Required when using internal_dynamic_variant_config
-                    internal: true,
-                    internal_dynamic_variant_config: Some((*analyze_variant_config).clone()),
-                    ..Default::default()
-                };
-
-                // Call the inference API
-                let inference_output = gateway_client.inference(params).await.map_err(|e| {
-                    Error::new(ErrorDetails::Inference {
-                        message: format!("Failed to call analyze function: {e}"),
-                    })
-                })?;
-
-                // Extract the response
-                let InferenceOutput::NonStreaming(response) = inference_output else {
-                    return Err(Error::new(ErrorDetails::Inference {
-                        message: "Expected NonStreaming response but got Streaming".to_string(),
-                    }))
-                };
-
-                // Extract text content from the response
-                let InferenceResponse::Chat(chat_response) = &response else {
-                    return Err(Error::new(ErrorDetails::Inference {
-                        message: "analyze function is defined as Chat, cannot return JSON".to_string(),
-                    }))
-                };
-
-                // Warn if response has more than 1 content block
-                if chat_response.content.len() > 1 {
-                    tracing::warn!(
-                        "Analyze function returned {} content blocks, expected 1. Using first Text block.",
-                        chat_response.content.len()
-                    );
-                }
-
-                // Find the first Text content block
-                let text_block = chat_response.content.iter().find_map(|block| {
-                    if let ContentBlockChatOutput::Text(text) = block {
-                        Some(text.clone())
-                    } else {
-                        None
-                    }
-                });
-
-                let analysis = match text_block {
-                    Some(text) => text.text,
-                    None => {
-                        return Err(Error::new(ErrorDetails::Inference {
-                            message: "Expected at least one Text content block from analyze function, found none"
-                                .to_string(),
-                        }))
-                    }
-                };
-
-                // Log progress every 10 analyses
-                if (index + 1) % 10 == 0 {
-                    tracing::info!(
-                        "Completed {}/{} analyses",
-                        index + 1,
-                        evaluation_infos.len()
-                    );
-                }
-
-                // Conditionally include inference context based on config flag
-                let inference = if gepa_config.include_inference_for_mutation {
-                    let output = match &eval_info.response {
-                        InferenceResponse::Chat(chat_response) => {
-                            to_value(&chat_response.content)?
-                        }
-                        InferenceResponse::Json(json_response) => {
-                            to_value(&json_response.output)?
-                        }
-                    };
-                    Some(Inference {
-                        input: eval_info.datapoint.input().clone(),
-                        output,
-                    })
-                } else {
-                    None
-                };
-
-                Ok(Analysis {
-                    inference,
-                    analysis,
-                })
-            }
+            analyze_inference(
+                semaphore,
+                gateway_client,
+                function_context,
+                variant_config,
+                gepa_config,
+                eval_info,
+            )
         })
         .collect();
 
@@ -698,13 +654,13 @@ mod tests {
         let variant_config = create_test_variant_config();
         let eval_config = create_test_evaluation_config();
 
-        let result = build_analyze_input(
-            &eval_info,
-            &function_config,
-            &static_tools,
-            &variant_config,
-            &eval_config,
-        );
+        let function_context = FunctionContext {
+            function_config: &function_config,
+            static_tools: &static_tools,
+            evaluation_config: &eval_config,
+        };
+
+        let result = build_analyze_input(&eval_info, &function_context, &variant_config);
 
         assert!(result.is_ok());
         let input = result.unwrap();
@@ -758,13 +714,13 @@ mod tests {
 
         // Test with schemas
         let function_config_with_schemas = create_test_function_config_with_schemas();
-        let result_with_schemas = build_analyze_input(
-            &eval_info,
-            &function_config_with_schemas,
-            &static_tools,
-            &variant_config,
-            &eval_config,
-        );
+        let function_context_with_schemas = FunctionContext {
+            function_config: &function_config_with_schemas,
+            static_tools: &static_tools,
+            evaluation_config: &eval_config,
+        };
+        let result_with_schemas =
+            build_analyze_input(&eval_info, &function_context_with_schemas, &variant_config);
 
         assert!(result_with_schemas.is_ok());
         let input_with_schemas = result_with_schemas.unwrap();
@@ -789,13 +745,18 @@ mod tests {
             .insert("boolean_score".to_string(), Some(json!(true)));
         eval_info.evaluations.insert("null_score".to_string(), None);
 
-        let result = build_analyze_input(
-            &eval_info,
-            &create_test_function_config(),
-            &None,
-            &create_test_variant_config(),
-            &create_test_evaluation_config(),
-        );
+        let function_config = create_test_function_config();
+        let static_tools = None;
+        let variant_config = create_test_variant_config();
+        let eval_config = create_test_evaluation_config();
+
+        let function_context = FunctionContext {
+            function_config: &function_config,
+            static_tools: &static_tools,
+            evaluation_config: &eval_config,
+        };
+
+        let result = build_analyze_input(&eval_info, &function_context, &variant_config);
 
         assert!(result.is_ok());
         let input = result.unwrap();
@@ -855,13 +816,17 @@ mod tests {
             },
         );
 
-        let result = build_analyze_input(
-            &eval_info,
-            &create_test_function_config(),
-            &None,
-            &variant_config,
-            &create_test_evaluation_config(),
-        );
+        let function_config = create_test_function_config();
+        let static_tools = None;
+        let eval_config = create_test_evaluation_config();
+
+        let function_context = FunctionContext {
+            function_config: &function_config,
+            static_tools: &static_tools,
+            evaluation_config: &eval_config,
+        };
+
+        let result = build_analyze_input(&eval_info, &function_context, &variant_config);
 
         assert!(result.is_ok());
         let input = result.unwrap();
@@ -910,13 +875,18 @@ mod tests {
         let mut static_tools = HashMap::new();
         static_tools.insert("test_tool".to_string(), tool_config);
 
-        let result = build_analyze_input(
-            &create_test_evaluation_info(),
-            &create_test_function_config(),
-            &Some(static_tools),
-            &create_test_variant_config(),
-            &create_test_evaluation_config(),
-        );
+        let eval_info = create_test_evaluation_info();
+        let function_config = create_test_function_config();
+        let variant_config = create_test_variant_config();
+        let eval_config = create_test_evaluation_config();
+
+        let function_context = FunctionContext {
+            function_config: &function_config,
+            static_tools: &Some(static_tools),
+            evaluation_config: &eval_config,
+        };
+
+        let result = build_analyze_input(&eval_info, &function_context, &variant_config);
 
         assert!(result.is_ok());
         let input = result.unwrap();

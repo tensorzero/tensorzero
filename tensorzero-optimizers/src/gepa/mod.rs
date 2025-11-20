@@ -27,7 +27,7 @@ use crate::{JobHandle, Optimizer};
 mod analyze;
 mod evaluate;
 
-pub use analyze::{analyze_inferences, Analysis};
+pub use analyze::{analyze_inferences, Analysis, FunctionContext};
 pub use evaluate::create_evaluation_dataset;
 
 #[async_trait]

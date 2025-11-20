@@ -24,7 +24,7 @@ use tensorzero_core::{
     tool::StaticToolConfig,
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
-use tensorzero_optimizers::gepa::analyze_inferences;
+use tensorzero_optimizers::gepa::{analyze_inferences, FunctionContext};
 use uuid::Uuid;
 
 // ============================================================================
@@ -605,17 +605,23 @@ async fn test_analyze_inferences_with_eval_infos(
 ) {
     let client = make_embedded_gateway().await;
     let function_config = create_test_function_config();
+    let static_tools = None;
+    let eval_config = create_test_evaluation_config();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
+
+    let function_context = FunctionContext {
+        function_config: &function_config,
+        static_tools: &static_tools,
+        evaluation_config: &eval_config,
+    };
 
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
-        &None,
+        &function_context,
         &variant_config,
         &gepa_config,
-        &create_test_evaluation_config(),
     )
     .await;
 
@@ -683,18 +689,24 @@ async fn test_analyze_inferences_with_concurrency(num_inferences: usize, max_con
         .collect();
 
     let function_config = create_test_function_config();
+    let static_tools = None;
+    let eval_config = create_test_evaluation_config();
     let variant_config = create_test_variant_config();
     let mut gepa_config = create_test_gepa_config();
     gepa_config.max_concurrency = max_concurrency;
 
+    let function_context = FunctionContext {
+        function_config: &function_config,
+        static_tools: &static_tools,
+        evaluation_config: &eval_config,
+    };
+
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
-        &None,
+        &function_context,
         &variant_config,
         &gepa_config,
-        &create_test_evaluation_config(),
     )
     .await;
 
@@ -731,19 +743,25 @@ async fn test_analyze_inferences_invalid_model() {
     )];
 
     let function_config = create_test_function_config();
+    let static_tools = None;
+    let eval_config = create_test_evaluation_config();
     let variant_config = create_test_variant_config();
     let mut gepa_config = create_test_gepa_config();
     gepa_config.analysis_model = "invalid_provider::nonexistent_model".to_string();
+
+    let function_context = FunctionContext {
+        function_config: &function_config,
+        static_tools: &static_tools,
+        evaluation_config: &eval_config,
+    };
 
     // Execute: Should fail when all analyses fail
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
-        &None,
+        &function_context,
         &variant_config,
         &gepa_config,
-        &create_test_evaluation_config(),
     )
     .await;
 
@@ -773,18 +791,24 @@ async fn test_analyze_inferences_with_schemas() {
     )];
 
     let function_config = create_test_function_config_with_schemas();
+    let static_tools = None;
+    let eval_config = create_test_evaluation_config();
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config();
+
+    let function_context = FunctionContext {
+        function_config: &function_config,
+        static_tools: &static_tools,
+        evaluation_config: &eval_config,
+    };
 
     // Execute: Should handle schemas correctly
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
-        &None,
+        &function_context,
         &variant_config,
         &gepa_config,
-        &create_test_evaluation_config(),
     )
     .await;
 
@@ -881,15 +905,20 @@ async fn test_analyze_inferences_json_function() {
 
     let eval_infos = vec![eval_info];
 
+    let eval_config = create_test_evaluation_config();
+    let function_context = FunctionContext {
+        function_config: &function_config,
+        static_tools: &static_tools,
+        evaluation_config: &eval_config,
+    };
+
     // Execute: Should handle JSON functions correctly
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
-        &static_tools,
+        &function_context,
         &variant_config,
         &gepa_config,
-        &create_test_evaluation_config(),
     )
     .await;
 
@@ -941,19 +970,25 @@ async fn test_analyze_inferences_response_structure() {
     )];
 
     let function_config = create_test_function_config();
+    let static_tools = None;
+    let eval_config = create_test_evaluation_config();
     let variant_config = create_test_variant_config();
     let mut gepa_config = create_test_gepa_config();
     gepa_config.include_inference_for_mutation = true; // Enable to verify inference structure
+
+    let function_context = FunctionContext {
+        function_config: &function_config,
+        static_tools: &static_tools,
+        evaluation_config: &eval_config,
+    };
 
     // Execute
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
-        &None,
+        &function_context,
         &variant_config,
         &gepa_config,
-        &create_test_evaluation_config(),
     )
     .await;
 
@@ -1004,14 +1039,18 @@ async fn test_analyze_input_echo_helper(
     let variant_config = create_test_variant_config();
     let gepa_config = create_test_gepa_config_echo();
 
+    let function_context = FunctionContext {
+        function_config: &function_config,
+        static_tools: &static_tools,
+        evaluation_config: &eval_config,
+    };
+
     let result = analyze_inferences(
         &client,
         &eval_infos,
-        &function_config,
-        &static_tools,
+        &function_context,
         &variant_config,
         &gepa_config,
-        &eval_config,
     )
     .await;
 
