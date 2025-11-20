@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use futures::future::join_all;
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{json, to_value, Map, Value};
 use tokio::sync::Semaphore;
 
 use tensorzero_core::{
@@ -35,7 +35,7 @@ use evaluations::stats::EvaluationInfo;
 #[derive(Debug, Clone, Serialize)]
 pub struct Inference {
     pub input: StoredInput,
-    pub output: serde_json::Value,
+    pub output: Value,
 }
 
 /// Represents an analysis result with optional inference context
@@ -120,23 +120,19 @@ pub fn build_analyze_input(
         .collect();
 
     let output = match &eval_info.response {
-        InferenceResponse::Chat(chat_response) => {
-            serialize_to_value(&chat_response.content, "chat response content")?
-        }
-        InferenceResponse::Json(json_response) => {
-            serialize_to_value(&json_response.output, "json response output")?
-        }
+        InferenceResponse::Chat(chat_response) => to_value(&chat_response.content)?,
+        InferenceResponse::Json(json_response) => to_value(&json_response.output)?,
     };
 
     // Build evaluation_scores map with just the scores
-    let mut evaluation_scores = serde_json::Map::new();
+    let mut evaluation_scores = Map::new();
     for (evaluator_name, result_opt) in &eval_info.evaluations {
         // Preserve the score type (number, boolean, or null)
         let score = result_opt
             .as_ref()
             .map(|value| match value {
-                serde_json::Value::Number(n) => json!(n),
-                serde_json::Value::Bool(b) => json!(b),
+                Value::Number(n) => json!(n),
+                Value::Bool(b) => json!(b),
                 _ => json!(null),
             })
             .unwrap_or(json!(null));
@@ -144,21 +140,15 @@ pub fn build_analyze_input(
     }
 
     // Build the input with high-level objects that will be serialized in the template
-    let mut map = serde_json::Map::new();
-    map.insert(
-        "function_config".to_string(),
-        serialize_to_value(function_config, "function_config")?,
-    );
+    let mut map = Map::new();
+    map.insert("function_config".to_string(), to_value(function_config)?);
     map.insert("static_tools".to_string(), json!(static_tools));
     map.insert(
         "evaluation_config".to_string(),
-        serialize_to_value(evaluation_config, "evaluation_config")?,
+        to_value(evaluation_config)?,
     );
     map.insert("templates_map".to_string(), json!(templates_map));
-    map.insert(
-        "datapoint".to_string(),
-        serialize_to_value(&eval_info.datapoint, "datapoint")?,
-    );
+    map.insert("datapoint".to_string(), to_value(&eval_info.datapoint)?);
     map.insert("output".to_string(), json!(output));
     map.insert("evaluation_scores".to_string(), json!(evaluation_scores));
 
@@ -321,10 +311,10 @@ pub async fn analyze_inferences(
                 let inference = if gepa_config.include_inference_for_mutation {
                     let output = match &eval_info.response {
                         InferenceResponse::Chat(chat_response) => {
-                            serialize_to_value(&chat_response.content, "chat response content")?
+                            to_value(&chat_response.content)?
                         }
                         InferenceResponse::Json(json_response) => {
-                            serialize_to_value(&json_response.output, "json response output")?
+                            to_value(&json_response.output)?
                         }
                     };
                     Some(Inference {
@@ -395,18 +385,6 @@ pub async fn analyze_inferences(
     }
 
     Ok(successes)
-}
-
-/// Helper function to serialize a value to JSON with consistent error handling
-pub fn serialize_to_value<T: serde::Serialize>(
-    value: &T,
-    context: &str,
-) -> Result<serde_json::Value, Error> {
-    serde_json::to_value(value).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize {context}: {e}"),
-        })
-    })
 }
 
 #[cfg(test)]
@@ -552,7 +530,7 @@ mod tests {
         };
 
         // Convert Input to StoredInput via JSON round-trip
-        let stored_input = serde_json::from_value(serde_json::to_value(&input).unwrap()).unwrap();
+        let stored_input = serde_json::from_value(to_value(&input).unwrap()).unwrap();
 
         let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
