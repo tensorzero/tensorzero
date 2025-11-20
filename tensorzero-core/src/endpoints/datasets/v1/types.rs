@@ -159,7 +159,7 @@ pub struct UpdateJsonDatapointRequest {
 #[export_schema]
 pub struct JsonDatapointOutputUpdate {
     /// The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
-    pub raw: String,
+    pub raw: Option<String>,
 }
 
 /// A request to update the metadata of a datapoint.

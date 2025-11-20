@@ -5,7 +5,6 @@ import type {
   UpdateDatapointsMetadataRequest,
   UpdateDatapointRequest,
   ContentBlockChatOutput,
-  JsonDatapointOutputUpdate,
   JsonInferenceOutput,
 } from "~/types/tensorzero";
 import type { UpdateDatapointFormData } from "./formDataUtils";
@@ -21,18 +20,14 @@ function convertUpdateDatapointFormDataToUpdateDatapointRequest(
   formData: Omit<UpdateDatapointFormData, "action">,
   functionType: "chat" | "json",
 ): UpdateDatapointRequest {
+  // TODO: this logic could be more type safe but it's progress...
   switch (functionType) {
     case "json": {
-      const output = formData.output as JsonInferenceOutput | undefined;
       return {
         type: "json",
         id: formData.id,
         input: formData.input,
-        output: output
-          ? ({
-              raw: JSON.stringify(output.parsed || output.raw),
-            } as JsonDatapointOutputUpdate)
-          : undefined,
+        output: formData.output as JsonInferenceOutput | undefined,
         tags: formData.tags,
       };
     }

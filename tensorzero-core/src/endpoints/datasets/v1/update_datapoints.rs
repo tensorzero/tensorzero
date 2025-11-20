@@ -1566,7 +1566,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&new_output_value).unwrap(),
+                    raw: Some(serde_json::to_string(&new_output_value).unwrap()),
                 })),
                 output_schema: None,
                 tags: None,
@@ -1651,7 +1651,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&new_output).unwrap(),
+                    raw: Some(serde_json::to_string(&new_output).unwrap()),
                 })),
                 output_schema: Some(new_schema.clone()),
                 tags: None,
@@ -1691,7 +1691,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&bad_output).unwrap(),
+                    raw: Some(serde_json::to_string(&bad_output).unwrap()),
                 })),
                 output_schema: None, // Will use existing schema which expects {value: string}
                 tags: None,
@@ -1818,7 +1818,7 @@ mod tests {
                 id: existing.id,
                 input: Some(new_input),
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&new_output).unwrap(),
+                    raw: Some(serde_json::to_string(&new_output).unwrap()),
                 })),
                 output_schema: Some(new_schema.clone()),
                 tags: Some(new_tags.clone()),
@@ -1952,7 +1952,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&new_output).unwrap(),
+                    raw: Some(serde_json::to_string(&new_output).unwrap()),
                 })),
                 output_schema: None,
                 tags: None,
@@ -1996,7 +1996,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&new_output).unwrap(),
+                    raw: Some(serde_json::to_string(&new_output).unwrap()),
                 })),
                 output_schema: None,
                 tags: None,

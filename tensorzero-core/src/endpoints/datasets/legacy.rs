@@ -782,9 +782,22 @@ pub async fn insert_datapoint(
                 }
 
                 // Convert legacy Value output to JsonDatapointOutputUpdate
-                let output_update = json.output.map(|output| JsonDatapointOutputUpdate {
-                    raw: output.to_string(),
-                });
+                let output_update = match json.output {
+                    Some(output) => {
+                        let raw = match output {
+                            serde_json::Value::Object(_) => Some(output.to_string()),
+                            serde_json::Value::Null => None,
+                            _ => {
+                                return Err(Error::new(ErrorDetails::InvalidRequest {
+                                    message: "The field `output` must be an object or null."
+                                        .to_string(),
+                                }))
+                            }
+                        };
+                        Some(JsonDatapointOutputUpdate { raw })
+                    }
+                    None => None,
+                };
 
                 v1_datapoints.push(CreateDatapointRequest::Json(CreateJsonDatapointRequest {
                     function_name: json.function_name,

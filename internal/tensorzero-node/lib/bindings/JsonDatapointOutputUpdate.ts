@@ -9,5 +9,5 @@ export type JsonDatapointOutputUpdate = {
   /**
    * The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
    */
-  raw: string;
+  raw: string | null;
 };
