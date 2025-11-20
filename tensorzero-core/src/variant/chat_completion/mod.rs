@@ -847,7 +847,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_request_message() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         // Part 1: test without templates
         let chat_completion_config = ChatCompletionConfig {
             model: "dummy".into(),
@@ -1083,9 +1083,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_prepare_system_message() {
-        let templates = get_test_template_config();
+    #[tokio::test]
+    async fn test_prepare_system_message() {
+        let templates = get_test_template_config().await;
 
         // Test without templates, string message
         let chat_completion_config = ChatCompletionConfig {
@@ -1231,7 +1231,7 @@ mod tests {
                 api_key_public_id: None,
             },
         };
-        let templates = Arc::new(get_test_template_config());
+        let templates = Arc::new(get_test_template_config().await);
         let system_template = get_system_template();
         let user_template = get_greeting_with_age_template();
         let chat_completion_config = UninitializedChatCompletionConfig {
@@ -2241,7 +2241,7 @@ mod tests {
                 api_key_public_id: None,
             },
         };
-        let templates = Box::leak(Box::new(get_test_template_config()));
+        let templates = Box::leak(Box::new(get_test_template_config().await));
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
@@ -2537,7 +2537,7 @@ mod tests {
             system: None,
             messages: vec![],
         };
-        let templates = Box::leak(Box::new(get_test_template_config()));
+        let templates = Box::leak(Box::new(get_test_template_config().await));
         let stream = false;
         // We will vary temperature, max_tokens, and seed
         let chat_completion_config = ChatCompletionConfig {
@@ -2782,17 +2782,17 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_validate_template_and_schema_both_none() {
-        let templates = get_test_template_config();
+    #[tokio::test]
+    async fn test_validate_template_and_schema_both_none() {
+        let templates = get_test_template_config().await;
         let result =
             validate_legacy_template_and_schema(TemplateKind::System, None, None, &templates);
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_validate_template_and_schema_both_some() {
-        let templates = get_test_template_config();
+    #[tokio::test]
+    async fn test_validate_template_and_schema_both_some() {
+        let templates = get_test_template_config().await;
         let schema = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             None,
@@ -2816,9 +2816,9 @@ mod tests {
         .unwrap();
     }
 
-    #[test]
-    fn test_validate_template_and_schema_template_no_needs_variables() {
-        let templates = get_test_template_config();
+    #[tokio::test]
+    async fn test_validate_template_and_schema_template_no_needs_variables() {
+        let templates = get_test_template_config().await;
         let template = PathBuf::from("system_filled");
         let result = validate_legacy_template_and_schema(
             TemplateKind::System,
@@ -2837,9 +2837,9 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_validate_template_and_schema_template_needs_variables() {
-        let templates = get_test_template_config(); // Template needing variables
+    #[tokio::test]
+    async fn test_validate_template_and_schema_template_needs_variables() {
+        let templates = get_test_template_config().await; // Template needing variables
         let template = PathBuf::from("greeting");
         let err = validate_legacy_template_and_schema(
             TemplateKind::System,
@@ -2868,9 +2868,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_validate_template_and_schema_schema_some_template_none() {
-        let templates = get_test_template_config(); // Default TemplateConfig
+    #[tokio::test]
+    async fn test_validate_template_and_schema_schema_some_template_none() {
+        let templates = get_test_template_config().await; // Default TemplateConfig
         let schema = StaticJSONSchema::from_path(ResolvedTomlPathData::new_for_tests(
             "fixtures/config/functions/templates_with_variables/system_schema.json".into(),
             None,

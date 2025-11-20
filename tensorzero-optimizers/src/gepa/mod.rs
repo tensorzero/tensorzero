@@ -23,8 +23,10 @@ use tensorzero_core::{
 
 use crate::{JobHandle, Optimizer};
 
+mod evaluate;
 mod validate;
 
+pub use evaluate::create_evaluation_dataset;
 use validate::{initialize_pareto_frontier, validate_examples, validate_gepa_config};
 
 #[async_trait]
