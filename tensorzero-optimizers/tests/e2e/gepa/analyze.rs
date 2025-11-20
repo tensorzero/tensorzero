@@ -401,31 +401,16 @@ pub fn create_test_evaluation_config_with_evaluators() -> EvaluationConfig {
 }
 
 /// Check if analysis contains one of the expected XML tags
-fn contains_expected_xml_tag(analysis: &[ContentBlockChatOutput]) -> bool {
-    let text = analysis
-        .iter()
-        .filter_map(|block| match block {
-            ContentBlockChatOutput::Text(t) => Some(t.text.as_str()),
-            _ => None,
-        })
-        .collect::<String>();
-
-    text.contains("<report_error>")
-        || text.contains("<report_improvement>")
-        || text.contains("<report_optimal>")
+fn contains_expected_xml_tag(analysis: &str) -> bool {
+    analysis.contains("<report_error>")
+        || analysis.contains("<report_improvement>")
+        || analysis.contains("<report_optimal>")
 }
 
 /// Extract the user message content from echo model response
 /// The echo model returns a JSON representation of the request; parse it once for reuse.
-fn parse_echo_payload(analysis: &[ContentBlockChatOutput]) -> Value {
-    let payload_text = analysis
-        .iter()
-        .find_map(|block| match block {
-            ContentBlockChatOutput::Text(t) => Some(t.text.as_str()),
-            _ => None,
-        })
-        .expect("Echo response should contain text content");
-    serde_json::from_str(payload_text)
+fn parse_echo_payload(analysis: &str) -> Value {
+    serde_json::from_str(analysis)
         .expect("Echo response should be valid JSON with system and messages fields")
 }
 

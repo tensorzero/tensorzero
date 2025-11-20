@@ -1,9 +1,15 @@
 //! Inference analysis functions for GEPA optimization
 //!
-//! This module provides functions for:
+//! This module provides functionality for analyzing inference outputs during GEPA optimization:
 //! - Analyzing inference outputs to identify errors, improvements, and optimal patterns
 //! - Building inputs for the built-in `tensorzero::optimization::gepa::analyze` function
-//! - Parsing XML feedback from analysis responses
+//! - Handling analysis results with optional inference context for mutation
+//!
+//! # Main Components
+//! - [`Inference`]: Represents an inference input/output pair
+//! - [`Analysis`]: Represents an analysis result with optional inference context
+//! - [`analyze_inferences`]: Main function to analyze multiple inferences in parallel
+//! - [`build_analyze_input`]: Builds template arguments for the analyze function
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -32,21 +38,33 @@ use tensorzero_core::{
 use evaluations::stats::EvaluationInfo;
 
 /// Represents an inference input and output pair
+///
+/// This struct is used to pass inference context to the mutation phase of GEPA.
+/// It is conditionally included in [`Analysis`] based on the
+/// `include_inference_for_mutation` config flag.
 #[derive(Debug, Clone, Serialize)]
 pub struct Inference {
+    /// The inference input (messages, system prompt, etc.)
     pub input: StoredInput,
+    /// The inference output serialized as JSON (chat content blocks or JSON output)
     pub output: Value,
 }
 
 /// Represents an analysis result with optional inference context
+///
+/// This struct is returned by [`analyze_inferences`] and contains the analysis
+/// feedback from the GEPA analyze function, along with optional inference context
+/// for the mutation phase.
 #[derive(Debug, Clone, Serialize)]
 pub struct Analysis {
-    /// Optional inference context (only included if include_inference_for_mutation is true)
-    /// Flattened during serialization so input/output appear at top level
-    /// Skipped during serialization if None to avoid bloating the mutate function input
+    /// Optional inference context (only included if `include_inference_for_mutation` is true).
+    /// Flattened during serialization so `input`/`output` appear at top level.
+    /// Skipped during serialization if `None` to avoid bloating the mutate function input.
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub inference: Option<Inference>,
-    pub analysis: Vec<ContentBlockChatOutput>,
+    /// The analysis feedback text from the analyze function.
+    /// Typically contains XML-formatted reports (error, improvement, or optimal).
+    pub analysis: String,
 }
 
 /// Create the variant configuration for the analyze function
@@ -96,14 +114,23 @@ fn create_analyze_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatC
 ///
 /// # Arguments
 /// * `eval_info` - Evaluation information containing the datapoint and inference response
-/// * `function_config` - Function configuration (serialized as function_config in template)
-/// * `static_tools` - Static tools from Config.tools (serialized as tool_schemas in template)
+/// * `function_config` - Function configuration (serialized as `function_config` in template)
+/// * `static_tools` - Static tools from `Config.tools` (serialized as `static_tools` in template)
 /// * `variant_config` - Variant configuration used to extract templates
-/// * `evaluation_config` - Evaluation config (serialized as evaluation_config in template)
+/// * `evaluation_config` - Evaluation config (serialized as `evaluation_config` in template)
 ///
 /// # Returns
-/// * Template arguments containing: function_config, static_tools, evaluation_config,
-///   templates_map, datapoint, output, and evaluation_scores
+/// * [`Arguments`] containing template variables:
+///   - `function_config`: Function configuration
+///   - `static_tools`: Static tool definitions
+///   - `evaluation_config`: Evaluation configuration
+///   - `templates_map`: Map of template names to template content
+///   - `datapoint`: The evaluation datapoint (input)
+///   - `output`: The inference output
+///   - `evaluation_scores`: Map of evaluator names to scores (numeric, boolean, or null)
+///
+/// # Errors
+/// Returns an error if serialization of any component fails.
 pub fn build_analyze_input(
     eval_info: &EvaluationInfo,
     function_config: &FunctionConfig,
@@ -160,17 +187,33 @@ pub fn build_analyze_input(
 /// Calls the built-in `tensorzero::optimization::gepa::analyze` function in parallel
 /// with controlled concurrency (up to `gepa_config.max_concurrency` concurrent API calls).
 ///
+/// # Behavior
+/// - Returns immediately with an empty vector if `evaluation_infos` is empty
+/// - Executes analyses in parallel with semaphore-based concurrency control
+/// - Implements graceful degradation: successful analyses are returned even if some fail
+/// - Logs progress every 10 analyses and provides a summary at completion
+/// - Conditionally includes inference context in results based on `include_inference_for_mutation` config flag
+///
 /// # Arguments
 /// * `gateway_client` - TensorZero gateway client for making inference requests
 /// * `evaluation_infos` - Evaluation results containing datapoints and their inference responses
 /// * `function_config` - Configuration of the function being optimized
-/// * `static_tools` - Static tools from Config.tools referenced by the function
+/// * `static_tools` - Static tools from `Config.tools` referenced by the function
 /// * `variant_config` - Configuration of the variant being analyzed
-/// * `gepa_config` - GEPA configuration containing analysis_model and max_concurrency settings
-/// * `evaluation_config` - Evaluation config enriched with loaded system templates
+/// * `gepa_config` - GEPA configuration containing `analysis_model`, `max_concurrency`, and `include_inference_for_mutation` settings
+/// * `evaluation_config` - Evaluation configuration for the function being optimized
 ///
 /// # Returns
-/// * Vector of [`Analysis`] containing each inference paired with its XML analysis feedback
+/// * Vector of [`Analysis`] containing successful analyses. Each analysis includes:
+///   - The analysis feedback text (typically XML-formatted)
+///   - Optional inference context (input/output) if `include_inference_for_mutation` is enabled
+///
+/// # Errors
+/// * Returns an error if ALL analyses fail (with details about the first failure)
+/// * Returns an error if semaphore acquisition fails
+/// * Returns an error if inference API calls fail
+/// * Returns an error if response format is unexpected (e.g., streaming instead of non-streaming, JSON instead of Chat)
+/// * Individual analysis failures are logged as warnings but don't cause the entire function to fail
 pub async fn analyze_inferences(
     gateway_client: &Client,
     evaluation_infos: &[EvaluationInfo],
@@ -289,7 +332,7 @@ pub async fn analyze_inferences(
                 });
 
                 let analysis = match text_block {
-                    Some(text) => vec![ContentBlockChatOutput::Text(text)],
+                    Some(text) => text.text,
                     None => {
                         return Err(Error::new(ErrorDetails::Inference {
                             message: "Expected at least one Text content block from analyze function, found none"
