@@ -130,6 +130,7 @@ export * from "./GetDatapointsResponse";
 export * from "./GetDatasetMetadataParams";
 export * from "./GetDatasetRowsParams";
 export * from "./GetFeedbackByVariantParams";
+export * from "./GetInferenceBoundsResponse";
 export * from "./GetInferencesRequest";
 export * from "./GetInferencesResponse";
 export * from "./GetModelLatencyQuantilesParams";
