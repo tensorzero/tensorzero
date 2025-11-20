@@ -82,7 +82,8 @@ async fn run_evaluations_json() {
         config_file: config_path.clone(),
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -359,7 +360,8 @@ async fn run_exact_match_evaluation_chat() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "haiku_with_outputs".to_string(),
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -484,7 +486,8 @@ async fn run_llm_judge_evaluation_chat() {
     let args = || Args {
         config_file: config_path.clone(),
         gateway_url: None,
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         evaluation_name: "haiku_without_outputs".to_string(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
@@ -707,7 +710,8 @@ async fn run_image_evaluation() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         evaluation_name: "images".to_string(),
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
@@ -924,7 +928,8 @@ async fn check_invalid_image_evaluation() {
     let args = Args {
         config_file: config_path,
         gateway_url: None,
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         evaluation_name: "bad_images".to_string(),
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
@@ -1028,7 +1033,8 @@ async fn run_llm_judge_evaluation_chat_pretty() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "haiku_without_outputs".to_string(),
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Pretty,
@@ -1073,7 +1079,8 @@ async fn run_llm_judge_evaluation_json_pretty() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Pretty,
@@ -1127,7 +1134,7 @@ async fn test_parse_args() {
     .unwrap();
     assert_eq!(args.evaluation_name, "my-evaluation");
     assert_eq!(args.variant_name, "my-variant");
-    assert_eq!(args.dataset_name, "my-dataset");
+    assert_eq!(args.dataset_name.unwrap(), "my-dataset".to_string());
     assert_eq!(args.config_file, PathBuf::from("./config/tensorzero.toml"));
     assert_eq!(args.concurrency, 1);
     assert_eq!(args.gateway_url, None);
@@ -1156,7 +1163,7 @@ async fn test_parse_args() {
     ])
     .unwrap();
     assert_eq!(args.evaluation_name, "my-evaluation");
-    assert_eq!(args.dataset_name, "my-dataset");
+    assert_eq!(args.dataset_name.unwrap(), "my-dataset".to_string());
     assert_eq!(args.variant_name, "my-variant");
     assert_eq!(args.config_file, PathBuf::from("/path/to/config.toml"));
     assert_eq!(
@@ -1234,7 +1241,8 @@ async fn run_evaluations_errors() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         variant_name: "dummy_error".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -1653,7 +1661,8 @@ async fn run_evaluations_best_of_3() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "best_of_3".to_string(),
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -1843,7 +1852,8 @@ async fn run_evaluations_mixture_of_3() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "mixture_of_3".to_string(),
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -2036,7 +2046,8 @@ async fn run_evaluations_dicl() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "dicl".to_string(),
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -2324,7 +2335,8 @@ async fn test_evaluation_with_dynamic_variant() {
         tensorzero_client,
         clickhouse_client: clickhouse,
         config,
-        dataset_name,
+        dataset_name: Some(dataset_name),
+        datapoint_ids: vec![],
         variant: EvaluationVariant::Info(Box::new(dynamic_variant)),
         evaluation_name: "haiku_with_outputs".to_string(),
         evaluation_run_id,
@@ -2380,7 +2392,8 @@ async fn test_max_datapoints_parameter() {
         tensorzero_client: tensorzero_client.clone(),
         clickhouse_client: clickhouse.clone(),
         config: config.clone(),
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
         evaluation_name: "entity_extraction".to_string(),
         evaluation_run_id,
@@ -2459,7 +2472,8 @@ async fn test_precision_targets_parameter() {
         tensorzero_client: tensorzero_client.clone(),
         clickhouse_client: clickhouse.clone(),
         config: config.clone(),
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
         evaluation_name: "haiku_without_outputs".to_string(), // Has both exact_match and topic_starts_with_f
         evaluation_run_id,
@@ -2559,7 +2573,8 @@ async fn test_cli_args_max_datapoints() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "haiku_with_outputs".to_string(),
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -2618,7 +2633,8 @@ async fn test_cli_args_precision_targets() {
         config_file: config_path,
         gateway_url: None,
         evaluation_name: "haiku_with_outputs".to_string(),
-        dataset_name: dataset_name.clone(),
+        dataset_name: Some(dataset_name.clone()),
+        datapoint_ids: vec![],
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,

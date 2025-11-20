@@ -72,6 +72,7 @@ use tensorzero_rust::{
 };
 use tokio::sync::Mutex;
 use url::Url;
+use uuid::Uuid;
 
 mod evaluation_handlers;
 mod gil_helpers;
@@ -1336,6 +1337,7 @@ impl TensorZeroGateway {
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
+                        datapoint_ids,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
@@ -1349,7 +1351,8 @@ impl TensorZeroGateway {
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
         evaluation_name: String,
-        dataset_name: String,
+        dataset_name: Option<String>,
+        datapoint_ids: Vec<String>,
         variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
@@ -1399,6 +1402,18 @@ impl TensorZeroGateway {
             HashMap::new()
         };
 
+        // Parse datapoint_ids from strings to UUIDs
+        let datapoint_ids: Vec<Uuid> = datapoint_ids
+            .iter()
+            .map(|s| {
+                Uuid::parse_str(s).map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "Invalid UUID in datapoint_ids: {e}"
+                    ))
+                })
+            })
+            .collect::<PyResult<Vec<Uuid>>>()?;
+
         let core_args = EvaluationCoreArgs {
             tensorzero_client: client.clone(),
             clickhouse_client: app_state.clickhouse_connection_info.clone(),
@@ -1406,6 +1421,7 @@ impl TensorZeroGateway {
             evaluation_name,
             evaluation_run_id,
             dataset_name,
+            datapoint_ids,
             variant,
             concurrency,
             inference_cache: inference_cache_enum,
@@ -2515,6 +2531,7 @@ impl AsyncTensorZeroGateway {
     #[pyo3(signature = (*,
                         evaluation_name,
                         dataset_name,
+                        datapoint_ids,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
@@ -2528,7 +2545,8 @@ impl AsyncTensorZeroGateway {
     fn experimental_run_evaluation<'py>(
         this: PyRef<'py, Self>,
         evaluation_name: String,
-        dataset_name: String,
+        dataset_name: Option<String>,
+        datapoint_ids: Vec<String>,
         variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
@@ -2571,6 +2589,18 @@ impl AsyncTensorZeroGateway {
             HashMap::new()
         };
 
+        // Parse datapoint_ids from strings to UUIDs
+        let datapoint_ids: Vec<Uuid> = datapoint_ids
+            .iter()
+            .map(|s| {
+                Uuid::parse_str(s).map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "Invalid UUID in datapoint_ids: {e}"
+                    ))
+                })
+            })
+            .collect::<PyResult<Vec<Uuid>>>()?;
+
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             // Get app state data
             let app_state = client.get_app_state_data().ok_or_else(|| {
@@ -2586,6 +2616,7 @@ impl AsyncTensorZeroGateway {
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,
+                datapoint_ids,
                 variant,
                 concurrency,
                 inference_cache: inference_cache_enum,

@@ -21,7 +21,10 @@ use tensorzero_core::client::{
     ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
 };
 use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo};
-use tensorzero_core::endpoints::datasets::v1::{list_datapoints, types::ListDatapointsRequest};
+use tensorzero_core::endpoints::datasets::v1::{
+    get_datapoints, list_datapoints,
+    types::{GetDatapointsRequest, ListDatapointsRequest},
+};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
@@ -70,8 +73,14 @@ pub struct Args {
     pub evaluation_name: String,
 
     /// Name of the dataset to run on.
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
     #[arg(short, long)]
-    pub dataset_name: String,
+    pub dataset_name: Option<String>,
+
+    /// Specific datapoint IDs to evaluate (comma-separated).
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
+    #[arg(long, value_delimiter = ',')]
+    pub datapoint_ids: Vec<Uuid>,
 
     /// Name of the variant to run.
     #[arg(short, long)]
@@ -162,7 +171,12 @@ pub struct EvaluationCoreArgs {
     pub evaluation_run_id: Uuid,
 
     /// Name of the dataset to run on.
-    pub dataset_name: String,
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
+    pub dataset_name: Option<String>,
+
+    /// Specific datapoint IDs to evaluate.
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
+    pub datapoint_ids: Vec<Uuid>,
 
     /// Variant to use for evaluation.
     /// Either a variant name from the config file, or a dynamic variant configuration.
@@ -213,12 +227,22 @@ pub struct EvaluationCoreArgs {
 ///
 /// - `Ok(())` if the evaluation completes successfully and meets all cutoffs
 /// - `Err` if setup fails, evaluation fails, or results don't meet cutoffs
-#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = ?(!args.datapoint_ids.is_empty()).then_some(args.datapoint_ids.len()), variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
     mut writer: impl Write,
 ) -> Result<()> {
+    // Validate that dataset_name and datapoint_ids are mutually exclusive
+    if args.dataset_name.is_some() && !args.datapoint_ids.is_empty() {
+        bail!(
+            "Cannot provide both dataset_name and datapoint_ids. Please specify one or the other."
+        );
+    }
+    if args.dataset_name.is_none() && args.datapoint_ids.is_empty() {
+        bail!("Must provide either dataset_name or datapoint_ids.");
+    }
+
     info!("Initializing evaluation environment");
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
@@ -269,6 +293,7 @@ pub async fn run_evaluation(
         clickhouse_client: clickhouse_client.clone(),
         config,
         dataset_name: args.dataset_name,
+        datapoint_ids: args.datapoint_ids,
         variant: EvaluationVariant::Name(args.variant_name),
         evaluation_name: args.evaluation_name,
         evaluation_run_id,
@@ -416,7 +441,7 @@ pub async fn run_evaluation(
 /// rather than failing the entire evaluation. Error messages include context:
 /// - Inference errors: Include the datapoint_id
 /// - Evaluation errors: Include both the inference_id and datapoint_id
-#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant = ?args.variant, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = ?(!args.datapoint_ids.is_empty()).then_some(args.datapoint_ids.len()), variant = ?args.variant, concurrency = %args.concurrency))]
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
     max_datapoints: Option<u32>,
@@ -451,25 +476,62 @@ pub async fn run_evaluation_core_streaming(
 
     let mut join_set = JoinSet::new();
 
-    info!("Querying dataset");
-    #[expect(deprecated)]
-    let request = ListDatapointsRequest {
-        function_name: Some(inference_evaluation_config.function_name.clone()),
-        limit: max_datapoints.or(Some(u32::MAX)), // Use u32::MAX when no limit specified, since otherwise ListDatapointsRequest defaults to 20
-        page_size: None,                          // deprecated but required
-        offset: Some(0),
-        filter: None,
+    // Validate that dataset_name and datapoint_ids are mutually exclusive
+    if args.dataset_name.is_some() && !args.datapoint_ids.is_empty() {
+        bail!(
+            "Cannot provide both dataset_name and datapoint_ids. Please specify one or the other."
+        );
+    }
+    if args.dataset_name.is_none() && args.datapoint_ids.is_empty() {
+        bail!("Must provide either dataset_name or datapoint_ids.");
+    }
+
+    info!("Loading datapoints");
+    let dataset = if let Some(dataset_name) = &args.dataset_name {
+        // Load from dataset
+        #[expect(deprecated)]
+        let request = ListDatapointsRequest {
+            function_name: Some(inference_evaluation_config.function_name.clone()),
+            limit: max_datapoints.or(Some(u32::MAX)), // Use u32::MAX when no limit specified, since otherwise ListDatapointsRequest defaults to 20
+            page_size: None,                          // deprecated but required
+            offset: Some(0),
+            filter: None,
+        };
+        list_datapoints(
+            &clients.clickhouse_client,
+            &args.config,
+            dataset_name.clone(),
+            request,
+        )
+        .await?
+        .datapoints
+    } else {
+        // Load by IDs
+        let request = GetDatapointsRequest {
+            ids: args.datapoint_ids.clone(),
+        };
+        let response = get_datapoints(&clients.clickhouse_client, &args.config, request).await?;
+
+        // Apply limit if provided
+        if let Some(limit) = max_datapoints {
+            response
+                .datapoints
+                .into_iter()
+                .take(limit as usize)
+                .collect()
+        } else {
+            response.datapoints
+        }
     };
-    let dataset = list_datapoints(
-        &clients.clickhouse_client,
-        &args.config,
-        args.dataset_name.clone(),
-        request,
-    )
-    .await?
-    .datapoints;
-    info!(dataset_size = dataset.len(), "Dataset loaded successfully");
-    let dataset_name = Arc::new(args.dataset_name);
+    info!(
+        dataset_size = dataset.len(),
+        "Datapoints loaded successfully"
+    );
+    let dataset_name = Arc::new(
+        args.dataset_name
+            .clone()
+            .unwrap_or_else(|| format!("datapoint_ids[{}]", args.datapoint_ids.len())),
+    );
     let variant = Arc::new(args.variant);
     let evaluation_name = Arc::new(args.evaluation_name);
     let dataset_len = dataset.len();
