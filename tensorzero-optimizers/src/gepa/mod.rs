@@ -49,7 +49,7 @@ impl Optimizer for GEPAConfig {
         // TODO[#4772]: Random split from train_examples if None
         let val_examples = val_examples.ok_or_else(|| {
             Error::new(ErrorDetails::Config {
-                message: "val_examples are required for GEPA optimization (used for Pareto frontier filtering)".to_string(),
+                message: "`val_examples` are required for GEPA optimization (used for Pareto frontier filtering)".to_string(),
             })
         })?;
 

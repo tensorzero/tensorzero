@@ -46,7 +46,7 @@ pub fn validate_gepa_config(
         .ok_or_else(|| {
             Error::new(ErrorDetails::Config {
                 message: format!(
-                    "function '{}' not found in configuration",
+                    "Function '{}' not found in configuration",
                     config.function_name
                 ),
             })
@@ -72,7 +72,7 @@ pub fn validate_gepa_config(
             if !function_variants.contains_key(variant_name) {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
-                        "variant '{}' specified in initial_variants not found in function '{}'",
+                        "Variant '{}' specified in initial_variants not found in Function '{}'",
                         variant_name, config.function_name
                     ),
                 }));
@@ -83,7 +83,7 @@ pub fn validate_gepa_config(
         if initial_variants.is_empty() {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
-                    "initial_variants is empty for function '{}'",
+                    "`initial_variants` is empty for Function '{}'",
                     config.function_name
                 ),
             }));
@@ -110,7 +110,7 @@ pub fn validate_gepa_config(
                 _ => {
                     return Err(Error::new(ErrorDetails::Config {
                         message: format!(
-                            "variant '{}' in function '{}' is not a ChatCompletion variant. GEPA only supports ChatCompletion variants.",
+                            "Variant '{}' in Function '{}' is not a ChatCompletion variant. GEPA only supports ChatCompletion variants.",
                             variant_name, config.function_name
                         ),
                     }));
@@ -138,7 +138,7 @@ pub fn validate_gepa_config(
             } else {
                 return Err(Error::new(ErrorDetails::Config {
                     message: format!(
-                        "tool '{}' referenced by function '{}' not found in configuration",
+                        "Tool '{}' referenced by Function '{}' not found in configuration",
                         tool_name, config.function_name
                     ),
                 }));
@@ -357,7 +357,7 @@ pub fn initialize_pareto_frontier(
             let variant_info = variants.get(variant_name).ok_or_else(|| {
                 Error::new(ErrorDetails::Config {
                     message: format!(
-                        "variant '{}' not found in function '{}'",
+                        "Variant '{}' not found in Function '{}'",
                         variant_name, config.function_name
                     ),
                 })
@@ -374,6 +374,12 @@ pub fn initialize_pareto_frontier(
                 tracing::info!("Using initial variant: {}", variant_name);
             }
         }
+
+        tracing::info!(
+            "Initialized Pareto frontier with {} specified initial variants from function '{}'",
+            frontier.len(),
+            config.function_name
+        );
     } else {
         // Use all ChatCompletion variants from the function
         for (variant_name, variant_info) in variants {
