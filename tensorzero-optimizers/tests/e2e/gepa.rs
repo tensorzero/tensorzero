@@ -817,10 +817,7 @@ async fn test_analyze_inferences_with_schemas() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_inferences_json_function() {
     use tensorzero_core::{
-        endpoints::{
-            datasets::{JsonInferenceDatapoint, StoredDatapoint},
-            inference::JsonInferenceResponse,
-        },
+        endpoints::{datasets::StoredDatapoint, inference::JsonInferenceResponse},
         inference::types::{Input, JsonInferenceOutput},
     };
 
@@ -855,7 +852,7 @@ async fn test_analyze_inferences_json_function() {
         "required": ["result"]
     });
 
-    let datapoint = JsonInferenceDatapoint {
+    let datapoint = tensorzero_core::endpoints::datasets::StoredJsonInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "test_json_function".to_string(),
         id: uuid::Uuid::now_v7(),

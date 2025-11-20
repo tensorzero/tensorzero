@@ -509,22 +509,34 @@ mod tests {
         })
     }
 
-    /// Create a test UninitializedChatCompletionConfig
+    /// Create a test UninitializedChatCompletionConfig using templates.inner
     fn create_test_variant_config() -> UninitializedChatCompletionConfig {
-        UninitializedChatCompletionConfig {
+        let mut config = UninitializedChatCompletionConfig {
             model: "test-model".into(),
             weight: None,
-            system_template: Some(ResolvedTomlPathData::new_fake_path(
-                "system.minijinja".to_string(),
-                "You are a helpful assistant.".to_string(),
-            )),
-            user_template: Some(ResolvedTomlPathData::new_fake_path(
-                "user.minijinja".to_string(),
-                "User: {{input}}".to_string(),
-            )),
-            assistant_template: None,
             ..Default::default()
-        }
+        };
+
+        config.templates.inner.insert(
+            "system".to_string(),
+            UninitializedChatTemplate {
+                path: ResolvedTomlPathData::new_fake_path(
+                    "system.minijinja".to_string(),
+                    "You are a helpful assistant.".to_string(),
+                ),
+            },
+        );
+        config.templates.inner.insert(
+            "user".to_string(),
+            UninitializedChatTemplate {
+                path: ResolvedTomlPathData::new_fake_path(
+                    "user.minijinja".to_string(),
+                    "User: {{input}}".to_string(),
+                ),
+            },
+        );
+
+        config
     }
 
     /// Create a test EvaluationInfo
