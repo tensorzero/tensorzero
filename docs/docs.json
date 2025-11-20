@@ -397,7 +397,7 @@
       "destination": "/evaluations/workflow-evaluations/api-reference"
     },
     {
-      "source": "/gateway/tutorial/",
+      "source": "/gateway/tutorial",
       "destination": "/quickstart"
     },
     {
