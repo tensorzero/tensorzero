@@ -1,6 +1,4 @@
 use std::{collections::HashMap, sync::Arc};
-
-use tensorzero_core::client::DisplayOrDebug;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
@@ -1243,19 +1241,7 @@ impl ClientExt for Client {
                         .into(),
                     })?;
                 let builder = client.http_client.post(url).json(&params);
-                let resp = client.check_http_response(builder.send().await).await?;
-                let encoded_handle = resp.text().await.map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error deserializing response: {}",
-                            DisplayOrDebug {
-                                val: e,
-                                debug: self.verbose_errors,
-                            }
-                        ),
-                    })
-                    .into(),
-                })?;
+                let encoded_handle = client.send_request(builder).await?;
                 let job_handle = OptimizationJobHandle::from_base64_urlencoded(&encoded_handle)
                     .map_err(|e| TensorZeroError::Other { source: e.into() })?;
                 Ok(job_handle)

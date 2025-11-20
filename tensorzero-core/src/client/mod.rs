@@ -126,6 +126,30 @@ impl HTTPGateway {
         builder.headers(self.headers.clone())
     }
 
+    pub async fn send_request(
+        &self,
+        builder: TensorzeroRequestBuilder<'_>,
+    ) -> Result<String, TensorZeroError> {
+        let builder = self.customize_builder(builder);
+        let resp = builder.send().await;
+        self.check_http_response(resp)
+            .await?
+            .text()
+            .await
+            .map_err(|e| TensorZeroError::Other {
+                source: Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error deserializing response: {}",
+                        DisplayOrDebug {
+                            val: e,
+                            debug: self.verbose_errors,
+                        }
+                    ),
+                })
+                .into(),
+            })
+    }
+
     pub async fn send_and_parse_http_response<T: serde::de::DeserializeOwned>(
         &self,
         builder: TensorzeroRequestBuilder<'_>,
