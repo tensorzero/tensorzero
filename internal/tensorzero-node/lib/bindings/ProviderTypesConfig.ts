@@ -12,6 +12,7 @@ import type { OpenAIProviderTypeConfig } from "./OpenAIProviderTypeConfig";
 import type { OpenRouterProviderTypeConfig } from "./OpenRouterProviderTypeConfig";
 import type { SGLangProviderTypeConfig } from "./SGLangProviderTypeConfig";
 import type { TGIProviderTypeConfig } from "./TGIProviderTypeConfig";
+import type { TensorZeroRelayProviderTypeConfig } from "./TensorZeroRelayProviderTypeConfig";
 import type { TogetherProviderTypeConfig } from "./TogetherProviderTypeConfig";
 import type { VLLMProviderTypeConfig } from "./VLLMProviderTypeConfig";
 import type { XAIProviderTypeConfig } from "./XAIProviderTypeConfig";
@@ -34,4 +35,5 @@ export type ProviderTypesConfig = {
   together: TogetherProviderTypeConfig;
   vllm: VLLMProviderTypeConfig;
   xai: XAIProviderTypeConfig;
+  tensorzero_relay: TensorZeroRelayProviderTypeConfig;
 };
