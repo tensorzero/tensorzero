@@ -3511,7 +3511,6 @@ async def test_async_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     assert captured.err == ""
 
 
-
 def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     client = TensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
