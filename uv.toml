@@ -1,0 +1,8 @@
+# Ensure uv uses the system Python on CI runners rather than downloading a
+# managed Python distribution (which can occasionally 503 from GitHub).
+# This makes steps like "uv run ./ui/fixtures/download-fixtures.py" more robust.
+#
+# See: https://docs.astral.sh/uv/configuration/
+python-preference = "system"
+# Disallow downloading managed Python distributions; fall back to system Python.
+python-downloads = "never"
