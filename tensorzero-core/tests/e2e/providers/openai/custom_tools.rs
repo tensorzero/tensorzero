@@ -1180,3 +1180,44 @@ async fn test_responses_api_mixed_function_and_custom_tools() {
     let format = tool_json.get("format").unwrap();
     assert_eq!(format.get("type").unwrap().as_str().unwrap(), "text");
 }
+
+/// Test that Anthropic rejects a custom tool with text format (400)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_non_openai_custom_tool_text_format() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "model_name": "anthropic::claude-sonnet-4-5",
+        "episode_id": episode_id,
+        "input": {
+            "messages": [{
+                "role": "user",
+                "content": "Generate Python code to print 'Hello, World!' using the code_generator tool."
+            }],
+        },
+        "additional_tools": [
+            {
+                "type": "openai_custom",
+                "name": "code_generator",
+                "description": "Generates Python code snippets based on requirements",
+                "format": {
+                    "type": "text"
+                }
+            }
+        ],
+        "allowed_tools": ["code_generator"],
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let text = response.text().await.unwrap();
+    assert!(text.contains("OpenAI custom tools are not supported by this provider"));
+}
