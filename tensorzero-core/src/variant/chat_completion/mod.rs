@@ -209,15 +209,15 @@ impl ChatCompletionConfig {
             presence_penalty: self.presence_penalty,
             frequency_penalty: self.frequency_penalty,
             seed: self.seed,
-            stop_sequences: self.stop_sequences.clone(),
-            reasoning_effort: self.inference_params_v2.reasoning_effort.clone(),
-            service_tier: self.inference_params_v2.service_tier.clone(),
+            stop_sequences: self.stop_sequences,
+            reasoning_effort: self.inference_params_v2.reasoning_effort,
+            service_tier: self.inference_params_v2.service_tier,
             thinking_budget_tokens: self.inference_params_v2.thinking_budget_tokens,
-            verbosity: self.inference_params_v2.verbosity.clone(),
+            verbosity: self.inference_params_v2.verbosity,
             json_mode: self.json_mode,
             retries: self.retries,
-            extra_body: self.extra_body.clone(),
-            extra_headers: self.extra_headers.clone(),
+            extra_body: self.extra_body,
+            extra_headers: self.extra_headers,
         }
     }
 }
