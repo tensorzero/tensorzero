@@ -636,6 +636,14 @@ jobs:
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "latest"
+
+      - name: Install helm-values-schema-json plugin
+        run: helm plugin install https://github.com/losisin/helm-values-schema-json.git
+
       - name: check‑case‑conflict
         run: uv run --with pre-commit pre-commit run check-case-conflict --all-files
 
@@ -665,6 +673,12 @@ jobs:
 
       - name: detect‑private‑key
         run: uv run --with pre-commit pre-commit run detect-private-key --all-files
+
+      - name: helm-values-schema
+        run: uv run --with pre-commit pre-commit run helm-schema --all-files
+
+      - name: Check helm schema sync
+        run: ./ci/check-helm-schema-sync.sh
 
       # We don't run these two because we want to allow template files to have trailing whitespace
       # TODO: how do we exclude minijinja files using pre-commit in GHA?

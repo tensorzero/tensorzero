@@ -68,6 +68,7 @@
                             "type": "string"
                         },
                         "tag": {
+                            "description": "The tag of the gateway image. If empty, uses Chart.appVersion",
                             "type": "string"
                         }
                     }
@@ -159,6 +160,7 @@
                     }
                 },
                 "serviceAccountName": {
+                    "description": "The service account name for the gateway deployment.",
                     "type": "string"
                 },
                 "tolerations": {
