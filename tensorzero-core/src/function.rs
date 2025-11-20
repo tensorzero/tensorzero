@@ -278,7 +278,7 @@ pub struct FunctionConfigJson {
     pub variants: HashMap<String, Arc<VariantInfo>>, // variant name => variant config
     pub schemas: SchemaData,
     pub output_schema: StaticJSONSchema, // schema is mandatory for JSON functions
-    pub implicit_tool_call_config: ToolCallConfig,
+    pub json_mode_tool_call_config: ToolCallConfig,
     pub description: Option<String>,
     pub experimentation: ExperimentationConfig,
     // See `FunctionConfigChat.all_explicit_template_names`.
@@ -298,13 +298,85 @@ impl FunctionConfig {
         &self,
         params: &crate::endpoints::inference::Params,
     ) -> Result<(), Error> {
-        if let FunctionConfig::Chat(_) = self {
-            if let Some(JsonMode::ImplicitTool) = &params.params.chat_completion.json_mode {
-                return Err(ErrorDetails::InvalidRequest {
-                    message: "JSON mode `implicit_tool` is not supported for chat functions"
-                        .to_string(),
+        if let FunctionConfig::Chat(chat_config) = self {
+            if let Some(JsonMode::Tool) = &params.params.chat_completion.json_mode {
+                // Check if the chat function has tools configured
+                if !chat_config.tools.is_empty() {
+                    return Err(ErrorDetails::InvalidRequest {
+                        message: "JSON mode `tool` is not supported with other tools configured."
+                            .to_string(),
+                    }
+                    .into());
                 }
-                .into());
+
+                // Check if the chat function has tool_choice configured (not Auto, which is the default)
+                if !matches!(chat_config.tool_choice, ToolChoice::Auto) {
+                    return Err(ErrorDetails::InvalidRequest {
+                        message: "JSON mode `tool` is not supported with `tool_choice` configured in the function.".to_string(),
+                    }
+                    .into());
+                }
+
+                // Check if the chat function has parallel_tool_calls configured
+                if chat_config.parallel_tool_calls.is_some() {
+                    return Err(ErrorDetails::InvalidRequest {
+                        message: "JSON mode `tool` is not supported with `parallel_tool_calls` configured in the function.".to_string(),
+                    }
+                    .into());
+                }
+
+                // Require output_schema when using `json_mode="tool"`
+                if params.output_schema.is_none() {
+                    return Err(ErrorDetails::InvalidRequest {
+                        message: "JSON mode `tool` requires `output_schema`.".to_string(),
+                    }
+                    .into());
+                }
+
+                // Reject dynamic tool params when using `json_mode="tool"` (similar to JSON functions)
+                let DynamicToolParams {
+                    ref allowed_tools,
+                    ref additional_tools,
+                    ref parallel_tool_calls,
+                    ref provider_tools,
+                    ref tool_choice,
+                } = params.dynamic_tool_params;
+
+                if allowed_tools.is_some() {
+                    return Err(ErrorDetails::InvalidRequest {
+                        message: "Cannot pass `allowed_tools` when using JSON mode `tool`."
+                            .to_string(),
+                    }
+                    .into());
+                }
+                if additional_tools.is_some() {
+                    return Err(ErrorDetails::InvalidRequest {
+                        message: "Cannot pass `additional_tools` when using JSON mode `tool`."
+                            .to_string(),
+                    }
+                    .into());
+                }
+                if parallel_tool_calls.is_some() {
+                    return Err(ErrorDetails::InvalidRequest {
+                        message: "Cannot pass `parallel_tool_calls` when using JSON mode `tool`."
+                            .to_string(),
+                    }
+                    .into());
+                }
+                if !provider_tools.is_empty() {
+                    return Err(ErrorDetails::InvalidRequest {
+                        message: "Cannot pass `provider_tools` when using JSON mode `tool`."
+                            .to_string(),
+                    }
+                    .into());
+                }
+                if tool_choice.is_some() {
+                    return Err(ErrorDetails::InvalidRequest {
+                        message: "Cannot pass `tool_choice` when using JSON mode `tool`."
+                            .to_string(),
+                    }
+                    .into());
+                }
             }
         }
         self.validate_input(&params.input)
@@ -418,17 +490,22 @@ impl FunctionConfig {
         original_response: Option<String>,
     ) -> Result<InferenceResult, Error> {
         match self {
-            FunctionConfig::Chat(..) => Ok(InferenceResult::Chat(
-                ChatInferenceResult::new(
-                    inference_id,
-                    content_blocks,
-                    model_inference_results,
-                    inference_config.tool_config.as_deref(),
-                    inference_params,
-                    original_response,
-                )
-                .await,
-            )),
+            FunctionConfig::Chat(..) => {
+                // Extract json_mode to pass to ChatInferenceResult
+                let json_mode = inference_params.chat_completion.json_mode;
+                Ok(InferenceResult::Chat(
+                    ChatInferenceResult::new(
+                        inference_id,
+                        content_blocks,
+                        model_inference_results,
+                        inference_config.tool_config.as_deref(),
+                        inference_params,
+                        original_response,
+                        json_mode,
+                    )
+                    .await,
+                ))
+            }
             FunctionConfig::Json(params) => {
                 let (raw_output, auxiliary_content, json_block_index) =
                     get_json_output_from_content_blocks(content_blocks);
@@ -1290,12 +1367,12 @@ mod tests {
     #[test]
     fn test_validate_input_json_no_schema() {
         let output_schema = json!({});
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1370,7 +1447,7 @@ mod tests {
         let system_schema = create_test_schema();
         let system_value = system_schema.value.clone();
         let output_schema = json!({});
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::load(
@@ -1382,7 +1459,7 @@ mod tests {
             )
             .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1445,7 +1522,7 @@ mod tests {
         let user_schema = create_test_schema();
         let user_value = user_schema.value.clone();
         let output_schema = json!({});
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::load(
@@ -1457,7 +1534,7 @@ mod tests {
             )
             .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1520,7 +1597,7 @@ mod tests {
         let assistant_schema = create_test_schema();
         let assistant_value = assistant_schema.value.clone();
         let output_schema = json!({});
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::load(
@@ -1532,7 +1609,7 @@ mod tests {
             )
             .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1598,7 +1675,7 @@ mod tests {
         let assistant_schema = create_test_schema();
         let system_value = system_schema.value.clone();
         let output_schema = json!({});
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let tool_config = FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::load(
@@ -1610,7 +1687,7 @@ mod tests {
             )
             .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema).unwrap(),
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1707,12 +1784,12 @@ mod tests {
 
         // Test for JSON function with description
         let output_schema = StaticJSONSchema::from_value(json!({})).unwrap();
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&json!({}));
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&json!({}));
         let json_config = FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: Some("A JSON function description".to_string()),
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1758,13 +1835,13 @@ mod tests {
           "required": ["name", "age"],
           "additionalProperties": false
         });
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -2326,13 +2403,13 @@ mod tests {
 
         // Test with an empty output schema
         let output_schema = json!({});
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let function_config = FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),

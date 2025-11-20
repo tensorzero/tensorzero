@@ -312,7 +312,7 @@ This field accepts an object with a `chat_completion` field containing any of th
 
 <Note>
 
-When using the OpenAI-compatible endpoint, parameters provided directly in the request body (e.g., top-level `temperature`, `max_tokens`) take precedence over values specified in `tensorzero::params`.
+When using the OpenAI-compatible endpoint, values specified in `tensorzero::params` take precedence over parameters provided directly in the request body (e.g., top-level `temperature`, `max_tokens`) or inferred from other fields (e.g., `json_mode` inferred from `response_format`).
 
 </Note>
 
