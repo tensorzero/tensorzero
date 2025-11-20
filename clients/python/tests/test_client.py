@@ -3482,8 +3482,14 @@ def test_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     )
     assert client is not None
     captured = capfd.readouterr()
+    if os.environ.get("TENSORZERO_E2E_PROXY") is not None:
+        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set
+        for line in captured.out.splitlines():
+            assert "Using proxy URL from TENSORZERO_E2E_PROXY" in line, f"Unexpected log line: {line}"
+    else:
+        assert captured.out == ""
+
     assert captured.err == ""
-    assert captured.out == ""
 
 
 @pytest.mark.asyncio
@@ -3496,8 +3502,14 @@ async def test_async_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     client = await client_fut
     assert client is not None
     captured = capfd.readouterr()
+    if os.environ.get("TENSORZERO_E2E_PROXY") is not None:
+        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set
+        for line in captured.out.splitlines():
+            assert "Using proxy URL from TENSORZERO_E2E_PROXY" in line, f"Unexpected log line: {line}"
+    else:
+        assert captured.out == ""
     assert captured.err == ""
-    assert captured.out == ""
+
 
 
 def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
@@ -3509,7 +3521,7 @@ def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     captured = capfd.readouterr()
     assert captured.err == ""
     if os.environ.get("TENSORZERO_E2E_PROXY") is not None:
-        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set, b
+        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set
         for line in captured.out.splitlines():
             assert "Using proxy URL from TENSORZERO_E2E_PROXY" in line, f"Unexpected log line: {line}"
     else:
