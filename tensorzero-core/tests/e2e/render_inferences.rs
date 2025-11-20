@@ -3,10 +3,10 @@ use object_store::path::Path;
 use serde_json::json;
 use std::collections::HashMap;
 use tensorzero::{
-    ClientExt, FunctionTool, JsonInferenceDatapoint, Role, StorageKind, StoragePath,
-    StoredChatInferenceDatabase, StoredChatInferenceDatapoint, StoredDatapoint,
-    StoredInferenceDatabase, StoredJsonInference,
+    ClientExt, FunctionTool, Role, StorageKind, StoragePath, StoredChatInferenceDatabase,
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredInferenceDatabase, StoredJsonInference,
 };
+use tensorzero_core::endpoints::datasets::StoredJsonInferenceDatapoint;
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::stored_input::{
@@ -738,7 +738,7 @@ pub async fn test_render_datapoints_normal() {
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
         }),
-        StoredDatapoint::Json(JsonInferenceDatapoint {
+        StoredDatapoint::Json(StoredJsonInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "json_success".to_string(),
             name: None,
