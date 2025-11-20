@@ -38,7 +38,7 @@ use crate::inference::types::{
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::InferenceProvider;
 use crate::model::{fully_qualified_name, Credential, ModelProvider};
-use crate::tool::ClientSideFunctionToolConfig;
+use crate::tool::FunctionToolConfig;
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
@@ -670,7 +670,7 @@ struct GeminiTool<'a> {
 }
 
 impl<'a> GeminiFunctionDeclaration<'a> {
-    fn from_tool_config(tool: &'a ClientSideFunctionToolConfig) -> Self {
+    fn from_tool_config(tool: &'a FunctionToolConfig) -> Self {
         let mut parameters = tool.parameters().clone();
         if let Some(obj) = parameters.as_object_mut() {
             obj.remove("additionalProperties");
@@ -1615,8 +1615,7 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&ClientSideFunctionToolConfig> =
-            MULTI_TOOL_CONFIG.tools_available().collect();
+        let tools_vec: Vec<&FunctionToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
         let tool = GeminiTool {
             function_declarations: tools_vec
                 .iter()

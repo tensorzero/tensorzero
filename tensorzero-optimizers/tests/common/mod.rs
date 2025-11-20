@@ -441,7 +441,7 @@ fn generate_tool_call_example() -> RenderedSample {
         stored_output: Some(StoredOutput::Chat(inference_response_tool_call)),
         tool_params: DynamicToolParams {
             allowed_tools: None,
-            additional_tools: Some(vec![Tool::ClientSideFunction(FunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "get_weather".to_string(),
                 description: "Get the weather for a location".to_string(),
                 parameters: serde_json::json!({

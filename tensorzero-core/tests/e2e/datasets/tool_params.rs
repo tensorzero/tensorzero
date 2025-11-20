@@ -74,7 +74,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
     // Create tool_params in storage format (ToolCallConfigDatabaseInsert)
     // This has ALL tools in dynamic_tools (merged static + dynamic)
     let tool_params = Some(ToolCallConfigDatabaseInsert::new_for_test(
-        vec![Tool::ClientSideFunction(custom_tool.clone())],
+        vec![Tool::Function(custom_tool.clone())],
         vec![ProviderTool {
             scope: ProviderToolScope::Unscoped,
             tool: json!({"foo": "bar"}),
@@ -212,7 +212,7 @@ async fn test_datapoint_update_tool_params() {
     };
 
     let original_tool_params = Some(ToolCallConfigDatabaseInsert::new_for_test(
-        vec![Tool::ClientSideFunction(get_temp_tool.clone())],
+        vec![Tool::Function(get_temp_tool.clone())],
         vec![],
         AllowedTools {
             tools: vec![get_temp_tool.name.clone()],
@@ -441,7 +441,7 @@ async fn test_list_datapoints_with_tool_params() {
         },
         output: None,
         tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-            vec![Tool::ClientSideFunction(custom_tool_1.clone())],
+            vec![Tool::Function(custom_tool_1.clone())],
             vec![],
             AllowedTools {
                 tools: vec![base_tool.name.clone(), custom_tool_1.name.clone()],
@@ -475,7 +475,7 @@ async fn test_list_datapoints_with_tool_params() {
         },
         output: None,
         tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-            vec![Tool::ClientSideFunction(custom_tool_2.clone())],
+            vec![Tool::Function(custom_tool_2.clone())],
             vec![],
             AllowedTools {
                 tools: vec![custom_tool_2.name.clone()],
@@ -696,7 +696,7 @@ async fn test_datapoint_only_dynamic_tools() {
         },
         output: None,
         tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-            vec![Tool::ClientSideFunction(dynamic_tool.clone())],
+            vec![Tool::Function(dynamic_tool.clone())],
             vec![],
             AllowedTools {
                 tools: vec![static_tool.name.clone(), dynamic_tool.name.clone()],
@@ -790,7 +790,7 @@ async fn test_datapoint_tool_params_three_states() {
         },
         output: None,
         tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-            vec![Tool::ClientSideFunction(tool.clone())],
+            vec![Tool::Function(tool.clone())],
             vec![],
             AllowedTools {
                 tools: vec![tool.name.clone()],

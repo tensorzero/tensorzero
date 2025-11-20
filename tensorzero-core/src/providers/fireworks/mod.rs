@@ -40,7 +40,7 @@ use crate::{
         InferenceProvider,
     },
     model::{Credential, ModelProvider},
-    tool::{ClientSideFunctionToolConfig, ToolCall, ToolCallChunk},
+    tool::{FunctionToolConfig, ToolCall, ToolCallChunk},
 };
 
 use super::{
@@ -538,8 +538,8 @@ impl<'a> From<&'a FunctionTool> for FireworksTool<'a> {
     }
 }
 
-impl<'a> From<&'a ClientSideFunctionToolConfig> for FireworksTool<'a> {
-    fn from(tool: &'a ClientSideFunctionToolConfig) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for FireworksTool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
         FireworksTool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {

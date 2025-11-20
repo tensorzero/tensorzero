@@ -2248,7 +2248,7 @@ mod tests {
     use super::*;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{ClientSideFunctionToolConfig, DynamicToolConfig, ToolChoice};
+    use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolChoice};
     use serde_json::json;
     use tokio::time::Instant;
 
@@ -2628,7 +2628,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             ..ToolCallConfig::with_tools_available(
                 vec![],
-                vec![ClientSideFunctionToolConfig::Dynamic(DynamicToolConfig {
+                vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "custom_tool".to_string(),
                     description: "A custom tool".to_string(),
                     parameters: DynamicJSONSchema::new(
@@ -2751,7 +2751,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             ..ToolCallConfig::with_tools_available(
                 vec![],
-                vec![ClientSideFunctionToolConfig::Dynamic(DynamicToolConfig {
+                vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "weather_tool".to_string(),
                     description: "Get weather information".to_string(),
                     parameters: DynamicJSONSchema::new(

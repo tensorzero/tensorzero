@@ -67,7 +67,7 @@ impl<'a> GCPVertexGeminiSupervisedRow<'a> {
                 tools
                     .iter()
                     .filter_map(|dt| match &dt {
-                        Tool::ClientSideFunction(func) => Some(func.into()),
+                        Tool::Function(func) => Some(func.into()),
                         Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
                     })
                     .collect()

@@ -66,7 +66,7 @@ use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultC
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
 use crate::tool::{
-    ClientSideFunctionToolConfig, FunctionTool, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice,
+    FunctionTool, FunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice,
 };
 
 use super::helpers::{convert_stream_error, parse_jsonl_batch_file, JsonlBatchFileInfo};
@@ -1685,8 +1685,8 @@ pub enum GCPVertexGeminiTool<'a> {
     FunctionDeclarations(Vec<GCPVertexGeminiFunctionDeclaration<'a>>),
 }
 
-impl<'a> From<&'a ClientSideFunctionToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
-    fn from(tool: &'a ClientSideFunctionToolConfig) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
         GCPVertexGeminiFunctionDeclaration {
             name: tool.name(),
             description: Some(tool.description()),
@@ -1695,8 +1695,8 @@ impl<'a> From<&'a ClientSideFunctionToolConfig> for GCPVertexGeminiFunctionDecla
     }
 }
 
-impl<'a> From<&'a Vec<ClientSideFunctionToolConfig>> for GCPVertexGeminiTool<'a> {
-    fn from(tools: &'a Vec<ClientSideFunctionToolConfig>) -> Self {
+impl<'a> From<&'a Vec<FunctionToolConfig>> for GCPVertexGeminiTool<'a> {
+    fn from(tools: &'a Vec<FunctionToolConfig>) -> Self {
         let function_declarations: Vec<GCPVertexGeminiFunctionDeclaration<'a>> =
             tools.iter().map(Into::into).collect();
         GCPVertexGeminiTool::FunctionDeclarations(function_declarations)
@@ -2853,9 +2853,8 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&ClientSideFunctionToolConfig> =
-            MULTI_TOOL_CONFIG.tools_available().collect();
-        let tools_vec_owned: Vec<ClientSideFunctionToolConfig> =
+        let tools_vec: Vec<&FunctionToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
+        let tools_vec_owned: Vec<FunctionToolConfig> =
             tools_vec.iter().map(|&t| t.clone()).collect();
         let tool = GCPVertexGeminiTool::from(&tools_vec_owned);
         assert_eq!(
@@ -4071,7 +4070,7 @@ mod tests {
             strict: false,
         };
 
-        let tool_config = ClientSideFunctionToolConfig::Static(Arc::new(static_tool));
+        let tool_config = FunctionToolConfig::Static(Arc::new(static_tool));
 
         // Convert the tool config to GCPVertexGeminiFunctionDeclaration
         let function_declaration = GCPVertexGeminiFunctionDeclaration::from(&tool_config);

@@ -420,7 +420,7 @@ pub async fn test_dont_cache_tool_call_schema_error() {
             max_age_s: None,
         },
         dynamic_tool_params: DynamicToolParams {
-            additional_tools: Some(vec![Tool::ClientSideFunction(FunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "get_temperature".to_string(),
                 description: "Get the temperature".to_string(),
                 parameters: json!({

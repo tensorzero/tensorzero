@@ -2323,7 +2323,7 @@ def test_prepare_inference_request(sync_client: TensorZeroGateway):
     assert request["params"]["chat_completion"]["temperature"] == 0.1
     assert request["tool_choice"] == "auto"
     assert request["additional_tools"][0] == {
-        "type": "client_side_function",
+        "type": "function",
         "name": "drill",
         "parameters": '{"foo": "bar"}',
         "description": "drills",

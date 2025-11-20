@@ -228,7 +228,7 @@ impl From<OpenAICompatibleTool> for Tool {
     fn from(tool: OpenAICompatibleTool) -> Self {
         match tool {
             OpenAICompatibleTool::Function { function } => {
-                Tool::ClientSideFunction(FunctionTool::from(function))
+                Tool::Function(FunctionTool::from(function))
             }
             OpenAICompatibleTool::Custom { custom } => Tool::OpenAICustom(custom),
         }
@@ -612,10 +612,10 @@ mod tests {
         let openai_tool: OpenAICompatibleTool = serde_json::from_value(function_json).unwrap();
         let tool: Tool = openai_tool.into();
         match tool {
-            Tool::ClientSideFunction(func) => {
+            Tool::Function(func) => {
                 assert_eq!(func.name, "test_function");
             }
-            Tool::OpenAICustom(_) => panic!("Expected ClientSideFunction variant"),
+            Tool::OpenAICustom(_) => panic!("Expected Function variant"),
         }
 
         // Test conversion of custom tool to Tool
@@ -632,7 +632,7 @@ mod tests {
             Tool::OpenAICustom(custom) => {
                 assert_eq!(custom.name, "custom_test");
             }
-            Tool::ClientSideFunction(_) => panic!("Expected OpenAICustom variant"),
+            Tool::Function(_) => panic!("Expected OpenAICustom variant"),
         }
     }
 }

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::inference::types::ModelInferenceRequest;
-use crate::tool::{ClientSideFunctionToolConfig, FunctionTool, ToolChoice};
+use crate::tool::{FunctionTool, FunctionToolConfig, ToolChoice};
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -91,8 +91,8 @@ type PreparedChatCompletionToolsResult<'a> = (
     Option<bool>,
 );
 
-impl<'a> From<&'a ClientSideFunctionToolConfig> for ChatCompletionTool<'a> {
-    fn from(tool: &'a ClientSideFunctionToolConfig) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for ChatCompletionTool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
         ChatCompletionTool {
             r#type: ChatCompletionToolType::Function,
             function: ChatCompletionFunction {
@@ -240,12 +240,12 @@ mod tests {
     use serde_json::json;
 
     // Helper to create a test tool config
-    fn create_static_tool_config() -> ClientSideFunctionToolConfig {
+    fn create_static_tool_config() -> FunctionToolConfig {
         use crate::jsonschema_util::StaticJSONSchema;
         use crate::tool::StaticToolConfig;
         use std::sync::Arc;
 
-        ClientSideFunctionToolConfig::Static(Arc::new(StaticToolConfig {
+        FunctionToolConfig::Static(Arc::new(StaticToolConfig {
             name: "test_tool".to_string(),
             description: "A test tool".to_string(),
             parameters: StaticJSONSchema::from_value(json!({
@@ -259,11 +259,11 @@ mod tests {
         }))
     }
 
-    fn create_dynamic_tool_config() -> ClientSideFunctionToolConfig {
+    fn create_dynamic_tool_config() -> FunctionToolConfig {
         use crate::jsonschema_util::DynamicJSONSchema;
         use crate::tool::DynamicToolConfig;
 
-        ClientSideFunctionToolConfig::Dynamic(DynamicToolConfig {
+        FunctionToolConfig::Dynamic(DynamicToolConfig {
             name: "dynamic_tool".to_string(),
             description: "A dynamic tool".to_string(),
             parameters: DynamicJSONSchema::new(json!({
@@ -403,7 +403,7 @@ mod tests {
 
     // Test From implementations
     #[test]
-    fn test_from_client_side_function_tool_config_static() {
+    fn test_from_function_tool_config_static() {
         let tool_config = create_static_tool_config();
         let chat_tool: ChatCompletionTool = (&tool_config).into();
 
@@ -414,7 +414,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_from_client_side_function_tool_config_dynamic() {
+    async fn test_from_function_tool_config_dynamic() {
         let tool_config = create_dynamic_tool_config();
         let chat_tool: ChatCompletionTool = (&tool_config).into();
 
@@ -423,7 +423,7 @@ mod tests {
     }
 
     #[test]
-    fn test_from_client_side_function_tool() {
+    fn test_from_function_tool() {
         let tool = FunctionTool {
             name: "direct_tool".to_string(),
             description: "Direct tool".to_string(),
@@ -784,14 +784,14 @@ mod tests {
         use crate::tool::StaticToolConfig;
         use std::sync::Arc;
 
-        let tool1 = ClientSideFunctionToolConfig::Static(Arc::new(StaticToolConfig {
+        let tool1 = FunctionToolConfig::Static(Arc::new(StaticToolConfig {
             name: "tool1".to_string(),
             description: "First tool".to_string(),
             parameters: StaticJSONSchema::from_value(json!({"type": "object"})).unwrap(),
             strict: true,
         }));
 
-        let tool2 = ClientSideFunctionToolConfig::Static(Arc::new(StaticToolConfig {
+        let tool2 = FunctionToolConfig::Static(Arc::new(StaticToolConfig {
             name: "tool2".to_string(),
             description: "Second tool".to_string(),
             parameters: StaticJSONSchema::from_value(json!({"type": "object"})).unwrap(),

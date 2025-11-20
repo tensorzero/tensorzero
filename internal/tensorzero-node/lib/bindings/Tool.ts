@@ -4,14 +4,14 @@ import type { OpenAICustomTool } from "./OpenAICustomTool";
 
 /**
  * `Tool` is the generic form for all tools that TensorZero itself manages.
- * This includes ClientSideFunctionTools (the original kind) and OpenAI's custom tools
+ * This includes function tools (the original kind) and OpenAI's custom tools
  * (which support text and grammar formats). Future additions may include MCP and other standards.
  *
  * We store this type (serialized) in the Array(String) in the `dynamic_tools` column
  * in the ChatInference, ChatInferenceDatapoint, and BatchModelInference tables.
  *
  * For the wire format, we use `DynamicTool` which wraps this enum with a custom deserializer
- * that allows ClientSideFunctionTools to be specified without type tags for backward compatibility,
+ * that allows function tools to be specified without type tags for backward compatibility,
  * while other tool types require explicit tagging.
  *
  * Notably, provider tools (like OpenAI websearch) are not part of this enum
@@ -19,5 +19,5 @@ import type { OpenAICustomTool } from "./OpenAICustomTool";
  * They are a separate type `ProviderTool`.
  */
 export type Tool =
-  | ({ type: "client_side_function" } & FunctionTool)
+  | ({ type: "function" } & FunctionTool)
   | ({ type: "openai_custom" } & OpenAICustomTool);

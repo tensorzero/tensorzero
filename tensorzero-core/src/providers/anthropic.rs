@@ -41,9 +41,7 @@ use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::tool::{
-    ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice,
-};
+use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
 
 use super::helpers::convert_stream_error;
 use super::helpers::{peek_first_chunk, warn_cannot_forward_url_if_missing_mime_type};
@@ -484,8 +482,8 @@ pub(super) struct AnthropicTool<'a> {
     pub(super) input_schema: &'a Value,
 }
 
-impl<'a> From<&'a ClientSideFunctionToolConfig> for AnthropicTool<'a> {
-    fn from(value: &'a ClientSideFunctionToolConfig) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for AnthropicTool<'a> {
+    fn from(value: &'a FunctionToolConfig) -> Self {
         // In case we add more tool types in the future, the compiler will complain here.
         AnthropicTool {
             name: value.name(),
@@ -1630,7 +1628,7 @@ mod tests {
             },
             "required": ["location", "unit"]
         });
-        let tool = ClientSideFunctionToolConfig::Dynamic(DynamicToolConfig {
+        let tool = FunctionToolConfig::Dynamic(DynamicToolConfig {
             name: "test".to_string(),
             description: "test".to_string(),
             parameters: DynamicJSONSchema::new(parameters.clone()),

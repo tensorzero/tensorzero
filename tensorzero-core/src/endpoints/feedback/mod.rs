@@ -942,7 +942,7 @@ mod tests {
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
     use crate::tool::{
-        ClientSideFunctionToolConfig, InferenceResponseToolCall, StaticToolConfig, ToolChoice,
+        FunctionToolConfig, InferenceResponseToolCall, StaticToolConfig, ToolChoice,
     };
 
     #[tokio::test]
@@ -1369,7 +1369,7 @@ mod tests {
                 tools
                     .values()
                     .cloned()
-                    .map(ClientSideFunctionToolConfig::Static)
+                    .map(FunctionToolConfig::Static)
                     .collect(),
                 vec![],
             )));
@@ -1397,7 +1397,7 @@ mod tests {
                 tools
                     .values()
                     .cloned()
-                    .map(ClientSideFunctionToolConfig::Static)
+                    .map(FunctionToolConfig::Static)
                     .collect(),
                 vec![],
             )));
@@ -1434,7 +1434,7 @@ mod tests {
                 tools
                     .values()
                     .cloned()
-                    .map(ClientSideFunctionToolConfig::Static)
+                    .map(FunctionToolConfig::Static)
                     .collect(),
                 vec![],
             )));
@@ -1461,7 +1461,7 @@ mod tests {
                 tools
                     .values()
                     .cloned()
-                    .map(ClientSideFunctionToolConfig::Static)
+                    .map(FunctionToolConfig::Static)
                     .collect(),
                 vec![],
             )));
@@ -1563,7 +1563,7 @@ mod tests {
                 tools
                     .values()
                     .cloned()
-                    .map(ClientSideFunctionToolConfig::Static)
+                    .map(FunctionToolConfig::Static)
                     .collect(),
                 vec![],
             )));

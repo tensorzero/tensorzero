@@ -399,7 +399,7 @@ pub async fn update_datapoint_handler(
                         legacy
                             .tools_available
                             .iter()
-                            .map(|t| Tool::ClientSideFunction(t.clone()))
+                            .map(|t| Tool::Function(t.clone()))
                             .collect(),
                     ), // All legacy tools as dynamic
                     tool_choice: Some(legacy.tool_choice.clone()),

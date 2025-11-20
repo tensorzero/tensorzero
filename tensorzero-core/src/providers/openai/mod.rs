@@ -59,8 +59,8 @@ use crate::providers::openai::responses::{
     OpenAIResponsesResponse,
 };
 use crate::tool::{
-    ClientSideFunctionToolConfig, FunctionTool, OpenAICustomTool, ToolCall, ToolCallChunk,
-    ToolCallConfig, ToolChoice,
+    FunctionTool, FunctionToolConfig, OpenAICustomTool, ToolCall, ToolCallChunk, ToolCallConfig,
+    ToolChoice,
 };
 
 use crate::providers::helpers::{
@@ -2038,8 +2038,8 @@ pub enum OpenAITool<'a> {
     },
 }
 
-impl<'a> From<&'a ClientSideFunctionToolConfig> for OpenAITool<'a> {
-    fn from(tool: &'a ClientSideFunctionToolConfig) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for OpenAITool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
         OpenAITool::Function {
             function: OpenAIFunction {
                 name: tool.name(),

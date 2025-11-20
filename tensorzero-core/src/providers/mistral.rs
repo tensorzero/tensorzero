@@ -37,7 +37,7 @@ use crate::{
         check_new_tool_call_name, convert_stream_error, inject_extra_request_data_and_send,
         inject_extra_request_data_and_send_eventsource,
     },
-    tool::{ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice},
+    tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice},
 };
 
 use super::openai::{
@@ -474,8 +474,8 @@ pub(super) struct MistralTool<'a> {
     function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<&'a ClientSideFunctionToolConfig> for MistralTool<'a> {
-    fn from(tool: &'a ClientSideFunctionToolConfig) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for MistralTool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
         MistralTool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {

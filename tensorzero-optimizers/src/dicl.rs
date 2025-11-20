@@ -868,7 +868,7 @@ mod tests {
         let mut sample = create_test_rendered_sample();
         sample.tool_params = DynamicToolParams {
             allowed_tools: None,
-            additional_tools: Some(tools.into_iter().map(Tool::ClientSideFunction).collect()),
+            additional_tools: Some(tools.into_iter().map(Tool::Function).collect()),
             tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: Some(true),
             provider_tools: vec![],
