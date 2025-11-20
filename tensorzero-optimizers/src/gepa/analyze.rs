@@ -134,9 +134,11 @@ pub fn build_analyze_input(
     variant_config: &UninitializedChatCompletionConfig,
 ) -> Result<Arguments, Error> {
     // Extract fields from function context
-    let function_config = function_context.function_config;
-    let static_tools = function_context.static_tools;
-    let evaluation_config = function_context.evaluation_config;
+    let FunctionContext {
+        function_config,
+        static_tools,
+        evaluation_config,
+    } = function_context;
 
     // Extract templates map from variant config
     let templates_map: HashMap<String, String> = variant_config
