@@ -45,7 +45,7 @@ use crate::inference::types::{
 };
 use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
-use crate::tool::{ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
+use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::helpers::{
@@ -1256,8 +1256,8 @@ pub(super) struct OpenRouterTool<'a> {
     pub(super) strict: bool,
 }
 
-impl<'a> From<&'a ClientSideFunctionToolConfig> for OpenRouterTool<'a> {
-    fn from(tool: &'a ClientSideFunctionToolConfig) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for OpenRouterTool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
         OpenRouterTool {
             r#type: OpenRouterToolType::Function,
             function: OpenRouterFunction {

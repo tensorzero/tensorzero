@@ -178,7 +178,7 @@ class FunctionTool:
     description: str
     parameters: Any
     name: str
-    type: Literal["client_side_function"] = "client_side_function"
+    type: Literal["function"] = "function"
     strict: bool | None = False
     """
     `strict` here specifies that TensorZero should attempt to use any facilities

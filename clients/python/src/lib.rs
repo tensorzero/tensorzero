@@ -442,7 +442,7 @@ impl BaseTensorZeroGateway {
             Some(
                 tools
                     .into_iter()
-                    .map(|key_vals| parse_tool(py, key_vals).map(Tool::ClientSideFunction))
+                    .map(|key_vals| parse_tool(py, key_vals).map(Tool::Function))
                     .collect::<Result<Vec<Tool>, PyErr>>()?,
             )
         } else {

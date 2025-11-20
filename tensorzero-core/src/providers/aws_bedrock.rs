@@ -44,7 +44,7 @@ use crate::inference::types::{
 use crate::inference::types::{FinishReason, ProviderInferenceResponseArgs, Thought, ThoughtChunk};
 use crate::inference::InferenceProvider;
 use crate::model::ModelProvider;
-use crate::tool::{ClientSideFunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
+use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 
 const PROVIDER_NAME: &str = "AWS Bedrock";
 pub const PROVIDER_TYPE: &str = "aws_bedrock";
@@ -1087,10 +1087,10 @@ fn serialize_aws_bedrock_struct<T: std::fmt::Debug>(output: &T) -> Result<String
     })
 }
 
-impl TryFrom<&ClientSideFunctionToolConfig> for Tool {
+impl TryFrom<&FunctionToolConfig> for Tool {
     type Error = Error;
 
-    fn try_from(tool_config: &ClientSideFunctionToolConfig) -> Result<Self, Error> {
+    fn try_from(tool_config: &FunctionToolConfig) -> Result<Self, Error> {
         let tool_input_schema = ToolInputSchema::Json(
             serde_json::from_value(tool_config.parameters().clone()).map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
