@@ -50,11 +50,12 @@ use migrations::migration_0039::Migration0039;
 use migrations::migration_0040::Migration0040;
 use migrations::migration_0041::Migration0041;
 use migrations::migration_0042::Migration0042;
+use migrations::migration_0043::Migration0043;
 use serde::{Deserialize, Serialize};
 
 /// This must match the number of migrations returned by `make_all_migrations` - the tests
 /// will panic if they don't match.
-pub const NUM_MIGRATIONS: usize = 36;
+pub const NUM_MIGRATIONS: usize = 37;
 pub fn get_run_migrations_command() -> String {
     let version = env!("CARGO_PKG_VERSION");
     format!("docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-clickhouse-migrations")
@@ -120,6 +121,7 @@ pub fn make_all_migrations<'a>(
         Box::new(Migration0040 { clickhouse }),
         Box::new(Migration0041 { clickhouse }),
         Box::new(Migration0042 { clickhouse }),
+        Box::new(Migration0043 { clickhouse }),
     ];
     assert_eq!(
         migrations.len(),
