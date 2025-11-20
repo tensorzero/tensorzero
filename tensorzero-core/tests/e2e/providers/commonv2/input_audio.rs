@@ -36,6 +36,18 @@ model = "google_ai_studio_gemini::gemini-2.5-flash-lite"
 type = "chat_completion"
 model = "openai::gpt-4o-audio-preview"
 
+[functions.input_audio_test.variants.tensorzero-relay-dummy]
+type = "chat_completion"
+model = "tensorzero-relay-dummy"
+
+[models.tensorzero-relay-dummy]
+routing = ["tensorzero_relay"]
+
+[models.tensorzero-relay-dummy.providers.tensorzero_relay]
+type = "tensorzero_relay"
+gateway_base_url = "http://localhost:3000"
+model_name = "openai::gpt-4o-audio-preview"
+
 [functions.input_audio_test.variants.openrouter]
 type = "chat_completion"
 model = "openrouter::openai/gpt-4o-audio-preview"

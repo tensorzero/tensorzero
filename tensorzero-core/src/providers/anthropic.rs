@@ -605,6 +605,7 @@ impl<'a> AnthropicMessageContent<'a> {
                             mime_type: Some(mime_type),
                             url,
                             detail,
+                            filename: _,
                         },
                     future: _,
                 } if !messages_config.fetch_and_encode_input_files_before_inference => {
@@ -3410,6 +3411,7 @@ mod tests {
                 url: url.clone(),
                 mime_type: Some(mime::IMAGE_PNG),
                 detail: Some(Detail::Low),
+                filename: None,
             },
             future: async { panic!("Should not resolve") }.boxed().shared(),
         }));

@@ -23,6 +23,7 @@ mod openai;
 mod openrouter;
 mod reasoning;
 mod sglang;
+mod tensorzero_relay;
 mod tgi;
 mod together;
 mod vllm;

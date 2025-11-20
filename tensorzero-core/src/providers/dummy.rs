@@ -456,7 +456,8 @@ impl InferenceProvider for DummyProvider {
                     model_provider,
                     model_name,
                     &mut body,
-                )?;
+                )?
+                .headers;
                 vec![ContentBlockOutput::Text(Text {
                     text: json!({
                         "injected_body": body,

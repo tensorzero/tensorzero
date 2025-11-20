@@ -1134,6 +1134,20 @@ impl InferenceResponse {
         }
     }
 
+    pub fn usage(&self) -> &Usage {
+        match self {
+            InferenceResponse::Chat(c) => &c.usage,
+            InferenceResponse::Json(j) => &j.usage,
+        }
+    }
+
+    pub fn finish_reason(&self) -> Option<&FinishReason> {
+        match self {
+            InferenceResponse::Chat(c) => c.finish_reason.as_ref(),
+            InferenceResponse::Json(j) => j.finish_reason.as_ref(),
+        }
+    }
+
     pub fn get_serialized_output(&self) -> Result<String, Error> {
         match self {
             InferenceResponse::Chat(c) => c.get_serialized_output(),

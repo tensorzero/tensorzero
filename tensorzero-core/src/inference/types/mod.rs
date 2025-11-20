@@ -326,6 +326,7 @@ impl InputMessageContent {
                         let url = url.clone();
                         let mime_type = mime_type.clone();
                         let detail_clone = detail.clone();
+                        let filename_clone = filename.clone();
                         let detail_for_future = detail.clone();
                         let filename_for_future = filename.clone();
                         let delayed_file_future = async move {
@@ -347,6 +348,7 @@ impl InputMessageContent {
                                 url,
                                 mime_type,
                                 detail: detail_clone,
+                                filename: filename_clone,
                             },
                             future: delayed_file_future.boxed().shared(),
                         }))

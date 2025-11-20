@@ -63,6 +63,12 @@ impl Debug for ClientMode {
     }
 }
 
+pub struct HttpInferenceResponse {
+    pub response: InferenceOutput,
+    pub raw_request: String,
+    pub raw_response: Option<String>,
+}
+
 pub struct HTTPGateway {
     pub base_url: Url,
     pub http_client: TensorzeroHttpClient,
@@ -150,15 +156,16 @@ impl HTTPGateway {
             })
     }
 
-    pub async fn send_and_parse_http_response<T: serde::de::DeserializeOwned>(
+    pub async fn send_and_parse_http_response_with_raw_response<T: serde::de::DeserializeOwned>(
         &self,
         builder: TensorzeroRequestBuilder<'_>,
-    ) -> Result<T, TensorZeroError> {
+    ) -> Result<(T, String), TensorZeroError> {
         let builder = self.customize_builder(builder);
         let resp = builder.send().await;
-        self.check_http_response(resp)
+        let raw_response = self
+            .check_http_response(resp)
             .await?
-            .json()
+            .text()
             .await
             .map_err(|e| TensorZeroError::Other {
                 source: Error::new(ErrorDetails::Serialization {
@@ -171,7 +178,33 @@ impl HTTPGateway {
                     ),
                 })
                 .into(),
-            })
+            })?;
+
+        let response: T =
+            serde_json::from_str(&raw_response).map_err(|e| TensorZeroError::Other {
+                source: Error::new(ErrorDetails::Serialization {
+                    message: format!(
+                        "Error deserializing response: {}",
+                        DisplayOrDebug {
+                            val: e,
+                            debug: self.verbose_errors,
+                        }
+                    ),
+                })
+                .into(),
+            })?;
+
+        Ok((response, raw_response))
+    }
+
+    pub async fn send_and_parse_http_response<T: serde::de::DeserializeOwned>(
+        &self,
+        builder: TensorzeroRequestBuilder<'_>,
+    ) -> Result<T, TensorZeroError> {
+        Ok(self
+            .send_and_parse_http_response_with_raw_response::<T>(builder)
+            .await?
+            .0)
     }
 
     async fn http_inference_stream(
@@ -804,6 +837,73 @@ impl Client {
         }
     }
 
+    pub async fn http_inference(
+        &self,
+        params: ClientInferenceParams,
+    ) -> Result<HttpInferenceResponse, TensorZeroError> {
+        let ClientMode::HTTPGateway(client) = &*self.mode else {
+            return Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InternalError {
+                    message: "HTTP inference can only be used in HTTPGateway mode".to_string(),
+                })
+                .into(),
+            });
+        };
+        let url = client
+            .base_url
+            .join("inference")
+            .map_err(|e| TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InvalidBaseUrl {
+                    message: format!("Failed to join base URL with /inference endpoint: {e}"),
+                })
+                .into(),
+            })?;
+        let body = serde_json::to_string(&params).map_err(|e| TensorZeroError::Other {
+            source: Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Failed to serialize inference params: {}",
+                    DisplayOrDebug {
+                        val: e,
+                        debug: self.verbose_errors,
+                    }
+                ),
+            })
+            .into(),
+        })?;
+        #[cfg(feature = "e2e_tests")]
+        {
+            *self.last_body.lock().await = Some(body.clone());
+        }
+        let mut builder = client
+            .http_client
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body.clone());
+
+        // Add OTLP trace headers with the required prefix
+        for (key, value) in &params.otlp_traces_extra_headers {
+            let header_name = format!("tensorzero-otlp-traces-extra-header-{key}");
+            builder = builder.header(header_name, value);
+        }
+
+        if params.stream.unwrap_or(false) {
+            Ok(HttpInferenceResponse {
+                response: InferenceOutput::Streaming(client.http_inference_stream(builder).await?),
+                raw_request: body,
+                raw_response: None,
+            })
+        } else {
+            let (response, raw_response) = client
+                .send_and_parse_http_response_with_raw_response(builder)
+                .await?;
+            Ok(HttpInferenceResponse {
+                response: InferenceOutput::NonStreaming(response),
+                raw_request: body,
+                raw_response: Some(raw_response),
+            })
+        }
+    }
+
     // Runs a TensorZero inference.
     // See https://www.tensorzero.com/docs/gateway/api-reference#post-inference
     pub async fn inference(
@@ -811,57 +911,7 @@ impl Client {
         params: ClientInferenceParams,
     ) -> Result<InferenceOutput, TensorZeroError> {
         match &*self.mode {
-            ClientMode::HTTPGateway(client) => {
-                let url =
-                    client
-                        .base_url
-                        .join("inference")
-                        .map_err(|e| TensorZeroError::Other {
-                            source: Error::new(ErrorDetails::InvalidBaseUrl {
-                                message: format!(
-                                    "Failed to join base URL with /inference endpoint: {e}"
-                                ),
-                            })
-                            .into(),
-                        })?;
-                let body = serde_json::to_string(&params).map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Failed to serialize inference params: {}",
-                            DisplayOrDebug {
-                                val: e,
-                                debug: self.verbose_errors,
-                            }
-                        ),
-                    })
-                    .into(),
-                })?;
-                #[cfg(feature = "e2e_tests")]
-                {
-                    *self.last_body.lock().await = Some(body.clone());
-                }
-                let mut builder = client
-                    .http_client
-                    .post(url)
-                    .header(reqwest::header::CONTENT_TYPE, "application/json")
-                    .body(body);
-
-                // Add OTLP trace headers with the required prefix
-                for (key, value) in &params.otlp_traces_extra_headers {
-                    let header_name = format!("tensorzero-otlp-traces-extra-header-{key}");
-                    builder = builder.header(header_name, value);
-                }
-
-                if params.stream.unwrap_or(false) {
-                    Ok(InferenceOutput::Streaming(
-                        client.http_inference_stream(builder).await?,
-                    ))
-                } else {
-                    Ok(InferenceOutput::NonStreaming(
-                        client.send_and_parse_http_response(builder).await?,
-                    ))
-                }
-            }
+            ClientMode::HTTPGateway(_) => Ok(self.http_inference(params).await?.response),
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     let res = crate::endpoints::inference::inference(
