@@ -609,6 +609,19 @@ pub struct InputMessage {
     pub content: Vec<InputMessageContent>,
 }
 
+impl From<StoredInputMessage> for InputMessage {
+    fn from(stored_input_message: StoredInputMessage) -> Self {
+        InputMessage {
+            role: stored_input_message.role,
+            content: stored_input_message
+                .content
+                .into_iter()
+                .map(StoredInputMessageContent::into_input_message_content)
+                .collect(),
+        }
+    }
+}
+
 /// A newtype wrapper around Map<String, Value> for template and system arguments
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
 #[ts(export)]
