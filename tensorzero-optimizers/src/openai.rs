@@ -123,7 +123,7 @@ impl<'a> OpenAISupervisedRow<'a> {
             .map(|tools| {
                 tools
                     .iter()
-                    .filter_map(|dt| match &dt.0 {
+                    .filter_map(|dt| match &dt {
                         tensorzero_core::tool::Tool::ClientSideFunction(func) => Some(func.into()),
                         tensorzero_core::tool::Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
                     })
@@ -208,7 +208,7 @@ impl<'a> OpenAIReinforcementRow<'a> {
             .map(|tools| {
                 tools
                     .iter()
-                    .filter_map(|dt| match &dt.0 {
+                    .filter_map(|dt| match &dt {
                         tensorzero_core::tool::Tool::ClientSideFunction(func) => Some(func.into()),
                         tensorzero_core::tool::Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
                     })

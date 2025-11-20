@@ -339,7 +339,7 @@ async fn test_create_delete_datapoint_chat() {
         if let Some(additional_tools) = &list_datapoint.tool_params.additional_tools {
             assert!(!additional_tools.is_empty());
             let first_tool = &additional_tools[0];
-            match &first_tool.0 {
+            match &first_tool {
                 Tool::ClientSideFunction(tool) => {
                     assert_eq!(tool.name, "get_temperature");
                     assert_eq!(

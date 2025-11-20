@@ -637,8 +637,8 @@ mod tests {
         providers::dummy::DummyProvider,
         stored_inference::{RenderedSample, StoredOutput},
         tool::{
-            create_implicit_tool_call_config, DynamicTool, DynamicToolParams, FunctionTool, Tool,
-            ToolCall, ToolCallConfig, ToolChoice, ToolResult,
+            create_implicit_tool_call_config, DynamicToolParams, FunctionTool, Tool, ToolCall,
+            ToolCallConfig, ToolChoice, ToolResult,
         },
     };
 
@@ -868,12 +868,7 @@ mod tests {
         let mut sample = create_test_rendered_sample();
         sample.tool_params = DynamicToolParams {
             allowed_tools: None,
-            additional_tools: Some(
-                tools
-                    .into_iter()
-                    .map(|t| DynamicTool(Tool::ClientSideFunction(t)))
-                    .collect(),
-            ),
+            additional_tools: Some(tools.into_iter().map(Tool::ClientSideFunction).collect()),
             tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: Some(true),
             provider_tools: vec![],

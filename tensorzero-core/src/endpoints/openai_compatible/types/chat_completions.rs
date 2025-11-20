@@ -33,7 +33,7 @@ use crate::inference::types::{
     current_timestamp, Arguments, ContentBlockChatOutput, FinishReason, Input, InputMessage,
     InputMessageContent, RawText, Role, System, Template, Text,
 };
-use crate::tool::{DynamicTool, DynamicToolParams, ProviderTool, ToolResult};
+use crate::tool::{DynamicToolParams, ProviderTool, ToolResult};
 use crate::variant::JsonMode;
 
 // ============================================================================
@@ -392,7 +392,7 @@ impl Params {
             allowed_tools,
             additional_tools: openai_compatible_params
                 .tools
-                .map(|tools| tools.into_iter().map(|t| DynamicTool(t.into())).collect()),
+                .map(|tools| tools.into_iter().map(|t| t.into()).collect()),
             tool_choice,
             parallel_tool_calls: openai_compatible_params.parallel_tool_calls,
             provider_tools: openai_compatible_params.tensorzero_provider_tools,

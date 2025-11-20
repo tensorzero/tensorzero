@@ -164,7 +164,7 @@ async fn test_inference_full_tool_params_round_trip() {
     // Dynamic tools should be in additional_tools
     let additional_tools = retrieved_tool_params.additional_tools.as_ref().unwrap();
     assert_eq!(additional_tools.len(), 1);
-    let tool = &additional_tools[0].0;
+    let tool = &additional_tools[0];
     if let tensorzero_core::tool::Tool::ClientSideFunction(func) = tool {
         assert_eq!(func.name, "custom_weather_tool");
         assert_eq!(func.description, "A custom tool added dynamically");
@@ -342,7 +342,7 @@ async fn test_inference_only_dynamic_tools() {
     // Dynamic tool should be in additional_tools
     let additional_tools = retrieved_tool_params.additional_tools.as_ref().unwrap();
     assert_eq!(additional_tools.len(), 1);
-    let tool = &additional_tools[0].0;
+    let tool = &additional_tools[0];
     if let tensorzero_core::tool::Tool::ClientSideFunction(func) = tool {
         assert_eq!(func.name, "runtime_tool");
         assert!(func.strict);
@@ -584,7 +584,7 @@ async fn test_tool_strict_flag_preserved() {
     let strict_tool = additional_tools
         .iter()
         .find(|dt| {
-            if let tensorzero_core::tool::Tool::ClientSideFunction(func) = &dt.0 {
+            if let tensorzero_core::tool::Tool::ClientSideFunction(func) = &dt {
                 func.name == "strict_tool"
             } else {
                 false
@@ -594,7 +594,7 @@ async fn test_tool_strict_flag_preserved() {
     let non_strict_tool = additional_tools
         .iter()
         .find(|dt| {
-            if let tensorzero_core::tool::Tool::ClientSideFunction(func) = &dt.0 {
+            if let tensorzero_core::tool::Tool::ClientSideFunction(func) = &dt {
                 func.name == "non_strict_tool"
             } else {
                 false
@@ -602,10 +602,10 @@ async fn test_tool_strict_flag_preserved() {
         })
         .expect("Should find non_strict_tool");
 
-    if let tensorzero_core::tool::Tool::ClientSideFunction(func) = &strict_tool.0 {
+    if let tensorzero_core::tool::Tool::ClientSideFunction(func) = &strict_tool {
         assert!(func.strict, "strict flag should be true");
     }
-    if let tensorzero_core::tool::Tool::ClientSideFunction(func) = &non_strict_tool.0 {
+    if let tensorzero_core::tool::Tool::ClientSideFunction(func) = &non_strict_tool {
         assert!(!func.strict, "strict flag should be false");
     }
 }
