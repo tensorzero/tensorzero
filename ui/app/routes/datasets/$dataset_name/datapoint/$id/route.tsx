@@ -33,6 +33,7 @@ import {
   prepareInferenceActionRequest,
   useInferenceActionFetcher,
 } from "~/routes/api/tensorzero/inference.utils";
+import { useToast } from "~/hooks/use-toast";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
 import { resolveStoredInputToInput } from "~/utils/resolve.server";
@@ -84,7 +85,7 @@ export function hasDatapointChanged(params: {
   currentInput: Input;
   originalInput: Input;
   currentOutput?: ContentBlockChatOutput[] | JsonInferenceOutput;
-  originalOutput: ContentBlockChatOutput[] | JsonInferenceOutput | undefined;
+  originalOutput?: ContentBlockChatOutput[] | JsonInferenceOutput;
   currentTags: Record<string, string>;
   originalTags: Record<string, string>;
 }): boolean {
@@ -418,6 +419,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const functionConfig = useFunctionConfig(datapoint.function_name);
   const variants = Object.keys(functionConfig?.variants || {});
 
+  const { toast } = useToast();
   const variantInferenceFetcher = useInferenceActionFetcher();
   const [lastRequestArgs, setLastRequestArgs] = useState<
     Parameters<typeof prepareInferenceActionRequest>[0] | null
@@ -434,16 +436,48 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     args: Parameters<typeof prepareInferenceActionRequest>[0],
     { bypassCache }: { bypassCache?: boolean } = {},
   ) => {
-    // TODO: error handling
-    const request = prepareInferenceActionRequest(args);
-    if (bypassCache) {
-      request.cache_options = {
-        ...request.cache_options,
-        enabled: "write_only",
-      };
+    try {
+      const request = prepareInferenceActionRequest(args);
+      if (bypassCache) {
+        request.cache_options = {
+          ...request.cache_options,
+          enabled: "write_only",
+        };
+      }
+      setLastRequestArgs(args);
+
+      try {
+        submit({ data: JSON.stringify(request) });
+      } catch (stringifyError) {
+        logger.error("Failed to stringify request:", stringifyError);
+        toast.error({
+          title: "Request Error",
+          description: "Failed to prepare the request. Please try again.",
+        });
+        // Reset state on error
+        setLastRequestArgs(null);
+        setIsModalOpen(false);
+        setSelectedVariant(null);
+      }
+    } catch (error) {
+      logger.error("Failed to prepare inference request:", error);
+
+      // Show user-friendly error message based on the error type
+      let errorMessage = "Failed to prepare the request. Please try again.";
+      if (error instanceof Error) {
+        if (error.message.includes("Extra body is not supported")) {
+          errorMessage =
+            "This datapoint contains extra body parameters which are not supported in the UI.";
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+      }
+
+      toast.error({
+        title: "Request Preparation Error",
+        description: errorMessage,
+      });
     }
-    setLastRequestArgs(args);
-    submit({ data: JSON.stringify(request) });
   };
 
   const onVariantSelect = (variant: string) => {
