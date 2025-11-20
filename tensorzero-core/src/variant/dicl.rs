@@ -51,14 +51,14 @@ use super::{
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct DiclConfig {
     weight: Option<f64>,
     embedding_model: Arc<str>,
     k: u32, // k as in k-nearest neighbors
     model: Arc<str>,
-    system_instructions: String,
+    system_instructions: ResolvedTomlPathData,
     temperature: Option<f32>,
     top_p: Option<f32>,
     stop_sequences: Option<Vec<String>>,
@@ -99,7 +99,7 @@ impl DiclConfig {
     }
 
     pub fn system_instructions(&self) -> &str {
-        &self.system_instructions
+        self.system_instructions.data()
     }
 
     pub fn temperature(&self) -> Option<f32> {
@@ -159,18 +159,19 @@ impl DiclConfig {
     }
 
     /// Converts this initialized config back to its uninitialized form.
-    /// Note: The original file path for system_instructions is not preserved;
-    /// a synthetic path is created with the content.
+    /// Note: Real file paths for system_instructions are preserved. Fake paths
+    /// (like defaults) are converted to None and will be regenerated on load.
     pub fn into_uninitialized(self) -> UninitializedDiclConfig {
         UninitializedDiclConfig {
             weight: self.weight,
             embedding_model: self.embedding_model.to_string(),
             k: self.k,
             model: self.model.to_string(),
-            system_instructions: Some(ResolvedTomlPathData::new_fake_path(
-                "<system_instructions>".to_string(),
-                self.system_instructions,
-            )),
+            system_instructions: if self.system_instructions.is_real_path() {
+                Some(self.system_instructions)
+            } else {
+                None
+            },
             temperature: self.temperature,
             top_p: self.top_p,
             stop_sequences: self.stop_sequences.clone(),
@@ -931,8 +932,11 @@ pub fn default_system_instructions() -> String {
 impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
     fn load(self) -> Result<DiclConfig, Error> {
         let system_instructions = match self.system_instructions {
-            Some(path) => path.data().to_string(),
-            None => default_system_instructions(),
+            Some(path) => path,
+            None => ResolvedTomlPathData::new_fake_path(
+                "tensorzero::dicl::default_system_instructions".to_string(),
+                default_system_instructions(),
+            ),
         };
 
         Ok(DiclConfig {
@@ -1417,7 +1421,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "DICL system instructions that should NOT be used".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "DICL system instructions that should NOT be used".to_string(),
+            ),
             temperature: Some(0.7),
             top_p: None,
             max_tokens: Some(100),
@@ -1532,7 +1539,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "DICL system instructions".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "DICL system instructions".to_string(),
+            ),
             temperature: Some(0.7),
             top_p: None,
             max_tokens: Some(100),
@@ -1663,7 +1673,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "test".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "test".to_string(),
+            ),
             temperature: None,
             top_p: None,
             max_tokens: None,
@@ -1691,7 +1704,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "test".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "test".to_string(),
+            ),
             temperature: None,
             top_p: None,
             max_tokens: None,
@@ -1718,7 +1734,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "test".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "test".to_string(),
+            ),
             temperature: None,
             top_p: None,
             max_tokens: None,
@@ -1856,14 +1875,43 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_system_instructions_content() {
+    fn test_into_uninitialized_preserves_real_path_system_instructions() {
+        let instructions_content = "These are system instructions";
+        // Using from_path_and_data to create a real path
+        let real_path = ResolvedTomlPathData::new_for_tests(
+            "test.txt".into(),
+            Some(instructions_content.to_string()),
+        );
+
+        let uninitialized = UninitializedDiclConfig {
+            embedding_model: "embed-model".to_string(),
+            k: 3,
+            model: "gpt-3.5-turbo".to_string(),
+            system_instructions: Some(real_path),
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.into_uninitialized();
+
+        // Verify real path is preserved
+        assert!(exported.system_instructions.is_some());
+        assert_eq!(
+            exported.system_instructions.unwrap().data(),
+            instructions_content
+        );
+    }
+
+    #[test]
+    fn test_into_uninitialized_fake_path_becomes_none() {
         let instructions_content = "These are system instructions";
         let uninitialized = UninitializedDiclConfig {
             embedding_model: "embed-model".to_string(),
             k: 3,
             model: "gpt-3.5-turbo".to_string(),
             system_instructions: Some(ResolvedTomlPathData::new_fake_path(
-                "test.txt".to_string(),
+                "tensorzero::test".to_string(),
                 instructions_content.to_string(),
             )),
             ..Default::default()
@@ -1873,11 +1921,8 @@ mod tests {
 
         let exported = config.into_uninitialized();
 
-        // Verify content is preserved (path will be synthetic)
-        assert_eq!(
-            exported.system_instructions.unwrap().data(),
-            instructions_content
-        );
+        // Verify fake path becomes None
+        assert_eq!(exported.system_instructions, None);
     }
 
     #[test]
@@ -1931,8 +1976,8 @@ mod tests {
         assert_eq!(exported.reasoning_effort, None);
         assert_eq!(exported.thinking_budget_tokens, None);
         assert_eq!(exported.verbosity, None);
-        // system_instructions will be Some(<system_instructions>) due to default
-        assert!(exported.system_instructions.is_some());
+        // system_instructions becomes None because the default is a fake path
+        assert_eq!(exported.system_instructions, None);
     }
 
     #[test]
