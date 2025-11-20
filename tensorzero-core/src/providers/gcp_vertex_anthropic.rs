@@ -535,10 +535,11 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
         // Workaround for GCP Vertex AI Anthropic API limitation: they don't support explicitly specifying "none"
         // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
         // request payload to achieve the same effect.
-        let tools = match &request.tool_config {
+        let tools = match request.tool_config.as_ref() {
             Some(c) if !matches!(c.tool_choice, ToolChoice::None) => Some(
                 c.strict_tools_available()?
-                    .map(Into::into)
+                    // GCP Vertex Anthropic does not support structured outputs
+                    .map(|tool| AnthropicTool::new(tool, false))
                     .collect::<Vec<_>>(),
             ),
             _ => None,
@@ -895,13 +896,14 @@ mod tests {
             parameters: DynamicJSONSchema::new(parameters.clone()),
             strict: false,
         });
-        let anthropic_tool: AnthropicTool = (&tool).into();
+        let anthropic_tool: AnthropicTool = AnthropicTool::new(&tool, false);
         assert_eq!(
             anthropic_tool,
             AnthropicTool {
                 name: "test",
                 description: Some("test"),
                 input_schema: &parameters,
+                strict: None,
             }
         );
     }
@@ -1214,6 +1216,7 @@ mod tests {
                     name: WEATHER_TOOL.name(),
                     description: Some(WEATHER_TOOL.description()),
                     input_schema: WEATHER_TOOL.parameters(),
+                    strict: None,
                 }]),
                 ..Default::default()
             }

@@ -26,6 +26,7 @@ import tempfile
 import threading
 import time
 import typing as t
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from os import path
@@ -2627,62 +2628,82 @@ def test_sync_timeout_invalid():
     assert "Invalid timeout: cannot convert float seconds to Duration: value is negative" == str(exc_info.value)
 
 
+# If TENSORZERO_E2E_PROXY is set, then we'll make requests using the proxy, which results in different error messages
+# if the target URL is unreachable.
+@contextmanager
+def without_env_tensorzero_e2e_proxy():
+    old_value = os.environ.pop("TENSORZERO_E2E_PROXY", None)
+    try:
+        yield
+    finally:
+        if old_value is not None:
+            os.environ["TENSORZERO_E2E_PROXY"] = old_value
+
+
 @pytest.mark.asyncio
 async def test_async_non_verbose_errors():
-    client_fut = AsyncTensorZeroGateway.build_http(gateway_url="http://tensorzero.invalid:3000", verbose_errors=False)
-    assert inspect.isawaitable(client_fut)
-    async with await client_fut as async_client:
-        with pytest.raises(TensorZeroInternalError) as exc_info:
-            await async_client.inference(
-                function_name="basic_test",
-                variant_name="slow",
-                input={"messages": [{"role": "user", "content": "Hello"}]},
-            )
+    with without_env_tensorzero_e2e_proxy():
+        client_fut = AsyncTensorZeroGateway.build_http(
+            gateway_url="http://tensorzero.invalid:3000", verbose_errors=False
+        )
+        assert inspect.isawaitable(client_fut)
+        async with await client_fut as async_client:
+            with pytest.raises(TensorZeroInternalError) as exc_info:
+                await async_client.inference(
+                    function_name="basic_test",
+                    variant_name="slow",
+                    input={"messages": [{"role": "user", "content": "Hello"}]},
+                )
 
-        assert "dns error" not in str(exc_info.value)
+            assert "dns error" not in str(exc_info.value)
 
 
 @pytest.mark.asyncio
 async def test_async_verbose_errors():
-    client_fut = AsyncTensorZeroGateway.build_http(gateway_url="http://tensorzero.invalid:3000", verbose_errors=True)
-    assert inspect.isawaitable(client_fut)
-    async with await client_fut as async_client:
-        with pytest.raises(TensorZeroInternalError) as exc_info:
-            await async_client.inference(
-                function_name="basic_test",
-                variant_name="slow",
-                input={"messages": [{"role": "user", "content": "Hello"}]},
-            )
+    with without_env_tensorzero_e2e_proxy():
+        client_fut = AsyncTensorZeroGateway.build_http(
+            gateway_url="http://tensorzero.invalid:3000", verbose_errors=True
+        )
+        assert inspect.isawaitable(client_fut)
+        async with await client_fut as async_client:
+            with pytest.raises(TensorZeroInternalError) as exc_info:
+                await async_client.inference(
+                    function_name="basic_test",
+                    variant_name="slow",
+                    input={"messages": [{"role": "user", "content": "Hello"}]},
+                )
 
-        assert "dns error" in str(exc_info.value)
+            assert "dns error" in str(exc_info.value)
 
 
 def test_sync_non_verbose_errors():
-    with TensorZeroGateway.build_http(
-        gateway_url="http://tensorzero.invalid:3000", verbose_errors=False
-    ) as async_client:
-        with pytest.raises(TensorZeroInternalError) as exc_info:
-            async_client.inference(
-                function_name="basic_test",
-                variant_name="slow",
-                input={"messages": [{"role": "user", "content": "Hello"}]},
-            )
+    with without_env_tensorzero_e2e_proxy():
+        with TensorZeroGateway.build_http(
+            gateway_url="http://tensorzero.invalid:3000", verbose_errors=False
+        ) as async_client:
+            with pytest.raises(TensorZeroInternalError) as exc_info:
+                async_client.inference(
+                    function_name="basic_test",
+                    variant_name="slow",
+                    input={"messages": [{"role": "user", "content": "Hello"}]},
+                )
 
-        assert "dns error" not in str(exc_info.value)
+            assert "dns error" not in str(exc_info.value)
 
 
 def test_sync_verbose_errors():
-    with TensorZeroGateway.build_http(
-        gateway_url="http://tensorzero.invalid:3000", verbose_errors=True
-    ) as async_client:
-        with pytest.raises(TensorZeroInternalError) as exc_info:
-            async_client.inference(
-                function_name="basic_test",
-                variant_name="slow",
-                input={"messages": [{"role": "user", "content": "Hello"}]},
-            )
+    with without_env_tensorzero_e2e_proxy():
+        with TensorZeroGateway.build_http(
+            gateway_url="http://tensorzero.invalid:3000", verbose_errors=True
+        ) as async_client:
+            with pytest.raises(TensorZeroInternalError) as exc_info:
+                async_client.inference(
+                    function_name="basic_test",
+                    variant_name="slow",
+                    input={"messages": [{"role": "user", "content": "Hello"}]},
+                )
 
-        assert "dns error" in str(exc_info.value)
+            assert "dns error" in str(exc_info.value)
 
 
 def test_uuid7_import():
@@ -3462,8 +3483,14 @@ def test_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     )
     assert client is not None
     captured = capfd.readouterr()
+    if os.environ.get("TENSORZERO_E2E_PROXY") is not None:
+        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set
+        for line in captured.out.splitlines():
+            assert "Using proxy URL from TENSORZERO_E2E_PROXY" in line, f"Unexpected log line: {line}"
+    else:
+        assert captured.out == ""
+
     assert captured.err == ""
-    assert captured.out == ""
 
 
 @pytest.mark.asyncio
@@ -3476,8 +3503,13 @@ async def test_async_http_client_no_spurious_log(capfd: CaptureFixture[str]):
     client = await client_fut
     assert client is not None
     captured = capfd.readouterr()
+    if os.environ.get("TENSORZERO_E2E_PROXY") is not None:
+        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set
+        for line in captured.out.splitlines():
+            assert "Using proxy URL from TENSORZERO_E2E_PROXY" in line, f"Unexpected log line: {line}"
+    else:
+        assert captured.out == ""
     assert captured.err == ""
-    assert captured.out == ""
 
 
 def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
@@ -3489,7 +3521,7 @@ def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     captured = capfd.readouterr()
     assert captured.err == ""
     if os.environ.get("TENSORZERO_E2E_PROXY") is not None:
-        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set, b
+        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set
         for line in captured.out.splitlines():
             assert "Using proxy URL from TENSORZERO_E2E_PROXY" in line, f"Unexpected log line: {line}"
     else:
