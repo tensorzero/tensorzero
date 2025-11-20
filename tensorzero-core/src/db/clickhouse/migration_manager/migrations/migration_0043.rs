@@ -36,7 +36,14 @@ const SNAPSHOT_TRACKED_TABLES: &[&str] = &[
     "TagInference",
 ];
 
-/// TODO
+/// This migration sets up the ClickHouse data structures required
+/// for snapshotting:
+/// * the `ConfigSnapshot table`
+/// * adds a `snapshot_hash` column to every table in `SNAPSHOT_TRACKED_TABLES` above
+/// * for all tables above which are populated by materialized views, we alter the
+///   materialized view as needed to ensure that the `snapshot_hash` propagates.
+/// This should allow us to write snapshots + snapshot hashes everywhere, and have
+/// much better information about data provenance.
 pub struct Migration0043<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
