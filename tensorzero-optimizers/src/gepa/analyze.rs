@@ -337,23 +337,30 @@ pub async fn analyze_inferences(
     let results = join_all(analysis_futures).await;
 
     // Partition into successes and failures
-    let mut successes = Vec::new();
-    let mut failures = Vec::new();
+    let (successes, failures): (Vec<_>, Vec<_>) = results
+        .into_iter()
+        .enumerate()
+        .partition(|(_, result)| result.is_ok());
 
-    for (index, result) in results.into_iter().enumerate() {
-        match result {
-            Ok(analysis) => successes.push(analysis),
-            Err(e) => {
+    let successes = successes
+        .into_iter()
+        .filter_map(|(_, result)| result.ok())
+        .collect::<Vec<_>>();
+
+    let failures = failures
+        .into_iter()
+        .filter_map(|(index, result)| {
+            result.err().map(|e| {
                 tracing::warn!(
                     "Analysis failed for inference {}/{}: {}",
                     index + 1,
                     evaluation_infos.len(),
                     e
                 );
-                failures.push(e);
-            }
-        }
-    }
+                e
+            })
+        })
+        .collect::<Vec<_>>();
 
     // Check if all analyses failed (empty input already handled by early return)
     if successes.is_empty() {
