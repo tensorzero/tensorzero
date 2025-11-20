@@ -31,7 +31,10 @@ import { Output } from "~/components/inference/Output";
 import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import { formatMetricSummaryValue } from "~/utils/config/feedback";
+import {
+  formatMetricSummaryValue,
+  formatConfidenceInterval,
+} from "~/utils/config/feedback";
 import type {
   EvaluatorConfig,
   MetricConfig,
@@ -587,9 +590,7 @@ export function EvaluationTable({
                                     className="h-[52px] text-center align-middle"
                                   >
                                     {/* Add group and relative positioning to the container */}
-                                    <div
-                                      className={`group relative flex h-full items-center justify-center ${metricValue && evaluatorConfig?.type === "llm_judge" ? "pl-10" : ""}`}
-                                    >
+                                    <div className="group relative flex h-full items-center justify-center">
                                       {metricValue &&
                                       metricType &&
                                       evaluatorConfig ? (
@@ -615,7 +616,7 @@ export function EvaluationTable({
                                           {evaluatorConfig.type ===
                                             "llm_judge" && (
                                             <div
-                                              className="ml-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                                              className="absolute right-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                                               // Stop click event propagation so the row navigation is not triggered
                                               onClick={(e) =>
                                                 e.stopPropagation()
@@ -792,12 +793,12 @@ const EvaluatorProperties = ({
                 ></div>
                 <span>
                   {formatMetricSummaryValue(stat.mean_metric, metricConfig)}
-                  {stat.stderr_metric ? (
+                  {stat.ci_lower != null && stat.ci_upper != null ? (
                     <>
                       {" "}
-                      ±{" "}
-                      {formatMetricSummaryValue(
-                        stat.stderr_metric,
+                      {formatConfidenceInterval(
+                        stat.ci_lower,
+                        stat.ci_upper,
                         metricConfig,
                       )}
                     </>

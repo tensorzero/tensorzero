@@ -1,3 +1,4 @@
+use crate::client::{File, InputMessage, InputMessageContent};
 use crate::config::Config;
 use crate::endpoints::object_storage::get_object;
 use crate::error::Error;
@@ -5,6 +6,7 @@ use crate::inference::types::file::{Base64FileMetadata, ObjectStorageFile, Objec
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
 use crate::inference::types::storage::StoragePath;
+use crate::inference::types::Input;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
@@ -12,6 +14,7 @@ use crate::inference::types::StoredContentBlock;
 use crate::inference::types::System;
 use crate::inference::types::Template;
 use crate::inference::types::{RawText, Role, Text, Thought, ToolCall, ToolResult, Unknown};
+use crate::tool::ToolCallWrapper;
 use futures::future::try_join_all;
 use schemars::JsonSchema;
 use serde::de::{self, Deserializer, MapAccess, Visitor};
@@ -76,6 +79,22 @@ impl StoredInput {
             .await?,
         })
     }
+
+    /// Converts a `StoredInput` to an `Input` without fetching file data.
+    /// Files are converted to `File::ObjectStoragePointer` variant which contains
+    /// only metadata (source_url, mime_type, storage_path) without the actual file data.
+    ///
+    /// TODO(shuyangli): Add optional parameter to fetch files from object storage.
+    pub fn into_input(self) -> Input {
+        Input {
+            system: self.system,
+            messages: self
+                .messages
+                .into_iter()
+                .map(StoredInputMessage::into_input_message)
+                .collect(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS, JsonSchema)]
@@ -102,6 +121,18 @@ impl StoredInputMessage {
             )
             .await?,
         })
+    }
+
+    /// Converts a `StoredInputMessage` to an `InputMessage`, possibly fetching files (later).
+    pub fn into_input_message(self) -> InputMessage {
+        InputMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(StoredInputMessageContent::into_input_message_content)
+                .collect(),
+        }
     }
 }
 
@@ -273,6 +304,30 @@ impl StoredInputMessageContent {
             StoredInputMessageContent::Unknown(unknown) => {
                 Ok(ResolvedInputMessageContent::Unknown(unknown))
             }
+        }
+    }
+
+    /// Converts a `StoredInputMessageContent` to the client type `InputMessageContent`, possibly fetching files (later).
+    pub fn into_input_message_content(self) -> InputMessageContent {
+        match self {
+            StoredInputMessageContent::Text(text) => InputMessageContent::Text(text),
+            StoredInputMessageContent::Template(template) => {
+                InputMessageContent::Template(template)
+            }
+            StoredInputMessageContent::ToolCall(tool_call) => {
+                InputMessageContent::ToolCall(ToolCallWrapper::ToolCall(tool_call))
+            }
+            StoredInputMessageContent::ToolResult(tool_result) => {
+                InputMessageContent::ToolResult(tool_result)
+            }
+            StoredInputMessageContent::RawText(raw_text) => InputMessageContent::RawText(raw_text),
+            StoredInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
+            StoredInputMessageContent::File(stored_file) => {
+                // Convert StoredFile (ObjectStoragePointer) to File::ObjectStoragePointer
+                // This preserves only the metadata without fetching actual file data
+                InputMessageContent::File(File::ObjectStoragePointer(stored_file.0))
+            }
+            StoredInputMessageContent::Unknown(unknown) => InputMessageContent::Unknown(unknown),
         }
     }
 }

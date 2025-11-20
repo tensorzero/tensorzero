@@ -117,6 +117,10 @@ pub struct RunEvaluationStreamingParams {
     pub variant_name: String,
     pub concurrency: u32,
     pub inference_cache: String,
+    pub max_datapoints: Option<u32>,
+    /// JSON string mapping evaluator names to precision limit thresholds.
+    /// Example: '{"exact_match": 0.13, "llm_judge": 0.16}'
+    pub precision_targets: Option<String>,
 }
 
 #[napi]
@@ -180,6 +184,21 @@ pub async fn run_evaluation_streaming(
 
     let evaluation_run_id = Uuid::now_v7();
 
+    // Convert max_datapoints from u32 to usize
+    let max_datapoints = params.max_datapoints.map(|v| v as usize);
+
+    // Parse precision_targets from JSON string to HashMap
+    let precision_targets = if let Some(limits_json_str) = params.precision_targets {
+        let limits_map: std::collections::HashMap<String, f64> =
+            serde_json::from_str(&limits_json_str).map_err(|e| {
+                napi::Error::from_reason(format!("Invalid precision_targets JSON: {e}"))
+            })?;
+        // Convert f64 to f32
+        limits_map.into_iter().map(|(k, v)| (k, v as f32)).collect()
+    } else {
+        HashMap::new()
+    };
+
     let core_args = EvaluationCoreArgs {
         tensorzero_client,
         clickhouse_client: clickhouse_client.clone(),
@@ -192,15 +211,16 @@ pub async fn run_evaluation_streaming(
         concurrency,
     };
 
-    let result = match run_evaluation_core_streaming(core_args, None, HashMap::new()).await {
-        Ok(result) => result,
-        Err(error) => {
-            let _ = callback.abort();
-            return Err(napi::Error::from_reason(format!(
-                "Failed to start evaluation run: {error}"
-            )));
-        }
-    };
+    let result =
+        match run_evaluation_core_streaming(core_args, max_datapoints, precision_targets).await {
+            Ok(result) => result,
+            Err(error) => {
+                let _ = callback.abort();
+                return Err(napi::Error::from_reason(format!(
+                    "Failed to start evaluation run: {error}"
+                )));
+            }
+        };
 
     let start_event = EvaluationRunEvent::Start(EvaluationRunStartEvent {
         evaluation_run_id,
