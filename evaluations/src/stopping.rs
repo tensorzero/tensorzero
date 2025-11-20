@@ -6,7 +6,7 @@ use tracing::info;
 
 use crate::stats::PerEvaluatorStats;
 
-const MIN_DATAPOINTS: usize = 20;
+pub const MIN_DATAPOINTS: usize = 20;
 
 /// Newtype wrapper for cancellation tokens
 ///
