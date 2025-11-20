@@ -2,7 +2,7 @@ name: Cancel workflows on status failure
 
 # Note that Github does not fire 'check_run' events for job fails in other Github Actions workflows,
 # so this job only cancels workflows when external statuses like Buildkite report a failure.
-# We use '.github/workflows/cancel-on-status-failure.yml' to cancel workflows when other checks fail.
+# We use '.github/workflows/cancel-merge-queue-on-job-failure.yml' to cancel workflows when other checks fail.
 on:
   status:
 
