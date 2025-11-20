@@ -45,7 +45,6 @@ pub struct EvaluationRunStartEvent {
     pub num_datapoints: usize,
     pub evaluation_name: String,
     pub dataset_name: Option<String>,
-    pub num_datapoint_ids: Option<usize>,
     pub variant_name: String,
 }
 
@@ -240,11 +239,6 @@ pub async fn run_evaluation_streaming(
         num_datapoints: result.run_info.num_datapoints,
         evaluation_name: params.evaluation_name.clone(),
         dataset_name: params.dataset_name.clone(),
-        num_datapoint_ids: if datapoint_ids.is_empty() {
-            None
-        } else {
-            Some(datapoint_ids.len())
-        },
         variant_name: params.variant_name.clone(),
     });
 
