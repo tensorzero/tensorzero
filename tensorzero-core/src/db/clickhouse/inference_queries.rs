@@ -1001,7 +1001,7 @@ mod tests {
                 })
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"latest_id":"01234567-89ab-cdef-0123-456789abcdef","earliest_id":"fedcba98-7654-3210-fedc-ba9876543210","count":42}"#.to_string(),
+                        response: r#"{"latest_id":"01234567-89ab-cdef-0123-456789abcdef","earliest_id":"fedcba98-7654-3210-fedc-ba9876543210","count":"42"}"#.to_string(),
                         metadata: ClickHouseResponseMetadata {
                             read_rows: 1,
                             written_rows: 0,
@@ -1042,7 +1042,7 @@ mod tests {
                 })
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"latest_id":"11111111-2222-3333-4444-555555555555","earliest_id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","count":10}"#.to_string(),
+                        response: r#"{"latest_id":"11111111-2222-3333-4444-555555555555","earliest_id":"aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee","count":"10"}"#.to_string(),
                         metadata: ClickHouseResponseMetadata {
                             read_rows: 1,
                             written_rows: 0,
@@ -1079,7 +1079,7 @@ mod tests {
                 })
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"latest_id":"22222222-3333-4444-5555-666666666666","earliest_id":"bbbbbbbb-cccc-dddd-eeee-ffffffffffff","count":5}"#.to_string(),
+                        response: r#"{"latest_id":"22222222-3333-4444-5555-666666666666","earliest_id":"bbbbbbbb-cccc-dddd-eeee-ffffffffffff","count":"5"}"#.to_string(),
                         metadata: ClickHouseResponseMetadata {
                             read_rows: 1,
                             written_rows: 0,
@@ -1120,7 +1120,7 @@ mod tests {
                 })
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"latest_id":"33333333-4444-5555-6666-777777777777","earliest_id":"cccccccc-dddd-eeee-ffff-000000000000","count":3}"#.to_string(),
+                        response: r#"{"latest_id":"33333333-4444-5555-6666-777777777777","earliest_id":"cccccccc-dddd-eeee-ffff-000000000000","count":"3"}"#.to_string(),
                         metadata: ClickHouseResponseMetadata {
                             read_rows: 1,
                             written_rows: 0,
@@ -1168,7 +1168,7 @@ mod tests {
                 })
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"latest_id":"44444444-5555-6666-7777-888888888888","earliest_id":"dddddddd-eeee-ffff-0000-111111111111","count":1}"#.to_string(),
+                        response: r#"{"latest_id":"44444444-5555-6666-7777-888888888888","earliest_id":"dddddddd-eeee-ffff-0000-111111111111","count":"1"}"#.to_string(),
                         metadata: ClickHouseResponseMetadata {
                             read_rows: 1,
                             written_rows: 0,
@@ -1231,7 +1231,8 @@ mod tests {
                 .expect_run_query_synchronous()
                 .returning(|_, _| {
                     Ok(ClickHouseResponse {
-                        response: r#"{"latest_id":null,"earliest_id":null,"count":0}"#.to_string(),
+                        response: r#"{"latest_id":null,"earliest_id":null,"count":"0"}"#
+                            .to_string(),
                         metadata: ClickHouseResponseMetadata {
                             read_rows: 1,
                             written_rows: 0,
