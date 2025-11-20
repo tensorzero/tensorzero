@@ -45,6 +45,7 @@ describe("update datapoints", () => {
     const updateResult = await tensorZeroClient.updateDatapoint("test", {
       type: "json",
       id: initialDatapoint.id,
+      // TODO (#4674 #4675): fix this casting
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       input: initialDatapoint.input as any, // Type conversion needed: StoredInput has ObjectStoragePointer files, Input expects full file types
       output: {
