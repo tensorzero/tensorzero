@@ -1799,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.11.4"
+version = "2025.11.5"
 dependencies = [
  "anyhow",
  "clap",
@@ -1901,7 +1901,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2025.11.4"
+version = "2025.11.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2147,7 +2147,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.11.4"
+version = "2025.11.5"
 dependencies = [
  "axum",
  "clap",
@@ -3362,7 +3362,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2025.11.4"
+version = "2025.11.5"
 dependencies = [
  "minijinja",
  "serde",
@@ -4522,7 +4522,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2025.11.4"
+version = "2025.11.5"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6059,7 +6059,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2025.11.4"
+version = "2025.11.5"
 dependencies = [
  "chrono",
  "futures",
@@ -6075,7 +6075,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.11.4"
+version = "2025.11.5"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -6185,7 +6185,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.11.4"
+version = "2025.11.5"
 dependencies = [
  "evaluations",
  "napi",
@@ -6204,7 +6204,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2025.11.4"
+version = "2025.11.5"
 dependencies = [
  "async-trait",
  "axum",
@@ -6236,7 +6236,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.11.4"
+version = "2025.11.5"
 dependencies = [
  "evaluations",
  "futures",
