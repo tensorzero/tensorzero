@@ -731,7 +731,7 @@ mod tests {
         let err = result.unwrap_err();
         assert!(err
             .to_string()
-            .contains("function 'nonexistent_function' not found"));
+            .contains("Function 'nonexistent_function' not found"));
     }
 
     #[test]

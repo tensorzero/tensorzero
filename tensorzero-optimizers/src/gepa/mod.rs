@@ -83,11 +83,11 @@ impl Optimizer for GEPAConfig {
         tracing::info!("Gateway client built successfully for GEPA optimization");
 
         // Initialize the Pareto frontier with baseline or provided variants
-        let pareto_frontier = initialize_pareto_frontier(self, &function_context)?;
+        let pareto_frontier_variants = initialize_pareto_frontier(self, &function_context)?;
 
         // Track original variant names to filter them out at the end
         let original_variant_names: std::collections::HashSet<String> =
-            pareto_frontier.keys().cloned().collect();
+            pareto_frontier_variants.keys().cloned().collect();
 
         tracing::info!(
             "Initialized with {} baseline variants: {:?}",
@@ -103,7 +103,7 @@ impl Optimizer for GEPAConfig {
         // For synchronous optimizers, we store the result in the handle
         // rather than returning an error from launch()
         Ok(GEPAJobHandle {
-            result: Ok(pareto_frontier),
+            result: Ok(pareto_frontier_variants),
         })
     }
 }
