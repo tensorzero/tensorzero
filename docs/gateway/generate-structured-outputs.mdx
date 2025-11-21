@@ -41,13 +41,13 @@ system_template = "system_template.minijinja"
 json_mode = "strict"
 ```
 
-The field `json_mode` can be one of the following: `off`, `on`, `strict`, or `implicit_tool`.
-The `implicit_tool` strategy is a custom TensorZero implementation that leverages tool use under the hood for generating JSON.
+The field `json_mode` can be one of the following: `off`, `on`, `strict`, or `tool`.
+The `tool` strategy is a custom TensorZero implementation that leverages tool use under the hood for generating JSON.
 See [Configuration Reference](/gateway/configuration-reference) for details.
 
 <Tip>
 
-Use `"strict"` mode for providers that support it (e.g. OpenAI) or `"implicit_tool"` for others (e.g. Anthropic).
+Use `"strict"` mode for providers that support it (e.g. OpenAI) or `"tool"` for others.
 
 </Tip>
 
@@ -345,8 +345,147 @@ curl -X POST "http://localhost:3000/inference" \
 
 ## Generate structured outputs with a dynamic schema
 
-While we recommend specifying a fixed schema whenever possible, you can provide the output schema dynamically at inference time if your use case demands it.
+While we recommend specifying a fixed schema in the configuration whenever possible, you can provide the output schema dynamically at inference time if your use case demands it.
 
 See `output_schema` in the [Inference API Reference](/gateway/api-reference/inference#output-schema) or `response_format` in the [Inference (OpenAI) API Reference](/gateway/api-reference/inference-openai-compatible#json-function-with-dynamic-output-schema).
 
 You can also override `json_mode` at inference time if necessary.
+
+## Set `json_mode` at inference time
+
+You can set `json_mode` for a particular request using `params`.
+
+This value takes precedence over any default behaviors or `json_mode` in the configuration.
+
+<Tabs>
+<Tab title="Python">
+
+You can set `json_mode` by adding `params` to the request body.
+
+```python
+response = await t0.inference(
+    # ...
+    params={
+        "chat_completion": {
+            "json_mode": "strict",  # or: "tool", "on", "off"
+        }
+    },
+    # ...
+)
+```
+
+See the [Inference API Reference](/gateway/api-reference/inference) for more details.
+
+</Tab>
+
+<Tab title="Python (OpenAI SDK)">
+
+You can set `json_mode` by adding `tensorzero::params` to the request's body.
+The OpenAI Python SDK accepts custom parameters in the `extra_body` field.
+
+```python
+response = client.chat.completions.create(
+    # ...
+    extra_body={
+        "tensorzero::params": {
+            "chat_completion": {
+                "json_mode": "strict",  # or: "tool", "on", "off"
+            }
+        }
+    }
+    # ...
+)
+```
+
+See the [OpenAI-Compatible Inference API Reference](/gateway/api-reference/inference-openai-compatible) for more details.
+
+</Tab>
+
+<Tab title="Node (OpenAI SDK)">
+
+You can set `json_mode` by adding `tensorzero::params` to the request's body.
+
+```ts
+const response = await client.chat.completions.create({
+  // ...
+  "tensorzero::params": {
+    chat_completion: {
+      json_mode: "strict", // or: "tool", "on", "off"
+    },
+  },
+  // ...
+});
+```
+
+See the [OpenAI-Compatible Inference API Reference](/gateway/api-reference/inference-openai-compatible) for more details.
+
+</Tab>
+
+<Tab title="HTTP">
+
+You can set `json_mode` by adding `params` to the request body.
+
+```bash
+curl -X POST "http://localhost:3000/inference" \
+  -H "Content-Type: application/json" \
+  -d '{
+    // ...
+    "params": {
+      "chat_completion": {
+        "json_mode": "strict", // or: "tool", "on", "off"
+      }
+    }
+    // ...
+  }'
+```
+
+See the [Inference API Reference](/gateway/api-reference/inference) for more details.
+
+</Tab>
+</Tabs>
+
+<Tip>
+
+Dynamic inference parameters like `json_mode` apply to specific variant types.
+Unless you're using an [advanced variant type](/gateway/guides/inference-time-optimizations), the variant type will be `chat_completion`.
+
+</Tip>
+
+## Handle model provider limitations
+
+### Anthropic
+
+Anthropic supports native structured outputs through their beta API.
+To use this feature with TensorZero, enable `beta_structured_outputs = true` in your Anthropic provider configuration and set `json_mode = "strict"`.
+Alternatively, you can use `extra_headers`.
+
+```toml tensorzero.toml
+[models.claude_structured]
+routing = ["anthropic"]
+
+[models.claude_structured.providers.anthropic]
+type = "anthropic"
+model_name = "claude-sonnet-4-5-20250929"
+beta_structured_outputs = true
+```
+
+### Gemini (GCP Vertex AI, Google AI Studio)
+
+GCP Vertex AI Gemini and Google AI Studio support structured outputs, but only support a subset of the JSON Schema specification.
+TensorZero automatically handles some known limitations, but certain output schemas will still be rejected by the model provider.
+Refer to the [Google documentation](https://ai.google.dev/gemini-api/docs/structured-output?example=recipe#json_schema_support) for details on supported JSON Schema features.
+
+### Lack of native support (e.g. AWS Bedrock)
+
+Some model providers (e.g. OpenAI, Google) support strictly enforcing output schemas natively, but others (e.g. AWS Bedrock) do not.
+
+For providers without native support, you can still generate structured outputs with `json_mode = "tool"`.
+TensorZero converts your output schema into a [tool](/gateway/guides/tool-use) call, then transforms the tool response back into JSON output.
+
+You can set `json_mode = "tool"` in your configuration file or at inference time.
+
+<Warn>
+
+When using `json_mode = "tool"`, you cannot use other tools in the same inference request.
+
+</Warn>

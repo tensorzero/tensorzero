@@ -274,3 +274,19 @@ pub struct GetInferencesResponse {
     /// The retrieved inferences.
     pub inferences: Vec<StoredInference>,
 }
+
+/// Response containing the inference table bounds.
+/// Used by the `GET /internal/inferences/bounds` endpoint.
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[serde_with::skip_serializing_none]
+#[ts(export, optional_fields)]
+pub struct GetInferenceBoundsResponse {
+    /// The most recent inference ID (MAX id_uint).
+    pub latest_id: Option<Uuid>,
+
+    /// The oldest inference ID (MIN id_uint).
+    pub earliest_id: Option<Uuid>,
+
+    /// The total number of inferences matching the filter criteria.
+    pub count: u64,
+}

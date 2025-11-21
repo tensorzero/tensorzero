@@ -219,7 +219,7 @@ fn validate_function_config(
         FunctionConfig::Json(json_config) => {
             // JSON functions should have exactly one implicit tool for schema validation
             if json_config
-                .implicit_tool_call_config
+                .json_mode_tool_call_config
                 .tools_available()
                 .count()
                 != 1
@@ -228,7 +228,7 @@ fn validate_function_config(
                     message: format!(
                         "DICL optimization expected JSON function '{}' to have exactly 1 implicit tool, but found {}. This indicates a configuration issue.",
                         function_name,
-                        json_config.implicit_tool_call_config.tools_available().count()
+                        json_config.json_mode_tool_call_config.tools_available().count()
                     ),
                 }));
             }
@@ -637,7 +637,7 @@ mod tests {
         providers::dummy::DummyProvider,
         stored_inference::{RenderedSample, StoredOutput},
         tool::{
-            create_implicit_tool_call_config, DynamicToolParams, FunctionTool, ToolCall,
+            create_json_mode_tool_call_config, DynamicToolParams, FunctionTool, ToolCall,
             ToolCallConfig, ToolChoice, ToolResult,
         },
     };
@@ -1077,13 +1077,13 @@ mod tests {
         }))
         .unwrap();
 
-        let implicit_tool_call_config = create_implicit_tool_call_config(output_schema.clone());
+        let json_mode_tool_call_config = create_json_mode_tool_call_config(output_schema.clone());
 
         FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1107,7 +1107,7 @@ mod tests {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema,
-            implicit_tool_call_config: invalid_tool_call_config,
+            json_mode_tool_call_config: invalid_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
