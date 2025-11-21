@@ -56,7 +56,7 @@ pub struct TemplateWithSchema {
     pub legacy_definition: bool,
 }
 
-#[derive(Clone, Debug, Default, Serialize, ts_rs::TS)]
+#[derive(Debug, Default, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ChatCompletionConfig {
     weight: Option<f64>,
@@ -160,7 +160,7 @@ impl ChatCompletionConfig {
 
     /// Converts this initialized config back to its uninitialized form.
     /// Note: Schema associations and original file paths are not preserved.
-    pub fn into_uninitialized(self) -> UninitializedChatCompletionConfig {
+    pub fn into_uninitialized(&self) -> UninitializedChatCompletionConfig {
         let mut system_template = None;
         let mut user_template = None;
         let mut assistant_template = None;
@@ -195,7 +195,7 @@ impl ChatCompletionConfig {
 
         UninitializedChatCompletionConfig {
             weight: self.weight,
-            model: self.model,
+            model: Arc::clone(&self.model),
             system_template,
             user_template,
             assistant_template,
@@ -209,15 +209,15 @@ impl ChatCompletionConfig {
             presence_penalty: self.presence_penalty,
             frequency_penalty: self.frequency_penalty,
             seed: self.seed,
-            stop_sequences: self.stop_sequences,
-            reasoning_effort: self.inference_params_v2.reasoning_effort,
-            service_tier: self.inference_params_v2.service_tier,
+            stop_sequences: self.stop_sequences.clone(),
+            reasoning_effort: self.inference_params_v2.reasoning_effort.clone(),
+            service_tier: self.inference_params_v2.service_tier.clone(),
             thinking_budget_tokens: self.inference_params_v2.thinking_budget_tokens,
-            verbosity: self.inference_params_v2.verbosity,
+            verbosity: self.inference_params_v2.verbosity.clone(),
             json_mode: self.json_mode,
             retries: self.retries,
-            extra_body: self.extra_body,
-            extra_headers: self.extra_headers,
+            extra_body: self.extra_body.clone(),
+            extra_headers: self.extra_headers.clone(),
         }
     }
 }
