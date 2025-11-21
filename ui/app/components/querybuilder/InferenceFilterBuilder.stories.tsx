@@ -119,6 +119,7 @@ const mockConfig: Config = {
     openai: { defaults: { api_key_location: "" } },
     openrouter: { defaults: { api_key_location: "" } },
     sglang: { defaults: { api_key_location: "" } },
+    tensorzero_relay: { defaults: { api_key_location: "" } },
     tgi: { defaults: { api_key_location: "" } },
     together: { defaults: { api_key_location: "" } },
     vllm: { defaults: { api_key_location: "" } },

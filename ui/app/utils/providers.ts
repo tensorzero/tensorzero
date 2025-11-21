@@ -96,6 +96,12 @@ export function formatProvider(provider: ProviderConfig["type"]): {
         className:
           "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300",
       };
+    case "tensorzero_relay":
+      return {
+        name: "TensorZero Relay",
+        className:
+          "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300",
+      };
     case "tgi":
       return {
         name: "TGI",
