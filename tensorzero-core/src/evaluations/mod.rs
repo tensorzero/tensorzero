@@ -61,7 +61,7 @@ pub enum EvaluationConfig {
     Inference(InferenceEvaluationConfig),
 }
 
-#[derive(Clone, Debug, Serialize, ts_rs::TS)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvaluatorConfig {
@@ -96,7 +96,7 @@ impl EvaluatorConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct ExactMatchConfig {
@@ -104,7 +104,7 @@ pub struct ExactMatchConfig {
     pub cutoff: Option<f32>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[serde(deny_unknown_fields)]
 pub struct LLMJudgeConfig {
@@ -126,7 +126,7 @@ pub struct LLMJudgeIncludeConfig {
     pub reference_output: bool,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum LLMJudgeInputFormat {
