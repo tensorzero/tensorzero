@@ -1573,7 +1573,6 @@ mod tests {
     // ============================================================================
 
     #[test]
-    #[expect(clippy::print_stderr)]
     fn test_basic_dominance() {
         let config = create_evaluation_config(&[("accuracy", "max")]);
 
@@ -1612,11 +1611,9 @@ mod tests {
 
         let datapoint_ids = extract_sorted_datapoint_ids(&val_scores_map);
         let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
-        let result = frontier.update(candidates, val_scores_map);
-        if let Err(ref e) = result {
-            eprintln!("Error: {e:?}");
-        }
-        assert!(result.is_ok());
+        frontier
+            .update(candidates, val_scores_map)
+            .expect("pareto frontier update should succeed");
 
         // Only variant_a should remain
         assert_eq!(frontier.variants.len(), 1);
