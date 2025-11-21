@@ -428,7 +428,7 @@ pub struct ListDatapointsRequest {
 }
 
 /// Request to get specific datapoints by their IDs.
-/// Used by the `POST /v1/datasets/get_datapoints` endpoint.
+/// Used by the `POST /v1/datasets/{dataset_name}/get_datapoints` endpoint.
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
 #[export_schema]
 #[ts(export)]
