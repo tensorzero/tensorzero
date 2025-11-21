@@ -9,7 +9,9 @@ use tensorzero::{
     Role, StoredDatapoint,
 };
 use tensorzero_core::config::{MetricConfigLevel, MetricConfigType};
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::clickhouse::test_helpers::{
+    clickhouse_flush_async_insert, get_clickhouse,
+};
 use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetMetadata, DatasetOutputSource, DatasetQueries, GetAdjacentDatapointIdsParams,
@@ -1124,6 +1126,9 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
         .await
         .unwrap();
 
+    // Flush async insert to ensure datapoint is visible before deletion
+    clickhouse_flush_async_insert(&clickhouse).await;
+
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -1152,6 +1157,9 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
         .delete_datapoints("test_chat_dataset", Some(&[datapoint_id]))
         .await
         .unwrap();
+
+    // Flush async insert to ensure datapoint is deleted
+    clickhouse_flush_async_insert(&clickhouse).await;
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
