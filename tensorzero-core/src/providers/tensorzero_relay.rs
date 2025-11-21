@@ -194,7 +194,6 @@ impl TensorZeroRelayProvider {
                         ContentBlock::Thought(t) => Ok(ClientInputMessageContent::Thought(t)),
                         ContentBlock::File(f) => match *f {
                             LazyFile::Url { file_url, future } => {
-                                // TODO - should we respect this setting for other `LazyFile` variants?
                                 if request.fetch_and_encode_input_files_before_inference {
                                     let resolved_file = future.await?;
                                     Ok(ClientInputMessageContent::File(File::ObjectStorage(
@@ -221,16 +220,26 @@ impl TensorZeroRelayProvider {
                             LazyFile::ObjectStoragePointer {
                                 metadata,
                                 storage_path,
-                                future: _,
-                            } => Ok(ClientInputMessageContent::File(File::ObjectStoragePointer(
-                                ObjectStoragePointer {
-                                    storage_path,
-                                    source_url: metadata.source_url.clone(),
-                                    mime_type: metadata.mime_type.clone(),
-                                    detail: metadata.detail.clone(),
-                                    filename: metadata.filename.clone(),
-                                },
-                            ))),
+                                future,
+                            } => {
+                                if request.fetch_and_encode_input_files_before_inference {
+                                    let resolved_file = future.await?;
+                                    Ok(ClientInputMessageContent::File(File::ObjectStorage(
+                                        resolved_file,
+                                    )))
+                                } else {
+                                    Ok(ClientInputMessageContent::File(File::ObjectStoragePointer(
+                                        ObjectStoragePointer {
+                                            storage_path,
+                                            source_url: metadata.source_url.clone(),
+                                            mime_type: metadata.mime_type.clone(),
+                                            detail: metadata.detail.clone(),
+                                            filename: metadata.filename.clone(),
+                                        },
+                                    )))
+                                }
+                            }
+
                             LazyFile::ObjectStorage(object_storage_file) => {
                                 Ok(ClientInputMessageContent::File(File::ObjectStorage(
                                     object_storage_file,
