@@ -13,7 +13,8 @@ RUN git rev-parse HEAD
 ARG CARGO_BUILD_FLAGS="--features e2e_tests"
 
 RUN cargo build -p gateway $CARGO_BUILD_FLAGS && \
-    cp -r /src/target/debug/gateway /release/gateway
+    mkdir -p /release && \
+    cp /src/target/debug/gateway /release/gateway
 
 # ========== base ==========
 
