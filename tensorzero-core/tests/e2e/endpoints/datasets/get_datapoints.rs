@@ -1,5 +1,6 @@
 /// Comprehensive tests for the get_datapoints and list_datapoints API endpoints.
-/// Tests both the POST /v1/datasets/get_datapoints and POST /v1/datasets/{dataset_name}/list_datapoints endpoints.
+/// Tests both the dataset-scoped POST /v1/datasets/{dataset_name}/get_datapoints and the deprecated
+/// POST /v1/datasets/get_datapoints endpoints alongside POST /v1/datasets/{dataset_name}/list_datapoints.
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -75,7 +76,9 @@ mod get_datapoints_tests {
 
         // Get the datapoint via the endpoint
         let resp = http_client
-            .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/get_datapoints"
+            )))
             .json(&json!({
                 "ids": [datapoint_id.to_string()]
             }))

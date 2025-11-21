@@ -2,9 +2,17 @@
 
 /**
  * Request to get specific datapoints by their IDs.
- * Used by the `POST /v1/datasets/get_datapoints` endpoint.
+ * Used by the `POST /v1/datasets/{dataset_name}/get_datapoints` endpoint.
+ * Deprecated: the `POST /v1/datasets/get_datapoints` endpoint falls back to the dataset provided
+ * here when present but should be migrated to the dataset-scoped route.
  */
 export type GetDatapointsRequest = {
+  /**
+   * Name of the dataset containing the datapoints.
+   * Omitting the dataset_name may result in slower queries because the dataset is part of the
+   * sorting key.
+   */
+  dataset_name?: string;
   /**
    * The IDs of the datapoints to retrieve. Required.
    */

@@ -43,6 +43,48 @@ pub async fn get_datapoints_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<GetDatapointsRequest>,
 ) -> Result<Json<GetDatapointsResponse>, Error> {
+    tracing::warn!(
+        "`/v1/datasets/get_datapoints` is deprecated; use `/v1/datasets/{{dataset_name}}/get_datapoints` instead"
+    );
+
+    let response = get_datapoints(
+        &app_state.clickhouse_connection_info,
+        &app_state.config,
+        request,
+    )
+    .await?;
+    Ok(Json(response))
+}
+
+/// Handler for the POST `/v1/datasets/{dataset_name}/get_datapoints` endpoint.
+/// Retrieves datapoints scoped to a dataset by their IDs.
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(
+    name = "datasets.v1.get_datapoints_by_dataset",
+    skip(app_state, request)
+)]
+pub async fn get_datapoints_by_dataset_handler(
+    State(app_state): AppState,
+    Path(dataset_name): Path<String>,
+    StructuredJson(request): StructuredJson<GetDatapointsRequest>,
+) -> Result<Json<GetDatapointsResponse>, Error> {
+    validate_dataset_name(&dataset_name)?;
+
+    if let Some(ref provided_dataset_name) = request.dataset_name {
+        if provided_dataset_name != &dataset_name {
+            tracing::warn!(
+                provided = provided_dataset_name,
+                dataset_name = dataset_name,
+                "Dataset name in request body does not match path; using path dataset name"
+            );
+        }
+    }
+
+    let request = GetDatapointsRequest {
+        dataset_name: Some(dataset_name),
+        ids: request.ids,
+    };
+
     let response = get_datapoints(
         &app_state.clickhouse_connection_info,
         &app_state.config,
@@ -94,13 +136,21 @@ pub async fn get_datapoints(
     config: &Config,
     request: GetDatapointsRequest,
 ) -> Result<GetDatapointsResponse, Error> {
+    if let Some(dataset_name) = request.dataset_name.as_ref() {
+        validate_dataset_name(dataset_name)?;
+    } else {
+        tracing::warn!(
+            "`dataset_name` was not provided to `get_datapoints`; query performance may be degraded"
+        );
+    }
+
     // If no IDs are provided, return an empty response.
     if request.ids.is_empty() {
         return Ok(GetDatapointsResponse { datapoints: vec![] });
     }
 
     let params = GetDatapointsParams {
-        dataset_name: None, // Get by IDs only, not filtering by dataset
+        dataset_name: request.dataset_name,
         function_name: None,
         ids: Some(request.ids),
         // Return all datapoints matching the IDs.

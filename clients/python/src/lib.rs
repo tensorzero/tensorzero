@@ -1152,8 +1152,12 @@ impl TensorZeroGateway {
     ///
     /// :param ids: A list of datapoint IDs to retrieve.
     /// :return: A `GetDatapointsResponse` object.
-    #[pyo3(signature = (*, ids))]
-    fn get_datapoints(this: PyRef<'_, Self>, ids: Vec<Bound<'_, PyAny>>) -> PyResult<Py<PyAny>> {
+    #[pyo3(signature = (*, ids, dataset_name = None))]
+    fn get_datapoints(
+        this: PyRef<'_, Self>,
+        ids: Vec<Bound<'_, PyAny>>,
+        dataset_name: Option<String>,
+    ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
         let ids: Vec<uuid::Uuid> = ids
             .iter()
@@ -1163,7 +1167,11 @@ impl TensorZeroGateway {
                     .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid UUID: {e}")))
             })
             .collect::<PyResult<Vec<_>>>()?;
-        let fut = client.get_datapoints(ids);
+        let fut = if let Some(dataset_name) = dataset_name {
+            client.get_datapoints_in_dataset(dataset_name, ids)
+        } else {
+            client.get_datapoints(ids)
+        };
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
@@ -2313,10 +2321,11 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param ids: A list of datapoint IDs to retrieve.
     /// :return: A `GetDatapointsResponse` object.
-    #[pyo3(signature = (*, ids))]
+    #[pyo3(signature = (*, ids, dataset_name = None))]
     fn get_datapoints<'a>(
         this: PyRef<'a, Self>,
         ids: Vec<Bound<'a, PyAny>>,
+        dataset_name: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
         let ids: Vec<uuid::Uuid> = ids
@@ -2324,7 +2333,10 @@ impl AsyncTensorZeroGateway {
             .map(|id| python_uuid_to_uuid("id", id))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.get_datapoints(ids).await;
+            let res = match dataset_name {
+                Some(dataset_name) => client.get_datapoints_in_dataset(dataset_name, ids).await,
+                None => client.get_datapoints(ids).await,
+            };
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,

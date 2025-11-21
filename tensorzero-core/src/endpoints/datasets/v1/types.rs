@@ -423,11 +423,20 @@ pub struct ListDatapointsRequest {
 }
 
 /// Request to get specific datapoints by their IDs.
-/// Used by the `POST /v1/datasets/get_datapoints` endpoint.
+/// Used by the `POST /v1/datasets/{dataset_name}/get_datapoints` endpoint.
+/// Deprecated: the `POST /v1/datasets/get_datapoints` endpoint falls back to the dataset provided
+/// here when present but should be migrated to the dataset-scoped route.
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS, JsonSchema)]
 #[export_schema]
 #[ts(export)]
 pub struct GetDatapointsRequest {
+    /// Name of the dataset containing the datapoints.
+    /// Omitting the dataset_name may result in slower queries because the dataset is part of the
+    /// sorting key.
+    #[serde(default)]
+    #[ts(optional)]
+    pub dataset_name: Option<String>,
+
     /// The IDs of the datapoints to retrieve. Required.
     pub ids: Vec<Uuid>,
 }

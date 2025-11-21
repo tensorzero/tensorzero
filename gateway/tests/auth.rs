@@ -273,6 +273,7 @@ async fn test_tensorzero_missing_auth() {
         ("POST", "/feedback"),
         ("GET", "/metrics"),
         ("GET", "/internal/object_storage"),
+        ("GET", "/v1/datasets/example/get_datapoints"),
         ("GET", "/v1/datasets/get_datapoints"),
     ];
 
