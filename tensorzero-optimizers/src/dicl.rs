@@ -218,17 +218,14 @@ fn validate_function_config(
         }
         FunctionConfig::Json(json_config) => {
             // JSON functions should have exactly one implicit tool for schema validation
-            if json_config
+            let tools_count = json_config
                 .json_mode_tool_call_config
-                .tools_available()
-                .count()
-                != 1
-            {
+                .tools_available()?
+                .count();
+            if tools_count != 1 {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
-                        "DICL optimization expected JSON function '{}' to have exactly 1 implicit tool, but found {}. This indicates a configuration issue.",
-                        function_name,
-                        json_config.json_mode_tool_call_config.tools_available().count()
+                        "DICL optimization expected JSON function '{function_name}' to have exactly 1 implicit tool, but found {tools_count}. This indicates a configuration issue."
                     ),
                 }));
             }
@@ -616,6 +613,7 @@ mod tests {
     use super::*;
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
+    use tensorzero_core::tool::Tool;
     use uuid::Uuid;
 
     use tensorzero_core::{
@@ -868,7 +866,7 @@ mod tests {
         let mut sample = create_test_rendered_sample();
         sample.tool_params = DynamicToolParams {
             allowed_tools: None,
-            additional_tools: Some(tools),
+            additional_tools: Some(tools.into_iter().map(Tool::Function).collect()),
             tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: Some(true),
             provider_tools: vec![],
@@ -1139,7 +1137,7 @@ mod tests {
     fn test_validate_function_config_json_valid() {
         let function_config = create_test_json_function_config();
         let result = validate_function_config("test_json_function", &function_config);
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Validation error: {result:?}");
     }
 
     #[test]

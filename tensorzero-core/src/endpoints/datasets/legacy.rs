@@ -35,7 +35,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
-use crate::tool::LegacyToolCallConfigDatabaseInsert;
+use crate::tool::{LegacyToolCallConfigDatabaseInsert, Tool};
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
@@ -395,7 +395,13 @@ pub async fn update_datapoint_handler(
                 // and use FunctionDefault for allowed_tools
                 let dynamic_params = DynamicToolParams {
                     allowed_tools: None, // FunctionDefault - use function's default tools
-                    additional_tools: Some(legacy.tools_available.clone()), // All legacy tools as dynamic
+                    additional_tools: Some(
+                        legacy
+                            .tools_available
+                            .iter()
+                            .map(|t| Tool::Function(t.clone()))
+                            .collect(),
+                    ), // All legacy tools as dynamic
                     tool_choice: Some(legacy.tool_choice.clone()),
                     parallel_tool_calls: legacy.parallel_tool_calls,
                     provider_tools: vec![],
@@ -411,7 +417,7 @@ pub async fn update_datapoint_handler(
             };
 
             // For demonstration validation, convert to ToolCallConfig
-            let dynamic_demonstration_info = if let Some(tool_params) = &tool_params_new {
+            let dynamic_demonstration_info = if let Some(ref tool_params) = tool_params_new {
                 DynamicDemonstrationInfo::Chat(
                     tool_params
                         .clone()

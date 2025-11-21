@@ -9118,28 +9118,30 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         },
         stream: Some(false),
         dynamic_tool_params: tensorzero::DynamicToolParams {
-            additional_tools: Some(vec![tensorzero::FunctionTool {
-                name: "get_temperature".to_string(),
-                description: "Get the current temperature in a given location".to_string(),
-                parameters: json!({
-                    "$schema": "http://json-schema.org/draft-07/schema#",
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "The location to get the temperature for (e.g. \"New York\")"
+            additional_tools: Some(vec![
+                tensorzero::Tool::Function(tensorzero::FunctionTool {
+                    name: "get_temperature".to_string(),
+                    description: "Get the current temperature in a given location".to_string(),
+                    parameters: json!({
+                        "$schema": "http://json-schema.org/draft-07/schema#",
+                        "type": "object",
+                        "properties": {
+                            "location": {
+                                "type": "string",
+                                "description": "The location to get the temperature for (e.g. \"New York\")"
+                            },
+                            "units": {
+                                "type": "string",
+                                "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+                                "enum": ["fahrenheit", "celsius"]
+                            }
                         },
-                        "units": {
-                            "type": "string",
-                            "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
-                            "enum": ["fahrenheit", "celsius"]
-                        }
-                    },
-                    "required": ["location"],
-                    "additionalProperties": false
+                        "required": ["location"],
+                        "additionalProperties": false
+                    }),
+                    strict: false,
                 }),
-                strict: false,
-            }]),
+            ]),
             ..Default::default()
         },
         ..Default::default()
@@ -9427,28 +9429,30 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         },
         stream: Some(true),
         dynamic_tool_params: tensorzero::DynamicToolParams {
-            additional_tools: Some(vec![tensorzero::FunctionTool {
-                name: "get_temperature".to_string(),
-                description: "Get the current temperature in a given location".to_string(),
-                parameters: json!({
-                    "$schema": "http://json-schema.org/draft-07/schema#",
-                    "type": "object",
-                    "properties": {
-                        "location": {
-                            "type": "string",
-                            "description": "The location to get the temperature for (e.g. \"New York\")"
+            additional_tools: Some(vec![
+                tensorzero::Tool::Function(tensorzero::FunctionTool {
+                    name: "get_temperature".to_string(),
+                    description: "Get the current temperature in a given location".to_string(),
+                    parameters: json!({
+                        "$schema": "http://json-schema.org/draft-07/schema#",
+                        "type": "object",
+                        "properties": {
+                            "location": {
+                                "type": "string",
+                                "description": "The location to get the temperature for (e.g. \"New York\")"
+                            },
+                            "units": {
+                                "type": "string",
+                                "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
+                                "enum": ["fahrenheit", "celsius"]
+                            }
                         },
-                        "units": {
-                            "type": "string",
-                            "description": "The units to get the temperature in (must be \"fahrenheit\" or \"celsius\")",
-                            "enum": ["fahrenheit", "celsius"]
-                        }
-                    },
-                    "required": ["location"],
-                    "additionalProperties": false
+                        "required": ["location"],
+                        "additionalProperties": false
+                    }),
+                    strict: false,
                 }),
-                strict: false,
-            }]),
+            ]),
             ..Default::default()
         },
         ..Default::default()
