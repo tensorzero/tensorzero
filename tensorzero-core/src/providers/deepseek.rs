@@ -440,7 +440,7 @@ impl<'a> DeepSeekRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, _) = prepare_chat_completion_tools(request, false);
+        let (tools, tool_choice, _) = prepare_chat_completion_tools(request, false)?;
 
         let mut deepseek_request = DeepSeekRequest {
             messages,

@@ -918,6 +918,7 @@ mod tests {
                             },
                             optimize: LLMJudgeOptimize::Min,
                             cutoff: None,
+                            description: Some("test_llm_judge_evaluator".to_string()),
                         })
                     }
                     _ => panic!("Invalid optimize direction: {optimize}"),
@@ -995,6 +996,7 @@ mod tests {
         InferenceEvaluationConfig {
             evaluators: evaluator_configs,
             function_name: "test_function".to_string(),
+            description: Some("test_evaluation".to_string()),
         }
     }
 

@@ -24,11 +24,14 @@ impl TemplateConfig<'_> {
     /// to template content.
     /// If `template_base_directory` is provided, we'll walk the templates explicitly configured,
     /// find all files that we can tell would be loaded, and eagerly load them.
+    /// Returns a `HashMap` of all additional templates that were loaded during the walk.
+    /// The key is the path to template / name in the minijinja `Environment`, and the
+    /// value is the contents.
     pub async fn initialize(
         &mut self,
         configured_templates: HashMap<String, String>,
         template_base_directory: Option<&Path>,
-    ) -> Result<(), Error> {
+    ) -> Result<HashMap<String, String>, Error> {
         self.env.set_undefined_behavior(UndefinedBehavior::Strict);
 
         // Phase 1: Load explicitly configured templates
@@ -46,11 +49,10 @@ impl TemplateConfig<'_> {
         // Phase 2: Load hardcoded templates
         self.add_hardcoded_templates()?;
 
+        // Cache for storing loaded templates - will be used in future PR
+        let mut all_template_load_data = HashMap::new();
         // Phase 3: If filesystem access is enabled, eagerly load all referenced templates
         if let Some(base_path) = template_base_directory {
-            // Cache for storing loaded templates - will be used in future PR
-            let mut all_template_load_data = HashMap::new();
-
             // Create a validation environment with a path loader to discover transitive dependencies
             let mut validation_env = minijinja::Environment::new();
             validation_env.set_undefined_behavior(UndefinedBehavior::Strict);
@@ -124,7 +126,7 @@ impl TemplateConfig<'_> {
                         })
                     })?;
 
-                all_template_load_data.insert(template_path, template_content);
+                all_template_load_data.insert(template_name.to_string(), template_content);
             }
 
             self.env.set_loader(|name| {
@@ -144,7 +146,7 @@ impl TemplateConfig<'_> {
                 ))
             });
         }
-        Ok(())
+        Ok(all_template_load_data)
     }
 
     pub fn add_template(

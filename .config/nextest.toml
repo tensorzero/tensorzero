@@ -142,6 +142,12 @@ filter = 'test(test_concurrent_requests)'
 slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
+# Settings for running mock optimization tests
+filter = 'test(mock_optimization)'
+retries = { backoff = "fixed", count = 2, delay = "5s", jitter = true }
+slow-timeout = { period = "60s", terminate-after = 2 }
+
+[[profile.default.overrides]]
 # Settings for running unit tests
 filter = 'not (binary(e2e) | test(export_bindings_) | test(export_schema_))'
 retries = 0
