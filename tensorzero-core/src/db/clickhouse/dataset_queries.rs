@@ -636,33 +636,93 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         // NOTE: in the two queries below, we don't alias to staled_at because then we won't select any rows.
         let chat_query = format!(
             r"
-            INSERT INTO ChatInferenceDatapoint
+            INSERT INTO ChatInferenceDatapoint (
+                dataset_name,
+                function_name,
+                id,
+                episode_id,
+                input,
+                output,
+                tool_params,
+                dynamic_tools,
+                dynamic_provider_tools,
+                parallel_tool_calls,
+                tool_choice,
+                allowed_tools,
+                tags,
+                auxiliary,
+                is_deleted,
+                now64() AS updated_at,
+                now64() AS staled_at,
+                source_inference_id,
+                is_custom,
+                name
+            )
             SELECT
-                *
-                REPLACE (
-                    now64() AS updated_at,
-                    now64() AS staled_at
-                )
+                dataset_name,
+                function_name,
+                id,
+                episode_id,
+                input,
+                output,
+                tool_params,
+                dynamic_tools,
+                dynamic_provider_tools,
+                parallel_tool_calls,
+                tool_choice,
+                allowed_tools,
+                tags,
+                auxiliary,
+                is_deleted,
+                updated_at,
+                staled_at,
+                source_inference_id,
+                is_custom,
+                name
             FROM ChatInferenceDatapoint FINAL
             WHERE dataset_name = {{dataset_name:String}}
             {datapoint_ids_filter_clause}
-            AND staled_at IS NULL
             "
         );
 
         let json_query = format!(
             r"
-            INSERT INTO JsonInferenceDatapoint
+            INSERT INTO JsonInferenceDatapoint (
+                dataset_name,
+                function_name,
+                id,
+                episode_id,
+                input,
+                output,
+                output_schema,
+                tags,
+                auxiliary,
+                is_deleted,
+                now64() AS updated_at,
+                now64() AS staled_at,
+                source_inference_id,
+                is_custom,
+                name
+            )
             SELECT
-                *
-                REPLACE (
-                    now64() AS updated_at,
-                    now64() AS staled_at
-                )
+                dataset_name,
+                function_name,
+                id,
+                episode_id,
+                input,
+                output,
+                output_schema,
+                tags,
+                auxiliary,
+                is_deleted,
+                updated_at,
+                staled_at,
+                source_inference_id,
+                is_custom,
+                name
             FROM JsonInferenceDatapoint FINAL
             WHERE dataset_name = {{dataset_name:String}}
             {datapoint_ids_filter_clause}
-            AND staled_at IS NULL
             "
         );
         let query_params = HashMap::from([("dataset_name", dataset_name)]);
