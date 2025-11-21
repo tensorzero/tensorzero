@@ -1539,8 +1539,8 @@ it("should handle extra headers parameter", async () => {
     // @ts-expect-error - custom TensorZero property
     "tensorzero::extra_headers": [
       {
-        model_provider_name:
-          "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+        model_name: "dummy::echo_extra_info",
+        provider_name: "dummy",
         name: "x-my-extra-header",
         value: "my-extra-header-value",
       },
@@ -1555,8 +1555,8 @@ it("should handle extra headers parameter", async () => {
     extra_headers: {
       inference_extra_headers: [
         {
-          model_provider_name:
-            "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+          model_name: "dummy::echo_extra_info",
+          provider_name: "dummy",
           name: "x-my-extra-header",
           value: "my-extra-header-value",
         },
@@ -1571,8 +1571,8 @@ it("should handle extra body parameter", async () => {
     // @ts-expect-error - custom TensorZero property
     "tensorzero::extra_body": [
       {
-        model_provider_name:
-          "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+        model_name: "dummy::echo_extra_info",
+        provider_name: "dummy",
         pointer: "/thinking",
         value: {
           type: "enabled",
@@ -1589,8 +1589,8 @@ it("should handle extra body parameter", async () => {
     extra_body: {
       inference_extra_body: [
         {
-          model_provider_name:
-            "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+          model_name: "dummy::echo_extra_info",
+          provider_name: "dummy",
           pointer: "/thinking",
           value: { type: "enabled", budget_tokens: 1024 },
         },

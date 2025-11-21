@@ -38,6 +38,8 @@ from clickhouse_connect import get_client  # type: ignore
 from openai import AsyncOpenAI, OpenAI
 from pytest import CaptureFixture
 from tensorzero import (
+    AlwaysExtraBody,
+    AlwaysExtraBodyDelete,
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
     DynamicEvaluationRunResponse,
@@ -49,6 +51,8 @@ from tensorzero import (
     ImageUrl,
     InferenceChunk,
     JsonInferenceResponse,
+    ModelProviderExtraBody,
+    ModelProviderExtraBodyDelete,
     RawText,
     TensorZeroError,
     TensorZeroGateway,
@@ -58,15 +62,15 @@ from tensorzero import (
     ThoughtChunk,
     ToolCall,
     ToolResult,
+    VariantExtraBody,
+    VariantExtraBodyDelete,
 )
 from tensorzero.types import (
     ChatChunk,
     JsonChunk,
-    ProviderExtraBody,
     Template,
     Thought,
     ToolCallChunk,
-    VariantExtraBody,
 )
 from uuid_utils import uuid7
 
@@ -2427,30 +2431,31 @@ def test_extra_body_types(sync_client: TensorZeroGateway):
                 pointer="/response_format",
                 value={"type": "json_object"},
             ),
-            ProviderExtraBody(
-                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+            ModelProviderExtraBody(
+                model_name="gpt-4o-mini-2024-07-18",
+                provider_name="openai",
                 pointer="/stop",
                 value="Potato",
             ),
-            ProviderExtraBody(
-                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+            ModelProviderExtraBody(
+                model_name="gpt-4o-mini-2024-07-18",
+                provider_name="openai",
                 pointer="/should_be_deleted_provider",
                 value=2,
             ),
-            ProviderExtraBody(
-                model_provider_name="tensorzero::model_name::gpt-4o-mini-2024-07-18::provider_name::openai",
+            ModelProviderExtraBodyDelete(
+                model_name="gpt-4o-mini-2024-07-18",
+                provider_name="openai",
                 pointer="/should_be_deleted_provider",
-                delete=True,
             ),
             VariantExtraBody(
                 variant_name="openai",
                 pointer="/should_be_deleted_variant",
                 value=2,
             ),
-            VariantExtraBody(
+            VariantExtraBodyDelete(
                 variant_name="openai",
                 pointer="/should_be_deleted_variant",
-                delete=True,
             ),
         ],
     )
@@ -2463,6 +2468,68 @@ def test_extra_body_types(sync_client: TensorZeroGateway):
     assert content[0].text is not None
     assert '"haiku"' in content[0].text
     assert "Potato" not in content[0].text
+
+
+def test_all_extra_body(sync_client: TensorZeroGateway):
+    """Test that AlwaysExtraBody applies to all variants."""
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="openai",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Write me a haiku"}],
+        },
+        extra_body=[
+            AlwaysExtraBody(
+                pointer="/max_completion_tokens",
+                value=2,
+            )
+        ],
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert result.variant_name == "openai"
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+    assert len(content[0].text.split(" ")) <= 2
+    usage = result.usage
+    assert usage.output_tokens == 2
+
+
+def test_all_extra_body_with_delete(sync_client: TensorZeroGateway):
+    """Test that AlwaysExtraBody can delete fields across all variants."""
+    result = sync_client.inference(
+        function_name="basic_test",
+        variant_name="openai",
+        input={
+            "system": {"assistant_name": "Alfred Pennyworth"},
+            "messages": [{"role": "user", "content": "Write me a haiku"}],
+        },
+        extra_body=[
+            AlwaysExtraBody(
+                pointer="/should_be_deleted_all",
+                value=2,
+            ),
+            AlwaysExtraBodyDelete(
+                pointer="/should_be_deleted_all",
+            ),
+            AlwaysExtraBody(
+                pointer="/max_completion_tokens",
+                value=10,
+            ),
+        ],
+    )
+    assert isinstance(result, ChatInferenceResponse)
+    assert result.variant_name == "openai"
+    content = result.content
+    assert len(content) == 1
+    assert content[0].type == "text"
+    assert isinstance(content[0], Text)
+    assert content[0].text is not None
+    usage = result.usage
+    assert usage.output_tokens <= 10
 
 
 def test_sync_dynamic_credentials(sync_client: TensorZeroGateway):
