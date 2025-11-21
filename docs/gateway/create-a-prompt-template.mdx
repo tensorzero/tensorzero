@@ -239,7 +239,7 @@ templates.fun_fact_topic.path = "functions/fun_fact/gpt_5_mini/fun_fact_topic_te
 
 You can enable template file system access to reuse shared snippets in your prompts.
 
-To use the MiniJinja directives `{% include %}` and `{% import %}`, you need to enable template file system access with `gateway.template_filesystem_access`.
+To use the MiniJinja directives `{% include %}` and `{% import %}`, set `gateway.template_filesystem_access.base_path` in your configuration.
 See [Organize your configuration](/operations/organize-your-configuration#enable-template-file-system-access-to-reuse-shared-snippets) for details.
 
 ## Migrate from legacy prompt templates
