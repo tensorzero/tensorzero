@@ -2084,7 +2084,7 @@ mod tests {
                 // Verify the new Migration 0041 columns are present with correct values
                 assert_eq!(
                     actual_row_as_json["dynamic_tools"],
-                    json!([{"type": "client_side_function", "description": "Get temperature", "parameters": {"type": "object"}, "name": "get_temperature", "strict": true}])
+                    json!([{"type": "function", "description": "Get temperature", "parameters": {"type": "object"}, "name": "get_temperature", "strict": true}])
                 );
                 assert_eq!(actual_row_as_json["dynamic_provider_tools"], json!([]));
                 assert_eq!(
@@ -2124,7 +2124,7 @@ mod tests {
                 text: "response".to_string(),
             })]),
             tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-                vec![Tool::ClientSideFunction(FunctionTool {
+                vec![Tool::Function(FunctionTool {
                     name: "get_temperature".to_string(),
                     description: "Get temperature".to_string(),
                     parameters: json!({"type": "object"}),
@@ -2169,7 +2169,7 @@ mod tests {
                 // Verify the new Migration 0041 columns are present with correct values
                 assert_eq!(
                     actual_row_as_json["dynamic_tools"],
-                    json!([{"type": "client_side_function", "description": "Get temperature", "parameters": {"type": "object"}, "name": "get_temperature", "strict": true}])
+                    json!([{"type": "function", "description": "Get temperature", "parameters": {"type": "object"}, "name": "get_temperature", "strict": true}])
                 );
                 assert_eq!(actual_row_as_json["dynamic_provider_tools"], json!([]));
                 assert_eq!(
@@ -2209,7 +2209,7 @@ mod tests {
                 text: "response".to_string(),
             })]),
             tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-                vec![Tool::ClientSideFunction(FunctionTool {
+                vec![Tool::Function(FunctionTool {
                     name: "get_temperature".to_string(),
                     description: "Get temperature".to_string(),
                     parameters: json!({"type": "object"}),

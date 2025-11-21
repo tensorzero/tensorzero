@@ -130,6 +130,13 @@ model = "gpt-4o-mini-2024-07-18"
 system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.weather_helper.variants.gpt-5-mini]
+type = "chat_completion"
+model = "openai::gpt-5-mini"
+system_template = "../../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
+
 [functions.weather_helper.variants.openai-responses]
 type = "chat_completion"
 model = "responses-gpt-4o-mini-2024-07-18"

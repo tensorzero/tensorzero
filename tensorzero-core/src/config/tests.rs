@@ -38,7 +38,7 @@ async fn test_config_from_toml_table_valid() {
         VariantConfig::ChatCompletion(chat_config) => chat_config.json_mode().unwrap(),
         _ => panic!("Expected a chat completion variant"),
     };
-    assert_eq!(prompt_a_json_mode, &JsonMode::ImplicitTool);
+    assert_eq!(prompt_a_json_mode, &JsonMode::Tool);
 
     let prompt_b_json_mode = match &config
         .functions
@@ -151,7 +151,7 @@ async fn test_config_from_toml_table_valid() {
                                         .to_string(),
                             }
                         );
-                    assert_eq!(chat_config.json_mode(), Some(&JsonMode::ImplicitTool));
+                    assert_eq!(chat_config.json_mode(), Some(&JsonMode::Tool));
                 }
                 _ => panic!("Expected a chat completion variant"),
             }
@@ -1475,7 +1475,7 @@ async fn test_load_bad_extra_body_delete() {
         .await
         .expect_err("Config loading should fail")
         .to_string();
-    assert_eq!(err, "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body.[0]: Error deserializing replacement config: 'delete' must be 'true', or not set");
+    assert_eq!(err, "functions.bash_assistant: variants.anthropic_claude_3_7_sonnet_20250219: extra_body.[0]: Error deserializing replacement config: `delete` must be `true`, or not set");
 }
 
 #[tokio::test]

@@ -790,7 +790,7 @@ mod tests {
     mod prepare_update_tests {
         use crate::{
             endpoints::datasets::v1::types::UpdateDynamicToolParamsRequest,
-            tool::{FunctionTool, Tool},
+            tool::{FunctionTool, Tool, ToolChoice},
         };
 
         use super::*;
@@ -830,7 +830,7 @@ mod tests {
                         "additionalProperties": false
                     }))
                     .unwrap(),
-                    implicit_tool_call_config: crate::tool::ToolCallConfig::default(),
+                    json_mode_tool_call_config: crate::tool::ToolCallConfig::default(),
                     description: None,
                     experimentation: ExperimentationConfig::default(),
                     all_explicit_template_names: HashSet::new(),
@@ -1146,7 +1146,7 @@ mod tests {
             // Create DynamicToolParams directly instead of round-tripping through database_insert_to_dynamic_tool_params
             // This represents a user setting allowed_tools to an empty list with tool_choice None
             // When there are no tools available, the result should be None (tools disabled)
-            let new_client_side_function_tool = FunctionTool {
+            let new_function_tool = FunctionTool {
                 name: "test_tool".to_string(),
                 description: "Test tool".to_string(),
                 parameters: json!({}),
@@ -1158,7 +1158,7 @@ mod tests {
                 output: None,
                 tool_params: UpdateDynamicToolParamsRequest {
                     allowed_tools: Some(Some(vec!["test_tool".to_string()])),
-                    additional_tools: Some(vec![new_client_side_function_tool.clone()]),
+                    additional_tools: Some(vec![Tool::Function(new_function_tool.clone())]),
                     tool_choice: Some(Some(ToolChoice::None)),
                     parallel_tool_calls: Some(Some(false)),
                     provider_tools: Some(vec![]),
@@ -1192,7 +1192,7 @@ mod tests {
             // Verify that tool params are transformed correctly into database type
             assert_eq!(
                 tool_params.dynamic_tools,
-                vec![Tool::ClientSideFunction(new_client_side_function_tool)],
+                vec![Tool::Function(new_function_tool)],
                 "Dynamic tools should be transformed correctly"
             );
             assert_eq!(

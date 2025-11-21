@@ -1763,7 +1763,9 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
             assert_eq!(dynamic_tools.len(), 1);
             let tool: Tool =
                 serde_json::from_str(dynamic_tools.first().unwrap().as_str().unwrap()).unwrap();
-            let Tool::ClientSideFunction(tool) = tool;
+            let Tool::Function(tool) = tool else {
+                panic!("Expected Function tool");
+            };
             assert_eq!(tool.name, "self_destruct");
         }
 

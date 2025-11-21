@@ -12,7 +12,7 @@ pub use crate::db::clickhouse::query_builder::{
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
-use crate::tool::{DynamicToolParams, FunctionTool, ProviderTool, ToolChoice};
+use crate::tool::{DynamicToolParams, ProviderTool, Tool, ToolChoice};
 
 /// Request to update one or more datapoints in a dataset.
 #[derive(Debug, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
@@ -210,7 +210,7 @@ pub struct UpdateDynamicToolParamsRequest {
     /// Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
     /// new tools or exclude removed tools.
     /// If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
-    pub additional_tools: Option<Vec<FunctionTool>>,
+    pub additional_tools: Option<Vec<Tool>>,
 
     /// User-specified tool choice strategy.
     /// If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.

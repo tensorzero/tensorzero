@@ -244,6 +244,14 @@ pub static DUMMY_STREAMING_TOOL_RESPONSE: [&str; 5] = [
     r#""}"#,
 ];
 
+pub static DUMMY_STREAMING_GOOD_TOOL_RESPONSE: [&str; 5] = [
+    r#"{"sentiment""#,
+    r#":"positive""#,
+    r#","confidence""#,
+    r":0.95",
+    r"}",
+];
+
 pub static DUMMY_STREAMING_JSON_RESPONSE: [&str; 5] =
     [r#"{"name""#, r#":"John""#, r#","age""#, r":30", r"}"];
 
@@ -366,6 +374,11 @@ impl InferenceProvider for DummyProvider {
                 name: "get_temperature".to_string(),
                 #[expect(clippy::unwrap_used)]
                 arguments: serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
+                id: "0".to_string(),
+            })],
+            "good_tool" => vec![ContentBlockOutput::ToolCall(ToolCall {
+                name: "output_schema_tool".to_string(),
+                arguments: r#"{"sentiment":"positive","confidence":0.95}"#.to_string(),
                 id: "0".to_string(),
             })],
             "invalid_tool_arguments" => vec![ContentBlockOutput::ToolCall(ToolCall {
@@ -556,6 +569,7 @@ impl InferenceProvider for DummyProvider {
         let raw_response = match self.model_name.as_str() {
             #[expect(clippy::unwrap_used)]
             "tool" => serde_json::to_string(&*DUMMY_TOOL_RESPONSE).unwrap(),
+            "good_tool" => r#"{"sentiment":"positive","confidence":0.95}"#.to_string(),
             "json" => DUMMY_JSON_RESPONSE_RAW.to_string(),
             "json_goodbye" => DUMMY_JSON_GOODBYE_RESPONSE_RAW.to_string(),
             "json_cot" => DUMMY_JSON_COT_RESPONSE_RAW.to_string(),
@@ -572,7 +586,7 @@ impl InferenceProvider for DummyProvider {
         };
         let system = request.system.clone();
         let input_messages = request.messages.clone();
-        let finish_reason = if self.model_name.contains("tool") {
+        let finish_reason = if self.model_name.contains("tool") || self.model_name == "good_tool" {
             Some(FinishReason::ToolCall)
         } else {
             Some(FinishReason::Stop)
@@ -675,6 +689,7 @@ impl InferenceProvider for DummyProvider {
 
         let (content_chunks, is_tool_call) = match self.model_name.as_str() {
             "tool" | "tool_split_name" => (DUMMY_STREAMING_TOOL_RESPONSE.to_vec(), true),
+            "good_tool" => (DUMMY_STREAMING_GOOD_TOOL_RESPONSE.to_vec(), true),
             "reasoner" => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
             _ => (DUMMY_STREAMING_RESPONSE.to_vec(), false),
         };

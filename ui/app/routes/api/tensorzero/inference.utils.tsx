@@ -16,7 +16,7 @@ import type {
   ChatTemplates,
   StaticToolConfig,
   ToolChoice,
-  FunctionTool,
+  Tool,
   ResolvedTomlPathData,
 } from "~/types/tensorzero";
 import type {
@@ -314,7 +314,7 @@ interface ClickHouseDatapointActionArgs {
   input: ZodDisplayInput;
   functionName: string;
   allowed_tools?: string[];
-  additional_tools?: Array<FunctionTool> | null;
+  additional_tools?: Array<Tool> | null;
   tool_choice?: ToolChoice | null;
   parallel_tool_calls?: boolean | null;
   output_schema?: JsonValue;
@@ -794,7 +794,7 @@ function variantInfoToUninitializedVariantInfo(
         embedding_model: inner.embedding_model,
         k: inner.k,
         model: inner.model,
-        system_instructions: stringToTemplate(inner.system_instructions),
+        system_instructions: stringToTemplate(inner.system_instructions.__data),
         temperature: inner.temperature,
         top_p: inner.top_p,
         stop_sequences: inner.stop_sequences,
