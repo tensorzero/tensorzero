@@ -168,7 +168,9 @@ pub fn build_analyze_input(
     // Build the input with high-level objects that will be serialized in the template
     let mut map = Map::new();
     map.insert("function_config".to_string(), to_value(function_config)?);
-    map.insert("static_tools".to_string(), json!(static_tools));
+    if let Some(tools) = static_tools {
+        map.insert("static_tools".to_string(), json!(tools));
+    }
     map.insert(
         "evaluation_config".to_string(),
         to_value(evaluation_config)?,
@@ -593,15 +595,23 @@ mod tests {
     fn test_create_analyze_variant_config() {
         // Create a test GEPAConfig with specific values
         let gepa_config = GEPAConfig {
+            function_name: "test_function".to_string(),
+            evaluation_name: "test_evaluation".to_string(),
+            initial_variants: None,
+            variant_prefix: None,
+            batch_size: 1,
+            max_iterations: 1,
+            max_concurrency: 10,
             analysis_model: "test-analysis-model".to_string(),
+            mutation_model: "test-mutation-model".to_string(),
+            seed: None,
+            timeout: 300,
+            include_inference_for_mutation: true,
             retries: RetryConfig {
                 num_retries: 5,
                 max_delay_s: 30.0,
             },
             max_tokens: Some(1000),
-            max_concurrency: 10,
-            include_inference_for_mutation: true,
-            ..Default::default()
         };
 
         let config = create_analyze_variant_config(&gepa_config);
@@ -678,9 +688,9 @@ mod tests {
         assert!(result.is_ok());
         let input = result.unwrap();
 
-        // Check all 7 required high-level fields are present
+        // Check all required high-level fields are present
         assert!(input.0.get("function_config").is_some());
-        assert!(input.0.get("static_tools").is_some());
+        assert!(input.0.get("static_tools").is_none()); // static_tools is None, so should not be present
         assert!(input.0.get("evaluation_config").is_some());
         assert!(input.0.get("templates_map").is_some());
         assert!(input.0.get("datapoint").is_some());

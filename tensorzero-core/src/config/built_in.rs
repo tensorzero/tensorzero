@@ -120,7 +120,7 @@ fn get_gepa_analyze_function() -> Result<Arc<FunctionConfig>, Error> {
             },
             "static_tools": {
                 "type": ["object", "null"],
-                "description": "Map of tool names to their StaticToolConfig definitions from the config",
+                "description": "Map of tool names to their StaticToolConfig definitions from the config. Omitted when the function has no static tools configured.",
                 "additionalProperties": {
                     "type": "object"
                 }

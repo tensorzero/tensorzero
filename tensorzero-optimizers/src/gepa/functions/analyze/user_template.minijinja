@@ -2,9 +2,11 @@
 <function_config>
 {{function_config | tojson(indent=2)}}
 </function_config>
+{% if static_tools is defined -%}
 <tool_schemas>
 {{static_tools | tojson(indent=2)}}
 </tool_schemas>
+{%- endif %}
 <evaluation_config>
 {{evaluation_config | tojson(indent=2)}}
 </evaluation_config>
