@@ -13,10 +13,10 @@ jobs:
 
       - name: Build `mock-inference-provider` container
         run: |
-          docker build -f tensorzero-core/tests/mock-inference-provider/Dockerfile . -t mock-inference-provider:latest
+          docker build -f tensorzero-core/tests/mock-inference-provider/Dockerfile . -t tensorzero/mock-inference-provider:sha-${{ github.sha }}
 
       - name: Save `mock-inference-provider` container
-        run: docker save mock-inference-provider:latest > mock-inference-container.tar
+        run: docker save tensorzero/mock-inference-provider:sha-${{ github.sha }} > mock-inference-container.tar
 
       - name: Upload `mock-inference-provider` container as an artifact
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4

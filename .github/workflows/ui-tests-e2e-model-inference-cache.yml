@@ -87,19 +87,20 @@ jobs:
           pattern: build-*-container
           merge-multiple: true
 
-      - name: Load `gateway` and `ui` containers
+      - name: Load container images
         # These containers may not exist if we manually triggered this workflow (or merge-queue.yml),
         # We'll automatically build the container locally if they don't exist, so let this step fail.
         continue-on-error: true
         run: |
           docker load < gateway-container.tar
           docker load < ui-container.tar
+          docker load < mock-inference-container.tar
 
       # This allows us to use 'no-build' on subsequent steps
       - name: Build needed docker images
         working-directory: ui
         run: |
-          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml build fixtures mock-inference-provider
+          docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml build fixtures
 
       - name: Set common fixture environment variables
         working-directory: ui
@@ -109,6 +110,7 @@ jobs:
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> fixtures/.env
           # We need these set in the ui container, so that we construct the correct optimizer config
           # to pass to 'experimentalLaunchOptimizationWorkflow'
           echo "FIREWORKS_BASE_URL=http://mock-inference-provider:3030/fireworks/" >> fixtures/.env

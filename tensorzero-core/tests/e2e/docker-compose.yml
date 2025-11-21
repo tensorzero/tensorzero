@@ -3,6 +3,7 @@ include:
 
 services:
   mock-inference-provider:
+    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
     build:
       context: ../../../
       dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile

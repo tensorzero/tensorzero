@@ -708,7 +708,7 @@ jobs:
       contents: read
       # Permission to download artifacts and for rust-cache
       actions: read
-    needs: [build-gateway-container]
+    needs: [build-gateway-container, build-mock-inference-container]
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
@@ -774,6 +774,7 @@ jobs:
       - name: Load container images
         run: |
           docker load < gateway-container.tar
+          docker load < mock-inference-container.tar
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
@@ -790,6 +791,10 @@ jobs:
       - name: Set TENSORZERO_GATEWAY_TAG
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Set TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG
+        run: |
+          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
@@ -994,6 +999,12 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
 
+  build-mock-inference-container:
+    uses: ./.github/workflows/build-mock-inference-container.yml
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+
   ui-tests:
     permissions:
       contents: read
@@ -1001,7 +1012,7 @@ jobs:
     uses: ./.github/workflows/ui-tests.yml
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
-    needs: build-gateway-container
+    needs: [build-gateway-container, build-mock-inference-container]
 
   ui-tests-e2e:
     permissions:
@@ -1010,7 +1021,7 @@ jobs:
     uses: ./.github/workflows/ui-tests-e2e.yml
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
-    needs: [build-gateway-container, build-ui-container]
+    needs: [build-gateway-container, build-ui-container, build-mock-inference-container]
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -1044,6 +1055,7 @@ jobs:
       actions: read
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     uses: ./.github/workflows/mocked-batch-test.yml
+    needs: [build-mock-inference-container]
     secrets: inherit
 
   # See 'ci/README.md' at the repository root for more details.
