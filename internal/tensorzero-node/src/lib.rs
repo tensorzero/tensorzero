@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 #![deny(clippy::all)]
 use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
+use tensorzero_core::config::ConfigWithHash;
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 use url::Url;
 
@@ -158,12 +159,11 @@ pub async fn run_evaluation_streaming(
     )
     .await
     .map_err(|e| napi::Error::from_reason(format!("Failed to connect to ClickHouse: {e}")))?;
-    let config = Arc::new(
-        config_load_info
-            .into_config(&clickhouse_client)
-            .await
-            .map_err(|e| napi::Error::from_reason(e.to_string()))?,
-    );
+    let ConfigWithHash { config, hash } = config_load_info
+        .into_config(&clickhouse_client)
+        .await
+        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    let config = Arc::new(config);
 
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::HTTPGateway { url })
         .build()

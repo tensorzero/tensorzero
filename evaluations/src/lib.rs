@@ -21,7 +21,9 @@ use tensorzero_core::client::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
 };
-use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo};
+use tensorzero_core::config::{
+    ConfigFileGlob, ConfigWithHash, MetricConfigOptimize, UninitializedVariantInfo,
+};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
@@ -249,7 +251,8 @@ pub async fn run_evaluation(
             .clone(),
     )
     .await?;
-    let config = Arc::new(config_load_info.into_config(&clickhouse_client).await?);
+    let ConfigWithHash { config, hash } = config_load_info.into_config(&clickhouse_client).await?;
+    let config = Arc::new(config);
     debug!("Configuration loaded successfully");
     let tensorzero_client = match args.gateway_url {
         Some(gateway_url) => {

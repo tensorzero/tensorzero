@@ -1,5 +1,6 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
+use crate::config::ConfigWithHash;
 use crate::config::{unwritten_config::ConfigLoadInfo, ConfigFileGlob};
 use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
 use crate::inference::types::stored_input::StoragePathResolver;
@@ -514,16 +515,13 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
-                let config = Arc::new(
-                    config_load_info
-                        .into_config(&clickhouse_connection_info)
-                        .await
-                        .map_err(|e| {
-                            ClientBuilderError::Clickhouse(TensorZeroError::Other {
-                                source: e.into(),
-                            })
-                        })?,
-                );
+                let ConfigWithHash { config, hash } = config_load_info
+                    .into_config(&clickhouse_connection_info)
+                    .await
+                    .map_err(|e| {
+                        ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
+                    })?;
+                let config = Arc::new(config);
                 Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let postgres_connection_info = setup_postgres(&config, postgres_url.clone())
                     .await

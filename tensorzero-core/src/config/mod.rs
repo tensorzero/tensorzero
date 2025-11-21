@@ -1230,16 +1230,26 @@ pub mod unwritten_config {
         pub async fn into_config(
             self,
             clickhouse: &ClickHouseConnectionInfo,
-        ) -> Result<Config, Error> {
+        ) -> Result<ConfigWithHash, Error> {
             let ConfigLoadInfo { config, snapshot } = self;
+            let hash = snapshot.hash();
             write_config_snapshot(clickhouse, snapshot).await?;
-            Ok(config.0)
+            Ok(ConfigWithHash {
+                config: config.0,
+                hash,
+            })
         }
 
         pub fn dangerous_into_config_without_writing(self) -> Config {
             self.config.0
         }
     }
+}
+
+#[derive(Debug)]
+pub struct ConfigWithHash {
+    pub config: Config,
+    pub hash: blake3::Hash,
 }
 
 /// Writes the config snapshot to the `ConfigSnapshot` table.
