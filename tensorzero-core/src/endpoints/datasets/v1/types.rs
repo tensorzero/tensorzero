@@ -56,10 +56,11 @@ pub struct UpdateChatDatapointRequest {
     #[serde(default)]
     pub input: Option<Input>,
 
-    /// Chat datapoint output. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
-    /// it will overwrite the existing output.
-    #[serde(default)]
-    pub output: Option<Vec<ContentBlockChatOutput>>,
+    /// Chat datapoint output. If omitted, it will be left unchanged. If specified as `null`, it will be set to
+    /// `null`. Otherwise, it will overwrite the existing output (and can be an empty array).
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
+    pub output: Option<Option<Vec<ContentBlockChatOutput>>>,
 
     /// Datapoint tool parameters.
     #[serde(flatten)]
@@ -106,8 +107,8 @@ impl<'de> Deserialize<'de> for UpdateChatDatapointRequest {
             id: Uuid,
             #[serde(default)]
             input: Option<Input>,
-            #[serde(default)]
-            output: Option<Vec<ContentBlockChatOutput>>,
+            #[serde(default, deserialize_with = "deserialize_double_option")]
+            output: Option<Option<Vec<ContentBlockChatOutput>>>,
             #[serde(flatten)]
             tool_params_new: UpdateDynamicToolParamsRequest,
             #[serde(default)]
