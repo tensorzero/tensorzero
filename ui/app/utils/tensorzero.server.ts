@@ -172,11 +172,16 @@ export async function listDatapoints(
   limit?: number,
   offset?: number,
 ): Promise<TensorZeroDatapoint[]> {
-  const response = await getTensorZeroClient().listDatapoints(
-    datasetName,
-    functionName,
-    limit,
-    offset,
-  );
-  return response;
+  const response = await getTensorZeroClient().listDatapoints(datasetName, {
+    function_name: functionName,
+    limit: limit,
+    offset: offset,
+    order_by: [
+      {
+        by: "timestamp",
+        direction: "descending",
+      },
+    ],
+  });
+  return response.datapoints;
 }

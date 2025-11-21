@@ -2,9 +2,7 @@ import { getNativeDatabaseClient } from "../tensorzero/native_client.server";
 import type {
   DatasetMetadata,
   DatasetQueryParams,
-  DatasetDetailRow,
   GetDatasetMetadataParams,
-  GetDatasetRowsParams,
   GetDatapointParams,
   Datapoint,
   AdjacentDatapointIds,
@@ -70,13 +68,6 @@ export async function getDatasetMetadata(
 export async function countDatasets(): Promise<number> {
   const dbClient = await getNativeDatabaseClient();
   return await dbClient.countDatasets();
-}
-
-export async function getDatasetRows(
-  params: GetDatasetRowsParams,
-): Promise<DatasetDetailRow[]> {
-  const dbClient = await getNativeDatabaseClient();
-  return await dbClient.getDatasetRows(params);
 }
 
 export async function getDatapoint(
@@ -150,6 +141,7 @@ export async function getAdjacentDatapointIds(
 export async function datapointToParsedDatasetRow(
   datapoint: Datapoint,
 ): Promise<ParsedDatasetRow> {
+  // Resolve any files with object storage pointers into data.
   const resolvedInput = await resolveStoredInput(datapoint.input);
 
   if (datapoint.type === "chat") {
