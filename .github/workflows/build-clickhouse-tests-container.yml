@@ -2,6 +2,11 @@ name: Build ClickHouse Tests Container
 
 on:
   workflow_call:
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_LIMITED_TOKEN:
+        required: true
 
 jobs:
   build-clickhouse-tests-container:
@@ -17,6 +22,15 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      # We use 'DOCKERHUB_LIMITED_TOKEN' to ensure that we can only push to our private '-dev' repos,
+      # not to any of the public production repos.
+      - name: Login to DockerHub
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
+        with:
+          # We're using an organization access token, so we need to use the org name for the username.
+          username: tensorzero
+          password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
+
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
       # (where the oidc token is not available)
 
@@ -30,12 +44,20 @@ jobs:
           wait-for-builder: true
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
-      - name: Build `clickhouse-tests` container
+      - name: Build and push `clickhouse-tests` container
         run: |
-          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f tensorzero-core/tests/e2e/Dockerfile.clickhouse . -t tensorzero/clickhouse-tests:sha-${{ github.sha }}
+          docker buildx build \
+            --push \
+            --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 \
+            -f tensorzero-core/tests/e2e/Dockerfile.clickhouse \
+            -t tensorzero/clickhouse-tests:sha-${{ github.sha }} \
+            -t tensorzero/clickhouse-tests:latest \
+            .
 
-      - name: Save `clickhouse-tests` container
-        run: docker save tensorzero/clickhouse-tests:sha-${{ github.sha }} > clickhouse-tests-container.tar
+      - name: Pull and save `clickhouse-tests` container
+        run: |
+          docker pull tensorzero/clickhouse-tests:sha-${{ github.sha }}
+          docker save tensorzero/clickhouse-tests:sha-${{ github.sha }} > clickhouse-tests-container.tar
 
       - name: Upload `clickhouse-tests` container as an artifact to Github
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
