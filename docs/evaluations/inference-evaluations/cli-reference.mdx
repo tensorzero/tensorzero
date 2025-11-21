@@ -71,6 +71,19 @@ See [Integrations](/integrations/model-providers) for more information.
 
 ### CLI Flags
 
+#### `--adaptive-stopping-precision EVALUATOR=PRECISION[,...]`
+
+- **Example:** `--adaptive-stopping-precision exact_match=0.13,llm_judge=0.16`
+- **Required:** no (default: none)
+
+This flag enables adaptive stopping for specified evaluators by setting per-evaluator precision thresholds.
+An evaluator stops when both sides of its 95% confidence interval are within the threshold of its mean value.
+
+You can specify multiple evaluators by separating them with commas.
+Each evaluator's precision threshold should be a positive number.
+
+If adaptive stopping is enabled for all evaluators, then the evaluation will stop once all evaluators have met their targets or all datapoints have been evaluated.
+
 #### `--config-file PATH`
 
 - **Example:** `--config-file /path/to/tensorzero.toml`
@@ -79,35 +92,12 @@ See [Integrations](/integrations/model-providers) for more information.
 This flag specifies the path to the TensorZero configuration file.
 You should use the same configuration file for your entire project.
 
-#### `--gateway-url URL`
+#### `--concurrency N` (`-c`)
 
-- **Example:** `--gateway-url http://localhost:3000`
-- **Required:** no (default: none)
+- **Example:** `--concurrency 5`
+- **Required:** no (default: `1`)
 
-If you provide this flag, the evaluations tool will use an external TensorZero Gateway for inference requests.
-
-If you don't provide this flag, the evaluations tool will use a built-in TensorZero gateway.
-In this case, the evaluations tool will require the same credentials the gateway would use.
-See [Integrations](/integrations/model-providers) for more information.
-
-#### `--evaluation-name NAME` (`-e`)
-
-- **Example:** `--evaluation-name my_evaluation`
-- **Required:** yes
-
-This flag specifies the name of the evaluation to run, as defined in your TensorZero configuration file.
-
-#### `--dataset-name NAME` (`-d`)
-
-- **Example:** `--dataset-name my_dataset`
-- **Required:** Either `--dataset-name` or `--datapoint-ids` must be provided (but not both)
-
-This flag specifies the dataset to use for evaluation.
-The dataset should be stored in your ClickHouse database.
-
-<Note>
-This flag is mutually exclusive with `--datapoint-ids`. You must provide either `--dataset-name` or `--datapoint-ids`, but not both.
-</Note>
+This flag specifies the maximum number of concurrent TensorZero inference requests during evaluation.
 
 #### `--datapoint-ids ID[,ID,...]`
 
@@ -123,20 +113,24 @@ Use this flag when you want to evaluate a specific subset of datapoints rather t
 This flag is mutually exclusive with `--dataset-name` and `--max-datapoints`. You must provide either `--dataset-name` or `--datapoint-ids`, but not both.
 </Note>
 
-#### `--variant-name NAME` (`-v`)
+#### `--dataset-name NAME` (`-d`)
 
-- **Example:** `--variant-name gpt_4o`
+- **Example:** `--dataset-name my_dataset`
+- **Required:** Either `--dataset-name` or `--datapoint-ids` must be provided (but not both)
+
+This flag specifies the dataset to use for evaluation.
+The dataset should be stored in your ClickHouse database.
+
+<Note>
+This flag is mutually exclusive with `--datapoint-ids`. You must provide either `--dataset-name` or `--datapoint-ids`, but not both.
+</Note>
+
+#### `--evaluation-name NAME` (`-e`)
+
+- **Example:** `--evaluation-name my_evaluation`
 - **Required:** yes
 
-This flag specifies the variant to evaluate.
-The variant name should be present in your TensorZero configuration file.
-
-#### `--concurrency N` (`-c`)
-
-- **Example:** `--concurrency 5`
-- **Required:** no (default: `1`)
-
-This flag specifies the maximum number of concurrent TensorZero inference requests during evaluation.
+This flag specifies the name of the evaluation to run, as defined in your TensorZero configuration file.
 
 #### `--format FORMAT` (`-f`)
 
@@ -147,6 +141,18 @@ This flag specifies the maximum number of concurrent TensorZero inference reques
 This flag specifies the output format for the evaluation CLI tool.
 
 You can use the `jsonl` format if you want to programatically process the evaluation results.
+
+#### `--gateway-url URL`
+
+- **Example:** `--gateway-url http://localhost:3000`
+- **Required:** no (default: none)
+
+If you provide this flag, the evaluations tool will use an external TensorZero Gateway for inference requests.
+
+If you don't provide this flag, the evaluations tool will use a built-in TensorZero gateway.
+In this case, the evaluations tool will require the same credentials the gateway would use.
+See [Integrations](/integrations/model-providers) for more information.
+
 
 #### `--inference-cache MODE`
 
@@ -168,18 +174,13 @@ This flag specifies the maximum number of datapoints to evaluate from the datase
 This flag can only be used with `--dataset-name`. It cannot be used with `--datapoint-ids`.
 </Note>
 
-#### `--adaptive-stopping-precision EVALUATOR=PRECISION[,...]`
+#### `--variant-name NAME` (`-v`)
 
-- **Example:** `--adaptive-stopping-precision exact_match=0.13,llm_judge=0.16`
-- **Required:** no (default: none)
+- **Example:** `--variant-name gpt_4o`
+- **Required:** yes
 
-This flag enables adaptive stopping for specified evaluators by setting per-evaluator precision thresholds.
-An evaluator stops when both sides of its 95% confidence interval are within the threshold of its mean value.
-
-You can specify multiple evaluators by separating them with commas.
-Each evaluator's precision threshold should be a positive number.
-
-If adaptive stopping is enabled for all evaluators, then the evaluation will stop once all evaluators have met their targets or all datapoints have been evaluated.
+This flag specifies the variant to evaluate.
+The variant name should be present in your TensorZero configuration file.
 
 ### Exit Status
 
