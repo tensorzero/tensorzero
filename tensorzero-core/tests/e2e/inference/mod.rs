@@ -4046,4 +4046,5 @@ async fn test_internal_tag_auto_injection() {
     );
 }
 
+pub mod json_mode_tool;
 pub mod tool_params;

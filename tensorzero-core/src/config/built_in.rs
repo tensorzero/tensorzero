@@ -27,7 +27,7 @@ use crate::function::FunctionConfigChat;
 use crate::function::FunctionConfigJson;
 use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
 #[cfg(feature = "e2e_tests")]
-use crate::tool::create_implicit_tool_call_config;
+use crate::tool::create_json_mode_tool_call_config;
 use crate::tool::ToolChoice;
 use std::collections::HashSet;
 
@@ -82,13 +82,13 @@ fn get_hello_chat_function() -> Result<Arc<FunctionConfig>, Error> {
 fn get_hello_json_function() -> Arc<FunctionConfig> {
     // Use default schema (no validation)
     let output_schema = StaticJSONSchema::default();
-    let implicit_tool_call_config = create_implicit_tool_call_config(output_schema.clone());
+    let json_mode_tool_call_config = create_json_mode_tool_call_config(output_schema.clone());
 
     Arc::new(FunctionConfig::Json(FunctionConfigJson {
         variants: HashMap::new(),
         schemas: SchemaData::default(),
         output_schema,
-        implicit_tool_call_config,
+        json_mode_tool_call_config,
         description: Some(
             "Built-in hello JSON function - a simple JSON response function".to_string(),
         ),

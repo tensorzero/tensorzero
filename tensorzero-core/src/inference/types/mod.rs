@@ -1970,9 +1970,10 @@ impl ChatInferenceResult {
         tool_config: Option<&ToolCallConfig>,
         inference_params: InferenceParams,
         original_response: Option<String>,
+        json_mode: Option<JsonMode>,
     ) -> Self {
         let created = current_timestamp();
-        let content = parse_chat_output(raw_content, tool_config).await;
+        let content = parse_chat_output(raw_content, tool_config, json_mode).await;
         let finish_reason = get_finish_reason(&model_inference_results);
         Self {
             inference_id,
@@ -2000,6 +2001,7 @@ fn get_finish_reason(
 pub async fn parse_chat_output(
     content: Vec<ContentBlockOutput>,
     tool_config: Option<&ToolCallConfig>,
+    json_mode: Option<JsonMode>,
 ) -> Vec<ContentBlockChatOutput> {
     if content.is_empty() {
         Error::new(ErrorDetails::Inference {
@@ -2014,12 +2016,19 @@ pub async fn parse_chat_output(
                 output.push(ContentBlockChatOutput::Text(text));
             }
             ContentBlockOutput::ToolCall(tool_call) => {
-                // Parse the tool call arguments
-                let inference_response_tool_call =
-                    InferenceResponseToolCall::new(tool_call, tool_config).await;
-                output.push(ContentBlockChatOutput::ToolCall(
-                    inference_response_tool_call,
-                ));
+                // If using json_mode="tool", convert tool call arguments to text
+                if json_mode == Some(JsonMode::Tool) {
+                    output.push(ContentBlockChatOutput::Text(Text {
+                        text: tool_call.arguments,
+                    }));
+                } else {
+                    // Normal tool call handling
+                    let inference_response_tool_call =
+                        InferenceResponseToolCall::new(tool_call, tool_config).await;
+                    output.push(ContentBlockChatOutput::ToolCall(
+                        inference_response_tool_call,
+                    ));
+                }
             }
             ContentBlockOutput::Thought(thought) => {
                 output.push(ContentBlockChatOutput::Thought(thought));
@@ -2187,7 +2196,7 @@ impl From<JsonMode> for ModelInferenceRequestJsonMode {
         match json_enforcement {
             JsonMode::On => ModelInferenceRequestJsonMode::On,
             JsonMode::Strict => ModelInferenceRequestJsonMode::Strict,
-            JsonMode::ImplicitTool => ModelInferenceRequestJsonMode::Off,
+            JsonMode::Tool => ModelInferenceRequestJsonMode::Off,
             JsonMode::Off => ModelInferenceRequestJsonMode::Off,
         }
     }
@@ -2286,6 +2295,7 @@ mod tests {
             None,
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         let output_content = ["Hello, world!".to_string().into()];
@@ -2335,6 +2345,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2386,6 +2397,7 @@ mod tests {
             Some(&weather_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2432,6 +2444,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2499,6 +2512,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2584,6 +2598,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2679,6 +2694,7 @@ mod tests {
             Some(&additional_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2728,6 +2744,7 @@ mod tests {
             model_inference_responses,
             Some(&additional_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2803,6 +2820,7 @@ mod tests {
             Some(&restricted_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2858,6 +2876,7 @@ mod tests {
             model_inference_responses,
             Some(&restricted_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -3072,6 +3091,7 @@ mod tests {
             None,
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         let result_all_some = InferenceResult::Chat(chat_result_all_some);
@@ -3102,6 +3122,7 @@ mod tests {
             model_responses_input_none,
             None,
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -3134,6 +3155,7 @@ mod tests {
             None,
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         let result_output_none = InferenceResult::Chat(chat_result_output_none);
@@ -3164,6 +3186,7 @@ mod tests {
             model_responses_all_none,
             None,
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -3196,6 +3219,7 @@ mod tests {
             model_responses_mixed,
             None,
             InferenceParams::default(),
+            None,
             None,
         )
         .await;

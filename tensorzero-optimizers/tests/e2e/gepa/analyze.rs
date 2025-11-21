@@ -47,7 +47,7 @@ pub fn create_test_function_config() -> FunctionConfig {
 
 /// Create a minimal JSON FunctionConfig for testing
 pub fn create_test_json_function_config() -> FunctionConfig {
-    use tensorzero_core::{function::FunctionConfigJson, tool::create_implicit_tool_call_config};
+    use tensorzero_core::{function::FunctionConfigJson, tool::create_json_mode_tool_call_config};
 
     let output_schema = StaticJSONSchema::from_value(serde_json::json!({
         "type": "object",
@@ -58,13 +58,13 @@ pub fn create_test_json_function_config() -> FunctionConfig {
     }))
     .expect("Failed to create JSON output schema");
 
-    let implicit_tool_call_config = create_implicit_tool_call_config(output_schema.clone());
+    let json_mode_tool_call_config = create_json_mode_tool_call_config(output_schema.clone());
 
     FunctionConfig::Json(FunctionConfigJson {
         variants: HashMap::new(),
         schemas: SchemaData::default(),
         output_schema,
-        implicit_tool_call_config,
+        json_mode_tool_call_config,
         description: Some("Test JSON function for GEPA e2e tests".to_string()),
         all_explicit_template_names: std::collections::HashSet::new(),
         experimentation: tensorzero_core::experimentation::ExperimentationConfig::default(),
@@ -367,6 +367,7 @@ pub fn create_test_evaluation_config() -> EvaluationConfig {
     EvaluationConfig::Inference(InferenceEvaluationConfig {
         evaluators: HashMap::new(),
         function_name: "test_function".to_string(),
+        description: Some("empty evaluation".to_string()),
     })
 }
 
@@ -391,12 +392,14 @@ pub fn create_test_evaluation_config_with_evaluators() -> EvaluationConfig {
             },
             optimize: LLMJudgeOptimize::Max,
             cutoff: Some(0.5),
+            description: Some("fluency evaluation".to_string()),
         }),
     );
 
     EvaluationConfig::Inference(InferenceEvaluationConfig {
         evaluators,
         function_name: "test_function".to_string(),
+        description: Some("evaluation with evaluators".to_string()),
     })
 }
 
@@ -1216,6 +1219,7 @@ async fn test_analyze_input_format_scenarios() {
             },
             optimize: LLMJudgeOptimize::Max,
             cutoff: None,
+            description: Some("numeric evaluator".to_string()),
         }),
     );
     evaluators.insert(
@@ -1228,6 +1232,7 @@ async fn test_analyze_input_format_scenarios() {
             },
             optimize: LLMJudgeOptimize::Max,
             cutoff: None,
+            description: Some("bool evaluator".to_string()),
         }),
     );
     evaluators.insert(
@@ -1240,11 +1245,13 @@ async fn test_analyze_input_format_scenarios() {
             },
             optimize: LLMJudgeOptimize::Max,
             cutoff: None,
+            description: Some("null evaluator".to_string()),
         }),
     );
     let score_eval_config = EvaluationConfig::Inference(InferenceEvaluationConfig {
         evaluators,
         function_name: "test_function".to_string(),
+        description: Some("empty evaluation".to_string()),
     });
 
     let scenarios = vec![

@@ -581,6 +581,7 @@ mod tests {
         EvaluationConfig::Inference(InferenceEvaluationConfig {
             evaluators: HashMap::new(),
             function_name: "test_function".to_string(),
+            description: Some("evaluation".to_string()),
         })
     }
 

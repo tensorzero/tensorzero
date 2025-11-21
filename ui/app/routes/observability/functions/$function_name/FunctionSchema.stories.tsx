@@ -130,7 +130,7 @@ export const JsonFunctionWithOutput: Story = {
       tools: [],
       tool_choice: null,
       parallel_tool_calls: null,
-      implicit_tool_call_config: null,
+      json_mode_tool_call_config: null,
       schemas: {
         system: {
           schema: {
