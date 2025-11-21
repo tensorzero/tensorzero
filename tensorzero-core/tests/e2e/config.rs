@@ -1,9 +1,14 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::config::snapshot::ConfigSnapshot;
+use tensorzero_core::config::{write_config_snapshot, Config, ConfigFileGlob};
+use tensorzero_core::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::http::TensorzeroHttpClient;
+use uuid::Uuid;
 
 #[tokio::test]
 async fn test_embedded_invalid_glob() {
@@ -94,7 +99,7 @@ async fn test_from_components_basic() {
         )
         .await
         .unwrap()
-        .config,
+        .dangerous_into_config_without_writing(),
     );
 
     // Create components
@@ -117,4 +122,108 @@ async fn test_from_components_basic() {
     // Verify client was created successfully (basic smoke test)
     // The fact that it built without error is the main validation
     assert!(!client.verbose_errors); // Default value
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_write_config_snapshot() {
+    // Get a clean ClickHouse instance with automatic cleanup
+    let clickhouse = get_clickhouse().await;
+
+    // Run migrations to set up the ConfigSnapshot table
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: true,
+        disable_automatic_migrations: false,
+    })
+    .await
+    .unwrap();
+    let random_id = Uuid::now_v7();
+
+    // Create a test config snapshot
+    let config_toml = format!(
+        r#"
+[gateway]
+bind = "0.0.0.0:3000"
+
+[models.test_model{random_id}]
+routing = ["test_provider::gpt-4"]
+"#
+    );
+
+    let mut extra_templates = HashMap::new();
+    extra_templates.insert("test_template".to_string(), "Hello {{name}}!".to_string());
+
+    let snapshot = ConfigSnapshot {
+        config: config_toml.to_string(),
+        extra_templates: extra_templates.clone(),
+    };
+
+    let hash = snapshot.hash();
+    let hash_hex = hash.to_hex().to_string();
+
+    // Write the config snapshot
+    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+
+    // Wait a bit for the data to be committed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Query the ConfigSnapshot table to verify the data was written
+    let query = "SELECT config, tensorzero_version, hex(version_hash) as version_hash_hex, created_at, last_used FROM ConfigSnapshot FINAL FORMAT JSONEachRow";
+    let response = clickhouse
+        .run_query_synchronous_no_params(query.to_string())
+        .await
+        .unwrap();
+
+    // Parse and verify the result
+    let snapshot_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+
+    assert_eq!(snapshot_row["config"].as_str().unwrap(), config_toml);
+    assert!(!snapshot_row["tensorzero_version"]
+        .as_str()
+        .unwrap()
+        .is_empty());
+    assert_eq!(snapshot_row["version_hash_hex"].as_str().unwrap(), hash_hex);
+
+    let created_at = snapshot_row["created_at"].as_str().unwrap();
+    let last_used_1 = snapshot_row["last_used"].as_str().unwrap();
+
+    // Test upsert behavior: write the same config again
+    let snapshot2 = ConfigSnapshot {
+        config: config_toml.to_string(),
+        extra_templates: extra_templates.clone(),
+    };
+
+    write_config_snapshot(&clickhouse, snapshot2).await.unwrap();
+
+    // Wait for the data to be committed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Query again to verify upsert behavior
+    let response2 = clickhouse
+        .run_query_synchronous_no_params(query.to_string())
+        .await
+        .unwrap();
+
+    let snapshot_row2: serde_json::Value = serde_json::from_str(&response2.response).unwrap();
+
+    // Verify created_at is preserved
+    assert_eq!(
+        snapshot_row2["created_at"].as_str().unwrap(),
+        created_at,
+        "created_at should be preserved on upsert"
+    );
+
+    // Verify last_used is updated (should be different from the first insert)
+    let last_used_2 = snapshot_row2["last_used"].as_str().unwrap();
+    assert!(
+        last_used_2 >= last_used_1,
+        "last_used should be updated on upsert"
+    );
+
+    // Verify the data is still correct
+    assert_eq!(snapshot_row2["config"].as_str().unwrap(), config_toml);
+    assert_eq!(
+        snapshot_row2["version_hash_hex"].as_str().unwrap(),
+        hash_hex
+    );
 }

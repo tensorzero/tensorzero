@@ -31,7 +31,7 @@ async fn get_e2e_config() -> Arc<Config> {
         )
         .await
         .expect("Failed to load e2e config")
-        .config,
+        .dangerous_into_config_without_writing(),
     )
 }
 

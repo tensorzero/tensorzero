@@ -1,6 +1,6 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
-use crate::config::{ConfigFileGlob, ConfigLoadInfo};
+use crate::config::{unwritten_config::ConfigLoadInfo, ConfigFileGlob};
 use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
@@ -1063,7 +1063,7 @@ mod tests {
             )
             .await
             .unwrap()
-            .config,
+            .dangerous_into_config_without_writing(),
         );
 
         // Create mock components
@@ -1114,7 +1114,7 @@ mod tests {
             )
             .await
             .unwrap()
-            .config,
+            .dangerous_into_config_without_writing(),
         );
 
         // Create mock components

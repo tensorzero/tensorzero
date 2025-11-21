@@ -22,7 +22,7 @@ use tensorzero_core::client::{
     ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
 };
 use tensorzero_core::config::{
-    ConfigFileGlob, ConfigLoadInfo, MetricConfigOptimize, UninitializedVariantInfo,
+    ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo,
 };
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::utils::spawn_ignoring_shutdown;

@@ -28,14 +28,16 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use unwritten_config::{ConfigLoadInfo, UnwrittenConfig};
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
 use crate::config::snapshot::ConfigSnapshot;
 use crate::config::span_map::SpanMap;
-use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
+use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::{Error, ErrorDetails};
 use crate::evaluations::{EvaluationConfig, UninitializedEvaluationConfig};
 use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
@@ -62,7 +64,7 @@ pub mod gateway;
 pub mod path;
 pub mod provider_types;
 pub mod rate_limiting;
-mod snapshot;
+pub mod snapshot;
 mod span_map;
 #[cfg(test)]
 mod tests;
@@ -999,13 +1001,13 @@ impl Config {
         config.evaluations = evaluations;
         config.templates = Arc::new(templates);
 
-        Ok(ConfigLoadInfo {
-            config: UnwrittenConfig(config),
-            snapshot: snapshot::ConfigSnapshot {
+        Ok(ConfigLoadInfo::new(
+            UnwrittenConfig::new(config),
+            snapshot::ConfigSnapshot {
                 config: serialized_table,
                 extra_templates,
             },
-        })
+        ))
     }
 
     /// Validate the config
@@ -1194,40 +1196,115 @@ impl Config {
     }
 }
 
-#[derive(Debug)]
-pub struct UnwrittenConfig(Config);
+/// This is for privacy of internal types
+pub mod unwritten_config {
+    use super::*;
 
-impl std::ops::Deref for UnwrittenConfig {
-    type Target = Config;
+    #[derive(Debug)]
+    pub struct UnwrittenConfig(Config);
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+    impl UnwrittenConfig {
+        pub fn new(config: Config) -> Self {
+            Self(config)
+        }
+    }
+
+    impl std::ops::Deref for UnwrittenConfig {
+        type Target = Config;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+    #[derive(Debug)]
+    pub struct ConfigLoadInfo {
+        pub config: UnwrittenConfig,
+        snapshot: ConfigSnapshot,
+    }
+
+    impl ConfigLoadInfo {
+        pub fn new(config: UnwrittenConfig, snapshot: ConfigSnapshot) -> Self {
+            Self { config, snapshot }
+        }
+
+        pub async fn into_config(
+            self,
+            clickhouse: &ClickHouseConnectionInfo,
+        ) -> Result<Config, Error> {
+            let ConfigLoadInfo { config, snapshot } = self;
+            write_config_snapshot(clickhouse, snapshot).await?;
+            Ok(config.0)
+        }
+
+        pub fn dangerous_into_config_without_writing(self) -> Config {
+            self.config.0
+        }
     }
 }
 
-#[derive(Debug)]
-pub struct ConfigLoadInfo {
-    pub config: UnwrittenConfig,
-    snapshot: ConfigSnapshot,
-}
-
-impl ConfigLoadInfo {
-    pub async fn into_config(self, clickhouse: &ClickHouseConnectionInfo) -> Result<Config, Error> {
-        let ConfigLoadInfo { config, snapshot } = self;
-        write_config_snapshot(clickhouse, snapshot).await?;
-        Ok(config.0)
-    }
-
-    pub fn dangerous_into_config_without_writing(self) -> Config {
-        self.config.0
-    }
-}
-
-async fn write_config_snapshot(
+/// Writes the config snapshot to the `ConfigSnapshot` table.
+/// Takes special care to retain the created_at if there was already a row
+/// that had the same hash.
+pub async fn write_config_snapshot(
     clickhouse: &ClickHouseConnectionInfo,
     snapshot: ConfigSnapshot,
 ) -> Result<(), Error> {
-    todo!()
+    // Define the row structure for serialization
+    #[derive(Serialize)]
+    struct ConfigSnapshotRow<'a> {
+        config: &'a str,
+        extra_templates: &'a HashMap<String, String>,
+        version_hash_hex: String,
+        tensorzero_version: &'static str,
+    }
+
+    // Compute the hash and convert to hex
+    let version_hash_hex = snapshot.hash().to_hex().to_string();
+
+    // Create the row
+    let row = ConfigSnapshotRow {
+        config: &snapshot.config,
+        extra_templates: &snapshot.extra_templates,
+        version_hash_hex: version_hash_hex.clone(),
+        tensorzero_version: TENSORZERO_VERSION,
+    };
+
+    // Serialize to JSON
+    let json_data = serde_json::to_string(&row).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize config snapshot: {}", e),
+        })
+    })?;
+
+    // Create the external data info
+    let external_data = ExternalDataInfo {
+        external_data_name: "new_data".to_string(),
+        structure: "config String, extra_templates Map(String, String), version_hash_hex String, tensorzero_version String".to_string(),
+        format: "JSONEachRow".to_string(),
+        data: json_data,
+    };
+
+    // Create the query with subquery to preserve created_at
+    let query = format!(
+        r#"INSERT INTO ConfigSnapshot
+(config, extra_templates, version_hash, tensorzero_version, created_at, last_used)
+SELECT
+    new_data.config,
+    new_data.extra_templates,
+    unhex(new_data.version_hash_hex) as version_hash,
+    new_data.tensorzero_version,
+    ifNull((SELECT created_at FROM ConfigSnapshot WHERE version_hash = unhex('{}') LIMIT 1), now64()) as created_at,
+    now64() as last_used
+FROM new_data"#,
+        version_hash_hex
+    );
+
+    // Execute the query
+    clickhouse
+        .run_query_with_external_data(external_data, query)
+        .await?;
+
+    Ok(())
 }
 
 #[cfg(feature = "pyo3")]

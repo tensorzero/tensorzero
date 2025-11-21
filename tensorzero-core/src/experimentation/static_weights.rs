@@ -241,7 +241,8 @@ mod tests {
 
     use super::*;
     use crate::config::{
-        Config, ConfigFileGlob, ConfigLoadInfo, ErrorContext, SchemaData, TimeoutsConfig,
+        unwritten_config::ConfigLoadInfo, Config, ConfigFileGlob, ErrorContext, SchemaData,
+        TimeoutsConfig,
     };
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::variant::chat_completion::ChatCompletionConfig;

@@ -207,7 +207,7 @@ mod tests {
         )
         .await
         .unwrap()
-        .config
+        .dangerous_into_config_without_writing()
     }
 
     fn create_test_input() -> Input {

@@ -527,7 +527,7 @@ mod tests {
         )
         .await
         .unwrap()
-        .config
+        .dangerous_into_config_without_writing()
     }
 
     #[tokio::test]
