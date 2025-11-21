@@ -316,10 +316,11 @@ impl TensorZeroRelayProvider {
             // TODO - implement extra_body and extra_headers
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            // We intentionally do for not forward the rest of these parameters,
+            // we only apply them to this gateway, not the next hop.
             credentials: HashMap::new(),
             cache_options: Default::default(),
             internal_dynamic_variant_config: None,
-            // TODO - should we forward these?
             episode_id: None,
             dryrun: None,
             tags: HashMap::new(),
