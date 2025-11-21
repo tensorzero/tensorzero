@@ -646,7 +646,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             FROM ChatInferenceDatapoint FINAL
             WHERE dataset_name = {{dataset_name:String}}
             {datapoint_ids_filter_clause}
-            AND staled_at IS NULL
             "
         );
 
@@ -662,7 +661,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             FROM JsonInferenceDatapoint FINAL
             WHERE dataset_name = {{dataset_name:String}}
             {datapoint_ids_filter_clause}
-            AND staled_at IS NULL
             "
         );
         let query_params = HashMap::from([("dataset_name", dataset_name)]);
@@ -3906,7 +3904,6 @@ mod tests {
                 );
                 assert_query_contains(query, "WHERE dataset_name = {dataset_name:String}");
                 assert_query_contains(query, &format!("AND id IN ['{id1}','{id2}']"));
-                assert_query_contains(query, "AND staled_at IS NULL");
 
                 assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
 
@@ -3948,7 +3945,6 @@ mod tests {
                     "SELECT * REPLACE ( now64() AS updated_at, now64() AS staled_at )",
                 );
                 assert_query_contains(query, "WHERE dataset_name = {dataset_name:String}");
-                assert_query_contains(query, "AND staled_at IS NULL");
 
                 assert_query_does_not_contain(query, "AND id IN");
 
