@@ -1020,6 +1020,43 @@ jobs:
       S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
+  check-production-docker-container:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Build Docker container for production deployment tests
+        run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
+
+      - name: Launch ClickHouse container for E2E tests
+        run: |
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse -d --wait
+
+      - name: Set up .env file for production deployment tests
+        run: |
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
+          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> examples/production-deployment/.env
+
+      - name: Run docker compose for production deployment tests
+        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
+
+      - name: Run inference for production deployment tests
+        run: examples/production-deployment/run.sh
+
+      - name: Print Docker compose logs
+        if: always()
+        run: |
+          docker compose -f examples/production-deployment/docker-compose.yml logs -t
+
+      - name: Take down docker compose for production deployment tests
+        run: |
+          docker compose -f examples/production-deployment/docker-compose.yml down
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
+
   run-merge-queue-checks:
     needs: [build-gateway-e2e-container]
     if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
@@ -1053,6 +1090,7 @@ jobs:
     needs:
       [
         check-version-consistency,
+        check-production-docker-container,
         check-if-edited-then-edit,
         check-docker-compose,
         check-latest-docker-compose,
