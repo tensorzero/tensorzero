@@ -84,7 +84,7 @@ jobs:
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-*-container
+          pattern: build-{gateway,ui,mock-inference}-container
           merge-multiple: true
 
       - name: Load container images

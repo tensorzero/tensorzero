@@ -81,13 +81,13 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      - name: Download container images
+      - name: Download mock-inference-container
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-*-container
-          merge-multiple: true
+          name: build-mock-inference-container
+          path: .
 
-      - name: Load container images
+      - name: Load mock-inference-container
         run: |
           docker load < mock-inference-container.tar
 
