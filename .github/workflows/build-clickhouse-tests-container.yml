@@ -1,0 +1,47 @@
+name: Build ClickHouse Tests Container
+
+on:
+  workflow_call:
+
+jobs:
+  build-clickhouse-tests-container:
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
+      # (where the oidc token is not available)
+
+      - name: Install Namespace CLI
+        uses: namespacelabs/nscloud-setup@d1c625762f7c926a54bd39252efff0705fd11c64
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Configure Namespace-powered Buildx
+        uses: namespacelabs/nscloud-setup-buildx-action@91c2e6537780e3b092cb8476406be99a8f91bd5e
+        with:
+          wait-for-builder: true
+        continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+
+      - name: Build `clickhouse-tests` container
+        run: |
+          docker buildx build --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 -f tensorzero-core/tests/e2e/Dockerfile.clickhouse . -t tensorzero/clickhouse-tests:sha-${{ github.sha }}
+
+      - name: Save `clickhouse-tests` container
+        run: docker save tensorzero/clickhouse-tests:sha-${{ github.sha }} > clickhouse-tests-container.tar
+
+      - name: Upload `clickhouse-tests` container as an artifact to Github
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        with:
+          name: build-clickhouse-tests-container
+          path: clickhouse-tests-container.tar
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false
