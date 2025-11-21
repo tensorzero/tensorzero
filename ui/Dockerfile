@@ -2,8 +2,6 @@
 
 FROM node:24.11.0-bookworm-slim AS base
 
-COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
-
 RUN npm install -g pnpm
 
 # ========== cargo-chef-planner ==========
@@ -85,7 +83,7 @@ FROM base AS ui
 
 RUN useradd -m -s /bin/sh ui
 
-RUN apt-get update && apt-get install -y curl wget python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl wget && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
