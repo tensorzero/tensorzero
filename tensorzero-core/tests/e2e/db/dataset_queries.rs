@@ -1089,7 +1089,7 @@ async fn test_get_datapoint_returns_error_for_non_existent_datapoint() {
 }
 
 #[tokio::test]
-async fn test_chat_datapoint_lifecycle_insert_get_delete() {
+async fn test_clickhouse_chat_datapoint_lifecycle_insert_get_delete() {
     let clickhouse = get_clickhouse().await;
     let datapoint_id = Uuid::now_v7();
     let source_inference_id = Uuid::now_v7();
@@ -1198,7 +1198,7 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
 }
 
 #[tokio::test]
-async fn test_json_datapoint_lifecycle_insert_get_delete() {
+async fn test_clickhouse_json_datapoint_lifecycle_insert_get_delete() {
     let clickhouse = get_clickhouse().await;
     let datapoint_id = Uuid::now_v7();
     let source_inference_id = Uuid::now_v7();
