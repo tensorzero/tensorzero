@@ -6,7 +6,11 @@ use tokio::try_join;
 use uuid::Uuid;
 
 use crate::db::clickhouse::query_builder::QueryParameter;
-use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
+use crate::db::clickhouse::{
+    escape_string_for_clickhouse_literal, ClickHouseConnectionInfo, ExternalDataInfo,
+};
+use crate::endpoints::datasets::v1::types::{DatapointOrderBy, DatapointOrderByTerm};
+use crate::endpoints::shared_types::OrderDirection;
 // TODO: move things somewhere sensible
 use crate::db::datasets::{
     ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
@@ -359,6 +363,8 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 offset: 0,
                 allow_stale,
                 filter: None,
+                order_by: None,
+                search_query_experimental: None,
             })
             .await?;
         if datapoints.is_empty() {
@@ -385,6 +391,8 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             offset,
             allow_stale,
             filter,
+            order_by,
+            search_query_experimental,
         } = params;
         let limit_str = limit.to_string();
         let offset_str = offset.to_string();
@@ -458,8 +466,28 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             query_params.insert(name.as_str(), value.as_str());
         }
 
-        // TODO(shuyangli): Consider supporting custom ordering.
-        let order_by_clause = "ORDER BY updated_at DESC, id DESC";
+        // Add text query term frequency columns and filter
+        let (search_select_clauses, search_filter_clause) = if let Some(search_query) =
+            search_query_experimental
+        {
+            // JSON-escape the query for matching against JSON-serialized input/output
+            let escaped_query = json_escape_string_without_quotes(search_query)?;
+            let clickhouse_escaped = escape_string_for_clickhouse_literal(&escaped_query);
+
+            let select_clauses = format!(
+                r"ifNull(countSubstringsCaseInsensitiveUTF8(input, '{clickhouse_escaped}'), 0) as input_term_frequency,
+                ifNull(countSubstringsCaseInsensitiveUTF8(output, '{clickhouse_escaped}'), 0) as output_term_frequency,
+                input_term_frequency + output_term_frequency as total_term_frequency"
+            );
+            let filter_clause = "AND total_term_frequency > 0";
+            (format!(", {select_clauses}"), filter_clause)
+        } else {
+            (String::new(), "")
+        };
+
+        // Generate ORDER BY clause
+        let order_by_clause =
+            get_order_by_clause(order_by.as_ref(), search_query_experimental.as_ref())?;
 
         // When constructing the query, all filters are pushed down to the subqueries for Chat/Json table, and the final
         // SELECT only handles merging and ordering for pagination.
@@ -489,6 +517,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 is_custom,
                 staled_at,
                 formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
+                {search_select_clauses}
             FROM ChatInferenceDatapoint AS i FINAL
             WHERE true
                 {dataset_name_clause}
@@ -496,6 +525,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 {ids_clause}
                 {allow_stale_clause}
                 {filter_clause}
+                {search_filter_clause}
             {order_by_clause}
             LIMIT {{subquery_limit:UInt32}}
             UNION ALL
@@ -522,6 +552,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 is_custom,
                 staled_at,
                 formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
+                {search_select_clauses}
             FROM JsonInferenceDatapoint AS i FINAL
             WHERE true
                 {dataset_name_clause}
@@ -529,6 +560,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 {ids_clause}
                 {allow_stale_clause}
                 {filter_clause}
+                {search_filter_clause}
             {order_by_clause}
             LIMIT {{subquery_limit:UInt32}}
         )
@@ -665,6 +697,60 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         written_rows += json_written_rows?;
         Ok(written_rows)
     }
+}
+
+/// Converts a vec of OrderBy terms to the correct ClickHouse ORDER BY clauses.
+fn get_order_by_clause(
+    order_by: Option<&Vec<DatapointOrderBy>>,
+    search_query_experimental: Option<&String>,
+) -> Result<String, Error> {
+    let Some(order_by_vec) = order_by else {
+        return Ok("ORDER BY updated_at DESC, id DESC".to_string());
+    };
+    if order_by_vec.is_empty() {
+        return Ok("ORDER BY updated_at DESC, id DESC".to_string());
+    }
+
+    // Validate that if SearchRelevance is used, search_query_experimental must be present
+    for order_spec in order_by_vec {
+        if matches!(order_spec.term, DatapointOrderByTerm::SearchRelevance)
+            && search_query_experimental.is_none()
+        {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message:
+                    "OrderBy::SearchRelevance requires search_query_experimental to be provided"
+                        .to_string(),
+            }));
+        }
+    }
+
+    // Generate ORDER BY SQL for datapoints
+    let order_parts: Vec<String> = order_by_vec
+        .iter()
+        .map(|order_spec| {
+            let column = match order_spec.term {
+                DatapointOrderByTerm::Timestamp => "updated_at".to_string(),
+                DatapointOrderByTerm::SearchRelevance => "total_term_frequency".to_string(),
+            };
+            let direction = match order_spec.direction {
+                OrderDirection::Asc => "ASC",
+                OrderDirection::Desc => "DESC",
+            };
+            format!("{column} {direction}")
+        })
+        .collect();
+
+    Ok(format!("ORDER BY {}", order_parts.join(", ")))
+}
+
+/// Escapes a string for JSON without quotes.
+/// This is used to escape the text query when doing a substring match on input and output strings, because
+/// input and output strings are JSON-escaped in ClickHouse.
+fn json_escape_string_without_quotes(s: &str) -> Result<String, Error> {
+    let mut json_escaped = serde_json::to_string(s)?;
+    json_escaped.remove(0);
+    json_escaped.pop();
+    Ok(json_escaped)
 }
 
 impl ClickHouseConnectionInfo {
@@ -984,6 +1070,7 @@ mod tests {
     use crate::db::datasets::{
         ChatInferenceDatapointInsert, JsonInferenceDatapointInsert, MetricFilter,
     };
+    use crate::endpoints::datasets::v1::types::DatapointOrderBy;
     use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput, Text};
     use crate::tool::{
         AllowedTools, AllowedToolsChoice, FunctionTool, Tool, ToolCallConfigDatabaseInsert,
@@ -3282,6 +3369,8 @@ mod tests {
                 offset: 0,
                 allow_stale: false,
                 filter: None,
+                order_by: None,
+                search_query_experimental: None,
             })
             .await
             .unwrap();
@@ -3332,6 +3421,8 @@ mod tests {
                 offset: 0,
                 allow_stale: false,
                 filter: None,
+                order_by: None,
+                search_query_experimental: None,
             })
             .await
             .unwrap();
@@ -3393,6 +3484,8 @@ mod tests {
                 offset: 0,
                 allow_stale: false,
                 filter: None,
+                order_by: None,
+                search_query_experimental: None,
             })
             .await
             .unwrap();
@@ -3438,6 +3531,8 @@ mod tests {
                 offset: 0,
                 allow_stale: false,
                 filter: None,
+                order_by: None,
+                search_query_experimental: None,
             })
             .await
             .unwrap();
@@ -3481,6 +3576,8 @@ mod tests {
                 offset: 0,
                 allow_stale: true,
                 filter: None,
+                order_by: None,
+                search_query_experimental: None,
             })
             .await
             .unwrap();
@@ -3540,6 +3637,8 @@ mod tests {
                 offset: 0,
                 allow_stale: false,
                 filter: None,
+                order_by: None,
+                search_query_experimental: None,
             })
             .await
             .unwrap();
@@ -3610,6 +3709,8 @@ mod tests {
                 offset: 0,
                 allow_stale: false,
                 filter: None,
+                order_by: None,
+                search_query_experimental: None,
             })
             .await
             .unwrap();
@@ -3653,6 +3754,8 @@ mod tests {
                 offset: 0,
                 allow_stale: false,
                 filter: None,
+                order_by: None,
+                search_query_experimental: None,
             })
             .await
             .unwrap();
@@ -3699,11 +3802,266 @@ mod tests {
                 offset: 0,
                 allow_stale: false,
                 filter: Some(filter),
+                order_by: None,
+                search_query_experimental: None,
             })
             .await
             .unwrap();
 
         assert_eq!(result.len(), 1, "Should return one datapoint");
+    }
+
+    #[tokio::test]
+    async fn test_get_datapoints_with_search_query() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _parameters| {
+                // Should include term frequency calculations
+                assert_query_contains(query, "ifNull(countSubstringsCaseInsensitiveUTF8(input,");
+                assert_query_contains(query, "ifNull(countSubstringsCaseInsensitiveUTF8(output,");
+                assert_query_contains(
+                    query,
+                    "input_term_frequency + output_term_frequency as total_term_frequency",
+                );
+                // Should filter by total_term_frequency > 0
+                assert_query_contains(query, "AND total_term_frequency > 0");
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test_name","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}]}","output":"[{\"type\":\"text\",\"text\":\"hello world\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z","input_term_frequency":1,"output_term_frequency":1,"total_term_frequency":2}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: None,
+                limit: 20,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+                order_by: None,
+                search_query_experimental: Some("hello".to_string()),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1, "Should return one datapoint");
+    }
+
+    #[tokio::test]
+    async fn test_get_datapoints_with_order_by_timestamp_desc() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _parameters| {
+                // Should order by timestamp in descending order
+                assert_query_contains(query, "ORDER BY updated_at DESC");
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test_name","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z","input_term_frequency":1,"output_term_frequency":1,"total_term_frequency":2}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: None,
+                limit: 20,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+                order_by: Some(vec![DatapointOrderBy {
+                    term: DatapointOrderByTerm::Timestamp,
+                    direction: OrderDirection::Desc,
+                }]),
+                search_query_experimental: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1, "Should return one datapoint");
+    }
+
+    #[tokio::test]
+    async fn test_get_datapoints_with_order_by_timestamp_asc() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _parameters| {
+                // Should order by timestamp in ascending order
+                assert_query_contains(query, "ORDER BY updated_at ASC");
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test_name","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z","input_term_frequency":1,"output_term_frequency":1,"total_term_frequency":2}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: None,
+                limit: 20,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+                order_by: Some(vec![DatapointOrderBy {
+                    term: DatapointOrderByTerm::Timestamp,
+                    direction: OrderDirection::Asc,
+                }]),
+                search_query_experimental: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1, "Should return one datapoint");
+    }
+
+    #[tokio::test]
+    async fn test_get_datapoints_with_order_by_search_relevance() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _parameters| {
+                // Should include term frequency calculations
+                assert_query_contains(query, "ifNull(countSubstringsCaseInsensitiveUTF8(input,");
+                assert_query_contains(query, "ifNull(countSubstringsCaseInsensitiveUTF8(output,");
+                // Should order by total_term_frequency in descending order
+                assert_query_contains(query, "ORDER BY total_term_frequency DESC");
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test_name","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}]}","output":"[{\"type\":\"text\",\"text\":\"hello world\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z","input_term_frequency":1,"output_term_frequency":1,"total_term_frequency":2}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: None,
+                limit: 20,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+                order_by: Some(vec![DatapointOrderBy {
+                    term: DatapointOrderByTerm::SearchRelevance,
+                    direction: OrderDirection::Desc,
+                }]),
+                search_query_experimental: Some("hello".to_string()),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1, "Should return one datapoint");
+    }
+
+    #[tokio::test]
+    async fn test_get_datapoints_with_multiple_order_by() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, _parameters| {
+                // Should order by search relevance first, then by timestamp
+                assert_query_contains(query, "ORDER BY total_term_frequency DESC, updated_at ASC");
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test_name","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}]}","output":"[{\"type\":\"text\",\"text\":\"hello world\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z","input_term_frequency":1,"output_term_frequency":1,"total_term_frequency":2}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: None,
+                limit: 20,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+                order_by: Some(vec![
+                    DatapointOrderBy {
+                        term: DatapointOrderByTerm::SearchRelevance,
+                        direction: OrderDirection::Desc,
+                    },
+                    DatapointOrderBy {
+                        term: DatapointOrderByTerm::Timestamp,
+                        direction: OrderDirection::Asc,
+                    },
+                ]),
+                search_query_experimental: Some("hello".to_string()),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1, "Should return one datapoint");
+    }
+
+    #[tokio::test]
+    async fn test_get_datapoints_search_relevance_without_search_query_fails() {
+        let mock_clickhouse_client = MockClickHouseClient::new();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: None,
+                limit: 20,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+                order_by: Some(vec![DatapointOrderBy {
+                    term: DatapointOrderByTerm::SearchRelevance,
+                    direction: OrderDirection::Desc,
+                }]),
+                search_query_experimental: None,
+            })
+            .await;
+
+        assert!(
+            result.is_err(),
+            "Should fail when using SearchRelevance without search query"
+        );
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("search_query_experimental"));
     }
 
     #[tokio::test]

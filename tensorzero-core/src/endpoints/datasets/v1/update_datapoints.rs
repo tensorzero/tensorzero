@@ -101,6 +101,8 @@ pub async fn update_datapoints(
             offset: 0,
             allow_stale: false,
             filter: None, // No filtering when updating datapoints
+            order_by: None,
+            search_query_experimental: None,
         })
         .await?;
 
@@ -449,6 +451,8 @@ pub async fn update_datapoints_metadata(
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await?;
 

@@ -54,6 +54,8 @@ export * from "./Datapoint";
 export * from "./DatapointFilter";
 export * from "./DatapointKind";
 export * from "./DatapointMetadataUpdate";
+export * from "./DatapointOrderBy";
+export * from "./DatapointOrderByTerm";
 export * from "./DatasetDetailRow";
 export * from "./DatasetMetadata";
 export * from "./DatasetOutputSource";

@@ -1007,6 +1007,39 @@ class TimeDatapointFilter(TimeFilter):
 
 
 @dataclass(kw_only=True)
+class DatapointOrderByTimestamp:
+    """
+    Creation timestamp of the datapoint.
+    """
+
+    direction: OrderDirection
+    """
+    The ordering direction.
+    """
+    by: Literal["timestamp"] = "timestamp"
+
+
+@dataclass(kw_only=True)
+class DatapointOrderBySearchRelevance:
+    """
+    Relevance score of the search query in the input and output of the datapoint.
+    Requires a search query (experimental). If it's not provided, we return an error.
+
+    Current relevance metric is very rudimentary (just term frequency), but we plan
+    to improve it in the future.
+    """
+
+    direction: OrderDirection
+    """
+    The ordering direction.
+    """
+    by: Literal["search_relevance"] = "search_relevance"
+
+
+DatapointOrderBy = DatapointOrderByTimestamp | DatapointOrderBySearchRelevance
+
+
+@dataclass(kw_only=True)
 class FileUrlFile(UrlFile):
     """
     A file for an inference or a datapoint.
@@ -2106,10 +2139,30 @@ class ListDatapointsRequest:
     The number of datapoints to skip before starting to return results.
     Defaults to 0.
     """
+    order_by: list[DatapointOrderBy] | None = None
+    """
+    Optional ordering criteria for the results.
+    Supports multiple sort criteria (e.g., sort by timestamp then by search relevance).
+    """
     page_size: int | None = None
     """
     The maximum number of datapoints to return. Defaults to 20.
     Deprecated: please use `limit`. If `limit` is provided, `page_size` is ignored.
+    """
+    search_query_experimental: str | None = None
+    """
+    Text query to filter. Case-insensitive substring search over the datapoints' input and output.
+
+    THIS FEATURE IS EXPERIMENTAL, and we may change or remove it at any time.
+    We recommend against depending on this feature for critical use cases.
+
+    Important limitations:
+    - This requires an exact substring match; we do not tokenize this query string.
+    - This doesn't search for any content in the template itself.
+    - Quality is based on term frequency > 0, without any relevance scoring.
+    - There are no performance guarantees (it's best effort only). Today, with no other
+      filters, it will perform a full table scan, which may be extremely slow depending
+      on the data volume.
     """
 
 

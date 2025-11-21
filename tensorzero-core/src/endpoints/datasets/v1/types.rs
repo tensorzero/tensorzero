@@ -14,6 +14,38 @@ use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
 use crate::tool::{DynamicToolParams, ProviderTool, Tool, ToolChoice};
 
+/// The property to order datapoints by.
+/// This is flattened in the public API inside the `DatapointOrderBy` struct.
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
+#[ts(export)]
+#[serde(tag = "by", rename_all = "snake_case")]
+pub enum DatapointOrderByTerm {
+    /// Creation timestamp of the datapoint.
+    #[schemars(title = "DatapointOrderByTimestamp")]
+    Timestamp,
+
+    /// Relevance score of the search query in the input and output of the datapoint.
+    /// Requires a search query (experimental). If it's not provided, we return an error.
+    ///
+    /// Current relevance metric is very rudimentary (just term frequency), but we plan
+    /// to improve it in the future.
+    #[schemars(title = "DatapointOrderBySearchRelevance")]
+    SearchRelevance,
+}
+
+/// Order by clauses for querying datapoints.
+#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
+#[ts(export)]
+#[export_schema]
+pub struct DatapointOrderBy {
+    /// The property to order by.
+    #[serde(flatten)]
+    pub term: DatapointOrderByTerm,
+
+    /// The ordering direction.
+    pub direction: OrderDirection,
+}
+
 /// Request to update one or more datapoints in a dataset.
 #[derive(Debug, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
@@ -426,6 +458,24 @@ pub struct ListDatapointsRequest {
     /// Optional filter to apply when querying datapoints.
     /// Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
     pub filter: Option<DatapointFilter>,
+
+    /// Optional ordering criteria for the results.
+    /// Supports multiple sort criteria (e.g., sort by timestamp then by search relevance).
+    pub order_by: Option<Vec<DatapointOrderBy>>,
+
+    /// Text query to filter. Case-insensitive substring search over the datapoints' input and output.
+    ///
+    /// THIS FEATURE IS EXPERIMENTAL, and we may change or remove it at any time.
+    /// We recommend against depending on this feature for critical use cases.
+    ///
+    /// Important limitations:
+    /// - This requires an exact substring match; we do not tokenize this query string.
+    /// - This doesn't search for any content in the template itself.
+    /// - Quality is based on term frequency > 0, without any relevance scoring.
+    /// - There are no performance guarantees (it's best effort only). Today, with no other
+    ///   filters, it will perform a full table scan, which may be extremely slow depending
+    ///   on the data volume.
+    pub search_query_experimental: Option<String>,
 }
 
 /// Request to get specific datapoints by their IDs.
