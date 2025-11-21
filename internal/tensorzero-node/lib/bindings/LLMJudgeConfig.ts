@@ -9,5 +9,6 @@ export type LLMJudgeConfig = {
   output_type: LLMJudgeOutputType;
   include: LLMJudgeIncludeConfig;
   optimize: LLMJudgeOptimize;
-  cutoff: number | null;
+  cutoff?: number;
+  description?: string;
 };

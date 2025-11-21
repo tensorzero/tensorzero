@@ -779,7 +779,7 @@ mod tests {
                 variants: Default::default(),
                 schemas: SchemaData::default(),
                 output_schema: StaticJSONSchema::default(),
-                implicit_tool_call_config: ToolCallConfig::default(),
+                json_mode_tool_call_config: ToolCallConfig::default(),
                 description: None,
                 experimentation: ExperimentationConfig::default(),
                 all_explicit_template_names: Default::default(),

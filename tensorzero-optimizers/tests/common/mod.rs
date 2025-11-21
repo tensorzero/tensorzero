@@ -31,7 +31,7 @@ use tensorzero_core::{
     model_table::ProviderTypeDefaultCredentials,
     optimization::{OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerInfo},
     stored_inference::StoredOutput,
-    tool::{DynamicToolParams, FunctionTool, ToolCall, ToolChoice, ToolResult},
+    tool::{DynamicToolParams, FunctionTool, Tool, ToolCall, ToolChoice, ToolResult},
     variant::JsonMode,
 };
 use tensorzero_optimizers::{JobHandle, Optimizer};
@@ -441,7 +441,7 @@ fn generate_tool_call_example() -> RenderedSample {
         stored_output: Some(StoredOutput::Chat(inference_response_tool_call)),
         tool_params: DynamicToolParams {
             allowed_tools: None,
-            additional_tools: Some(vec![FunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "get_weather".to_string(),
                 description: "Get the weather for a location".to_string(),
                 parameters: serde_json::json!({
@@ -455,7 +455,7 @@ fn generate_tool_call_example() -> RenderedSample {
                     "required": ["location"]
                 }),
                 strict: false,
-            }]),
+            })]),
             tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: None,
             provider_tools: vec![],
@@ -565,7 +565,7 @@ macro_rules! embedded_workflow_test_case {
     ($fn_name:ident, $constructor:expr) => {
         ::paste::paste! {
             #[tokio::test(flavor = "multi_thread")]
-            async fn [<test_embedded_slow_optimization_ $fn_name>]() {
+            async fn [<test_embedded_mock_optimization_ $fn_name>]() {
                 let client = tensorzero::test_helpers::make_embedded_gateway().await;
                 $crate::common::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
             }
@@ -581,7 +581,7 @@ macro_rules! http_workflow_test_case {
     ($fn_name:ident, $constructor:expr) => {
         ::paste::paste! {
             #[tokio::test]
-            async fn [<test_http_slow_optimization_ $fn_name>]() {
+            async fn [<test_http_mock_optimization_ $fn_name>]() {
                 let client = tensorzero::test_helpers::make_http_gateway().await;
                 $crate::common::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
             }

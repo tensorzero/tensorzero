@@ -555,6 +555,7 @@ mod tests {
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig::default(),
+            description: None,
         };
         let input = ClientInput {
             system: Some(System::Text("You are a helpful assistant".to_string())),
@@ -632,6 +633,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: true,
             },
+            description: None,
         };
         let input = prepare_llm_judge_input(
             &llm_judge_config,
@@ -839,6 +841,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: false,
             },
+            description: None,
         };
         let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
@@ -872,6 +875,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: true,
             },
+            description: None,
         };
         let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
@@ -968,6 +972,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: true,
             },
+            description: None,
         };
         let result = prepare_final_message_messages_input(&config, "Generated", None);
         assert_eq!(result, None);
@@ -990,6 +995,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: false,
             },
+            description: None,
         };
         let message = prepare_final_message_messages_input(&config, "Generated", None).unwrap();
         let expected = format!(
@@ -1010,6 +1016,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: false,
             },
+            description: None,
         };
         let input = ClientInput {
             system: Some(System::Text("System instruction".to_string())),
@@ -1124,6 +1131,7 @@ mod tests {
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig::default(),
+            description: None,
         };
         let input = ClientInput {
             system: None,

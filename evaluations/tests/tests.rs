@@ -1337,6 +1337,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         optimize: LLMJudgeOptimize::Max,
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
+        description: None,
     };
     let input = resolved_input_to_client_input(
         datapoint
@@ -1513,6 +1514,7 @@ async fn test_run_llm_judge_evaluator_json() {
         optimize: LLMJudgeOptimize::Max,
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
+        description: None,
     };
     let input = resolved_input_to_client_input(
         datapoint
