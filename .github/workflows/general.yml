@@ -1077,6 +1077,7 @@ jobs:
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
+        build-mock-inference-container,
         mocked-batch-tests,
         minikube,
         rust-build,
