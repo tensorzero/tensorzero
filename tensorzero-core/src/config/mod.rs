@@ -1213,13 +1213,21 @@ pub struct ConfigLoadInfo {
 
 impl ConfigLoadInfo {
     pub async fn into_config(self, clickhouse: &ClickHouseConnectionInfo) -> Result<Config, Error> {
-        // TODO: write config to ConfigSnapshot table before returning Arc
-        Ok(self.config.0)
+        let ConfigLoadInfo { config, snapshot } = self;
+        write_config_snapshot(clickhouse, snapshot).await?;
+        Ok(config.0)
     }
 
     pub fn dangerous_into_config_without_writing(self) -> Config {
         self.config.0
     }
+}
+
+async fn write_config_snapshot(
+    clickhouse: &ClickHouseConnectionInfo,
+    snapshot: ConfigSnapshot,
+) -> Result<(), Error> {
+    todo!()
 }
 
 #[cfg(feature = "pyo3")]
