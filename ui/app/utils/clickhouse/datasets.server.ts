@@ -2,9 +2,7 @@ import { getNativeDatabaseClient } from "../tensorzero/native_client.server";
 import type {
   DatasetMetadata,
   DatasetQueryParams,
-  DatasetDetailRow,
   GetDatasetMetadataParams,
-  GetDatasetRowsParams,
 } from "~/types/tensorzero";
 import { getConfig, getFunctionConfig } from "../config/index.server";
 
@@ -61,13 +59,6 @@ export async function getDatasetMetadata(
 export async function countDatasets(): Promise<number> {
   const dbClient = await getNativeDatabaseClient();
   return await dbClient.countDatasets();
-}
-
-export async function getDatasetRows(
-  params: GetDatasetRowsParams,
-): Promise<DatasetDetailRow[]> {
-  const dbClient = await getNativeDatabaseClient();
-  return await dbClient.getDatasetRows(params);
 }
 
 export async function countDatapointsForDatasetFunction(

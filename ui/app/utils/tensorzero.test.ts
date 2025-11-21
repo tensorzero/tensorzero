@@ -70,13 +70,13 @@ describe("update datapoints", () => {
   });
 
   test("should list datapoints", async () => {
-    const datapoints = await tensorZeroClient.listDatapoints(
-      "foo",
-      "extract_entities",
-      10,
-    );
-    expect(datapoints.length).toBe(10);
-    for (const datapoint of datapoints) {
+    const datapoints = await tensorZeroClient.listDatapoints("foo", {
+      function_name: "extract_entities",
+      limit: 10,
+      offset: 0,
+    });
+    expect(datapoints.datapoints.length).toBe(10);
+    for (const datapoint of datapoints.datapoints) {
       expect(datapoint.function_name).toBe("extract_entities");
     }
   });
