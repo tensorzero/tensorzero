@@ -140,6 +140,9 @@ single_match_else = "allow"
 # This lint cannot be fixed with 'cargo fmt', and we don't currently generate docs
 doc_lazy_continuation = "allow"
 
+[profile.dev]
+debug = "limited"
+
 [profile.performance]
 inherits = "release"
 lto = "fat"
