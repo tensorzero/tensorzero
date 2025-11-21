@@ -160,7 +160,7 @@ impl ChatCompletionConfig {
 
     /// Converts this initialized config back to its uninitialized form.
     /// Note: Schema associations and original file paths are not preserved.
-    pub fn as_uninitialized(self) -> UninitializedChatCompletionConfig {
+    pub fn as_uninitialized(&self) -> UninitializedChatCompletionConfig {
         let mut system_template = None;
         let mut user_template = None;
         let mut assistant_template = None;
