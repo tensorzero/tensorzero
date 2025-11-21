@@ -1,7 +1,6 @@
 #![recursion_limit = "256"]
 #![deny(clippy::all)]
 use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
-use tensorzero_core::config::ConfigLoadInfo;
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 use url::Url;
 
@@ -140,10 +139,7 @@ pub async fn run_evaluation_streaming(
             ))
         })?;
 
-    let ConfigLoadInfo {
-        config,
-        snapshot: _,
-    } = Config::load_from_path_optional_verify_credentials(&config_glob, false)
+    let config_load_info = Config::load_from_path_optional_verify_credentials(&config_glob, false)
         .await
         .map_err(|e| {
             napi::Error::from_reason(format!(
@@ -151,19 +147,28 @@ pub async fn run_evaluation_streaming(
                 params.config_path
             ))
         })?;
-    let config = Arc::new(config);
+    let clickhouse_client = ClickHouseConnectionInfo::new(
+        &params.clickhouse_url,
+        config_load_info
+            .config
+            .gateway
+            .observability
+            .batch_writes
+            .clone(),
+    )
+    .await
+    .map_err(|e| napi::Error::from_reason(format!("Failed to connect to ClickHouse: {e}")))?;
+    let config = Arc::new(
+        config_load_info
+            .into_config(&clickhouse_client)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?,
+    );
 
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::HTTPGateway { url })
         .build()
         .await
         .map_err(|e| napi::Error::from_reason(format!("Failed to build TensorZero client: {e}")))?;
-
-    let clickhouse_client = ClickHouseConnectionInfo::new(
-        &params.clickhouse_url,
-        config.gateway.observability.batch_writes.clone(),
-    )
-    .await
-    .map_err(|e| napi::Error::from_reason(format!("Failed to connect to ClickHouse: {e}")))?;
 
     let cache_mode = match params.inference_cache.as_str() {
         "on" => CacheEnabledMode::On,
@@ -420,7 +425,10 @@ pub async fn get_config(config_path: Option<String>) -> Result<String, napi::Err
         .map(|path| path.to_path_buf());
     let config = tensorzero::get_config_no_verify_credentials(config_path)
         .await
-        .map_err(|e| napi::Error::from_reason(format!("Failed to get config: {e}")))?;
+        .map_err(|e| napi::Error::from_reason(format!("Failed to get config: {e}")))?
+        // Note: this is OK because we're simply serializing it and passing to Node
+        // We'll never write anything to DB that uses this exact config since we drop it after serializing
+        .dangerous_into_config_without_writing();
     let config_str =
         serde_json::to_string(&config).map_err(|e| napi::Error::from_reason(e.to_string()))?;
     Ok(config_str)

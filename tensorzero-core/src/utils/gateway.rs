@@ -168,18 +168,19 @@ fn create_auth_cache_from_config(config: &Config) -> Option<Cache<String, AuthRe
 }
 
 impl GatewayHandle {
-    pub async fn new(config: Arc<Config>) -> Result<Self, Error> {
+    pub async fn new(config: ConfigLoadInfo) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
         Self::new_with_databases(config, clickhouse_url, postgres_url).await
     }
 
     async fn new_with_databases(
-        config: Arc<Config>,
+        config: ConfigLoadInfo,
         clickhouse_url: Option<String>,
         postgres_url: Option<String>,
     ) -> Result<Self, Error> {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
+        let config = Arc::new(config.into_config(&clickhouse_connection_info).await?);
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
         let http_client = config.http_client.clone();
         Self::new_with_database_and_http_client(
@@ -276,20 +277,18 @@ impl GatewayHandle {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(
-        &Config::new_empty().await?.config,
-        Some(clickhouse_url),
-        true,
-    )
-    .await
+    setup_clickhouse(&Config::new_empty().await?, Some(clickhouse_url), true).await
 }
 
 pub async fn setup_clickhouse(
-    config: &Config,
+    config: &ConfigLoadInfo,
     clickhouse_url: Option<String>,
     embedded_client: bool,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    let clickhouse_connection_info = match (config.gateway.observability.enabled, clickhouse_url) {
+    let clickhouse_connection_info = match (
+        config.config.gateway.observability.enabled,
+        clickhouse_url,
+    ) {
         // Observability disabled by config
         (Some(false), _) => {
             tracing::info!("Disabling observability: `gateway.observability.enabled` is set to false in config.");
@@ -306,7 +305,7 @@ pub async fn setup_clickhouse(
         (Some(true), Some(clickhouse_url)) => {
             ClickHouseConnectionInfo::new(
                 &clickhouse_url,
-                config.gateway.observability.batch_writes.clone(),
+                config.config.gateway.observability.batch_writes.clone(),
             )
             .await?
         }
@@ -324,7 +323,7 @@ pub async fn setup_clickhouse(
         (None, Some(clickhouse_url)) => {
             ClickHouseConnectionInfo::new(
                 &clickhouse_url,
-                config.gateway.observability.batch_writes.clone(),
+                config.config.gateway.observability.batch_writes.clone(),
             )
             .await?
         }
@@ -335,7 +334,11 @@ pub async fn setup_clickhouse(
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
             is_manual_run: false,
-            disable_automatic_migrations: config.gateway.observability.disable_automatic_migrations,
+            disable_automatic_migrations: config
+                .config
+                .gateway
+                .observability
+                .disable_automatic_migrations,
         })
         .await?;
     }
@@ -492,18 +495,13 @@ pub async fn start_openai_compatible_gateway(
             message: format!("Failed to get local address: {e}"),
         })
     })?;
-    let config = if let Some(config_file) = config_file {
-        let ConfigLoadInfo {
-            config,
-            snapshot: _,
-            // TODO: make sure this gets written
-        } = Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?;
-        Arc::new(config)
+    let config_load_info = if let Some(config_file) = config_file {
+        Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?
     } else {
-        Arc::new(Config::new_empty().await?.config)
+        Config::new_empty().await?
     };
     let gateway_handle =
-        GatewayHandle::new_with_databases(config, clickhouse_url, postgres_url).await?;
+        GatewayHandle::new_with_databases(config_load_info, clickhouse_url, postgres_url).await?;
 
     let router = Router::new()
         .register_openai_compatible_routes()

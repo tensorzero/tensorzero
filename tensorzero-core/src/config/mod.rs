@@ -33,6 +33,7 @@ use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
 use crate::config::snapshot::ConfigSnapshot;
 use crate::config::span_map::SpanMap;
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
 use crate::error::{Error, ErrorDetails};
@@ -720,12 +721,6 @@ fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<
     matched_files
 }
 
-#[derive(Debug)]
-pub struct ConfigLoadInfo {
-    pub config: Config,
-    pub snapshot: ConfigSnapshot,
-}
-
 impl Config {
     /// Constructs a new `Config`, as if from an empty config file.
     /// This is the only way to construct an empty config file in production code,
@@ -1005,7 +1000,7 @@ impl Config {
         config.templates = Arc::new(templates);
 
         Ok(ConfigLoadInfo {
-            config,
+            config: UnwrittenConfig(config),
             snapshot: snapshot::ConfigSnapshot {
                 config: serialized_table,
                 extra_templates,
@@ -1196,6 +1191,34 @@ impl Config {
                 })
             })?
             .clone())
+    }
+}
+
+#[derive(Debug)]
+pub struct UnwrittenConfig(Config);
+
+impl std::ops::Deref for UnwrittenConfig {
+    type Target = Config;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[derive(Debug)]
+pub struct ConfigLoadInfo {
+    pub config: UnwrittenConfig,
+    snapshot: ConfigSnapshot,
+}
+
+impl ConfigLoadInfo {
+    pub async fn into_config(self, clickhouse: &ClickHouseConnectionInfo) -> Result<Config, Error> {
+        // TODO: write config to ConfigSnapshot table before returning Arc
+        Ok(self.config.0)
+    }
+
+    pub fn dangerous_into_config_without_writing(self) -> Config {
+        self.config.0
     }
 }
 

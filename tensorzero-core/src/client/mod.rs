@@ -1,6 +1,6 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
-use crate::config::ConfigFileGlob;
+use crate::config::{ConfigFileGlob, ConfigLoadInfo};
 use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
@@ -484,46 +484,47 @@ impl ClientBuilder {
                 verify_credentials,
                 allow_batch_writes,
             } => {
-                let config = if let Some(config_file) = config_file {
+                let config_load_info = if let Some(config_file) = config_file {
                     let glob = ConfigFileGlob::new(config_file.to_string_lossy().to_string())
                         .map_err(|e| {
                             ClientBuilderError::ConfigParsingPreGlob(TensorZeroError::Other {
                                 source: e.into(),
                             })
                         })?;
-                    Arc::new(
-                        Config::load_from_path_optional_verify_credentials(
-                            &glob,
-                            *verify_credentials,
-                        )
+                    Config::load_from_path_optional_verify_credentials(&glob, *verify_credentials)
                         .await
                         .map_err(|e| ClientBuilderError::ConfigParsing {
                             error: TensorZeroError::Other { source: e.into() },
                             glob,
                         })?
-                        .config,
-                    )
                 } else {
                     tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
-                    Arc::new(
-                        Config::new_empty()
-                            .await
-                            .map_err(|e| ClientBuilderError::ConfigParsing {
-                                error: TensorZeroError::Other { source: e.into() },
-                                glob: ConfigFileGlob::new_empty(),
-                            })?
-                            .config,
-                    )
+                    Config::new_empty()
+                        .await
+                        .map_err(|e| ClientBuilderError::ConfigParsing {
+                            error: TensorZeroError::Other { source: e.into() },
+                            glob: ConfigFileGlob::new_empty(),
+                        })?
                 };
-                Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let clickhouse_connection_info =
-                    setup_clickhouse(&config, clickhouse_url.clone(), true)
+                    setup_clickhouse(&config_load_info, clickhouse_url.clone(), true)
                         .await
                         .map_err(|e| {
                             ClientBuilderError::Clickhouse(TensorZeroError::Other {
                                 source: e.into(),
                             })
                         })?;
+                let config = Arc::new(
+                    config_load_info
+                        .into_config(&clickhouse_connection_info)
+                        .await
+                        .map_err(|e| {
+                            ClientBuilderError::Clickhouse(TensorZeroError::Other {
+                                source: e.into(),
+                            })
+                        })?,
+                );
+                Self::validate_embedded_gateway_config(&config, *allow_batch_writes)?;
                 let postgres_connection_info = setup_postgres(&config, postgres_url.clone())
                     .await
                     .map_err(|e| {
@@ -961,7 +962,7 @@ pub async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroErr
 /// If the path is None, it returns the default config.
 pub async fn get_config_no_verify_credentials(
     path: Option<PathBuf>,
-) -> Result<Config, TensorZeroError> {
+) -> Result<ConfigLoadInfo, TensorZeroError> {
     match path {
         Some(path) => Config::load_from_path_optional_verify_credentials(
             &ConfigFileGlob::new(path.to_string_lossy().to_string())
@@ -969,12 +970,10 @@ pub async fn get_config_no_verify_credentials(
             false,
         )
         .await
-        .map(|load_info| load_info.config)
         .map_err(|e| TensorZeroError::Other { source: e.into() }),
         None => Ok(Config::new_empty()
             .await
-            .map_err(|e| TensorZeroError::Other { source: e.into() })?
-            .config),
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?),
     }
 }
 
