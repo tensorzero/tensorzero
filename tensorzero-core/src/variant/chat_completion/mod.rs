@@ -160,7 +160,7 @@ impl ChatCompletionConfig {
 
     /// Converts this initialized config back to its uninitialized form.
     /// Note: Schema associations and original file paths are not preserved.
-    pub fn into_uninitialized(self) -> UninitializedChatCompletionConfig {
+    pub fn as_uninitialized(self) -> UninitializedChatCompletionConfig {
         let mut system_template = None;
         let mut user_template = None;
         let mut assistant_template = None;
@@ -195,7 +195,7 @@ impl ChatCompletionConfig {
 
         UninitializedChatCompletionConfig {
             weight: self.weight,
-            model: self.model,
+            model: Arc::clone(&self.model),
             system_template,
             user_template,
             assistant_template,
@@ -209,15 +209,15 @@ impl ChatCompletionConfig {
             presence_penalty: self.presence_penalty,
             frequency_penalty: self.frequency_penalty,
             seed: self.seed,
-            stop_sequences: self.stop_sequences,
-            reasoning_effort: self.inference_params_v2.reasoning_effort,
-            service_tier: self.inference_params_v2.service_tier,
+            stop_sequences: self.stop_sequences.clone(),
+            reasoning_effort: self.inference_params_v2.reasoning_effort.clone(),
+            service_tier: self.inference_params_v2.service_tier.clone(),
             thinking_budget_tokens: self.inference_params_v2.thinking_budget_tokens,
-            verbosity: self.inference_params_v2.verbosity,
+            verbosity: self.inference_params_v2.verbosity.clone(),
             json_mode: self.json_mode,
             retries: self.retries,
-            extra_body: self.extra_body,
-            extra_headers: self.extra_headers,
+            extra_body: self.extra_body.clone(),
+            extra_headers: self.extra_headers.clone(),
         }
     }
 }
@@ -2972,7 +2972,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_basic_fields() {
+    fn test_as_uninitialized_preserves_basic_fields() {
         let uninitialized = UninitializedChatCompletionConfig {
             model: "gpt-4".into(),
             weight: Some(0.8),
@@ -2990,7 +2990,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.model, "gpt-4".into());
         assert_eq!(exported.weight, Some(0.8));
@@ -3007,7 +3007,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_inference_params_v2() {
+    fn test_as_uninitialized_preserves_inference_params_v2() {
         let uninitialized = UninitializedChatCompletionConfig {
             model: "gpt-4".into(),
             reasoning_effort: Some("high".to_string()),
@@ -3021,7 +3021,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.reasoning_effort, Some("high".to_string()));
         assert_eq!(exported.service_tier, Some(ServiceTier::Auto));
@@ -3030,7 +3030,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_none_values() {
+    fn test_as_uninitialized_preserves_none_values() {
         let uninitialized = UninitializedChatCompletionConfig {
             model: "gpt-4".into(),
             weight: None,
@@ -3049,7 +3049,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.weight, None);
         assert_eq!(exported.temperature, None);
@@ -3063,7 +3063,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_serialization_round_trip() {
+    fn test_as_uninitialized_serialization_round_trip() {
         let original = UninitializedChatCompletionConfig {
             model: "gpt-4".into(),
             weight: Some(0.5),
@@ -3078,7 +3078,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         // Serialize and deserialize
         let json = serde_json::to_string(&exported).unwrap();
