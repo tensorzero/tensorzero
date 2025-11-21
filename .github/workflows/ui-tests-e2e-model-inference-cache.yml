@@ -37,7 +37,7 @@ permissions:
 jobs:
   ui-tests-e2e-model-inference-cache:
     name: ui-tests-e2e-model-inference-cache (auth=${{ matrix.auth_enabled }})
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: ubuntu-latest
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
