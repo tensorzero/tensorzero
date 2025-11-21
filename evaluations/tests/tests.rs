@@ -2228,12 +2228,13 @@ async fn test_query_skips_staled_datapoints() {
         "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
-    let config = Config::load_from_path_optional_verify_credentials(
+    let config_info = Config::load_from_path_optional_verify_credentials(
         &ConfigFileGlob::new_from_path(&config_path).unwrap(),
         false,
     )
     .await
     .unwrap();
+    let config = config_info.into_config();
 
     #[expect(deprecated)]
     let request = ListDatapointsRequest {
