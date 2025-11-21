@@ -18,7 +18,7 @@ use tensorzero_core::{
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
-// Type aliases for cleaner score map signatures (TODO: will live next to evaluation code)
+// Type aliases for cleaner score map signatures (TODO(#4669): move to evaluation module)
 pub type EvaluatorName = String;
 
 /// Unique identifier for a datapoint/example in a dataset
@@ -153,9 +153,26 @@ impl ParetoFrontier {
             .collect();
 
         if !collisions.is_empty() {
+            let collision_list = if collisions.len() <= 5 {
+                collisions
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            } else {
+                format!(
+                    "{} and {} more",
+                    collisions[..5]
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    collisions.len() - 5
+                )
+            };
             return Err(Error::new(ErrorDetails::InternalError {
                 message: format!(
-                    "Variant name collision(s) detected: {collisions:?}. New variants cannot have the same names as existing frontier variants."
+                    "Variant name collision(s) detected: {collision_list}. New variants cannot have the same names as existing frontier variants."
                 ),
             }));
         }
@@ -164,9 +181,13 @@ impl ParetoFrontier {
         let mut all_candidates = self.variants.clone();
         all_candidates.extend(new_variants);
 
-        // Step 3: Merge new scores with existing scores
-        let mut all_scores = self.val_scores.clone();
-        all_scores.extend(new_variant_scores.clone());
+        // Check if we have any valid scores (before merging to avoid unnecessary clone)
+        if new_variant_scores.is_empty() {
+            tracing::warn!("No validation scores provided for any variant");
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "No validation scores provided for any variant".to_string(),
+            }));
+        }
 
         tracing::debug!(
             "Combined candidates: {} total ({} existing + {} new)",
@@ -175,13 +196,9 @@ impl ParetoFrontier {
             new_variant_scores.len()
         );
 
-        // Check if we have any valid scores
-        if new_variant_scores.is_empty() {
-            tracing::warn!("No validation scores provided for any variant");
-            return Err(Error::new(ErrorDetails::InternalError {
-                message: "No validation scores provided for any variant".to_string(),
-            }));
-        }
+        // Step 3: Merge new scores with existing scores (consuming new_variant_scores)
+        let mut all_scores = self.val_scores.clone();
+        all_scores.extend(new_variant_scores);
 
         // Check if there are any datapoints - if yes, ensure at least one valid score exists
         let has_any_datapoint = all_scores
@@ -221,12 +238,20 @@ impl ParetoFrontier {
                 .difference(&expected_datapoints)
                 .map(|s| (*s).clone())
                 .collect();
+            let unexpected_list = if unexpected.len() <= 5 {
+                unexpected.join(", ")
+            } else {
+                format!(
+                    "{} and {} more",
+                    unexpected[..5].join(", "),
+                    unexpected.len() - 5
+                )
+            };
             return Err(Error::new(ErrorDetails::InternalError {
                 message: format!(
-                    "Validation scores contain {} datapoint(s) not in frontier's datapoint_ids: {:?}. \
+                    "Validation scores contain {} datapoint(s) not in frontier's datapoint_ids: {unexpected_list}. \
                      Layout must remain constant across iterations.",
-                    unexpected.len(),
-                    unexpected
+                    unexpected.len()
                 ),
             }));
         }
@@ -240,12 +265,30 @@ impl ParetoFrontier {
             .collect();
 
         if !unknown_metrics.is_empty() {
+            let mut unknown_list: Vec<_> = unknown_metrics.iter().collect();
+            unknown_list.sort();
+            let formatted_list = if unknown_list.len() <= 5 {
+                unknown_list
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            } else {
+                format!(
+                    "{} and {} more",
+                    unknown_list[..5]
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    unknown_list.len() - 5
+                )
+            };
             return Err(Error::new(ErrorDetails::InternalError {
                 message: format!(
-                    "Validation scores contain {} evaluator(s) not in frontier's evaluator set: {:?}. \
+                    "Validation scores contain {} evaluator(s) not in frontier's evaluator set: {formatted_list}. \
                      Evaluator layout must remain constant across iterations.",
-                    unknown_metrics.len(),
-                    unknown_metrics
+                    unknown_metrics.len()
                 ),
             }));
         }
