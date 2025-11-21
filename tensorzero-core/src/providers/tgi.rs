@@ -8,9 +8,9 @@ use async_trait::async_trait;
 /// Second, TGI doesn't handle multiple tools in a single request, because it doesn't return correct tool names. See the docs [here](https://huggingface.co/docs/text-generation-inference/main/en/basic_tutorials/using_guidance#the-tools-parameter)
 /// for an example.
 /// Third, TGI doesn't support tool responses being sent back at all.
-/// Fourth, TGI only supports JSON mode through a tool call. Luckily, we do this out of the box with `implicit_tool` as the json mode
+/// Fourth, TGI only supports JSON mode through a tool call. Luckily, we do this out of the box with `tool` as the json mode
 ///
-/// In light of this, we have decided to not explicitly support tool calling for TGI and only support JSON mode via `implicit_tool`.
+/// In light of this, we have decided to not explicitly support tool calling for TGI and only support JSON mode via `tool`.
 /// Our implementation currently allows you to use a tool in TGI (nonstreaming), but YMMV.
 use futures::{Stream, StreamExt, TryStreamExt};
 use reqwest::StatusCode;
@@ -494,9 +494,9 @@ impl<'a> TGIRequest<'a> {
     ) -> Result<TGIRequest<'a>, Error> {
         // TGI doesn't support JSON mode at all (only through tools [https://huggingface.co/docs/text-generation-inference/en/conceptual/guidance])
         // So we log a warning and ignore the JSON mode
-        // You can get JSON mode through `implicit_tool` instead.
+        // You can get JSON mode through `tool` instead.
         if request.json_mode != ModelInferenceRequestJsonMode::Off {
-            tracing::warn!("TGI does not support JSON mode. Ignoring JSON mode. Consider using `json_mode = \"implicit_tool\"` instead.");
+            tracing::warn!("TGI does not support JSON mode. Ignoring JSON mode. Consider using `json_mode = \"tool\"` instead.");
         }
 
         let stream_options = if request.stream {
@@ -523,7 +523,7 @@ impl<'a> TGIRequest<'a> {
         .await?;
 
         let (tools, tool_choice, parallel_tool_calls) =
-            prepare_chat_completion_tools(request, false);
+            prepare_chat_completion_tools(request, false)?;
 
         let mut tgi_request = TGIRequest {
             messages,

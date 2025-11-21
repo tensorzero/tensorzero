@@ -1339,6 +1339,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         optimize: LLMJudgeOptimize::Max,
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
+        description: None,
     };
     let input = resolved_input_to_client_input(
         datapoint
@@ -1515,6 +1516,7 @@ async fn test_run_llm_judge_evaluator_json() {
         optimize: LLMJudgeOptimize::Max,
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
+        description: None,
     };
     let input = resolved_input_to_client_input(
         datapoint
@@ -2356,7 +2358,8 @@ async fn test_max_datapoints_parameter() {
             false,
         )
         .await
-        .unwrap(),
+        .unwrap()
+        .config,
     );
 
     let evaluation_run_id = Uuid::now_v7();
@@ -2429,7 +2432,8 @@ async fn test_precision_targets_parameter() {
             false,
         )
         .await
-        .unwrap(),
+        .unwrap()
+        .config,
     );
 
     let evaluation_run_id = Uuid::now_v7();

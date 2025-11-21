@@ -7,7 +7,7 @@
 - Once you're done with your work, make sure to:
   - Run `cargo fmt`.
   - Run `cargo clippy --all-targets --all-features -- -D warnings` to catch warnings and errors.
-  - Run unit tests with `cargo test-unit` which uses `nextest` under the hood.
+  - Run unit tests with `cargo test-unit-fast` which uses `nextest` under the hood.
 
 ## For APIs
 

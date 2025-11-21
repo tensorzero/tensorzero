@@ -31,21 +31,21 @@ use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::experimentation::ExperimentationConfig;
-use crate::function::FunctionConfig;
-use crate::function::FunctionConfigChat;
+use crate::function::{FunctionConfig, FunctionConfigChat};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier,
 };
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
+use crate::inference::types::extra_stuff::validate_inference_filters;
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     collect_chunks, ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
     ContentBlockChatOutput, ContentBlockChunk, FetchContext, FinishReason, InferenceResult,
     InferenceResultChunk, InferenceResultStream, Input, InternalJsonInferenceOutput,
     JsonInferenceDatabaseInsert, JsonInferenceOutput, JsonInferenceResultChunk,
-    ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput, Usage,
+    ModelInferenceResponseWithMetadata, RequestMessage, ResolvedInput, TextChunk, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -147,6 +147,7 @@ struct InferenceMetadata {
     pub dynamic_output_schema: Option<DynamicJSONSchema>,
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
+    pub json_mode: Option<JsonMode>,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub fetch_and_encode_input_files_before_inference: bool,
     pub include_original_response: bool,
@@ -294,7 +295,7 @@ pub async fn inference(
         );
     }
 
-    let (function, function_name) = find_function(&params, &config)?;
+    let (function, function_name) = find_function(&params, &config).await?;
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
         function.variants().clone().into_iter().collect();
 
@@ -308,6 +309,15 @@ pub async fn inference(
 
     // Validate the input
     function.validate_inference_params(&params)?;
+
+    // Validate extra_body and extra_headers filters
+    validate_inference_filters(
+        &params.extra_body,
+        &params.extra_headers,
+        Some(&function),
+        &config.models,
+    )
+    .await?;
 
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
@@ -593,7 +603,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             input: resolved_input,
             dryrun,
             start_time,
-            inference_params: model_used_info.inference_params,
+            inference_params: model_used_info.inference_params.clone(),
             model_name: model_used_info.model_name,
             model_provider_name: model_used_info.model_provider_name,
             raw_request: model_used_info.raw_request,
@@ -606,6 +616,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             dynamic_output_schema: output_schema.clone(),
             cached: model_used_info.cached,
             extra_body,
+            json_mode: model_used_info.inference_params.chat_completion.json_mode,
             extra_headers,
             include_original_response,
             fetch_and_encode_input_files_before_inference: config
@@ -697,7 +708,10 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
 /// invalid combination of parameters is provided.
 /// If `model_name` is specified, then we use the special 'default' function
 /// Returns the function config and the function name
-fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig>, String), Error> {
+async fn find_function(
+    params: &Params,
+    config: &Config,
+) -> Result<(Arc<FunctionConfig>, String), Error> {
     match (
         &params.function_name,
         &params.model_name,
@@ -722,6 +736,15 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 }
                 .into());
             }
+
+            // Validate extra_body and extra_headers filters
+            validate_inference_filters(
+                &params.extra_body,
+                &params.extra_headers,
+                None,
+                &config.models,
+            )
+            .await?;
 
             Ok((
                 Arc::new(FunctionConfig::Chat(FunctionConfigChat {
@@ -863,6 +886,7 @@ fn create_stream(
                 dynamic_output_schema,
                 cached,
                 extra_body,
+                json_mode: _,
                 extra_headers,
                 fetch_and_encode_input_files_before_inference,
                 include_original_response: _,
@@ -957,6 +981,7 @@ fn prepare_response_chunk(
         metadata.cached,
         metadata.include_original_response,
         extra_usage,
+        metadata.json_mode,
     )
 }
 
@@ -1198,6 +1223,7 @@ pub struct JsonInferenceResponseChunk {
 }
 
 impl InferenceResponseChunk {
+    #[expect(clippy::too_many_arguments)]
     fn new(
         inference_result: InferenceResultChunk,
         inference_id: Uuid,
@@ -1206,6 +1232,7 @@ impl InferenceResponseChunk {
         cached: bool,
         include_original_response: bool,
         extra_usage: &mut Option<Usage>,
+        json_mode: Option<JsonMode>,
     ) -> Option<Self> {
         let mut result_usage = if cached {
             // When our outer inference result is cached, don't
@@ -1237,11 +1264,31 @@ impl InferenceResponseChunk {
         }
         Some(match inference_result {
             InferenceResultChunk::Chat(result) => {
+                // For chat functions with json_mode="tool", convert tool call chunks to text chunks
+                let content = if json_mode == Some(JsonMode::Tool) {
+                    result
+                        .content
+                        .into_iter()
+                        .map(|chunk| match chunk {
+                            ContentBlockChunk::ToolCall(tool_call) => {
+                                // Convert tool call arguments to text chunk
+                                ContentBlockChunk::Text(TextChunk {
+                                    id: tool_call.id,
+                                    text: tool_call.raw_arguments,
+                                })
+                            }
+                            other => other,
+                        })
+                        .collect()
+                } else {
+                    result.content
+                };
+
                 InferenceResponseChunk::Chat(ChatInferenceResponseChunk {
                     inference_id,
                     episode_id,
                     variant_name,
-                    content: result.content,
+                    content,
                     // Token usage is intended to represent 'billed tokens',
                     // so set it to zero if the result is cached
                     usage: result_usage,
@@ -1545,6 +1592,7 @@ mod tests {
             dynamic_output_schema: None,
             cached: false,
             extra_body: Default::default(),
+            json_mode: None,
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
@@ -1599,6 +1647,7 @@ mod tests {
             dynamic_output_schema: None,
             cached: false,
             extra_body: Default::default(),
+            json_mode: None,
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             include_original_response: false,
@@ -1620,8 +1669,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_find_function_no_function_model() {
+    #[tokio::test]
+    async fn test_find_function_no_function_model() {
         let err = find_function(
             &Params {
                 function_name: None,
@@ -1630,6 +1679,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect_err("find_function should fail without either arg");
         assert!(
             err.to_string()
@@ -1638,8 +1688,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_find_function_both_function_model() {
+    #[tokio::test]
+    async fn test_find_function_both_function_model() {
         let err = find_function(
             &Params {
                 function_name: Some("my_function".to_string()),
@@ -1648,6 +1698,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect_err("find_function should fail with both args provided");
         assert!(
             err.to_string()
@@ -1656,8 +1707,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_find_function_model_and_variant() {
+    #[tokio::test]
+    async fn test_find_function_model_and_variant() {
         let err = find_function(
             &Params {
                 function_name: None,
@@ -1667,6 +1718,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect_err("find_function should fail without model_name");
         assert!(
             err.to_string()
@@ -1675,8 +1727,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_find_function_shorthand_model() {
+    #[tokio::test]
+    async fn test_find_function_shorthand_model() {
         let (function_config, function_name) = find_function(
             &Params {
                 function_name: None,
@@ -1685,6 +1737,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect("Failed to find shorthand function");
         assert_eq!(function_name, "tensorzero::default");
         assert_eq!(function_config.variants().len(), 1);
@@ -1694,8 +1747,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_find_function_shorthand_missing_provider() {
+    #[tokio::test]
+    async fn test_find_function_shorthand_missing_provider() {
         let err = find_function(
             &Params {
                 model_name: Some("fake_provider::gpt-9000".to_string()),
@@ -1703,6 +1756,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect_err("find_function should fail with invalid provider");
         assert!(
             err.to_string()
