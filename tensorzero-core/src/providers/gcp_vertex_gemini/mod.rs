@@ -1655,17 +1655,13 @@ pub enum GCPVertexGeminiPartData<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GCPVertexGeminiContentPart<'a> {
-    #[serde(default, skip_serializing_if = "is_false")]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     thought: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     thought_signature: Option<String>,
     #[serde(flatten)]
     #[serde(default)]
     data: FlattenUnknown<'a, GCPVertexGeminiPartData<'a>>,
-}
-
-fn is_false(b: &bool) -> bool {
-    !b
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -2239,8 +2235,7 @@ async fn convert_non_thought_content_block<'a>(
         Cow::Borrowed(ContentBlock::Thought(_)) | Cow::Owned(ContentBlock::Thought(_)) => {
             Err(Error::new(ErrorDetails::InternalError {
                 message: format!(
-                    "convert_non_thought_content_block was called with a Thought block. {}",
-                    IMPOSSIBLE_ERROR_MESSAGE
+                    "convert_non_thought_content_block was called with a Thought block. {IMPOSSIBLE_ERROR_MESSAGE}"
                 ),
             }))
         }
@@ -2457,8 +2452,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                             }));
                         }
                         Some(next_block) => {
-                            let gcp_part =
-                                convert_non_thought_content_block(next_block).await?;
+                            let gcp_part = convert_non_thought_content_block(next_block).await?;
                             model_content_blocks.push(GCPVertexGeminiContentPart {
                                 thought: false,
                                 thought_signature: Some(signature.clone()),
@@ -3068,7 +3062,7 @@ mod tests {
             .unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::User);
         assert_eq!(content.parts.len(), 1);
-        assert_eq!(content.parts[0].thought, false);
+        assert!(!content.parts[0].thought);
         assert_eq!(content.parts[0].thought_signature, None);
         match &content.parts[0].data {
             FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
@@ -3086,7 +3080,7 @@ mod tests {
             .unwrap();
         assert_eq!(content.role, GCPVertexGeminiRole::Model);
         assert_eq!(content.parts.len(), 1);
-        assert_eq!(content.parts[0].thought, false);
+        assert!(!content.parts[0].thought);
         assert_eq!(content.parts[0].thought_signature, None);
         match &content.parts[0].data {
             FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
@@ -3120,7 +3114,10 @@ mod tests {
         match &content.parts[1].data {
             FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionCall { function_call }) => {
                 assert_eq!(function_call.name, "get_temperature");
-                assert_eq!(function_call.args, json!({"location": "New York", "unit": "celsius"}));
+                assert_eq!(
+                    function_call.args,
+                    json!({"location": "New York", "unit": "celsius"})
+                );
             }
             _ => panic!("Expected function call part"),
         }
@@ -3139,12 +3136,17 @@ mod tests {
         assert_eq!(content.role, GCPVertexGeminiRole::User);
         assert_eq!(content.parts.len(), 1);
         match &content.parts[0].data {
-            FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionResponse { function_response }) => {
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::FunctionResponse {
+                function_response,
+            }) => {
                 assert_eq!(function_response.name, "get_temperature");
-                assert_eq!(function_response.response, json!({
-                    "name": "get_temperature",
-                    "content": r#"{"temperature": 25, "conditions": "sunny"}"#
-                }));
+                assert_eq!(
+                    function_response.response,
+                    json!({
+                        "name": "get_temperature",
+                        "content": r#"{"temperature": 25, "conditions": "sunny"}"#
+                    })
+                );
             }
             _ => panic!("Expected function response part"),
         }

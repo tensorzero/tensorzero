@@ -258,7 +258,6 @@ mod tests {
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
             StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
         },
-        providers::gcp_vertex_gemini::GCPVertexGeminiContentPart,
         stored_inference::{RenderedSample, StoredOutput},
         tool::DynamicToolParams,
     };
