@@ -593,8 +593,6 @@ impl ClientBuilder {
                         timeout: *timeout,
                     }),
                     verbose_errors: self.verbose_errors,
-                    #[cfg(feature = "e2e_tests")]
-                    last_body: Default::default(),
                 })
             }
             ClientBuilderMode::FromComponents {
@@ -631,8 +629,6 @@ impl ClientBuilder {
                         timeout: *timeout,
                     }),
                     verbose_errors: self.verbose_errors,
-                    #[cfg(feature = "e2e_tests")]
-                    last_body: Default::default(),
                 })
             }
         }
@@ -646,8 +642,6 @@ impl ClientBuilder {
                 timeout: None,
             }),
             verbose_errors: false,
-            #[cfg(feature = "e2e_tests")]
-            last_body: Default::default(),
         })
     }
 
@@ -763,8 +757,6 @@ impl ClientBuilder {
                 verbose_errors: self.verbose_errors,
             })),
             verbose_errors: self.verbose_errors,
-            #[cfg(feature = "e2e_tests")]
-            last_body: Default::default(),
         })
     }
 }
@@ -774,8 +766,6 @@ impl ClientBuilder {
 pub struct Client {
     mode: Arc<ClientMode>,
     pub verbose_errors: bool,
-    #[cfg(feature = "e2e_tests")]
-    pub last_body: Arc<tokio::sync::Mutex<Option<String>>>,
 }
 
 impl StoragePathResolver for Client {
@@ -870,10 +860,6 @@ impl Client {
             })
             .into(),
         })?;
-        #[cfg(feature = "e2e_tests")]
-        {
-            *self.last_body.lock().await = Some(body.clone());
-        }
         let mut builder = client
             .http_client
             .post(url)
