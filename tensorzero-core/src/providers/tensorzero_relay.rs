@@ -325,7 +325,7 @@ impl TensorZeroRelayProvider {
             // TODO - implement extra_body and extra_headers
             extra_body: Default::default(),
             extra_headers: Default::default(),
-            // We intentionally do for not forward the rest of these parameters,
+            // We intentionally do not forward the rest of these parameters,
             // we only apply them to this gateway, not the next hop.
             credentials: HashMap::new(),
             cache_options: Default::default(),
