@@ -6,7 +6,9 @@ use futures::future::Shared;
 use futures::FutureExt;
 use mime::MediaType;
 use object_store::{PutMode, PutOptions};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tensorzero_derive::export_schema;
 use url::Url;
 
 use super::{
@@ -25,7 +27,7 @@ use crate::tool::{ToolCall, ToolResult};
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
-    resolved_content_block_to_python, resolved_input_message_content_to_python, serialize_to_dict,
+    resolved_input_message_content_to_python, serialize_to_dict,
 };
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -457,9 +459,9 @@ impl RateLimitedInputContent for LazyFile {
 }
 
 /// Like `RequestMessage`, but holds fully-resolved files instead of `LazyFile`s
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[export_schema]
 pub struct ResolvedRequestMessage {
     pub role: Role,
     pub content: Vec<ResolvedContentBlock>,
@@ -475,30 +477,5 @@ impl ResolvedRequestMessage {
                 .map(ResolvedContentBlock::into_content_block)
                 .collect(),
         }
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl ResolvedRequestMessage {
-    #[getter]
-    fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        use pyo3::types::PyList;
-
-        let content = self
-            .content
-            .iter()
-            .map(|c| resolved_content_block_to_python(py, c))
-            .collect::<PyResult<Vec<_>>>()?;
-        PyList::new(py, content).map(Bound::into_any)
-    }
-
-    #[getter]
-    fn get_role(&self) -> String {
-        self.role.to_string()
-    }
-
-    pub fn __repr__(&self) -> String {
-        self.to_string()
     }
 }

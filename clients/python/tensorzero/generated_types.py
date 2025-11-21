@@ -258,6 +258,15 @@ ProviderToolScope = ProviderToolScopeModelProvider | None
 
 
 @dataclass(kw_only=True)
+class Usage:
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
+FinishReason = Literal["stop", "stop_sequence", "length", "tool_call", "content_filter", "unknown"]
+
+
+@dataclass(kw_only=True)
 class JsonDatapointOutputUpdate:
     raw: str
     """
@@ -368,6 +377,28 @@ class StoredInputMessageContentUnknown:
 
 
 @dataclass(kw_only=True)
+class ChatInferenceResponse:
+    inference_id: str
+    episode_id: str
+    variant_name: str
+    content: list[ContentBlockChatOutput]
+    usage: Usage
+    original_response: str | None = None
+    finish_reason: FinishReason | None = None
+
+
+@dataclass(kw_only=True)
+class JsonInferenceResponse:
+    inference_id: str
+    episode_id: str
+    variant_name: str
+    output: JsonInferenceOutput
+    usage: Usage
+    original_response: str | None = None
+    finish_reason: FinishReason | None = None
+
+
+@dataclass(kw_only=True)
 class TagDatapointFilter(TagFilter):
     type: Literal["tag"] = "tag"
 
@@ -378,6 +409,40 @@ class TimeDatapointFilter(TimeFilter):
 
 
 OrderDirection = Literal["ascending", "descending"]
+
+
+@dataclass(kw_only=True)
+class ResolvedContentBlockText:
+    text: str
+    type: Literal["text"] = "text"
+
+
+@dataclass(kw_only=True)
+class ResolvedContentBlockToolCall(ToolCall):
+    type: Literal["tool_call"] = "tool_call"
+
+
+@dataclass(kw_only=True)
+class ResolvedContentBlockToolResult:
+    name: str
+    result: str
+    id: str
+    type: Literal["tool_result"] = "tool_result"
+
+
+@dataclass(kw_only=True)
+class ResolvedContentBlockThought(Thought):
+    type: Literal["thought"] = "thought"
+
+
+@dataclass(kw_only=True)
+class ResolvedContentBlockUnknown:
+    data: Any
+    type: Literal["unknown"] = "unknown"
+    model_provider_name: str | None = None
+
+
+StoredOutput = list[ContentBlockChatOutput] | JsonInferenceOutput
 
 
 @dataclass(kw_only=True)
@@ -725,6 +790,11 @@ ExtraHeader = (
 
 
 @dataclass(kw_only=True)
+class FeedbackResponse:
+    feedback_id: str
+
+
+@dataclass(kw_only=True)
 class GetDatapointsRequest:
     ids: list[str]
     """
@@ -750,6 +820,9 @@ class GetInferencesRequest:
     Including this improves query performance since `function_name` is the first column
     in the ClickHouse primary key.
     """
+
+
+InferenceResponse = ChatInferenceResponse | JsonInferenceResponse
 
 
 @dataclass(kw_only=True)
@@ -957,6 +1030,21 @@ OrderBy = OrderByTimestamp | OrderByMetric | OrderBySearchRelevance
 
 
 @dataclass(kw_only=True)
+class ResolvedContentBlockFile(ObjectStorageFile):
+    type: Literal["file"] = "file"
+
+
+ResolvedContentBlock = (
+    ResolvedContentBlockText
+    | ResolvedContentBlockToolCall
+    | ResolvedContentBlockToolResult
+    | ResolvedContentBlockFile
+    | ResolvedContentBlockThought
+    | ResolvedContentBlockUnknown
+)
+
+
+@dataclass(kw_only=True)
 class InputMessageContentFile:
     type: Literal["file"] = "file"
 
@@ -986,6 +1074,18 @@ OpenAICustomToolFormat = OpenAICustomToolFormatText | OpenAICustomToolFormatGram
 class StoredInputMessage:
     role: Role
     content: list[StoredInputMessageContent]
+
+
+@dataclass(kw_only=True)
+class ResolvedRequestMessage:
+    role: Role
+    content: list[ResolvedContentBlock]
+
+
+@dataclass(kw_only=True)
+class ModelInput:
+    messages: list[ResolvedRequestMessage]
+    system: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -1120,6 +1220,44 @@ class DynamicToolParams:
     """
     Provider-specific tool configurations
     """
+
+
+@dataclass(kw_only=True)
+class RenderedSample:
+    function_name: str
+    input: ModelInput
+    stored_input: StoredInput
+    dispreferred_outputs: list[list[ContentBlockChatOutput]]
+    tags: dict[str, str]
+    output: list[ContentBlockChatOutput] | None = None
+    stored_output: StoredOutput | None = None
+    episode_id: str | None = None
+    inference_id: str | None = None
+    allowed_tools: list[str] | None = None
+    """
+    A subset of static tools configured for the function that the inference is allowed to use. Optional.
+    If not provided, all static tools are allowed.
+    """
+    additional_tools: list[Tool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured
+    tools, that are also allowed.
+    """
+    tool_choice: ToolChoice | None = None
+    """
+    User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+    Optional.
+    """
+    parallel_tool_calls: bool | None = None
+    """
+    Whether to use parallel tool calls in the inference. Optional.
+    If provided during inference, it will override the function-configured parallel tool calls.
+    """
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
+    """
+    Provider-specific tool configurations
+    """
+    output_schema: Any | None = None
 
 
 @dataclass(kw_only=True)
@@ -1269,7 +1407,6 @@ class ChatInferenceDatapoint:
     Provider-specific tool configurations
     """
     tags: dict[str, Any] | None = None
-    auxiliary: str | None = None
     is_custom: bool | None = False
     source_inference_id: str | None = None
     staled_at: str | None = None
@@ -1288,7 +1425,6 @@ class JsonInferenceDatapoint:
     episode_id: str | None = None
     output: JsonInferenceOutput | None = None
     tags: dict[str, Any] | None = None
-    auxiliary: str | None = None
     is_custom: bool | None = False
     source_inference_id: str | None = None
     staled_at: str | None = None

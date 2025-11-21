@@ -6,49 +6,11 @@ use std::collections::HashMap;
 use pyo3::{exceptions::PyValueError, prelude::*, sync::PyOnceLock, types::PyDict};
 use tensorzero_core::endpoints::workflow_evaluation_run::WorkflowEvaluationRunEpisodeResponse;
 use tensorzero_core::inference::types::pyo3_helpers::{deserialize_from_pyobj, serialize_to_dict};
-use tensorzero_rust::{
-    FeedbackResponse, FunctionTool, InferenceResponse, InferenceResponseChunk,
-    WorkflowEvaluationRunResponse,
-};
+use tensorzero_rust::{FunctionTool, InferenceResponseChunk, WorkflowEvaluationRunResponse};
 use uuid::Uuid;
 
 // We lazily lookup the corresponding Python class/method for all of these helpers,
 // since they're not available during module initialization.
-pub fn parse_feedback_response(py: Python<'_>, data: FeedbackResponse) -> PyResult<Py<PyAny>> {
-    static PARSE_FEEDBACK_RESPONSE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-    static UUID: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-    // This should never actually fail, since we're just importing code defined in our own Python
-    // package. However, we still produce a Python error if it fails, rather than panicking
-    // and bringing down the entire Python process.
-    let parse_feedback_response =
-        PARSE_FEEDBACK_RESPONSE.get_or_try_init::<_, PyErr>(py, || {
-            let self_module = PyModule::import(py, "tensorzero.types")?;
-            Ok(self_module.getattr("FeedbackResponse")?.unbind())
-        })?;
-    let uuid = UUID.get_or_try_init::<_, PyErr>(py, || {
-        let self_module = PyModule::import(py, "uuid")?;
-        Ok(self_module.getattr("UUID")?.unbind())
-    })?;
-    let uuid_str = data.feedback_id.to_string();
-    let python_uuid = uuid.call1(py, (uuid_str,))?;
-    let python_parsed = parse_feedback_response.call1(py, (python_uuid,))?;
-    Ok(python_parsed.into_any())
-}
-
-pub fn parse_inference_response(py: Python<'_>, data: InferenceResponse) -> PyResult<Py<PyAny>> {
-    let json_data = serialize_to_dict(py, data)?;
-    static PARSE_INFERENCE_RESPONSE: PyOnceLock<Py<PyAny>> = PyOnceLock::new();
-    // This should never actually fail, since we're just importing code defined in our own Python
-    // package. However, we still produce a Python error if it fails, rather than panicking
-    // and bringing down the entire Python process.
-    let parse_inference_response =
-        PARSE_INFERENCE_RESPONSE.get_or_try_init::<_, PyErr>(py, || {
-            let self_module = PyModule::import(py, "tensorzero.types")?;
-            Ok(self_module.getattr("parse_inference_response")?.unbind())
-        })?;
-    let python_parsed = parse_inference_response.call1(py, (json_data,))?;
-    Ok(python_parsed.into_any())
-}
 
 pub fn parse_inference_chunk(py: Python<'_>, chunk: InferenceResponseChunk) -> PyResult<Py<PyAny>> {
     static PARSE_INFERENCE_CHUNK: PyOnceLock<Py<PyAny>> = PyOnceLock::new();

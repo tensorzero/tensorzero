@@ -20,9 +20,9 @@ use pyo3::{
     IntoPyObjectExt,
 };
 use python_helpers::{
-    convert_response_to_python_dataclass, parse_feedback_response, parse_inference_chunk,
-    parse_inference_response, parse_tool, parse_workflow_evaluation_run_episode_response,
-    parse_workflow_evaluation_run_response, python_uuid_to_uuid,
+    convert_response_to_python_dataclass, parse_inference_chunk, parse_tool,
+    parse_workflow_evaluation_run_episode_response, parse_workflow_evaluation_run_response,
+    python_uuid_to_uuid,
 };
 
 use crate::gil_helpers::in_tokio_runtime_no_gil;
@@ -66,8 +66,8 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
     Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
-    InferenceStream, LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams,
-    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
+    InferenceResponse, InferenceStream, LaunchOptimizationParams, ListDatapointsRequest,
+    ListInferencesParams, OptimizationJobHandle, StoredInference, TensorZeroError, Tool,
     WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
@@ -99,7 +99,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<AsyncTensorZeroGateway>()?;
     m.add_class::<TensorZeroGateway>()?;
     m.add_class::<LocalHttpGateway>()?;
-    m.add_class::<RenderedSample>()?;
     m.add_class::<EvaluationJobHandler>()?;
     m.add_class::<AsyncEvaluationJobHandler>()?;
     m.add_class::<UninitializedOpenAIRFTConfig>()?;
@@ -108,7 +107,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<UninitializedDiclOptimizationConfig>()?;
     m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
     m.add_class::<UninitializedTogetherSFTConfig>()?;
-    m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
     m.add_class::<ConfigPyClass>()?;
@@ -727,7 +725,13 @@ impl TensorZeroGateway {
         // We're in the synchronous `TensorZeroGateway` class, so we need to block on the Rust future,
         // and then return the result to the Python caller directly (not wrapped in a Python `Future`).
         match tokio_block_on_without_gil(py, fut) {
-            Ok(resp) => Ok(parse_feedback_response(py, resp)?.into_any()),
+            Ok(resp) => Ok(convert_response_to_python_dataclass(
+                py,
+                resp,
+                "tensorzero",
+                "FeedbackResponse",
+            )?
+            .into_any()),
             Err(e) => Err(convert_error(py, e)),
         }
     }
@@ -829,7 +833,13 @@ impl TensorZeroGateway {
         // and then return the result to the Python caller directly (not wrapped in a Python `Future`).
         let resp = tokio_block_on_without_gil(py, fut).map_err(|e| convert_error(py, e))?;
         match resp {
-            InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
+            InferenceOutput::NonStreaming(data) => {
+                let python_dataclass = match &data {
+                    InferenceResponse::Chat(_) => "ChatInferenceResponse",
+                    InferenceResponse::Json(_) => "JsonInferenceResponse",
+                };
+                convert_response_to_python_dataclass(py, data, "tensorzero", python_dataclass)
+            }
             InferenceOutput::Streaming(stream) => Ok(StreamWrapper {
                 stream: Arc::new(Mutex::new(stream)),
                 _gateway: this.into_pyobject(py)?.into_any().unbind(),
@@ -1046,14 +1056,24 @@ impl TensorZeroGateway {
         this: PyRef<'py, Self>,
         dataset_name: String,
         datapoint_id: Bound<'py, PyAny>,
-    ) -> PyResult<Bound<'py, Datapoint>> {
+    ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         #[expect(deprecated)]
         let fut = client.get_datapoint(dataset_name, datapoint_id);
         let wire: Datapoint =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        wire.into_pyobject(this.py())
+
+        // Convert to Python dataclass
+        convert_response_to_python_dataclass(
+            this.py(),
+            &wire,
+            "tensorzero",
+            match wire {
+                Datapoint::Chat(_) => "DatapointChat",
+                Datapoint::Json(_) => "DatapointJson",
+            },
+        )
     }
 
     /// DEPRECATED: Use `list_datapoints` instead.
@@ -1069,7 +1089,7 @@ impl TensorZeroGateway {
         function_name: Option<String>,
         limit: Option<u32>,
         offset: Option<u32>,
-    ) -> PyResult<Bound<'_, PyList>> {
+    ) -> PyResult<Py<PyList>> {
         let client = this.as_super().client.clone();
 
         let request = ListDatapointsRequest {
@@ -1082,13 +1102,25 @@ impl TensorZeroGateway {
         let fut = client.list_datapoints(dataset_name, request);
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
-            Ok(datapoints) => {
-                let py_datapoints = datapoints
+            Ok(response) => {
+                // Convert each datapoint to Python dataclass
+                let py_datapoints: Vec<_> = response
                     .datapoints
-                    .into_iter()
-                    .map(|x| x.into_pyobject(this.py()))
-                    .collect::<Result<Vec<_>, _>>()?;
-                PyList::new(this.py(), py_datapoints)
+                    .iter()
+                    .map(|datapoint| {
+                        convert_response_to_python_dataclass(
+                            this.py(),
+                            datapoint,
+                            "tensorzero",
+                            match datapoint {
+                                Datapoint::Chat(_) => "DatapointChat",
+                                Datapoint::Json(_) => "DatapointJson",
+                            },
+                        )
+                    })
+                    .collect::<PyResult<_>>()?;
+
+                Ok(PyList::new(this.py(), py_datapoints)?.unbind())
             }
             Err(e) => Err(convert_error(this.py(), e)),
         }
@@ -1589,7 +1621,7 @@ impl TensorZeroGateway {
         this: PyRef<'_, Self>,
         stored_samples: Vec<Bound<'_, PyAny>>,
         variants: HashMap<String, String>,
-    ) -> PyResult<Vec<RenderedSample>> {
+    ) -> PyResult<Py<PyList>> {
         let client = this.as_super().client.clone();
         let config = client.config().ok_or_else(|| {
             PyValueError::new_err(
@@ -1611,7 +1643,23 @@ impl TensorZeroGateway {
             })
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_samples, variants);
-        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+        let wires =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+
+        // Convert to Python dataclasses
+        let py_objects: Vec<_> = wires
+            .iter()
+            .map(|sample| {
+                convert_response_to_python_dataclass(
+                    this.py(),
+                    sample,
+                    "tensorzero",
+                    "RenderedSample",
+                )
+            })
+            .collect::<PyResult<_>>()?;
+
+        Ok(PyList::new(this.py(), py_objects)?.unbind())
     }
 
     /// Launch an optimization job.
@@ -1928,7 +1976,18 @@ impl AsyncTensorZeroGateway {
             Python::attach(|py| {
                 let output = res.map_err(|e| convert_error(py, e))?;
                 match output {
-                    InferenceOutput::NonStreaming(data) => parse_inference_response(py, data),
+                    InferenceOutput::NonStreaming(data) => {
+                        let python_dataclass = match &data {
+                            InferenceResponse::Chat(_) => "ChatInferenceResponse",
+                            InferenceResponse::Json(_) => "JsonInferenceResponse",
+                        };
+                        convert_response_to_python_dataclass(
+                            py,
+                            data,
+                            "tensorzero",
+                            python_dataclass,
+                        )
+                    }
                     InferenceOutput::Streaming(stream) => Ok(AsyncStreamWrapper {
                         stream: Arc::new(Mutex::new(stream)),
                         _gateway: gateway,
@@ -1983,7 +2042,13 @@ impl AsyncTensorZeroGateway {
             // We need to interact with Python objects here (to build up a Python feedback response),
             // so we need the GIL
             Python::attach(|py| match res {
-                Ok(resp) => Ok(parse_feedback_response(py, resp)?.into_any()),
+                Ok(resp) => Ok(convert_response_to_python_dataclass(
+                    py,
+                    resp,
+                    "tensorzero",
+                    "FeedbackResponse",
+                )?
+                .into_any()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2221,7 +2286,18 @@ impl AsyncTensorZeroGateway {
             #[expect(deprecated)]
             let res = client.get_datapoint(dataset_name, datapoint_id).await;
             Python::attach(|py| match res {
-                Ok(wire) => Ok(wire.into_py_any(py)?),
+                Ok(wire) => {
+                    // Convert to Python dataclass
+                    convert_response_to_python_dataclass(
+                        py,
+                        &wire,
+                        "tensorzero",
+                        match wire {
+                            Datapoint::Chat(_) => "DatapointChat",
+                            Datapoint::Json(_) => "DatapointJson",
+                        },
+                    )
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2247,7 +2323,26 @@ impl AsyncTensorZeroGateway {
             };
             let res = client.list_datapoints(dataset_name, request).await;
             Python::attach(|py| match res {
-                Ok(response) => Ok(PyList::new(py, response.datapoints)?.unbind()),
+                Ok(response) => {
+                    // Convert each datapoint to Python dataclass
+                    let py_datapoints: Vec<_> = response
+                        .datapoints
+                        .iter()
+                        .map(|datapoint| {
+                            convert_response_to_python_dataclass(
+                                py,
+                                datapoint,
+                                "tensorzero",
+                                match datapoint {
+                                    Datapoint::Chat(_) => "DatapointChat",
+                                    Datapoint::Json(_) => "DatapointJson",
+                                },
+                            )
+                        })
+                        .collect::<PyResult<_>>()?;
+
+                    Ok(PyList::new(py, py_datapoints)?.unbind())
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2842,7 +2937,22 @@ impl AsyncTensorZeroGateway {
                 .experimental_render_samples(stored_samples, variants)
                 .await;
             Python::attach(|py| match res {
-                Ok(samples) => Ok(PyList::new(py, samples)?.unbind()),
+                Ok(samples) => {
+                    // Convert to Python dataclasses
+                    let py_objects: Vec<_> = samples
+                        .iter()
+                        .map(|sample| {
+                            convert_response_to_python_dataclass(
+                                py,
+                                sample,
+                                "tensorzero",
+                                "RenderedSample",
+                            )
+                        })
+                        .collect::<PyResult<_>>()?;
+
+                    Ok(PyList::new(py, py_objects)?.unbind())
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })

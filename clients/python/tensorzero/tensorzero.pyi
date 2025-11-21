@@ -20,27 +20,22 @@ from typing_extensions import deprecated
 # PyO3
 from tensorzero import (
     ChatDatapointInsert,
-    ChatInferenceOutput,
     ContentBlock,
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
     DynamicEvaluationRunResponse,  # DEPRECATED
     ExtraBody,
     ExtraHeader,
-    FeedbackResponse,
     InferenceChunk,
     InferenceInput,
-    InferenceResponse,
     JsonDatapointInsert,
     OptimizationConfig,
     WorkflowEvaluationRunEpisodeResponse,
     WorkflowEvaluationRunResponse,
 )
-from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 
 # TODO: clean these up.
 from tensorzero.types import (
     EvaluatorStatsDict,
-    JsonInferenceOutput,
     OrderBy,
 )
 
@@ -52,12 +47,14 @@ from .generated_types import (
     CreateDatapointsResponse,
     Datapoint,
     DeleteDatapointsResponse,
+    FeedbackResponse,
     GetDatapointsResponse,
     GetInferencesResponse,
     InferenceFilter,
-    Input,
+    InferenceResponse,
     ListDatapointsRequest,
     ListInferencesRequest,
+    RenderedSample,
     StoredInference,
     UpdateDatapointMetadataRequest,
     UpdateDatapointRequest,
@@ -161,28 +158,6 @@ class AsyncEvaluationJobHandler:
         ...
 
     def __repr__(self) -> str: ...
-
-@final
-class RenderedSample:
-    function_name: str
-    input: ModelInput
-    stored_input: ResolvedInput
-    output: Optional[ChatInferenceOutput]
-    stored_output: Optional[Union[ChatInferenceOutput, JsonInferenceOutput]]
-    episode_id: Optional[UUID]
-    inference_id: Optional[UUID]
-    tool_params: Optional[ToolCallConfigDatabaseInsert]
-    output_schema: Optional[Dict[str, Any]]
-    dispreferred_outputs: List[ChatInferenceOutput] = []
-    tags: Dict[str, str]
-    @property
-    def allowed_tools(self) -> Optional[List[str]]: ...
-    @property
-    def additional_tools(self) -> Optional[List[Any]]: ...
-    @property
-    def parallel_tool_calls(self) -> Optional[bool]: ...
-    @property
-    def provider_tools(self) -> Optional[List[Any]]: ...
 
 @final
 class OptimizationJobHandle:
@@ -354,41 +329,6 @@ class TogetherSFTConfig:
         hf_api_token: Optional[str] = None,
         hf_output_repo_name: Optional[str] = None,
     ) -> None: ...
-
-@final
-class LegacyDatapoint:
-    """
-    A legacy type representing a datapoint.
-    Deprecated; use `Datapoint` instead from v1 Datapoint APIs.
-    """
-
-    Chat: Type["LegacyDatapoint"]
-    Json: Type["LegacyDatapoint"]
-
-    @property
-    def id(self) -> UUID: ...
-    @property
-    def input(self) -> Input: ...
-    @property
-    def output(self) -> Any: ...
-    @property
-    def dataset_name(self) -> str: ...
-    @property
-    def function_name(self) -> str: ...
-    @property
-    def allowed_tools(self) -> Optional[List[str]]: ...
-    @property
-    def additional_tools(self) -> Optional[List[Any]]: ...
-    @property
-    def parallel_tool_calls(self) -> Optional[bool]: ...
-    @property
-    def provider_tools(self) -> Optional[List[Any]]: ...
-    @property
-    def output_schema(self) -> Optional[Any]: ...
-    @property
-    def name(self) -> Optional[str]: ...
-    @property
-    def is_custom(self) -> bool: ...
 
 @final
 class ChatCompletionConfig:
@@ -752,7 +692,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         dataset_name: str,
         datapoint_id: UUID,
-    ) -> LegacyDatapoint:
+    ) -> Datapoint:
         """
         Make a GET request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
 
@@ -1294,7 +1234,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         dataset_name: str,
         datapoint_id: UUID,
-    ) -> LegacyDatapoint:
+    ) -> Datapoint:
         """
         Make a GET request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
 
@@ -1570,7 +1510,6 @@ __all__ = [
     "ChainOfThoughtConfig",
     "ChatCompletionConfig",
     "Config",
-    "LegacyDatapoint",
     "DICLConfig",
     "DICLOptimizationConfig",
     "EvaluationJobHandler",

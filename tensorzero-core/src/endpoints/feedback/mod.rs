@@ -7,8 +7,10 @@ use axum::extract::State;
 use axum::{debug_handler, Extension, Json};
 use human_feedback::write_static_evaluation_human_feedback_if_necessary;
 use metrics::counter;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tensorzero_derive::export_schema;
 use tokio::{time::Instant, try_join};
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
@@ -88,7 +90,8 @@ impl From<&MetricConfigType> for FeedbackType {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[export_schema]
 pub struct FeedbackResponse {
     pub feedback_id: Uuid,
 }

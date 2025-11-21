@@ -42,6 +42,9 @@ from tensorzero import (
     AlwaysExtraBodyDelete,
     AsyncTensorZeroGateway,
     ChatInferenceResponse,
+    ContentBlockChatOutputText,
+    ContentBlockChatOutputThought,
+    ContentBlockChatOutputToolCall,
     DynamicEvaluationRunResponse,
     FeedbackResponse,
     FileBase64,
@@ -117,7 +120,7 @@ class CountData:
 async def test_async_gil_unlock(async_client: AsyncTensorZeroGateway):
     input = {
         "system": {"assistant_name": "Alfred Pennyworth"},
-        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}],
     }
 
     count_data = CountData(count=0)
@@ -150,7 +153,7 @@ async def test_async_gil_unlock(async_client: AsyncTensorZeroGateway):
 def test_sync_gil_unlock(sync_client: TensorZeroGateway):
     input = {
         "system": {"assistant_name": "Alfred Pennyworth"},
-        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}],
     }
 
     count_data = CountData(count=0)
@@ -184,7 +187,7 @@ def test_sync_gil_unlock(sync_client: TensorZeroGateway):
 async def test_async_basic_inference(async_client: AsyncTensorZeroGateway):
     input = {
         "system": {"assistant_name": "Alfred Pennyworth"},
-        "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+        "messages": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}],
     }
     input_copy = deepcopy(input)
     result = await async_client.inference(
@@ -200,7 +203,7 @@ async def test_async_basic_inference(async_client: AsyncTensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert (
         content[0].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -208,7 +211,7 @@ async def test_async_basic_inference(async_client: AsyncTensorZeroGateway):
     usage = result.usage
     assert usage.input_tokens == 10
     assert usage.output_tokens == 1
-    assert result.finish_reason == FinishReason.STOP
+    assert result.finish_reason == "stop"
     time.sleep(1)
 
     # Test caching
@@ -222,7 +225,7 @@ async def test_async_basic_inference(async_client: AsyncTensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert (
         content[0].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -230,7 +233,7 @@ async def test_async_basic_inference(async_client: AsyncTensorZeroGateway):
     usage = result.usage
     assert usage.input_tokens == 0  # should be cached
     assert usage.output_tokens == 0  # should be cached
-    assert result.finish_reason == FinishReason.STOP
+    assert result.finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -243,7 +246,7 @@ async def test_async_client_build_http_sync():
     async with client_ as client:
         input = {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}],
         }
         input_copy = deepcopy(input)
         result = await client.inference(
@@ -259,7 +262,7 @@ async def test_async_client_build_http_sync():
         content = result.content
         assert len(content) == 1
         assert content[0].type == "text"
-        assert isinstance(content[0], Text)
+        assert isinstance(content[0], ContentBlockChatOutputText)
         assert (
             content[0].text
             == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -267,7 +270,7 @@ async def test_async_client_build_http_sync():
         usage = result.usage
         assert usage.input_tokens == 10
         assert usage.output_tokens == 1
-        assert result.finish_reason == FinishReason.STOP
+        assert result.finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -281,7 +284,7 @@ async def test_async_client_build_embedded_sync():
     async with client_ as client:
         input = {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [Text(type="text", text="Hello")]}],
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}],
         }
         input_copy = deepcopy(input)
         result = await client.inference(
@@ -297,7 +300,7 @@ async def test_async_client_build_embedded_sync():
         content = result.content
         assert len(content) == 1
         assert content[0].type == "text"
-        assert isinstance(content[0], Text)
+        assert isinstance(content[0], ContentBlockChatOutputText)
         assert (
             content[0].text
             == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -305,7 +308,7 @@ async def test_async_client_build_embedded_sync():
         usage = result.usage
         assert usage.input_tokens == 10
         assert usage.output_tokens == 1
-        assert result.finish_reason == FinishReason.STOP
+        assert result.finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -340,7 +343,7 @@ async def test_async_thought_input(async_client: AsyncTensorZeroGateway):
     )
     assert isinstance(result, ChatInferenceResponse)
     assert len(result.content) == 1
-    assert isinstance(result.content[0], Text)
+    assert isinstance(result.content[0], ContentBlockChatOutputText)
     # The last thought should be discarded, since '_internal_provider_type' does not match
     assert (
         result.content[0].text
@@ -372,7 +375,7 @@ async def test_async_thought_signature_only_input(
     )
     assert isinstance(result, ChatInferenceResponse)
     assert len(result.content) == 1
-    assert isinstance(result.content[0], Text)
+    assert isinstance(result.content[0], ContentBlockChatOutputText)
     assert (
         result.content[0].text
         == '{"system":null,"messages":[{"role":"user","content":[{"type":"thought","text":null,"signature":"my_first_signature"},{"type":"thought","text":null,"signature":"my_second_signature"}]}]}'
@@ -428,11 +431,11 @@ async def test_async_reasoning_inference(async_client: AsyncTensorZeroGateway):
     assert result.original_response is None
     content = result.content
     assert len(content) == 2
-    assert isinstance(content[0], Thought)
+    assert isinstance(content[0], ContentBlockChatOutputThought)
     assert content[0].type == "thought"
     assert content[0].text == "hmmm"
     assert content[0].signature == "my_signature"
-    assert isinstance(content[1], Text)
+    assert isinstance(content[1], ContentBlockChatOutputText)
     assert content[1].type == "text"
     assert (
         content[1].text
@@ -466,7 +469,7 @@ async def test_async_default_function_inference(
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert (
         content[0].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -503,7 +506,7 @@ async def test_async_default_function_inference_plain_dict(
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert (
         content[0].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -577,7 +580,7 @@ async def test_async_inference_streaming(async_client: AsyncTensorZeroGateway):
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 16
-            assert chunk.finish_reason == FinishReason.STOP
+            assert chunk.finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -656,7 +659,7 @@ async def test_async_reasoning_inference_streaming(
             assert chunk.usage is not None
             assert chunk.usage.input_tokens == 10
             assert chunk.usage.output_tokens == 18
-            assert chunk.finish_reason == FinishReason.STOP
+            assert chunk.finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -725,7 +728,7 @@ async def test_async_tool_call_inference(async_client: AsyncTensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "tool_call"
-    assert isinstance(content[0], ToolCall)
+    assert isinstance(content[0], ContentBlockChatOutputToolCall)
     assert content[0].raw_name == "get_temperature"
     assert content[0].id == "0"
     assert content[0].raw_arguments == '{"location":"Brooklyn","units":"celsius"}'
@@ -759,7 +762,7 @@ async def test_async_malformed_tool_call_inference(
     assert isinstance(result, ChatInferenceResponse)
     content = result.content
     assert len(content) == 1
-    assert isinstance(content[0], ToolCall)
+    assert isinstance(content[0], ContentBlockChatOutputToolCall)
     assert content[0].type == "tool_call"
     assert content[0].raw_name == "get_temperature"
     assert content[0].id == "0"
@@ -1022,7 +1025,7 @@ async def test_async_feedback(async_client: AsyncTensorZeroGateway):
 
     result = await async_client.feedback(metric_name="user_rating", value=5, episode_id=episode_id)
     assert isinstance(result, FeedbackResponse)
-    assert isinstance(result.feedback_id, UUID)
+    assert isinstance(result.feedback_id, str)
 
     result = await async_client.feedback(metric_name="task_success", value=True, inference_id=inference_id)
     assert isinstance(result, FeedbackResponse)
@@ -1100,7 +1103,7 @@ async def test_async_dynamic_credentials(async_client: AsyncTensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert (
         content[0].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -1141,7 +1144,7 @@ def test_sync_inference_caching(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert (
         content[0].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -1168,7 +1171,7 @@ def test_sync_inference_caching(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert (
         content[0].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -1278,7 +1281,7 @@ def test_default_function_inference(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert (
         content[0].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -1316,7 +1319,7 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert content[0].text is not None
     json_content = json.loads(content[0].text)
     assert json_content == [
@@ -1362,7 +1365,7 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert content[0].text is not None
     json_content = json.loads(content[0].text)
     assert json_content == [
@@ -1412,7 +1415,7 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert content[0].text is not None
     print(content[0].text)
     json_content = json.loads(content[0].text)
@@ -1460,7 +1463,7 @@ def test_image_inference_url_wrong_mime_type(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert content[0].text is not None
     json_content = json.loads(content[0].text)
     assert json_content == [
@@ -1503,7 +1506,7 @@ def test_image_inference_url(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert content[0].text is not None
     json_content = json.loads(content[0].text)
     assert json_content == [
@@ -1545,7 +1548,7 @@ def test_file_inference_url(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert content[0].text is not None
     json_content = json.loads(content[0].text)
     print(json_content)
@@ -1699,7 +1702,7 @@ def test_sync_tool_call_inference(sync_client: TensorZeroGateway):
     assert result.variant_name == "variant"
     content = result.content
     assert len(content) == 1
-    assert isinstance(content[0], ToolCall)
+    assert isinstance(content[0], ContentBlockChatOutputToolCall)
     assert content[0].type == "tool_call"
     assert content[0].raw_name == "get_temperature"
     assert content[0].id == "0"
@@ -1726,11 +1729,11 @@ def test_sync_reasoning_inference(sync_client: TensorZeroGateway):
     assert isinstance(result, ChatInferenceResponse)
     content = result.content
     assert len(content) == 2
-    assert isinstance(content[0], Thought)
+    assert isinstance(content[0], ContentBlockChatOutputThought)
     assert content[0].type == "thought"
     assert content[0].text == "hmmm"
     assert content[1].type == "text"
-    assert isinstance(content[1], Text)
+    assert isinstance(content[1], ContentBlockChatOutputText)
     assert (
         content[1].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -1760,7 +1763,7 @@ def test_sync_malformed_tool_call_inference(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "tool_call"
-    assert isinstance(content[0], ToolCall)
+    assert isinstance(content[0], ContentBlockChatOutputToolCall)
     assert content[0].raw_name == "get_temperature"
     assert content[0].id == "0"
     assert content[0].raw_arguments == '{"location":"Brooklyn","units":"Celsius"}'
@@ -2084,7 +2087,7 @@ def test_sync_feedback(sync_client: TensorZeroGateway):
 
     result = sync_client.feedback(metric_name="task_success", value=True, inference_id=inference_id)
     assert isinstance(result, FeedbackResponse)
-    assert isinstance(result.feedback_id, UUID)
+    assert isinstance(result.feedback_id, str)
 
     result = sync_client.feedback(
         metric_name="demonstration",
@@ -2168,7 +2171,7 @@ def test_sync_basic_inference_with_content_block(
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert (
         content[0].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -2212,7 +2215,7 @@ def test_sync_basic_inference_with_content_block_plain_dict(
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert (
         content[0].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -2381,7 +2384,7 @@ def test_otlp_traces_extra_headers(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) >= 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert content[0].text is not None
 
 
@@ -2406,7 +2409,7 @@ def test_extra_body_raw(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert content[0].text is not None
     assert len(content[0].text.split(" ")) <= 2
     usage = result.usage
@@ -2465,7 +2468,7 @@ def test_extra_body_types(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert content[0].text is not None
     assert '"haiku"' in content[0].text
     assert "Potato" not in content[0].text
@@ -2548,7 +2551,7 @@ def test_sync_dynamic_credentials(sync_client: TensorZeroGateway):
     content = result.content
     assert len(content) == 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert (
         content[0].text
         == "Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake."
@@ -3098,7 +3101,7 @@ async def test_async_multi_turn_parallel_tool_use(
         if content_block.type == "text":
             print("Got a text block...")
         elif content_block.type == "tool_call":
-            assert isinstance(content_block, ToolCall)
+            assert isinstance(content_block, ContentBlockChatOutputToolCall)
             if content_block.name == "get_temperature":
                 print("Calling get_temperature tool...")
                 new_content_blocks.append(
@@ -3141,7 +3144,7 @@ async def test_async_multi_turn_parallel_tool_use(
         },
     )
     assert isinstance(response, ChatInferenceResponse)
-    assert isinstance(response.content[0], Text)
+    assert isinstance(response.content[0], ContentBlockChatOutputText)
     assistant_message = response.content[0].text
     assert assistant_message is not None
 
@@ -3180,7 +3183,7 @@ def test_text_arguments_deprecation_1170_warning(
     assert response.output.parsed == {"answer": "Hello"}
     assert response.usage.input_tokens == 10
     assert response.usage.output_tokens == 1
-    assert response.finish_reason == FinishReason.STOP
+    assert response.finish_reason == "stop"
 
 
 def test_content_block_text_init_validation():
@@ -3232,7 +3235,7 @@ def test_sync_dynamic_evaluation_run(sync_client: TensorZeroGateway):
     )
     assert isinstance(inference_response, ChatInferenceResponse)
     first_content_block = inference_response.content[0]
-    assert isinstance(first_content_block, Text)
+    assert isinstance(first_content_block, ContentBlockChatOutputText)
     assert first_content_block.text is not None
     assert first_content_block.text.startswith("Megumin")
     assert inference_response.variant_name == "test2"
@@ -3267,7 +3270,7 @@ async def test_async_dynamic_evaluation_run(
     )
     assert isinstance(inference_response, ChatInferenceResponse)
     first_content_block = inference_response.content[0]
-    assert isinstance(first_content_block, Text)
+    assert isinstance(first_content_block, ContentBlockChatOutputText)
     assert first_content_block.text is not None
     assert first_content_block.text.startswith("Megumin")
     assert inference_response.variant_name == "test2"
@@ -3412,7 +3415,7 @@ def test_sync_clickhouse_batch_writes():
         )
         assert len(clickhouse_result) == num_inferences  # type: ignore
 
-        actual_inference_ids = set(row.id for row in clickhouse_result.iloc)  # type: ignore
+        actual_inference_ids = set(str(row.id) for row in clickhouse_result.iloc)  # type: ignore
         assert actual_inference_ids == expected_inference_ids
 
 
@@ -3459,7 +3462,7 @@ async def test_async_clickhouse_batch_writes():
         )
         assert len(clickhouse_result) == num_inferences  # type: ignore
 
-        actual_inference_ids = set(row.id for row in clickhouse_result.iloc)  # type: ignore
+        actual_inference_ids = set(str(row.id) for row in clickhouse_result.iloc)  # type: ignore
         assert actual_inference_ids == expected_inference_ids
 
 
@@ -3536,7 +3539,7 @@ def test_sync_chat_function_named_template(sync_client: TensorZeroGateway):
     )
     assert isinstance(result, ChatInferenceResponse)
     assert len(result.content) == 1
-    assert isinstance(result.content[0], Text)
+    assert isinstance(result.content[0], ContentBlockChatOutputText)
     assert (
         result.content[0].text
         == """{"system":"The system text was `none`","messages":[{"role":"user","content":[{"type":"text","text":"New template: first_variable=first_from_python second_variable=second_from_python"},{"type":"text","text":"New template: first_variable=first_from_dict second_variable=second_from_dict"}]}]}"""
@@ -3639,7 +3642,7 @@ async def test_async_otlp_traces_extra_headers(
     content = result.content
     assert len(content) >= 1
     assert content[0].type == "text"
-    assert isinstance(content[0], Text)
+    assert isinstance(content[0], ContentBlockChatOutputText)
     assert content[0].text is not None
 
 
