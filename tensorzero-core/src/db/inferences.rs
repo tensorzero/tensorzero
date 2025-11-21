@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_with::{serde_as, DisplayFromStr};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -220,6 +221,45 @@ impl Default for ListInferencesParams<'_> {
     }
 }
 
+/// Parameters for querying inference bounds
+#[derive(Default)]
+pub struct GetInferenceBoundsParams {
+    /// Optional function name to filter inferences by.
+    pub function_name: Option<String>,
+    /// Optional variant name to filter inferences by.
+    pub variant_name: Option<String>,
+    /// Optional episode ID to filter inferences by.
+    pub episode_id: Option<Uuid>,
+}
+
+/// Result from querying inference table bounds.
+/// Contains the min/max inference IDs and the total count.
+#[serde_as]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+pub struct InferenceBounds {
+    /// The most recent inference ID (MAX id_uint).
+    pub latest_id: Option<Uuid>,
+
+    /// The oldest inference ID (MIN id_uint).
+    pub earliest_id: Option<Uuid>,
+
+    /// The total number of inferences matching the filter criteria.
+    /// Note that ClickHouse returns u64s as strings, so we use DisplayFromStr to deserialize it.
+    #[serde_as(as = "DisplayFromStr")]
+    pub count: u64,
+}
+
+impl InferenceBounds {
+    /// Creates bounds representing no results.
+    pub fn empty() -> Self {
+        Self {
+            latest_id: None,
+            earliest_id: None,
+            count: 0,
+        }
+    }
+}
+
 #[async_trait]
 #[cfg_attr(test, automock)]
 pub trait InferenceQueries {
@@ -229,4 +269,9 @@ pub trait InferenceQueries {
         config: &Config,
         params: &ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInferenceDatabase>, Error>;
+
+    async fn get_inference_bounds(
+        &self,
+        params: GetInferenceBoundsParams,
+    ) -> Result<InferenceBounds, Error>;
 }
