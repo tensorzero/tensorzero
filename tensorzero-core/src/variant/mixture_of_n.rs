@@ -75,13 +75,13 @@ impl MixtureOfNConfig {
     }
 
     /// Converts this initialized config back to its uninitialized form.
-    pub fn into_uninitialized(self) -> UninitializedMixtureOfNConfig {
+    pub fn as_uninitialized(self) -> UninitializedMixtureOfNConfig {
         UninitializedMixtureOfNConfig {
             weight: self.weight,
             timeout_s: self.timeout_s,
             candidates: self.candidates,
             fuser: UninitializedFuserConfig {
-                inner: self.fuser.inner.into_uninitialized(),
+                inner: self.fuser.inner.as_uninitialized(),
             },
         }
     }
@@ -1821,7 +1821,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_basic_fields() {
+    fn test_as_uninitialized_preserves_basic_fields() {
         let uninitialized = UninitializedMixtureOfNConfig {
             weight: Some(1.0),
             timeout_s: 60.0,
@@ -1839,7 +1839,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.weight, Some(1.0));
         assert_eq!(exported.timeout_s, 60.0);
@@ -1852,7 +1852,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_nested_fuser() {
+    fn test_as_uninitialized_preserves_nested_fuser() {
         let uninitialized = UninitializedMixtureOfNConfig {
             weight: None,
             timeout_s: 300.0,
@@ -1872,7 +1872,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.fuser.inner.model, "fuser-model".into());
         assert_eq!(exported.fuser.inner.temperature, Some(0.1));
@@ -1881,7 +1881,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_with_empty_candidates() {
+    fn test_as_uninitialized_with_empty_candidates() {
         let uninitialized = UninitializedMixtureOfNConfig {
             weight: None,
             timeout_s: 300.0,
@@ -1898,13 +1898,13 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert!(exported.candidates.is_empty());
     }
 
     #[test]
-    fn test_into_uninitialized_serialization_round_trip() {
+    fn test_as_uninitialized_serialization_round_trip() {
         let original = UninitializedMixtureOfNConfig {
             weight: Some(0.7),
             timeout_s: 120.0,
@@ -1922,7 +1922,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         // Serialize and deserialize
         let json = serde_json::to_string(&exported).unwrap();
