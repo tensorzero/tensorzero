@@ -94,7 +94,10 @@ async fn test_create_datapoints(client: Client) {
     assert_eq!(response.ids.len(), 2);
 
     // Verify all datapoints were created
-    let get_response = client.get_datapoints(response.ids.clone()).await.unwrap();
+    let get_response = client
+        .get_datapoints(Some(dataset_name.clone()), response.ids.clone())
+        .await
+        .unwrap();
 
     assert_eq!(get_response.datapoints.len(), 2);
 
@@ -154,7 +157,10 @@ async fn test_get_datapoints_by_ids(client: Client) {
     let datapoint_ids = response.ids;
 
     // Get all datapoints by IDs using v1 endpoint
-    let response = client.get_datapoints(datapoint_ids.clone()).await.unwrap();
+    let response = client
+        .get_datapoints(Some(dataset_name.clone()), datapoint_ids.clone())
+        .await
+        .unwrap();
 
     assert_eq!(response.datapoints.len(), 2);
 
@@ -546,7 +552,10 @@ async fn test_create_datapoints_from_inferences(client: Client) {
 
     // Verify the datapoint was created
 
-    let datapoints = client.get_datapoints(response.ids.clone()).await.unwrap();
+    let datapoints = client
+        .get_datapoints(Some(dataset_name.clone()), response.ids.clone())
+        .await
+        .unwrap();
 
     assert_eq!(
         datapoints.datapoints.len(),

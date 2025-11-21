@@ -146,6 +146,11 @@ fn build_datasets_routes() -> Router<AppStateData> {
             delete(endpoints::datasets::v1::delete_dataset_handler),
         )
         .route(
+            "/v1/datasets/{dataset_name}/get_datapoints",
+            post(endpoints::datasets::v1::get_datapoints_by_dataset_handler),
+        )
+        // DEPRECATED: prefer /v1/datasets/{dataset_name}/get_datapoints
+        .route(
             "/v1/datasets/get_datapoints",
             post(endpoints::datasets::v1::get_datapoints_handler),
         )
