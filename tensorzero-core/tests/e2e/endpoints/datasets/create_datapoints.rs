@@ -92,6 +92,8 @@ async fn test_create_chat_datapoint_basic() {
         offset: 0,
         allow_stale: false,
         filter: None,
+        order_by: None,
+        search_query_experimental: None,
     };
 
     let datapoints = clickhouse.get_datapoints(&params).await.unwrap();
@@ -194,6 +196,8 @@ async fn test_create_json_datapoint_basic() {
         offset: 0,
         allow_stale: false,
         filter: None,
+        order_by: None,
+        search_query_experimental: None,
     };
 
     let datapoints = clickhouse.get_datapoints(&params).await.unwrap();
@@ -511,6 +515,8 @@ async fn test_create_json_datapoint_invalid_schema() {
         offset: 0,
         allow_stale: false,
         filter: None,
+        order_by: None,
+        search_query_experimental: None,
     };
 
     let datapoints = clickhouse.get_datapoints(&params).await.unwrap();

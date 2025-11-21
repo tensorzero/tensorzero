@@ -45,10 +45,9 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
     TimeFilter,
 };
 pub use tensorzero_core::db::datasets::{
-    AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
-    DatasetDetailRow, DatasetQueries, DatasetQueryParams, GetAdjacentDatapointIdsParams,
-    GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams, GetDatasetRowsParams,
-    StaleDatapointParams,
+    AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetQueries,
+    DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatapointsParams,
+    GetDatasetMetadataParams, StaleDatapointParams,
 };
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
 pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};

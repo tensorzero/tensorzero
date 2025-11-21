@@ -13,10 +13,11 @@ import {
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
 import type {
-  Datapoint as TensorZeroDatapoint,
   UpdateDatapointsMetadataRequest,
   UpdateDatapointsResponse,
   GetInferenceBoundsResponse,
+  ListDatapointsRequest,
+  GetDatapointsResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -449,33 +450,20 @@ export class TensorZeroClient {
 
   async listDatapoints(
     dataset_name: string,
-    function_name?: string,
-    limit?: number,
-    offset?: number,
-  ): Promise<TensorZeroDatapoint[]> {
-    const params = new URLSearchParams();
-    if (function_name) {
-      params.append("function_name", function_name);
-    }
-    if (limit !== undefined) {
-      params.append("limit", limit.toString());
-    }
-    if (offset !== undefined) {
-      params.append("offset", offset.toString());
-    }
-
-    const queryString = params.toString();
-    const endpoint = `/datasets/${encodeURIComponent(dataset_name)}/datapoints${queryString ? `?${queryString}` : ""}`;
+    params: ListDatapointsRequest,
+  ): Promise<GetDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(dataset_name)}/list_datapoints`;
 
     const response = await this.fetch(endpoint, {
-      method: "GET",
+      method: "POST",
+      body: JSON.stringify(params),
     });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    const body = await response.json();
-    return body as TensorZeroDatapoint[];
+    const body = (await response.json()) as GetDatapointsResponse;
+    return body;
   }
 
   async updateDatapointsMetadata(
