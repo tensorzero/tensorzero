@@ -187,6 +187,8 @@ def generate_dataclasses_from_schema(schema_file: Path, templates_dir: Path, out
                 "--disable-future-imports",
                 # Generate union types as `A | B` instead of `Union[A, B]`
                 "--use-union-operator",
+                # Use schema / class descriptions for docstrings
+                "--use-schema-description",
                 # Use field descriptions for docstrings
                 "--use-field-description",
                 # Explicitly pass extra keys to handle double-optional generation
