@@ -168,9 +168,11 @@ routing = ["test_provider::gpt-4"]
     tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Query the ConfigSnapshot table to verify the data was written
-    let query = "SELECT config, tensorzero_version, hex(version_hash) as version_hash_hex, created_at, last_used FROM ConfigSnapshot FINAL FORMAT JSONEachRow";
+    let query = format!(
+        "SELECT config, tensorzero_version, hex(version_hash) as version_hash_hex, created_at, last_used FROM ConfigSnapshot FINAL WHERE version_hash = reinterpretAsUInt256(reverse(unhex('{hash_hex}'))) FORMAT JSONEachRow"
+    );
     let response = clickhouse
-        .run_query_synchronous_no_params(query.to_string())
+        .run_query_synchronous_no_params(query.clone())
         .await
         .unwrap();
 
@@ -182,7 +184,13 @@ routing = ["test_provider::gpt-4"]
         .as_str()
         .unwrap()
         .is_empty());
-    assert_eq!(snapshot_row["version_hash_hex"].as_str().unwrap(), hash_hex);
+    assert_eq!(
+        snapshot_row["version_hash_hex"]
+            .as_str()
+            .unwrap()
+            .to_lowercase(),
+        hash_hex
+    );
 
     let created_at = snapshot_row["created_at"].as_str().unwrap();
     let last_used_1 = snapshot_row["last_used"].as_str().unwrap();
@@ -200,7 +208,7 @@ routing = ["test_provider::gpt-4"]
 
     // Query again to verify upsert behavior
     let response2 = clickhouse
-        .run_query_synchronous_no_params(query.to_string())
+        .run_query_synchronous_no_params(query)
         .await
         .unwrap();
 
@@ -223,7 +231,10 @@ routing = ["test_provider::gpt-4"]
     // Verify the data is still correct
     assert_eq!(snapshot_row2["config"].as_str().unwrap(), config_toml);
     assert_eq!(
-        snapshot_row2["version_hash_hex"].as_str().unwrap(),
+        snapshot_row2["version_hash_hex"]
+            .as_str()
+            .unwrap()
+            .to_lowercase(),
         hash_hex
     );
 }

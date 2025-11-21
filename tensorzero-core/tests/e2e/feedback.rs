@@ -2,9 +2,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tensorzero_core::{
-    config::{
-        Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
-    },
+    config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
     db::{
         clickhouse::test_helpers::{
             select_feedback_clickhouse, select_feedback_tags_clickhouse,

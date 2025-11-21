@@ -21,9 +21,7 @@ use tensorzero_core::client::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
 };
-use tensorzero_core::config::{
-    ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo,
-};
+use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{

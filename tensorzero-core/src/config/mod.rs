@@ -1272,7 +1272,7 @@ pub async fn write_config_snapshot(
     // Serialize to JSON
     let json_data = serde_json::to_string(&row).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize config snapshot: {}", e),
+            message: format!("Failed to serialize config snapshot: {e}"),
         })
     })?;
 
@@ -1286,17 +1286,16 @@ pub async fn write_config_snapshot(
 
     // Create the query with subquery to preserve created_at
     let query = format!(
-        r#"INSERT INTO ConfigSnapshot
+        r"INSERT INTO ConfigSnapshot
 (config, extra_templates, version_hash, tensorzero_version, created_at, last_used)
 SELECT
     new_data.config,
     new_data.extra_templates,
-    unhex(new_data.version_hash_hex) as version_hash,
+    reinterpretAsUInt256(reverse(unhex(new_data.version_hash_hex))) as version_hash,
     new_data.tensorzero_version,
-    ifNull((SELECT created_at FROM ConfigSnapshot WHERE version_hash = unhex('{}') LIMIT 1), now64()) as created_at,
+    ifNull((SELECT created_at FROM ConfigSnapshot FINAL WHERE version_hash = reinterpretAsUInt256(reverse(unhex('{version_hash_hex}'))) LIMIT 1), now64()) as created_at,
     now64() as last_used
-FROM new_data"#,
-        version_hash_hex
+FROM new_data"
     );
 
     // Execute the query
