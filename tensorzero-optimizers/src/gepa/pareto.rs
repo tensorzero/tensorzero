@@ -51,7 +51,14 @@ pub struct ParetoFrontier {
 /// Check if child improves over parent variant (summary statistic Pareto dominance)
 ///
 /// Uses the evaluation config to determine objective directions (optimize: max/min).
-/// Returns true if child Pareto-dominates parent (better/equal on all, strictly better on ≥1 evaluator summary stats).
+///
+/// # Arguments
+/// * `parent_stats` - Summary statistics (mean, stderr, count) for parent variant's evaluations
+/// * `child_stats` - Summary statistics (mean, stderr, count) for child variant's evaluations
+/// * `evaluation_config` - Evaluation config with evaluator definitions and optimization directions
+///
+/// # Returns
+/// * `bool` - True if child Pareto-dominates parent (better/equal on all, strictly better on ≥1 evaluator summary stats)
 pub fn is_improvement(
     parent_stats: &HashMap<String, EvaluatorStats>,
     child_stats: &HashMap<String, EvaluatorStats>,
@@ -103,8 +110,21 @@ pub fn is_improvement(
 
 /// Updates the Pareto frontier based on instance-wise Pareto dominance
 ///
-/// Filters candidates to only include Pareto-optimal variants based on validation scores.
-/// Returns the filtered variants and their frequencies (count of instances where each variant is Pareto-optimal).
+/// Implements the SELECTCANDIDATE algorithm from the GEPA paper:
+/// 1. For each datapoint, find instance-wise Pareto-optimal variants (Step 1)
+/// 2. Build candidate set C as union of all instance-wise Pareto sets (Step 2)
+/// 3. Filter candidates globally to remove dominated variants (Step 3)
+/// 4. Compute frequency of each variant's membership in instance-wise Pareto sets
+///
+/// Reference: "GEPA: Improving Language Models through Genetic Evolutionary Prompt Adaptation"
+/// <https://arxiv.org/abs/2507.19457>
+///
+/// Note: The original GEPA paper:
+/// - Uses a single evaluator and selects variants achieving maximum score per instance
+/// - In the online setting, also checks for optimality across functions (not applicable in our offline setting)
+///
+/// We extend this to multiple evaluators by selecting Pareto non-dominated variants per instance,
+/// which naturally generalizes the single-objective case.
 ///
 /// # Arguments
 /// * `candidates` - Candidate variants to filter
@@ -112,20 +132,8 @@ pub fn is_improvement(
 /// * `evaluation_config` - Evaluation config with evaluator definitions and optimization directions
 ///
 /// # Returns
-/// * Tuple of (filtered_variants, frequencies) where frequencies is used for sampling
-/// Filter candidates using GEPA's instance-wise Pareto frontier algorithm
-///
-/// Implements the SELECTCANDIDATE algorithm from the GEPA paper:
-/// 1. For each datapoint, find instance-wise Pareto-optimal variants (Step 1)
-/// 2. Build candidate set C as union of all instance-wise Pareto sets (Step 2)
-/// 3. Filter candidates globally to remove dominated variants (Step 3)
-/// 4. Compute frequency of each variant's membership in instance-wise Pareto sets
-///
-/// Note: The original GEPA paper uses a single evaluator and selects variants achieving
-/// maximum score per instance. We extend this to multiple evaluators by selecting Pareto
-/// non-dominated variants per instance, which naturally generalizes the single-objective case.
-///
-/// Returns a ParetoFrontier containing filtered variants and their sampling frequencies.
+/// * `Result<ParetoFrontier, Error>` - ParetoFrontier containing filtered variants and their sampling frequencies,
+///   or an error if validation scores are empty or all evaluations failed
 pub fn update_pareto_frontier(
     candidates: HashMap<String, UninitializedChatCompletionConfig>,
     val_scores_map: &HashMap<String, VariantScores>,
@@ -330,7 +338,14 @@ pub fn update_pareto_frontier(
 /// inference errors) while treating random failures (e.g., provider unavailable) equally across variants.
 ///
 /// This ensures variants with missing evaluations are dominated unless they excel on other objectives.
-pub fn impute_missing_score(score: Option<f32>, optimize: MetricConfigOptimize) -> f32 {
+///
+/// # Arguments
+/// * `score` - Optional evaluation score (None if evaluation failed or is missing)
+/// * `optimize` - Optimization direction (Max or Min)
+///
+/// # Returns
+/// * `f32` - The original score if present, or -inf for Max optimization / +inf for Min optimization if missing
+fn impute_missing_score(score: Option<f32>, optimize: MetricConfigOptimize) -> f32 {
     match score {
         Some(s) => s,
         None => match optimize {
@@ -393,7 +408,16 @@ fn calculate_frequencies(
 ///
 /// This compares variants across the full (D×E)-dimensional space where D=datapoints, E=evaluators.
 /// Missing scores are imputed as worst-case (-inf for max, +inf for min).
-pub fn global_dominates(
+///
+/// # Arguments
+/// * `variant_a_name` - Name of the first variant to compare
+/// * `variant_b_name` - Name of the second variant to compare
+/// * `val_scores_map` - Map of variant names to their per-datapoint scores
+/// * `evaluators` - Map of evaluator configurations containing optimization directions
+///
+/// # Returns
+/// * `bool` - True if variant A globally dominates variant B
+fn global_dominates(
     variant_a_name: &str,
     variant_b_name: &str,
     val_scores_map: &HashMap<String, VariantScores>,
@@ -461,7 +485,15 @@ pub fn global_dominates(
 /// - A is strictly better than B on at least one evaluator
 ///
 /// Missing scores are imputed as worst-case (-inf for max, +inf for min).
-pub fn instance_dominates(
+///
+/// # Arguments
+/// * `a_scores` - Scores for variant A on this datapoint, mapped by evaluator name
+/// * `b_scores` - Scores for variant B on this datapoint, mapped by evaluator name
+/// * `evaluators` - Map of evaluator configurations containing optimization directions
+///
+/// # Returns
+/// * `bool` - True if variant A instance-dominates variant B on this datapoint
+fn instance_dominates(
     a_scores: &HashMap<String, Option<f32>>,
     b_scores: &HashMap<String, Option<f32>>,
     evaluators: &HashMap<String, EvaluatorConfig>,
@@ -500,7 +532,7 @@ pub fn instance_dominates(
 ///
 /// # Returns
 /// Vector of variant names that are not dominated by any other variant on this instance
-pub fn find_non_dominated_variants(
+fn find_non_dominated_variants(
     instance_scores: &[(String, HashMap<String, Option<f32>>)],
     evaluators: &HashMap<String, EvaluatorConfig>,
 ) -> Vec<String> {
