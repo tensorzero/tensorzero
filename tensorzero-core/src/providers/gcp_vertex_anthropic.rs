@@ -535,18 +535,15 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
         // Workaround for GCP Vertex AI Anthropic API limitation: they don't support explicitly specifying "none"
         // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
         // request payload to achieve the same effect.
-        let tools = request.tool_config.as_ref().and_then(|c| {
-            if matches!(c.tool_choice, ToolChoice::None) {
-                None
-            } else {
-                Some(
-                    c.strict_tools_available()
-                        // GCP Vertex Anthropic does not support structured outputs
-                        .map(|tool| AnthropicTool::new(tool, false))
-                        .collect::<Vec<_>>(),
-                )
-            }
-        });
+        let tools = match request.tool_config.as_ref() {
+            Some(c) if !matches!(c.tool_choice, ToolChoice::None) => Some(
+                c.strict_tools_available()?
+                    // GCP Vertex Anthropic does not support structured outputs
+                    .map(|tool| AnthropicTool::new(tool, false))
+                    .collect::<Vec<_>>(),
+            ),
+            _ => None,
+        };
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
             .as_ref()
@@ -866,7 +863,7 @@ mod tests {
     };
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
-    use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
+    use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolResult};
 
     fn parse_usage_info(usage_info: &Value) -> GCPVertexAnthropic {
         let input_tokens = usage_info
@@ -893,7 +890,7 @@ mod tests {
             },
             "required": ["location", "unit"]
         });
-        let tool = ToolConfig::Dynamic(DynamicToolConfig {
+        let tool = FunctionToolConfig::Dynamic(DynamicToolConfig {
             name: "test".to_string(),
             description: "test".to_string(),
             parameters: DynamicJSONSchema::new(parameters.clone()),

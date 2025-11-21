@@ -40,15 +40,15 @@ use crate::{
         InferenceProvider,
     },
     model::{Credential, ModelProvider},
-    tool::{ToolCall, ToolCallChunk},
+    tool::{FunctionToolConfig, ToolCall, ToolCallChunk},
 };
 
 use super::{
     helpers_thinking_block::{process_think_blocks, ThinkingState},
     openai::{
         get_chat_url, handle_openai_error, tensorzero_to_openai_messages, OpenAIFunction,
-        OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice,
-        OpenAIToolType, OpenAIUsage,
+        OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAIToolChoice, OpenAIToolType,
+        OpenAIUsage,
     },
 };
 
@@ -381,7 +381,7 @@ struct FireworksRequest<'a> {
 }
 
 type PreparedFireworksToolsResult<'a> = (
-    Option<Vec<OpenAITool<'a>>>,
+    Option<Vec<FireworksTool<'a>>>,
     Option<OpenAIToolChoice<'a>>,
     Option<bool>,
 );
@@ -390,16 +390,16 @@ type PreparedFireworksToolsResult<'a> = (
 /// Otherwise convert the tool choice and tools to Fireworks format
 pub(super) fn prepare_fireworks_tools<'a>(
     request: &'a ModelInferenceRequest,
-) -> PreparedFireworksToolsResult<'a> {
+) -> Result<PreparedFireworksToolsResult<'a>, Error> {
     match &request.tool_config {
-        None => (None, None, None),
+        None => Ok((None, None, None)),
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None, None);
+                return Ok((None, None, None));
             }
             let tools = Some(
                 tool_config
-                    .strict_tools_available()
+                    .strict_tools_available()?
                     .map(Into::into)
                     .collect(),
             );
@@ -407,7 +407,7 @@ pub(super) fn prepare_fireworks_tools<'a>(
 
             // Fireworks does not support allowed_tools constraint, use regular tool_choice
             let tool_choice = Some((&tool_config.tool_choice).into());
-            (tools, tool_choice, parallel_tool_calls)
+            Ok((tools, tool_choice, parallel_tool_calls))
         }
     }
 }
@@ -470,8 +470,7 @@ impl<'a> FireworksRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _) = prepare_fireworks_tools(request);
-        let tools = tools.map(|t| t.into_iter().map(OpenAITool::into).collect());
+        let (tools, tool_choice, _) = prepare_fireworks_tools(request)?;
 
         let mut fireworks_request = FireworksRequest {
             messages,
@@ -539,11 +538,15 @@ impl<'a> From<&'a FunctionTool> for FireworksTool<'a> {
     }
 }
 
-impl<'a> From<OpenAITool<'a>> for FireworksTool<'a> {
-    fn from(tool: OpenAITool<'a>) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for FireworksTool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
         FireworksTool {
-            r#type: tool.r#type,
-            function: tool.function,
+            r#type: OpenAIToolType::Function,
+            function: OpenAIFunction {
+                name: tool.name(),
+                description: Some(tool.description()),
+                parameters: tool.parameters(),
+            },
         }
     }
 }

@@ -65,7 +65,9 @@ use crate::model::{
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
-use crate::tool::{FunctionTool, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
+use crate::tool::{
+    FunctionTool, FunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice,
+};
 
 use super::helpers::{convert_stream_error, parse_jsonl_batch_file, JsonlBatchFileInfo};
 
@@ -1683,8 +1685,8 @@ pub enum GCPVertexGeminiTool<'a> {
     FunctionDeclarations(Vec<GCPVertexGeminiFunctionDeclaration<'a>>),
 }
 
-impl<'a> From<&'a ToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
-    fn from(tool: &'a ToolConfig) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
         GCPVertexGeminiFunctionDeclaration {
             name: tool.name(),
             description: Some(tool.description()),
@@ -1693,8 +1695,8 @@ impl<'a> From<&'a ToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
     }
 }
 
-impl<'a> From<&'a Vec<ToolConfig>> for GCPVertexGeminiTool<'a> {
-    fn from(tools: &'a Vec<ToolConfig>) -> Self {
+impl<'a> From<&'a Vec<FunctionToolConfig>> for GCPVertexGeminiTool<'a> {
+    fn from(tools: &'a Vec<FunctionToolConfig>) -> Self {
         let function_declarations: Vec<GCPVertexGeminiFunctionDeclaration<'a>> =
             tools.iter().map(Into::into).collect();
         GCPVertexGeminiTool::FunctionDeclarations(function_declarations)
@@ -1973,7 +1975,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
         .into_iter()
         .filter(|m| !m.parts.is_empty())
         .collect();
-        let (tools, tool_config) = prepare_tools(request, model_name);
+        let (tools, tool_config) = prepare_tools(request, model_name)?;
         let (response_mime_type, response_schema) = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 match request.output_schema {
@@ -2045,18 +2047,21 @@ pub async fn prepare_gcp_vertex_gemini_messages<'a>(
 fn prepare_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
     model_name: &'a str,
-) -> (
-    Option<Vec<GCPVertexGeminiTool<'a>>>,
-    Option<GCPVertexGeminiToolConfig<'a>>,
-) {
+) -> Result<
+    (
+        Option<Vec<GCPVertexGeminiTool<'a>>>,
+        Option<GCPVertexGeminiToolConfig<'a>>,
+    ),
+    Error,
+> {
     match &request.tool_config {
         Some(tool_config) => {
             if !tool_config.any_tools_available() {
-                return (None, None);
+                return Ok((None, None));
             }
             let tools = Some(vec![GCPVertexGeminiTool::FunctionDeclarations(
                 tool_config
-                    .tools_available()
+                    .tools_available()?
                     .map(GCPVertexGeminiFunctionDeclaration::from)
                     .collect(),
             )]);
@@ -2064,9 +2069,9 @@ fn prepare_tools<'a>(
                 tool_config,
                 model_name,
             ));
-            (tools, tool_config)
+            Ok((tools, tool_config))
         }
-        None => (None, None),
+        None => Ok((None, None)),
     }
 }
 
@@ -2751,7 +2756,7 @@ mod tests {
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::tool::{StaticToolConfig, ToolCallConfig, ToolConfig, ToolResult};
+    use crate::tool::{StaticToolConfig, ToolCallConfig, ToolResult};
     use serde_json::json;
     use std::borrow::Cow;
     use std::sync::Arc;
@@ -2851,8 +2856,10 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
-        let tools_vec_owned: Vec<ToolConfig> = tools_vec.iter().map(|&t| t.clone()).collect();
+        let tools_vec: Vec<&FunctionToolConfig> =
+            MULTI_TOOL_CONFIG.tools_available().unwrap().collect();
+        let tools_vec_owned: Vec<FunctionToolConfig> =
+            tools_vec.iter().map(|&t| t.clone()).collect();
         let tool = GCPVertexGeminiTool::from(&tools_vec_owned);
         assert_eq!(
             tool,
@@ -2879,6 +2886,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
+            openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
@@ -2900,6 +2908,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
+            openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: None,
@@ -2921,6 +2930,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
+            openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Specific("get_temperature".to_string()),
             parallel_tool_calls: None,
@@ -2945,6 +2955,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
+            openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
@@ -2972,6 +2983,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
+            openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: None,
@@ -2995,6 +3007,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
+            openai_custom_tools: vec![],
             provider_tools: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
@@ -3611,7 +3624,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-2.5-pro");
+        let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-2.5-pro").unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -3655,7 +3668,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools, "gemini-2.0-flash-lite");
+        let (tools, tool_choice) =
+            prepare_tools(&request_with_tools, "gemini-2.0-flash-lite").unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -4061,7 +4075,7 @@ mod tests {
             strict: false,
         };
 
-        let tool_config = ToolConfig::Static(Arc::new(static_tool));
+        let tool_config = FunctionToolConfig::Static(Arc::new(static_tool));
 
         // Convert the tool config to GCPVertexGeminiFunctionDeclaration
         let function_declaration = GCPVertexGeminiFunctionDeclaration::from(&tool_config);

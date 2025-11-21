@@ -9,6 +9,9 @@ deny = [
     { name = "openssl" },
     { name = "openssl-sys"}
 ]
+# We have lots of transitive dependencies with multiple versions,
+# so this check isn't useful for us.
+multiple-versions = "allow"
 
 [advisories]
 ignore = [

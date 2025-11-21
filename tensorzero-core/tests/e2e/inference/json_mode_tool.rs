@@ -23,7 +23,7 @@ use tensorzero::{
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
 use tensorzero_core::inference::types::TextKind;
-use tensorzero_core::tool::{DynamicToolParams, FunctionTool};
+use tensorzero_core::tool::{DynamicToolParams, FunctionTool, Tool};
 use tensorzero_core::variant::JsonMode;
 use tokio_stream::StreamExt;
 
@@ -282,7 +282,7 @@ model = "dummy::good"
             },
             output_schema: Some(simple_output_schema()),
             dynamic_tool_params: DynamicToolParams {
-                additional_tools: Some(vec![additional_tool]),
+                additional_tools: Some(vec![Tool::Function(additional_tool)]),
                 ..Default::default()
             },
             stream: Some(false),
