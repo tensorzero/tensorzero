@@ -708,14 +708,15 @@ ExtraHeader = (
 
 @dataclass(kw_only=True)
 class GetDatapointsRequest:
-    dataset_name: str | None = None
-    """
-    Name of the dataset containing the datapoints. Providing this improves query performance because
-    the dataset is part of the sorting key.
-    """
     ids: list[str]
     """
     The IDs of the datapoints to retrieve. Required.
+    """
+    dataset_name: str | None = None
+    """
+    Name of the dataset containing the datapoints.
+    Omitting the dataset_name may result in slower queries because the dataset is part of the
+    sorting key.
     """
 
 
