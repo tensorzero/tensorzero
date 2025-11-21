@@ -416,7 +416,7 @@ fn extract_chat_completion_from_variant_info(
 ) -> Option<UninitializedChatCompletionConfig> {
     match &variant_info.inner {
         VariantConfig::ChatCompletion(chat_config) => {
-            let uninitialized = chat_config.into_uninitialized();
+            let uninitialized = chat_config.as_uninitialized();
             tracing::debug!(
                 "Extracted ChatCompletion config for variant: {}",
                 variant_name

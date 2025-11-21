@@ -161,7 +161,7 @@ impl DiclConfig {
     /// Converts this initialized config back to its uninitialized form.
     /// Note: Real file paths for system_instructions are preserved. Fake paths
     /// (like defaults) are converted to None and will be regenerated on load.
-    pub fn into_uninitialized(self) -> UninitializedDiclConfig {
+    pub fn as_uninitialized(self) -> UninitializedDiclConfig {
         UninitializedDiclConfig {
             weight: self.weight,
             embedding_model: self.embedding_model.to_string(),
@@ -1839,7 +1839,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_basic_fields() {
+    fn test_as_uninitialized_preserves_basic_fields() {
         let uninitialized = UninitializedDiclConfig {
             weight: Some(0.9),
             embedding_model: "text-embedding-ada-002".to_string(),
@@ -1860,7 +1860,7 @@ mod tests {
 
         let config = uninitialized.load().unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.weight, Some(0.9));
         assert_eq!(exported.embedding_model, "text-embedding-ada-002");
@@ -1875,7 +1875,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_real_path_system_instructions() {
+    fn test_as_uninitialized_preserves_real_path_system_instructions() {
         let instructions_content = "These are system instructions";
         // Using from_path_and_data to create a real path
         let real_path = ResolvedTomlPathData::new_for_tests(
@@ -1893,7 +1893,7 @@ mod tests {
 
         let config = uninitialized.load().unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         // Verify real path is preserved
         assert!(exported.system_instructions.is_some());
@@ -1904,7 +1904,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_fake_path_becomes_none() {
+    fn test_as_uninitialized_fake_path_becomes_none() {
         let instructions_content = "These are system instructions";
         let uninitialized = UninitializedDiclConfig {
             embedding_model: "embed-model".to_string(),
@@ -1919,14 +1919,14 @@ mod tests {
 
         let config = uninitialized.load().unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         // Verify fake path becomes None
         assert_eq!(exported.system_instructions, None);
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_inference_params_v2() {
+    fn test_as_uninitialized_preserves_inference_params_v2() {
         let uninitialized = UninitializedDiclConfig {
             embedding_model: "embed".to_string(),
             k: 1,
@@ -1939,7 +1939,7 @@ mod tests {
 
         let config = uninitialized.load().unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.reasoning_effort, Some("high".to_string()));
         assert_eq!(exported.thinking_budget_tokens, Some(1000));
@@ -1947,7 +1947,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_none_values() {
+    fn test_as_uninitialized_preserves_none_values() {
         let uninitialized = UninitializedDiclConfig {
             embedding_model: "embed".to_string(),
             k: 1,
@@ -1966,7 +1966,7 @@ mod tests {
 
         let config = uninitialized.load().unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.weight, None);
         assert_eq!(exported.temperature, None);
@@ -1981,7 +1981,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_serialization_round_trip() {
+    fn test_as_uninitialized_serialization_round_trip() {
         let original = UninitializedDiclConfig {
             weight: Some(0.6),
             embedding_model: "ada-002".to_string(),
@@ -1993,7 +1993,7 @@ mod tests {
 
         let config = original.clone().load().unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         // Serialize and deserialize
         let json = serde_json::to_string(&exported).unwrap();
