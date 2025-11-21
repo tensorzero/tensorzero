@@ -25,7 +25,7 @@ use tokio::time::sleep;
 use url::Url;
 
 use crate::common::write_json_fixture_to_dataset;
-use common::{get_tensorzero_client, write_chat_fixture_to_dataset};
+use common::{get_config, get_tensorzero_client, write_chat_fixture_to_dataset};
 use evaluations::{
     run_evaluation, run_evaluation_core_streaming,
     stats::{EvaluationUpdate, PerEvaluatorStats},
@@ -38,8 +38,7 @@ use tensorzero_core::client::{
     ClientBuilder, ClientBuilderMode, FeedbackParams, InferenceResponse, Role,
 };
 use tensorzero_core::config::{
-    path::ResolvedTomlPathData, Config, ConfigFileGlob, UninitializedVariantConfig,
-    UninitializedVariantInfo,
+    path::ResolvedTomlPathData, Config, UninitializedVariantConfig, UninitializedVariantInfo,
 };
 use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig;
 use tensorzero_core::{
@@ -2224,16 +2223,7 @@ async fn test_query_skips_staled_datapoints() {
     )
     .await;
 
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
-    let config = Config::load_from_path_optional_verify_credentials(
-        &ConfigFileGlob::new_from_path(&config_path).unwrap(),
-        false,
-    )
-    .await
-    .unwrap();
+    let config = get_config().await;
 
     #[expect(deprecated)]
     let request = ListDatapointsRequest {
@@ -2360,19 +2350,7 @@ async fn test_max_datapoints_parameter() {
     )
     .await;
 
-    let config = Arc::new(
-        Config::load_from_path_optional_verify_credentials(
-            &tensorzero_core::config::ConfigFileGlob::new_from_path(&PathBuf::from(&format!(
-                "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-                std::env::var("CARGO_MANIFEST_DIR").unwrap()
-            )))
-            .unwrap(),
-            false,
-        )
-        .await
-        .unwrap()
-        .config,
-    );
+    let config = get_config().await;
 
     let evaluation_run_id = Uuid::now_v7();
 
@@ -2434,19 +2412,7 @@ async fn test_precision_targets_parameter() {
     )
     .await;
 
-    let config = Arc::new(
-        Config::load_from_path_optional_verify_credentials(
-            &tensorzero_core::config::ConfigFileGlob::new_from_path(&PathBuf::from(&format!(
-                "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-                std::env::var("CARGO_MANIFEST_DIR").unwrap()
-            )))
-            .unwrap(),
-            false,
-        )
-        .await
-        .unwrap()
-        .config,
-    );
+    let config = get_config().await;
 
     let evaluation_run_id = Uuid::now_v7();
 
