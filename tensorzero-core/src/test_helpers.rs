@@ -1,4 +1,4 @@
-#![expect(clippy::expect_used, clippy::missing_panics_doc, clippy::unwrap_used)]
+#![expect(clippy::missing_panics_doc, clippy::unwrap_used)]
 
 use std::path::PathBuf;
 

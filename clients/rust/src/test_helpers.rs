@@ -2,7 +2,6 @@
 
 use crate::{Client, ClientBuilder, ClientBuilderMode};
 use tempfile::NamedTempFile;
-use tensorzero_core::config::Config;
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
 use url::Url;
 
