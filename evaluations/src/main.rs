@@ -22,6 +22,11 @@ async fn main() -> Result<()> {
         _ => {}
     }
 
+    // Validate that max_datapoints is not used with datapoint_ids
+    if !args.datapoint_ids.is_empty() && args.max_datapoints.is_some() {
+        bail!("Cannot provide both --datapoint-ids and --max-datapoints. --max-datapoints can only be used with --dataset-name");
+    }
+
     if let Some(dataset_name) = &args.dataset_name {
         info!(
             evaluation_run_id = %evaluation_run_id,

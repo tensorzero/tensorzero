@@ -402,6 +402,42 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive() {
+    init_tracing_for_tests();
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let evaluation_run_id = Uuid::now_v7();
+
+    // Test: Both datapoint_ids and max_datapoints provided should fail
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        evaluation_name: "entity_extraction".to_string(),
+        dataset_name: None,
+        datapoint_ids: vec![Uuid::now_v7()],
+        variant_name: "gpt_4o_mini".to_string(),
+        concurrency: 10,
+        format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::On,
+        max_datapoints: Some(10),
+        precision_targets: vec![],
+    };
+
+    let mut output = Vec::new();
+    let result = run_evaluation(args, evaluation_run_id, &mut output).await;
+    assert!(
+        result.is_err(),
+        "Should fail when both datapoint_ids and max_datapoints are provided"
+    );
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("Cannot provide both datapoint_ids and max_datapoints"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn run_evaluation_with_specific_datapoint_ids() {
     init_tracing_for_tests();
     let dataset_name = format!("haiku-data-subset-{}", Uuid::now_v7());
