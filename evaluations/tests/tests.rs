@@ -38,8 +38,7 @@ use tensorzero_core::client::{
     ClientBuilder, ClientBuilderMode, FeedbackParams, InferenceResponse, Role,
 };
 use tensorzero_core::config::{
-    path::ResolvedTomlPathData, Config, ConfigFileGlob, UninitializedVariantConfig,
-    UninitializedVariantInfo,
+    path::ResolvedTomlPathData, Config, UninitializedVariantConfig, UninitializedVariantInfo,
 };
 use tensorzero_core::variant::chat_completion::UninitializedChatCompletionConfig;
 use tensorzero_core::{
@@ -1600,6 +1599,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         optimize: LLMJudgeOptimize::Max,
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
+        description: None,
     };
     let input = resolved_input_to_client_input(
         datapoint
@@ -1776,6 +1776,7 @@ async fn test_run_llm_judge_evaluator_json() {
         optimize: LLMJudgeOptimize::Max,
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
+        description: None,
     };
     let input = resolved_input_to_client_input(
         datapoint
@@ -2489,16 +2490,7 @@ async fn test_query_skips_staled_datapoints() {
     )
     .await;
 
-    let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-        std::env::var("CARGO_MANIFEST_DIR").unwrap()
-    ));
-    let config = Config::load_from_path_optional_verify_credentials(
-        &ConfigFileGlob::new_from_path(&config_path).unwrap(),
-        false,
-    )
-    .await
-    .unwrap();
+    let config = get_config().await;
 
     #[expect(deprecated)]
     let request = ListDatapointsRequest {

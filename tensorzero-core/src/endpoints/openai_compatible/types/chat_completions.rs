@@ -345,40 +345,50 @@ impl Params {
             .tensorzero_params
             .unwrap_or_default();
 
-        // Override the inference parameters with OpenAI-compatible parameters
+        // Collect the inference parameters.
+        // `tensorzero::params` takes precedence over inferred values from OpenAI-compatible parameters.
+        // This is necessary so that users can set things like `json_mode="tool"` dynamically; otherwise it'll always be `"strict"`.
         // TODO (GabrielBianconi): Should we warn if we override parameters that are already set?
-        // Currently: OpenAI-compatible parameters take precedence over TensorZero parameters
         inference_params.chat_completion = ChatCompletionInferenceParams {
-            frequency_penalty: openai_compatible_params
+            frequency_penalty: inference_params
+                .chat_completion
                 .frequency_penalty
-                .or(inference_params.chat_completion.frequency_penalty),
-            json_mode: json_mode.or(inference_params.chat_completion.json_mode),
-            max_tokens: max_tokens.or(inference_params.chat_completion.max_tokens),
-            presence_penalty: openai_compatible_params
+                .or(openai_compatible_params.frequency_penalty),
+            json_mode: inference_params.chat_completion.json_mode.or(json_mode),
+            max_tokens: inference_params.chat_completion.max_tokens.or(max_tokens),
+            presence_penalty: inference_params
+                .chat_completion
                 .presence_penalty
-                .or(inference_params.chat_completion.presence_penalty),
-            reasoning_effort: openai_compatible_params
+                .or(openai_compatible_params.presence_penalty),
+            reasoning_effort: inference_params
+                .chat_completion
                 .reasoning_effort
-                .or(inference_params.chat_completion.reasoning_effort),
-            service_tier: openai_compatible_params
+                .or(openai_compatible_params.reasoning_effort),
+            service_tier: inference_params
+                .chat_completion
                 .service_tier
-                .or(inference_params.chat_completion.service_tier),
-            seed: openai_compatible_params
+                .or(openai_compatible_params.service_tier),
+            seed: inference_params
+                .chat_completion
                 .seed
-                .or(inference_params.chat_completion.seed),
-            stop_sequences: openai_compatible_params
-                .stop
-                .or(inference_params.chat_completion.stop_sequences),
-            temperature: openai_compatible_params
+                .or(openai_compatible_params.seed),
+            stop_sequences: inference_params
+                .chat_completion
+                .stop_sequences
+                .or(openai_compatible_params.stop),
+            temperature: inference_params
+                .chat_completion
                 .temperature
-                .or(inference_params.chat_completion.temperature),
+                .or(openai_compatible_params.temperature),
             thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
-            top_p: openai_compatible_params
+            top_p: inference_params
+                .chat_completion
                 .top_p
-                .or(inference_params.chat_completion.top_p),
-            verbosity: openai_compatible_params
+                .or(openai_compatible_params.top_p),
+            verbosity: inference_params
+                .chat_completion
                 .verbosity
-                .or(inference_params.chat_completion.verbosity),
+                .or(openai_compatible_params.verbosity),
         };
 
         let OpenAICompatibleToolChoiceParams {

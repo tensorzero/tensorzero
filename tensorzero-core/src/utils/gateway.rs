@@ -17,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
-use crate::config::{Config, ConfigFileGlob};
+use crate::config::{Config, ConfigFileGlob, ConfigLoadInfo};
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -276,7 +276,12 @@ impl GatewayHandle {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(&Config::new_empty().await?, Some(clickhouse_url), true).await
+    setup_clickhouse(
+        &Config::new_empty().await?.config,
+        Some(clickhouse_url),
+        true,
+    )
+    .await
 }
 
 pub async fn setup_clickhouse(
@@ -487,11 +492,15 @@ pub async fn start_openai_compatible_gateway(
             message: format!("Failed to get local address: {e}"),
         })
     })?;
-
     let config = if let Some(config_file) = config_file {
-        Arc::new(Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?)
+        let ConfigLoadInfo {
+            config,
+            snapshot: _,
+            // TODO: make sure this gets written
+        } = Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?;
+        Arc::new(config)
     } else {
-        Arc::new(Config::new_empty().await?)
+        Arc::new(Config::new_empty().await?.config)
     };
     let gateway_handle =
         GatewayHandle::new_with_databases(config, clickhouse_url, postgres_url).await?;

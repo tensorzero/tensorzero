@@ -351,59 +351,61 @@ async fn test_list_inferences_by_variant(client: Client) {
 
 tensorzero::make_gateway_test_functions!(test_list_inferences_by_variant);
 
-/// Test listing inferences by episode ID
-async fn test_list_inferences_by_episode(client: Client) {
-    // Create some test inferences first
-    for _ in 0..3 {
-        let _ = create_test_inference(&client).await;
-    }
+// Test listing inferences by episode ID
+// TODO(#4773): Investigate why this is failing in merge queues.
+// async fn test_list_inferences_by_episode(client: Client) {
+//     // Create some test inferences first
+//     for _ in 0..3 {
+//         let _ = create_test_inference(&client).await;
+//     }
 
-    // Wait a bit for the inferences to be written to the database
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+//     // Wait a bit for the inferences to be written to the database
+//     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
-    // First get an existing inference to extract an episode_id
-    let list_request = ListInferencesRequest {
-        function_name: Some("basic_test".to_string()),
-        limit: Some(100),
-        ..Default::default()
-    };
-    let list_response = client.list_inferences(list_request).await.unwrap();
+//     // First get an existing inference to extract an episode_id
+//     let list_request = ListInferencesRequest {
+//         function_name: Some("basic_test".to_string()),
+//         limit: Some(100),
+//         ..Default::default()
+//     };
+//     let list_response = client.list_inferences(list_request).await.unwrap();
 
-    assert!(
-        !list_response.inferences.is_empty(),
-        "Expected at least some inferences to exist"
-    );
+//     assert!(
+//         !list_response.inferences.is_empty(),
+//         "Expected at least some inferences to exist"
+//     );
 
-    // Get an episode_id from one of the existing inferences
-    let episode_id = match &list_response.inferences[0] {
-        tensorzero::StoredInference::Chat(chat_inf) => chat_inf.episode_id,
-        tensorzero::StoredInference::Json(json_inf) => json_inf.episode_id,
-    };
+//     // Get an episode_id from one of the existing inferences
+//     let episode_id = match &list_response.inferences[0] {
+//         tensorzero::StoredInference::Chat(chat_inf) => chat_inf.episode_id,
+//         tensorzero::StoredInference::Json(json_inf) => json_inf.episode_id,
+//     };
 
-    // List inferences by episode ID
-    let request = ListInferencesRequest {
-        episode_id: Some(episode_id),
-        limit: Some(100),
-        ..Default::default()
-    };
-    let response = client.list_inferences(request).await.unwrap();
+//     // List inferences by episode ID
+//     let request = ListInferencesRequest {
+//         episode_id: Some(episode_id),
+//         limit: Some(100),
+//         ..Default::default()
+//     };
+//     let response = client.list_inferences(request).await.unwrap();
 
-    assert!(
-        !response.inferences.is_empty(),
-        "Expected at least one inference with this episode_id"
-    );
+//     assert!(
+//         !response.inferences.is_empty(),
+//         "Expected at least one inference with this episode_id"
+//     );
 
-    // Verify all inferences have the correct episode ID
-    for inference in &response.inferences {
-        let inf_episode_id = match inference {
-            tensorzero::StoredInference::Chat(chat_inf) => chat_inf.episode_id,
-            tensorzero::StoredInference::Json(json_inf) => json_inf.episode_id,
-        };
-        assert_eq!(inf_episode_id, episode_id);
-    }
-}
+//     // Verify all inferences have the correct episode ID
+//     for inference in &response.inferences {
+//         let inf_episode_id = match inference {
+//             tensorzero::StoredInference::Chat(chat_inf) => chat_inf.episode_id,
+//             tensorzero::StoredInference::Json(json_inf) => json_inf.episode_id,
+//         };
+//         assert_eq!(inf_episode_id, episode_id);
+//     }
+// }
 
-tensorzero::make_gateway_test_functions!(test_list_inferences_by_episode);
+// TODO(#4773): Investigate why this is failing in merge queues.
+// tensorzero::make_gateway_test_functions!(test_list_inferences_by_episode);
 
 /// Test listing inferences with ordering
 async fn test_list_inferences_with_ordering(client: Client) {

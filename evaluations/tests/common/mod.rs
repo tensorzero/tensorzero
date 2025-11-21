@@ -6,7 +6,7 @@ use std::{
 };
 
 use tensorzero_core::client::{Client, ClientBuilder, ClientBuilderMode};
-use tensorzero_core::config::{Config, ConfigFileGlob};
+use tensorzero_core::config::{Config, ConfigFileGlob, ConfigLoadInfo};
 use tensorzero_core::db::clickhouse::{
     test_helpers::{get_clickhouse, CLICKHOUSE_URL},
     TableName,
@@ -85,16 +85,18 @@ pub async fn get_tensorzero_client() -> Client {
 }
 
 pub async fn get_config() -> Arc<Config> {
-    Arc::new(
-        Config::load_from_path_optional_verify_credentials(
-            &ConfigFileGlob::new_from_path(&PathBuf::from(&format!(
-                "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-                std::env::var("CARGO_MANIFEST_DIR").unwrap()
-            )))
-            .unwrap(),
-            false,
-        )
-        .await
+    let ConfigLoadInfo {
+        config,
+        snapshot: _,
+    } = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new_from_path(&PathBuf::from(&format!(
+            "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )))
         .unwrap(),
+        false,
     )
+    .await
+    .unwrap();
+    Arc::new(config)
 }

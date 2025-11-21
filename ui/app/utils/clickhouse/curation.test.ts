@@ -37,7 +37,7 @@ test("countCuratedInferences for boolean metrics", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
@@ -103,7 +103,7 @@ test("countCuratedInferences for float metrics", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
@@ -128,7 +128,7 @@ test("countCuratedInferences for float metrics", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
@@ -192,7 +192,7 @@ test("countCuratedInferences for demonstration metrics", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
@@ -238,7 +238,7 @@ test("getCuratedInferences retrieves correct data", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
@@ -284,7 +284,7 @@ test("getCuratedInferences retrieves correct data", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
@@ -310,7 +310,7 @@ test("getCuratedInferences retrieves correct data", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
@@ -339,7 +339,7 @@ test("countFeedbacksForMetric returns correct counts", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
@@ -381,7 +381,7 @@ test("countFeedbacksForMetric returns correct counts", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],

@@ -830,7 +830,7 @@ mod tests {
                         "additionalProperties": false
                     }))
                     .unwrap(),
-                    implicit_tool_call_config: crate::tool::ToolCallConfig::default(),
+                    json_mode_tool_call_config: crate::tool::ToolCallConfig::default(),
                     description: None,
                     experimentation: ExperimentationConfig::default(),
                     all_explicit_template_names: HashSet::new(),

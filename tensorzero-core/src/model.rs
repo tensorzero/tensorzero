@@ -973,6 +973,8 @@ pub enum UninitializedProviderConfig {
         api_base: Option<Url>,
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
+        #[serde(default)]
+        beta_structured_outputs: bool,
     },
     #[strum(serialize = "aws_bedrock")]
     #[serde(rename = "aws_bedrock")]
@@ -1121,6 +1123,7 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_base,
                 api_key_location,
+                beta_structured_outputs,
             } => ProviderConfig::Anthropic(AnthropicProvider::new(
                 model_name,
                 api_base,
@@ -1130,6 +1133,7 @@ impl UninitializedProviderConfig {
                         provider_type_default_credentials,
                     )
                     .await?,
+                beta_structured_outputs,
             )),
             UninitializedProviderConfig::AWSBedrock {
                 model_id,
@@ -2266,6 +2270,8 @@ impl ShorthandModelConfig for ModelConfig {
                 AnthropicKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                // We don't support beta structured output for shorthand models
+                false,
             )),
             "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(
                 model_name,
@@ -3388,6 +3394,7 @@ mod tests {
                 "claude".to_string(),
                 None,
                 AnthropicCredentials::None,
+                false,
             ))
         });
         let anthropic_model_config = ModelConfig {
