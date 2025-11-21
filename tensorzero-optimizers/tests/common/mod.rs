@@ -113,6 +113,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     .await
     .unwrap();
     let config = load_info.dangerous_into_config_without_writing();
+    let snapshot_hash = blake3::hash(&[]);
     let job_handle = optimizer_info
         .launch(
             &client,
@@ -121,6 +122,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             &credentials,
             &clickhouse,
             Arc::new(config),
+            snapshot_hash,
         )
         .await
         .unwrap();

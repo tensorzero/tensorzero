@@ -96,6 +96,7 @@ metrics-exporter-prometheus = { version = "0.17.2", features = [
     "http-listener",
 ], default-features = false }
 schemars = "1.1.0"
+blake3 = "1.8.2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

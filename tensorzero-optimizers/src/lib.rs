@@ -94,6 +94,7 @@ pub trait JobHandle {
 pub trait Optimizer {
     type Handle: JobHandle;
 
+    #[expect(clippy::too_many_arguments)]
     async fn launch(
         &self,
         client: &TensorzeroHttpClient,
@@ -102,6 +103,7 @@ pub trait Optimizer {
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: Arc<Config>,
+        snapshot_hash: blake3::Hash,
     ) -> Result<Self::Handle, Error>;
 }
 
@@ -117,6 +119,7 @@ impl Optimizer for OptimizerInfo {
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: Arc<Config>,
+        snapshot_hash: blake3::Hash,
     ) -> Result<Self::Handle, Error> {
         match &self.inner {
             OptimizerConfig::Dicl(optimizer_config) => optimizer_config
@@ -127,6 +130,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     clickhouse_connection_info,
                     config.clone(),
+                    snapshot_hash,
                 )
                 .await
                 .map(OptimizationJobHandle::Dicl),
@@ -138,6 +142,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     clickhouse_connection_info,
                     config.clone(),
+                    snapshot_hash,
                 )
                 .await
                 .map(OptimizationJobHandle::OpenAISFT),
@@ -149,6 +154,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     clickhouse_connection_info,
                     config.clone(),
+                    snapshot_hash,
                 )
                 .await
                 .map(OptimizationJobHandle::OpenAIRFT),
@@ -160,6 +166,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     clickhouse_connection_info,
                     config.clone(),
+                    snapshot_hash,
                 )
                 .await
                 .map(OptimizationJobHandle::FireworksSFT),
@@ -171,6 +178,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     clickhouse_connection_info,
                     config.clone(),
+                    snapshot_hash,
                 )
                 .await
                 .map(OptimizationJobHandle::GCPVertexGeminiSFT),
@@ -182,6 +190,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     clickhouse_connection_info,
                     config.clone(),
+                    snapshot_hash,
                 )
                 .await
                 .map(OptimizationJobHandle::TogetherSFT),
@@ -193,6 +202,7 @@ impl Optimizer for OptimizerInfo {
                     credentials,
                     clickhouse_connection_info,
                     config.clone(),
+                    snapshot_hash,
                 )
                 .await
                 .map(OptimizationJobHandle::GEPA),

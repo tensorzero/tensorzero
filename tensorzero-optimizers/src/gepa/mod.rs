@@ -40,10 +40,12 @@ impl Optimizer for GEPAConfig {
         _credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: std::sync::Arc<Config>,
+        snapshot_hash: blake3::Hash,
     ) -> Result<Self::Handle, Error> {
         // Build the gateway client once for the entire optimization run
         let _gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config: config.clone(),
+            snapshot_hash,
             clickhouse_connection_info: clickhouse_connection_info.clone(),
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             http_client: client.clone(),

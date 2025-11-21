@@ -1192,6 +1192,7 @@ impl ClientExt for Client {
                         params,
                         &gateway.handle.app_state.clickhouse_connection_info,
                         gateway.handle.app_state.config.clone(),
+                        gateway.handle.app_state.snapshot_hash,
                     )
                     .await
                     .map_err(err_to_http)
@@ -1220,6 +1221,7 @@ impl ClientExt for Client {
                     launch_optimization_workflow(
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.config.clone(),
+                        gateway.handle.app_state.snapshot_hash,
                         &gateway.handle.app_state.clickhouse_connection_info,
                         params,
                     )

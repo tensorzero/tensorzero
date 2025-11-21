@@ -33,6 +33,7 @@ url = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 secrecy = { workspace = true }
+blake3 = { workspace = true }
 
 # HTTP client
 reqwest = { workspace = true }

@@ -399,6 +399,8 @@ pub enum ClientBuilderMode {
     FromComponents {
         /// Pre-parsed TensorZero configuration
         config: Arc<Config>,
+        /// The snapshot_hash of the config that was already parsed
+        snapshot_hash: blake3::Hash,
         /// Already-initialized ClickHouse connection
         clickhouse_connection_info: ClickHouseConnectionInfo,
         /// Already-initialized Postgres connection
@@ -550,6 +552,7 @@ impl ClientBuilder {
                                 postgres_connection_info,
                                 http_client,
                                 self.drop_wrapper,
+                                hash,
                             )
                             .await
                             .map_err(|e| {
@@ -567,6 +570,7 @@ impl ClientBuilder {
             }
             ClientBuilderMode::FromComponents {
                 config,
+                snapshot_hash,
                 clickhouse_connection_info,
                 postgres_connection_info,
                 http_client,
@@ -588,6 +592,7 @@ impl ClientBuilder {
                                 postgres_connection_info.clone(),
                                 http_client.clone(),
                                 self.drop_wrapper,
+                                *snapshot_hash,
                             )
                             .await
                             .map_err(|e| {
@@ -1063,6 +1068,7 @@ mod tests {
             .unwrap()
             .dangerous_into_config_without_writing(),
         );
+        let snapshot_hash = blake3::hash(&[]);
 
         // Create mock components
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -1072,6 +1078,7 @@ mod tests {
         // Attempt to build client with FromComponents mode
         let err = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config,
+            snapshot_hash,
             clickhouse_connection_info,
             postgres_connection_info,
             http_client,
@@ -1114,6 +1121,7 @@ mod tests {
             .unwrap()
             .dangerous_into_config_without_writing(),
         );
+        let snapshot_hash = blake3::hash(&[]);
 
         // Create mock components
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -1123,6 +1131,7 @@ mod tests {
         // Attempt to build client with FromComponents mode
         let err = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config,
+            snapshot_hash,
             clickhouse_connection_info,
             postgres_connection_info,
             http_client,

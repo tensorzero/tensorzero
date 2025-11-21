@@ -127,6 +127,7 @@ impl Drop for GatewayHandle {
 #[expect(clippy::manual_non_exhaustive)]
 pub struct AppStateData {
     pub config: Arc<Config>,
+    pub snapshot_hash: blake3::Hash,
     pub http_client: TensorzeroHttpClient,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub postgres_connection_info: PostgresConnectionInfo,
@@ -192,6 +193,7 @@ impl GatewayHandle {
             postgres_connection_info,
             http_client,
             None,
+            hash,
         )
         .await
     }
@@ -207,9 +209,12 @@ impl GatewayHandle {
             PostgresConnectionInfo::new_mock(test_options.postgres_healthy);
         let cancel_token = CancellationToken::new();
         let auth_cache = create_auth_cache_from_config(&config);
+        // For testing only
+        let snapshot_hash = blake3::hash(&[]);
         Self {
             app_state: AppStateData {
                 config,
+                snapshot_hash,
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
@@ -229,6 +234,7 @@ impl GatewayHandle {
         postgres_connection_info: PostgresConnectionInfo,
         http_client: TensorzeroHttpClient,
         drop_wrapper: Option<DropWrapper>,
+        snapshot_hash: blake3::Hash,
     ) -> Result<Self, Error> {
         // Validate that rate limiting is not configured when Postgres is disabled
         if config.rate_limiting.enabled()
@@ -264,6 +270,7 @@ impl GatewayHandle {
             app_state: AppStateData {
                 config,
                 http_client,
+                snapshot_hash,
                 clickhouse_connection_info,
                 postgres_connection_info,
                 deferred_tasks: TaskTracker::new(),
@@ -867,6 +874,7 @@ mod tests {
             rate_limiting: Default::default(),
             ..Default::default()
         });
+        let hash = blake3::hash(&[]);
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let postgres_connection_info = PostgresConnectionInfo::Disabled;
@@ -879,6 +887,7 @@ mod tests {
             postgres_connection_info,
             http_client,
             None,
+            hash,
         )
         .await
         .expect("Gateway setup should succeed when rate limiting has no rules");

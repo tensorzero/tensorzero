@@ -42,6 +42,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
         .unwrap()
         .dangerous_into_config_without_writing(),
     );
+    let snapshot_hash = blake3::hash(&[]);
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
         is_manual_run: false,
@@ -55,6 +56,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
         PostgresConnectionInfo::Disabled,
         TensorzeroHttpClient::new_testing().unwrap(),
         None,
+        snapshot_hash,
     )
     .await
     .unwrap();

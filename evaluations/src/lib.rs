@@ -251,7 +251,12 @@ pub async fn run_evaluation(
             .clone(),
     )
     .await?;
-    let ConfigWithHash { config, hash } = config_load_info.into_config(&clickhouse_client).await?;
+    let ConfigWithHash {
+        config,
+        // NOTE: since we reload the config for the actual client that does all the operations,
+        // we don't need to carry this hash around here too (it will be carried around inside the client)
+        hash: _,
+    } = config_load_info.into_config(&clickhouse_client).await?;
     let config = Arc::new(config);
     debug!("Configuration loaded successfully");
     let tensorzero_client = match args.gateway_url {

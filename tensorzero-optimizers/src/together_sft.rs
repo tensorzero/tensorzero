@@ -132,6 +132,7 @@ impl Optimizer for TogetherSFTConfig {
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: Arc<Config>,
+        _snapshot_hash: blake3::Hash,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()

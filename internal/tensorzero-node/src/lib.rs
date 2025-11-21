@@ -159,7 +159,12 @@ pub async fn run_evaluation_streaming(
     )
     .await
     .map_err(|e| napi::Error::from_reason(format!("Failed to connect to ClickHouse: {e}")))?;
-    let ConfigWithHash { config, hash } = config_load_info
+    let ConfigWithHash {
+        config,
+        // Since the evaluation actually runs all inferences and feedback through the gateway,
+        // there is no use for this hash in the Node.js process
+        hash: _,
+    } = config_load_info
         .into_config(&clickhouse_client)
         .await
         .map_err(|e| napi::Error::from_reason(e.to_string()))?;

@@ -117,6 +117,7 @@ pub async fn test_dicl_optimization_chat() {
     .await
     .unwrap();
     let config = config_load_info.dangerous_into_config_without_writing();
+    let snapshot_hash = blake3::hash(&[]);
 
     let job_handle = optimizer_info
         .launch(
@@ -126,6 +127,7 @@ pub async fn test_dicl_optimization_chat() {
             &credentials,
             &clickhouse,
             Arc::new(config),
+            snapshot_hash,
         )
         .await
         .unwrap();
@@ -402,6 +404,7 @@ pub async fn test_dicl_optimization_json() {
     .await
     .unwrap();
     let config = config_load_info.dangerous_into_config_without_writing();
+    let snapshot_hash = blake3::hash(&[]);
 
     let job_handle = optimizer_info
         .launch(
@@ -411,6 +414,7 @@ pub async fn test_dicl_optimization_json() {
             &credentials,
             &clickhouse,
             Arc::new(config),
+            snapshot_hash,
         )
         .await
         .unwrap();

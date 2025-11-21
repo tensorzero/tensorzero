@@ -44,6 +44,7 @@ impl Optimizer for DiclOptimizationConfig {
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: Arc<Config>,
+        _snapshot_hash: blake3::Hash,
     ) -> Result<Self::Handle, Error> {
         // Validate training examples
         validate_train_examples(&train_examples)?;

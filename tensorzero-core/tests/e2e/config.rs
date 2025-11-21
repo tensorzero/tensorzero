@@ -101,6 +101,7 @@ async fn test_from_components_basic() {
         .unwrap()
         .dangerous_into_config_without_writing(),
     );
+    let snapshot_hash = blake3::hash(&[]);
 
     // Create components
     let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -110,6 +111,7 @@ async fn test_from_components_basic() {
     // Build client using FromComponents mode
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::FromComponents {
         config,
+        snapshot_hash,
         clickhouse_connection_info,
         postgres_connection_info,
         http_client,
