@@ -6,7 +6,7 @@ use tracing::info;
 
 use crate::stats::PerEvaluatorStats;
 
-const MIN_DATAPOINTS: usize = 20;
+pub const MIN_DATAPOINTS: usize = 20;
 
 /// Newtype wrapper for cancellation tokens
 ///
@@ -179,11 +179,11 @@ mod tests {
         let mut evaluators = HashMap::new();
         evaluators.insert(
             "evaluator1".to_string(),
-            ExactMatch(ExactMatchConfig { cutoff: None }),
+            ExactMatch(ExactMatchConfig::default()),
         );
         evaluators.insert(
             "evaluator2".to_string(),
-            ExactMatch(ExactMatchConfig { cutoff: None }),
+            ExactMatch(ExactMatchConfig::default()),
         );
 
         let manager = StoppingManager::new(&evaluators, HashMap::new());
@@ -207,7 +207,7 @@ mod tests {
         let mut evaluators = HashMap::new();
         evaluators.insert(
             "evaluator1".to_string(),
-            ExactMatch(ExactMatchConfig { cutoff: None }),
+            ExactMatch(ExactMatchConfig::default()),
         );
 
         let manager = StoppingManager::new(&evaluators, precision_targets);
@@ -228,7 +228,7 @@ mod tests {
         let mut evaluators = HashMap::new();
         evaluators.insert(
             "evaluator1".to_string(),
-            ExactMatch(ExactMatchConfig { cutoff: None }),
+            ExactMatch(ExactMatchConfig::default()),
         );
 
         let manager = StoppingManager::new(&evaluators, precision_targets);
@@ -251,7 +251,7 @@ mod tests {
         let mut evaluators = HashMap::new();
         evaluators.insert(
             "evaluator1".to_string(),
-            ExactMatch(ExactMatchConfig { cutoff: None }),
+            ExactMatch(ExactMatchConfig::default()),
         );
 
         let mut manager = StoppingManager::new(&evaluators, precision_targets);
@@ -291,11 +291,11 @@ mod tests {
         let mut evaluators = HashMap::new();
         evaluators.insert(
             "evaluator1".to_string(),
-            ExactMatch(ExactMatchConfig { cutoff: None }),
+            ExactMatch(ExactMatchConfig::default()),
         );
         evaluators.insert(
             "evaluator2".to_string(),
-            ExactMatch(ExactMatchConfig { cutoff: None }),
+            ExactMatch(ExactMatchConfig::default()),
         );
 
         let manager = StoppingManager::new(&evaluators, precision_targets);
@@ -325,11 +325,11 @@ mod tests {
         let mut evaluators = HashMap::new();
         evaluators.insert(
             "evaluator1".to_string(),
-            ExactMatch(ExactMatchConfig { cutoff: None }),
+            ExactMatch(ExactMatchConfig::default()),
         );
         evaluators.insert(
             "evaluator2".to_string(),
-            ExactMatch(ExactMatchConfig { cutoff: None }),
+            ExactMatch(ExactMatchConfig::default()),
         );
 
         let mut manager = StoppingManager::new(&evaluators, precision_targets);

@@ -17,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
-use crate::config::{Config, ConfigFileGlob};
+use crate::config::{Config, ConfigFileGlob, ConfigLoadInfo};
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -276,7 +276,12 @@ impl GatewayHandle {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(&Config::new_empty().await?, Some(clickhouse_url), true).await
+    setup_clickhouse(
+        &Config::new_empty().await?.config,
+        Some(clickhouse_url),
+        true,
+    )
+    .await
 }
 
 pub async fn setup_clickhouse(
@@ -451,6 +456,12 @@ where
 }
 
 // We hold on to these fields so that their Drop impls run when `ShutdownHandle` is dropped
+// IMPORTANT: The 'sender' field must come first in the struct definition, so that Rust will
+// drop it first: https://doc.rust-lang.org/reference/destructors.html#r-destructors.operation
+// This triggers graceful shutdown of the Axum server first, and then waits for the server to
+// exit in the `Drop` impl for `GatewayHandle`.
+// Declaring these fields in the opposite order will cause a deadlock, since we'll wait on
+// an Axum server to shutdown without triggering graceful shutdown first.
 pub struct ShutdownHandle {
     #[expect(dead_code)]
     sender: Sender<()>,
@@ -481,11 +492,15 @@ pub async fn start_openai_compatible_gateway(
             message: format!("Failed to get local address: {e}"),
         })
     })?;
-
     let config = if let Some(config_file) = config_file {
-        Arc::new(Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?)
+        let ConfigLoadInfo {
+            config,
+            snapshot: _,
+            // TODO: make sure this gets written
+        } = Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?;
+        Arc::new(config)
     } else {
-        Arc::new(Config::new_empty().await?)
+        Arc::new(Config::new_empty().await?.config)
     };
     let gateway_handle =
         GatewayHandle::new_with_databases(config, clickhouse_url, postgres_url).await?;
@@ -504,9 +519,10 @@ pub async fn start_openai_compatible_gateway(
         let _ = recv.await;
     };
 
-    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-    #[expect(clippy::disallowed_methods)]
-    tokio::spawn(
+    // Note - this will cause `gateway_handle` to block on the Axum server shutting down
+    // when `gateway_handle` is dropped.
+    // See the comment on `ShutdownHandle` for more details.
+    gateway_handle.app_state.deferred_tasks.spawn(
         axum::serve(listener, router)
             .with_graceful_shutdown(shutdown_fut)
             .into_future(),

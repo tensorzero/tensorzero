@@ -354,6 +354,14 @@ OrderDirection = Literal["ascending", "descending"]
 
 
 @dataclass(kw_only=True)
+class DatapointMetadataUpdate:
+    name: str | None | UnsetType = UNSET
+    """
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+
+
+@dataclass(kw_only=True)
 class UpdateDatapointMetadataRequest:
     id: str
     """
@@ -382,14 +390,6 @@ class CreateDatapointsResponse:
     ids: list[str]
     """
     The IDs of the newly-generated datapoints.
-    """
-
-
-@dataclass(kw_only=True)
-class DatapointMetadataUpdate:
-    name: str | None | UnsetType = UNSET
-    """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     """
 
 
@@ -920,34 +920,6 @@ OrderBy = OrderByTimestamp | OrderByMetric | OrderBySearchRelevance
 
 
 @dataclass(kw_only=True)
-class DynamicToolParams:
-    allowed_tools: list[str] | None = None
-    """
-    A subset of static tools configured for the function that the inference is allowed to use. Optional.
-    If not provided, all static tools are allowed.
-    """
-    additional_tools: list[FunctionTool] | None = None
-    """
-    Tools that the user provided at inference time (not in function config), in addition to the function-configured
-    tools, that are also allowed.
-    """
-    tool_choice: ToolChoice | None = None
-    """
-    User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
-    Optional.
-    """
-    parallel_tool_calls: bool | None = None
-    """
-    Whether to use parallel tool calls in the inference. Optional.
-    If provided during inference, it will override the function-configured parallel tool calls.
-    """
-    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
-    """
-    Provider-specific tool configurations
-    """
-
-
-@dataclass(kw_only=True)
 class UpdateDynamicToolParamsRequest:
     allowed_tools: list[str] | None | UnsetType = UNSET
     """
@@ -976,6 +948,34 @@ class UpdateDynamicToolParamsRequest:
     """
     Provider-specific tool configurations
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    """
+
+
+@dataclass(kw_only=True)
+class DynamicToolParams:
+    allowed_tools: list[str] | None = None
+    """
+    A subset of static tools configured for the function that the inference is allowed to use. Optional.
+    If not provided, all static tools are allowed.
+    """
+    additional_tools: list[FunctionTool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured
+    tools, that are also allowed.
+    """
+    tool_choice: ToolChoice | None = None
+    """
+    User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+    Optional.
+    """
+    parallel_tool_calls: bool | None = None
+    """
+    Whether to use parallel tool calls in the inference. Optional.
+    If provided during inference, it will override the function-configured parallel tool calls.
+    """
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
+    """
+    Provider-specific tool configurations
     """
 
 
@@ -1310,6 +1310,11 @@ class UpdateChatDatapointRequestInternal:
     Provider-specific tool configurations
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
+    tool_params: UpdateDynamicToolParamsRequest | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Datapoint tool parameters.
+    Moving forward, don't nest these fields.
+    """
     tags: dict[str, Any] | None = None
     """
     Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
@@ -1318,6 +1323,11 @@ class UpdateChatDatapointRequestInternal:
     name: str | None | UnsetType = UNSET
     """
     Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    metadata: DatapointMetadataUpdate | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
+    Moving forward, don't nest these fields.
     """
 
 
@@ -1350,6 +1360,11 @@ class UpdateJsonDatapointRequestInternal:
     name: str | None | UnsetType = UNSET
     """
     Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    metadata: DatapointMetadataUpdate | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
+    Moving forward, don't nest these fields.
     """
 
 

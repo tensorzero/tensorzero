@@ -4,7 +4,10 @@ use crate::config::Config;
 use crate::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, JsonInferenceDatapointInsert,
 };
-use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
+use crate::endpoints::datasets::v1::types::{
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceOutputSource,
+    CreateJsonDatapointRequest, JsonDatapointOutputUpdate,
+};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 #[cfg(feature = "pyo3")]
@@ -460,6 +463,47 @@ impl RenderedSample {
             tags: self.tags,
         }
     }
+
+    /// Convert this RenderedSample into a CreateDatapointRequest for use with the datasets v1 API.
+    ///
+    /// This method handles the conversion from RenderedSample (which has StoredInput and StoredOutput)
+    /// to CreateDatapointRequest (which expects Input and type-specific output).
+    ///
+    /// The type discrimination (Chat vs JSON) is based on the stored_output enum variant.
+    pub fn into_create_datapoint_request(self) -> Result<CreateDatapointRequest, Error> {
+        // Convert StoredInput to Input
+        let input = self.stored_input.into_input();
+
+        // Use stored_output to determine whether this is a Chat or JSON datapoint
+        match self.stored_output {
+            Some(StoredOutput::Json(json_output)) => {
+                // JSON function datapoint
+                let output = json_output.raw.map(|raw| JsonDatapointOutputUpdate { raw });
+
+                Ok(CreateDatapointRequest::Json(CreateJsonDatapointRequest {
+                    function_name: self.function_name,
+                    episode_id: self.episode_id,
+                    input,
+                    output,
+                    output_schema: self.output_schema,
+                    tags: Some(self.tags),
+                    name: None,
+                }))
+            }
+            Some(StoredOutput::Chat(_)) | None => {
+                // Chat function datapoint
+                Ok(CreateDatapointRequest::Chat(CreateChatDatapointRequest {
+                    function_name: self.function_name,
+                    episode_id: self.episode_id,
+                    input,
+                    output: self.output,
+                    dynamic_tool_params: self.tool_params,
+                    tags: Some(self.tags),
+                    name: None,
+                }))
+            }
+        }
+    }
 }
 
 /// Like `RenderedSample`, but holds `RequestMessage`s instead of `ResolvedRequestMessage`s
@@ -735,7 +779,7 @@ mod tests {
                 variants: Default::default(),
                 schemas: SchemaData::default(),
                 output_schema: StaticJSONSchema::default(),
-                implicit_tool_call_config: ToolCallConfig::default(),
+                json_mode_tool_call_config: ToolCallConfig::default(),
                 description: None,
                 experimentation: ExperimentationConfig::default(),
                 all_explicit_template_names: Default::default(),
@@ -809,6 +853,89 @@ mod tests {
                     "result": {"type": "string"}
                 }
             }),
+            tags: {
+                let mut tags = HashMap::new();
+                tags.insert("json_key".to_string(), "json_value".to_string());
+                tags
+            },
+        }
+    }
+
+    /// Helper to create a test RenderedSample for Chat function
+    fn create_test_chat_rendered_sample() -> RenderedSample {
+        let inference_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
+
+        RenderedSample {
+            function_name: "test_function".to_string(),
+            input: ModelInput {
+                system: Some("Test system prompt".to_string()),
+                messages: vec![],
+            },
+            stored_input: StoredInput {
+                system: Some(System::Text("Test system prompt".to_string())),
+                messages: vec![],
+            },
+            output: Some(vec![
+                ContentBlockChatOutput::Text(Text {
+                    text: "Test output 1".to_string(),
+                }),
+                ContentBlockChatOutput::Text(Text {
+                    text: "Test output 2".to_string(),
+                }),
+            ]),
+            stored_output: Some(StoredOutput::Chat(vec![
+                ContentBlockChatOutput::Text(Text {
+                    text: "Test output 1".to_string(),
+                }),
+                ContentBlockChatOutput::Text(Text {
+                    text: "Test output 2".to_string(),
+                }),
+            ])),
+            dispreferred_outputs: vec![],
+            episode_id: Some(episode_id),
+            inference_id: Some(inference_id),
+            tool_params: DynamicToolParams::default(),
+            output_schema: None,
+            tags: {
+                let mut tags = HashMap::new();
+                tags.insert("key1".to_string(), "value1".to_string());
+                tags.insert("key2".to_string(), "value2".to_string());
+                tags
+            },
+        }
+    }
+
+    /// Helper to create a test RenderedSample for JSON function
+    fn create_test_json_rendered_sample() -> RenderedSample {
+        let inference_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
+
+        RenderedSample {
+            function_name: "json_function".to_string(),
+            input: ModelInput {
+                system: Some("JSON system prompt".to_string()),
+                messages: vec![],
+            },
+            stored_input: StoredInput {
+                system: Some(System::Text("JSON system prompt".to_string())),
+                messages: vec![],
+            },
+            output: None, // JSON functions don't have chat output
+            stored_output: Some(StoredOutput::Json(JsonInferenceOutput {
+                raw: Some(r#"{"result": "test"}"#.to_string()),
+                parsed: Some(serde_json::json!({"result": "test"})),
+            })),
+            dispreferred_outputs: vec![],
+            episode_id: Some(episode_id),
+            inference_id: Some(inference_id),
+            tool_params: DynamicToolParams::default(),
+            output_schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "result": {"type": "string"}
+                }
+            })),
             tags: {
                 let mut tags = HashMap::new();
                 tags.insert("json_key".to_string(), "json_value".to_string());
@@ -1081,5 +1208,166 @@ mod tests {
 
         assert_eq!(chat_id, chat_inference.inference_id);
         assert_eq!(json_id, json_inference.inference_id);
+    }
+
+    // Tests for RenderedSample::into_create_datapoint_request()
+
+    #[test]
+    fn test_chat_rendered_sample_to_create_datapoint_request_with_output() {
+        let sample = create_test_chat_rendered_sample();
+
+        let original_function_name = sample.function_name.clone();
+        let original_episode_id = sample.episode_id;
+        let original_output = sample.output.clone();
+        let original_tool_params = sample.tool_params.clone();
+        let original_tags = sample.tags.clone();
+
+        let result = sample.into_create_datapoint_request().unwrap();
+
+        match result {
+            CreateDatapointRequest::Chat(req) => {
+                assert_eq!(req.function_name, original_function_name);
+                assert_eq!(req.episode_id, original_episode_id);
+                assert_eq!(req.output, original_output);
+                assert_eq!(req.dynamic_tool_params, original_tool_params);
+                assert_eq!(req.tags, Some(original_tags));
+                assert_eq!(req.name, None);
+
+                // Verify input conversion worked (system should be preserved)
+                match &req.input.system {
+                    Some(crate::inference::types::System::Text(text)) => {
+                        assert_eq!(text, "Test system prompt");
+                    }
+                    _ => panic!("Expected Text system"),
+                }
+                assert_eq!(req.input.messages.len(), 0);
+            }
+            CreateDatapointRequest::Json(_) => panic!("Expected Chat datapoint, got Json"),
+        }
+    }
+
+    #[test]
+    fn test_chat_rendered_sample_to_create_datapoint_request_without_output() {
+        let mut sample = create_test_chat_rendered_sample();
+        sample.stored_output = None;
+        sample.output = None;
+
+        let result = sample.into_create_datapoint_request().unwrap();
+
+        match result {
+            CreateDatapointRequest::Chat(req) => {
+                // When stored_output is None, it should still create a Chat variant
+                assert_eq!(req.output, None);
+                assert_eq!(req.function_name, "test_function");
+            }
+            CreateDatapointRequest::Json(_) => panic!("Expected Chat datapoint, got Json"),
+        }
+    }
+
+    #[test]
+    fn test_json_rendered_sample_to_create_datapoint_request_with_output() {
+        let sample = create_test_json_rendered_sample();
+
+        let original_function_name = sample.function_name.clone();
+        let original_episode_id = sample.episode_id;
+        let original_output_schema = sample.output_schema.clone();
+        let original_tags = sample.tags.clone();
+
+        let result = sample.into_create_datapoint_request().unwrap();
+
+        match result {
+            CreateDatapointRequest::Json(req) => {
+                assert_eq!(req.function_name, original_function_name);
+                assert_eq!(req.episode_id, original_episode_id);
+                assert_eq!(req.output_schema, original_output_schema);
+                assert_eq!(req.tags, Some(original_tags));
+                assert_eq!(req.name, None);
+
+                // Verify output was extracted correctly
+                assert!(req.output.is_some());
+                let output = req.output.unwrap();
+                assert_eq!(output.raw, r#"{"result": "test"}"#);
+
+                // Verify input conversion worked
+                match &req.input.system {
+                    Some(crate::inference::types::System::Text(text)) => {
+                        assert_eq!(text, "JSON system prompt");
+                    }
+                    _ => panic!("Expected Text system"),
+                }
+            }
+            CreateDatapointRequest::Chat(_) => panic!("Expected Json datapoint, got Chat"),
+        }
+    }
+
+    #[test]
+    fn test_json_rendered_sample_to_create_datapoint_request_without_output() {
+        let mut sample = create_test_json_rendered_sample();
+        sample.stored_output = Some(StoredOutput::Json(JsonInferenceOutput {
+            raw: None,
+            parsed: None,
+        }));
+
+        let result = sample.into_create_datapoint_request().unwrap();
+
+        match result {
+            CreateDatapointRequest::Json(req) => {
+                // When raw is None, output should be None
+                assert!(req.output.is_none());
+                assert_eq!(req.function_name, "json_function");
+            }
+            CreateDatapointRequest::Chat(_) => panic!("Expected Json datapoint, got Chat"),
+        }
+    }
+
+    #[test]
+    fn test_chat_rendered_sample_with_empty_tags() {
+        let mut sample = create_test_chat_rendered_sample();
+        sample.tags = HashMap::new();
+
+        let result = sample.into_create_datapoint_request().unwrap();
+
+        match result {
+            CreateDatapointRequest::Chat(req) => {
+                // Empty HashMap should be converted to Some(empty HashMap)
+                assert_eq!(req.tags, Some(HashMap::new()));
+            }
+            CreateDatapointRequest::Json(_) => panic!("Expected Chat datapoint"),
+        }
+    }
+
+    #[test]
+    fn test_json_rendered_sample_with_empty_tags() {
+        let mut sample = create_test_json_rendered_sample();
+        sample.tags = HashMap::new();
+
+        let result = sample.into_create_datapoint_request().unwrap();
+
+        match result {
+            CreateDatapointRequest::Json(req) => {
+                // Empty HashMap should be converted to Some(empty HashMap)
+                assert_eq!(req.tags, Some(HashMap::new()));
+            }
+            CreateDatapointRequest::Chat(_) => panic!("Expected Json datapoint"),
+        }
+    }
+
+    #[test]
+    fn test_stored_input_to_input_conversion() {
+        let sample = create_test_chat_rendered_sample();
+
+        // Verify the StoredInput → Input conversion works correctly
+        let result = sample.into_create_datapoint_request().unwrap();
+
+        match result {
+            CreateDatapointRequest::Chat(req) => {
+                // The input should have been successfully converted
+                // System should be preserved
+                assert!(req.input.system.is_some());
+                // Messages should be preserved (empty in this case)
+                assert_eq!(req.input.messages.len(), 0);
+            }
+            CreateDatapointRequest::Json(_) => panic!("Expected Chat datapoint"),
+        }
     }
 }

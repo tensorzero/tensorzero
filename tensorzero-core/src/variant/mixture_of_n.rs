@@ -73,6 +73,18 @@ impl MixtureOfNConfig {
     pub fn fuser(&self) -> &FuserConfig {
         &self.fuser
     }
+
+    /// Converts this initialized config back to its uninitialized form.
+    pub fn into_uninitialized(self) -> UninitializedMixtureOfNConfig {
+        UninitializedMixtureOfNConfig {
+            weight: self.weight,
+            timeout_s: self.timeout_s,
+            candidates: self.candidates,
+            fuser: UninitializedFuserConfig {
+                inner: self.fuser.inner.into_uninitialized(),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -949,7 +961,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_system_message() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Test without templates, string message
         let fuser_config = FuserConfig {
@@ -1130,7 +1142,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_candidate_message() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Prepare some candidate InferenceResults
         let model_inference_response = ModelInferenceResponseWithMetadata {
@@ -1161,6 +1173,7 @@ mod tests {
                 vec![model_inference_response],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,
@@ -1195,6 +1208,7 @@ mod tests {
                 None,
                 InferenceParams::default(),
                 None,
+                None,
             )
             .await,
         );
@@ -1215,7 +1229,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_candidate_message_json() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
@@ -1321,12 +1335,12 @@ mod tests {
             fuser: fuser_config,
         };
 
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
-            implicit_tool_call_config: ToolCallConfig::default(),
+            json_mode_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1361,6 +1375,7 @@ mod tests {
                 None,
                 InferenceParams::default(),
                 None,
+                None,
             )
             .await,
         );
@@ -1393,6 +1408,7 @@ mod tests {
                 vec![model_inference_response1],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,
@@ -1801,6 +1817,127 @@ mod tests {
                 raw_response: "My raw response".to_string(),
                 finish_reason: Some(FinishReason::Length),
             })),]
+        );
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_basic_fields() {
+        let uninitialized = UninitializedMixtureOfNConfig {
+            weight: Some(1.0),
+            timeout_s: 60.0,
+            candidates: vec!["variant1".to_string(), "variant2".to_string()],
+            fuser: UninitializedFuserConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-4".into(),
+                    temperature: Some(0.3),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.weight, Some(1.0));
+        assert_eq!(exported.timeout_s, 60.0);
+        assert_eq!(
+            exported.candidates,
+            vec!["variant1".to_string(), "variant2".to_string()]
+        );
+        assert_eq!(exported.fuser.inner.model, "gpt-4".into());
+        assert_eq!(exported.fuser.inner.temperature, Some(0.3));
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_nested_fuser() {
+        let uninitialized = UninitializedMixtureOfNConfig {
+            weight: None,
+            timeout_s: 300.0,
+            candidates: vec!["v1".to_string()],
+            fuser: UninitializedFuserConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "fuser-model".into(),
+                    temperature: Some(0.1),
+                    max_tokens: Some(50),
+                    seed: Some(99),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.fuser.inner.model, "fuser-model".into());
+        assert_eq!(exported.fuser.inner.temperature, Some(0.1));
+        assert_eq!(exported.fuser.inner.max_tokens, Some(50));
+        assert_eq!(exported.fuser.inner.seed, Some(99));
+    }
+
+    #[test]
+    fn test_into_uninitialized_with_empty_candidates() {
+        let uninitialized = UninitializedMixtureOfNConfig {
+            weight: None,
+            timeout_s: 300.0,
+            candidates: vec![],
+            fuser: UninitializedFuserConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-4".into(),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert!(exported.candidates.is_empty());
+    }
+
+    #[test]
+    fn test_into_uninitialized_serialization_round_trip() {
+        let original = UninitializedMixtureOfNConfig {
+            weight: Some(0.7),
+            timeout_s: 120.0,
+            candidates: vec!["a".to_string(), "b".to_string()],
+            fuser: UninitializedFuserConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-3.5-turbo".into(),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = original
+            .clone()
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&exported).unwrap();
+        let deserialized: UninitializedMixtureOfNConfig = serde_json::from_str(&json).unwrap();
+
+        // Should be able to load again
+        let reloaded = deserialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        assert_eq!(reloaded.weight(), Some(0.7));
+        assert_eq!(reloaded.timeout_s(), 120.0);
+        assert_eq!(
+            reloaded.candidates(),
+            &vec!["a".to_string(), "b".to_string()]
         );
     }
 }

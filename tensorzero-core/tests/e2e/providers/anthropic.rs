@@ -752,6 +752,196 @@ pub async fn test_redacted_thinking_helper(
     assert_eq!(content_blocks[1]["type"], "text");
 }
 
+#[tokio::test]
+async fn test_beta_structured_outputs_json_streaming() {
+    test_beta_structured_outputs_json_helper(true).await;
+}
+
+#[tokio::test]
+async fn test_beta_structured_outputs_json_non_streaming() {
+    test_beta_structured_outputs_json_helper(false).await;
+}
+
+async fn test_beta_structured_outputs_json_helper(stream: bool) {
+    let client = Client::new();
+    let payload = json!({
+        "function_name": "anthropic_beta_structured_outputs_json",
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital of Japan?"
+                }
+            ]
+        },
+        "stream": stream,
+    });
+
+    let inference_id = if stream {
+        let mut event_source = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .eventsource()
+            .unwrap();
+        let mut first_inference_id = None;
+        while let Some(event) = event_source.next().await {
+            let event = event.unwrap();
+            match event {
+                Event::Open => continue,
+                Event::Message(message) => {
+                    if message.data == "[DONE]" {
+                        break;
+                    }
+                    let chunk_json: Value = serde_json::from_str(&message.data).unwrap();
+                    if let Some(inference_id) = chunk_json
+                        .get("inference_id")
+                        .and_then(|id| id.as_str().map(|id| Uuid::parse_str(id).unwrap()))
+                    {
+                        first_inference_id = Some(inference_id);
+                    }
+                }
+            }
+        }
+        first_inference_id.unwrap()
+    } else {
+        let response = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let response_text = response.text().await.unwrap();
+        println!("Response text: {response_text}");
+        let response_json: Value = serde_json::from_str(&response_text).unwrap();
+        assert_eq!(status, StatusCode::OK);
+        let inference_id = response_json
+            .get("inference_id")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
+        Uuid::parse_str(&inference_id).unwrap()
+    };
+
+    // Wait one second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result_json = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    println!("Result: {result_json}");
+
+    // Check that the result is valid JSON
+    println!("Result JSON: {result_json}");
+    let output = result_json.get("output");
+    println!("Output: {output:?}");
+
+    let raw_request = result_json.get("raw_request").unwrap().as_str().unwrap();
+    if stream {
+        assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}");
+    } else {
+        assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"output_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}}}");
+    }
+}
+
+#[tokio::test]
+async fn test_beta_structured_outputs_strict_tool_streaming() {
+    test_beta_structured_outputs_strict_tool_helper(true).await;
+}
+
+#[tokio::test]
+async fn test_beta_structured_outputs_strict_tool_non_streaming() {
+    test_beta_structured_outputs_strict_tool_helper(false).await;
+}
+
+async fn test_beta_structured_outputs_strict_tool_helper(stream: bool) {
+    let client = Client::new();
+    let payload = json!({
+        "function_name": "anthropic_beta_structured_outputs_chat",
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital of Japan?"
+                }
+            ]
+        },
+        "stream": stream,
+    });
+
+    let inference_id = if stream {
+        let mut event_source = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .eventsource()
+            .unwrap();
+        let mut first_inference_id = None;
+        while let Some(event) = event_source.next().await {
+            let event = event.unwrap();
+            match event {
+                Event::Open => continue,
+                Event::Message(message) => {
+                    if message.data == "[DONE]" {
+                        break;
+                    }
+                    let chunk_json: Value = serde_json::from_str(&message.data).unwrap();
+                    if let Some(inference_id) = chunk_json
+                        .get("inference_id")
+                        .and_then(|id| id.as_str().map(|id| Uuid::parse_str(id).unwrap()))
+                    {
+                        first_inference_id = Some(inference_id);
+                    }
+                }
+            }
+        }
+        first_inference_id.unwrap()
+    } else {
+        let response = client
+            .post(get_gateway_endpoint("/inference"))
+            .json(&payload)
+            .send()
+            .await
+            .unwrap();
+        let status = response.status();
+        let response_text = response.text().await.unwrap();
+        println!("Response text: {response_text}");
+        let response_json: Value = serde_json::from_str(&response_text).unwrap();
+        assert_eq!(status, StatusCode::OK);
+        let inference_id = response_json
+            .get("inference_id")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
+        Uuid::parse_str(&inference_id).unwrap()
+    };
+
+    // Wait one second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+    let result_json = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    println!("Result: {result_json}");
+
+    // Check that the result is valid JSON
+    println!("Result JSON: {result_json}");
+    let output = result_json.get("output");
+    println!("Output: {output:?}");
+
+    let raw_request = result_json.get("raw_request").unwrap().as_str().unwrap();
+    if stream {
+        assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":true,\"tool_choice\":{\"type\":\"auto\",\"disable_parallel_tool_use\":false},\"tools\":[{\"name\":\"answer_question\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"input_schema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"The answer to the question.\"}},\"required\":[\"answer\"],\"additionalProperties\":false},\"strict\":true}]}");
+    } else {
+        assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the capital of Japan?\"}]}],\"max_tokens\":100,\"stream\":false,\"tool_choice\":{\"type\":\"auto\",\"disable_parallel_tool_use\":false},\"tools\":[{\"name\":\"answer_question\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"input_schema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"description\":\"End the search process and answer a question. Returns the answer to the question.\",\"properties\":{\"answer\":{\"type\":\"string\",\"description\":\"The answer to the question.\"}},\"required\":[\"answer\"],\"additionalProperties\":false},\"strict\":true}]}");
+    }
+}
+
 /// This test checks that streaming inference works as expected.
 #[tokio::test]
 async fn test_streaming_thinking() {

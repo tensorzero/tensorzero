@@ -1,7 +1,5 @@
 #![expect(clippy::print_stdout, clippy::print_stderr)]
-use std::collections::HashMap;
-use std::{collections::HashSet, sync::Arc};
-
+use crate::common::get_gateway_endpoint;
 use crate::{
     otel::{
         attrs_to_map, build_span_map, install_capturing_otel_exporter, CapturingOtelExporter,
@@ -9,15 +7,21 @@ use crate::{
     },
     providers::common::FERRIS_PNG,
 };
-use base64::prelude::*;
+use base64::prelude::{Engine as Base64Engine, BASE64_STANDARD};
 use futures::StreamExt;
 use opentelemetry_sdk::trace::SpanData;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::{collections::HashSet, sync::Arc};
 use tensorzero::{
     ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     InferenceOutput, InferenceResponse,
+};
+use tensorzero_core::db::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
+    select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 use tensorzero_core::inference::types::{Arguments, StoredInput, System};
 use tensorzero_core::observability::enter_fake_http_request_otel;
@@ -43,16 +47,10 @@ use tokio::task::JoinSet;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
-use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
-    select_json_inference_clickhouse, select_model_inference_clickhouse,
-};
-
-use crate::common::get_gateway_endpoint;
-
 mod extra_body;
 mod extra_headers;
-mod tool_params;
+pub mod json_mode_tool;
+pub mod tool_params;
 
 #[tokio::test]
 async fn e2e_test_inference_dryrun() {

@@ -4,6 +4,12 @@ import { resolveInput } from "../resolve.server";
 import { getClickhouseClient } from "./client.server";
 import { CountSchema, inputSchema } from "./common";
 import {
+  waldConfidenceIntervalLower,
+  waldConfidenceIntervalUpper,
+  wilsonConfidenceIntervalLower,
+  wilsonConfidenceIntervalUpper,
+} from "./helpers";
+import {
   EvaluationRunInfoSchema,
   EvaluationStatisticsSchema,
   type EvaluationResult,
@@ -303,21 +309,14 @@ export async function getEvaluationStatistics(
   const query = `
   WITH ${getEvaluationResultDatapointIdQuery()},
     filtered_inference AS (
-      SELECT * FROM {inference_table_name:Identifier}
+      SELECT
+        id,
+        tags['tensorzero::evaluation_run_id'] AS evaluation_run_id
+      FROM {inference_table_name:Identifier}
       WHERE id IN (SELECT inference_id FROM all_inference_ids)
       AND function_name = {function_name:String}
     ),
-   filtered_feedback AS (
-      SELECT metric_name,
-             argMax(value, timestamp) as value,
-             argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
-             argMax(id, timestamp) as feedback_id,
-             target_id
-      FROM BooleanMetricFeedback
-      WHERE metric_name IN ({metric_names:Array(String)})
-      AND target_id IN (SELECT inference_id FROM all_inference_ids)
-      GROUP BY target_id, metric_name -- for the argMax
-      UNION ALL
+    float_feedback AS (
       SELECT metric_name,
              argMax(value, timestamp) as value,
              argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
@@ -327,22 +326,55 @@ export async function getEvaluationStatistics(
       WHERE metric_name IN ({metric_names:Array(String)})
       AND target_id IN (SELECT inference_id FROM all_inference_ids)
       GROUP BY target_id, metric_name -- for the argMax
+    ),
+    boolean_feedback AS (
+      SELECT metric_name,
+             argMax(value, timestamp) as value,
+             argMax(tags['tensorzero::evaluator_inference_id'], timestamp) as evaluator_inference_id,
+             argMax(id, timestamp) as feedback_id,
+             target_id
+      FROM BooleanMetricFeedback
+      WHERE metric_name IN ({metric_names:Array(String)})
+      AND target_id IN (SELECT inference_id FROM all_inference_ids)
+      GROUP BY target_id, metric_name -- for the argMax
+    ),
+    float_stats AS (
+      SELECT
+        filtered_inference.evaluation_run_id,
+        float_feedback.metric_name AS metric_name,
+        toUInt32(count()) AS datapoint_count,
+        avg(toFloat64(float_feedback.value)) AS mean_metric,
+        ${waldConfidenceIntervalLower("toFloat64(float_feedback.value)")} AS ci_lower,
+        ${waldConfidenceIntervalUpper("toFloat64(float_feedback.value)")} AS ci_upper
+      FROM filtered_inference
+      INNER JOIN float_feedback
+        ON float_feedback.target_id = filtered_inference.id
+        AND float_feedback.value IS NOT NULL
+      GROUP BY
+        filtered_inference.evaluation_run_id,
+        float_feedback.metric_name
+    ),
+    boolean_stats AS (
+      SELECT
+        filtered_inference.evaluation_run_id,
+        boolean_feedback.metric_name AS metric_name,
+        toUInt32(count()) AS datapoint_count,
+        avg(toFloat64(boolean_feedback.value)) AS mean_metric,
+        ${wilsonConfidenceIntervalLower("toFloat64(boolean_feedback.value)")} AS ci_lower,
+        ${wilsonConfidenceIntervalUpper("toFloat64(boolean_feedback.value)")} AS ci_upper
+      FROM filtered_inference
+      INNER JOIN boolean_feedback
+        ON boolean_feedback.target_id = filtered_inference.id
+        AND boolean_feedback.value IS NOT NULL
+      GROUP BY
+        filtered_inference.evaluation_run_id,
+        boolean_feedback.metric_name
     )
-  SELECT
-    filtered_inference.tags['tensorzero::evaluation_run_id'] AS evaluation_run_id,
-    filtered_feedback.metric_name AS metric_name,
-    toUInt32(count()) AS datapoint_count,
-    avg(toFloat64(filtered_feedback.value)) AS mean_metric,
-    stddevSamp(toFloat64(filtered_feedback.value)) / sqrt(count()) AS stderr_metric
-  FROM filtered_inference
-  INNER JOIN filtered_feedback
-    ON filtered_feedback.target_id = filtered_inference.id
-    AND filtered_feedback.value IS NOT NULL
-  GROUP BY
-    filtered_inference.tags['tensorzero::evaluation_run_id'],
-    filtered_feedback.metric_name
+  SELECT * FROM float_stats
+  UNION ALL
+  SELECT * FROM boolean_stats
   ORDER BY
-    toUInt128(toUUID(filtered_inference.tags['tensorzero::evaluation_run_id'])) DESC,
+    toUInt128(toUUID(evaluation_run_id)) DESC,
     metric_name ASC
   `;
 

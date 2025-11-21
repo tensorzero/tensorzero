@@ -12,8 +12,8 @@ use crate::db::datasets::{
     JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::{
-    validate_dataset_name, JsonInferenceDatapoint, StoredChatInferenceDatapoint, StoredDatapoint,
-    CLICKHOUSE_DATETIME_FORMAT,
+    validate_dataset_name, StoredChatInferenceDatapoint, StoredDatapoint,
+    StoredJsonInferenceDatapoint, CLICKHOUSE_DATETIME_FORMAT,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
@@ -262,7 +262,7 @@ async fn prepare_json_update(
     fetch_context: &FetchContext<'_>,
     dataset_name: &str,
     update: UpdateJsonDatapointRequest,
-    existing_datapoint: JsonInferenceDatapoint,
+    existing_datapoint: StoredJsonInferenceDatapoint,
     now_timestamp: &str,
 ) -> Result<PreparedUpdate, Error> {
     if existing_datapoint.dataset_name != dataset_name {
@@ -520,7 +520,7 @@ mod tests {
     use crate::endpoints::datasets::v1::types::{
         DatapointMetadataUpdate, JsonDatapointOutputUpdate,
     };
-    use crate::endpoints::datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
+    use crate::endpoints::datasets::StoredChatInferenceDatapoint;
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
@@ -748,8 +748,8 @@ mod tests {
         }
 
         /// Helper to create a sample JsonInferenceDatapoint
-        pub fn create_sample_json_datapoint(dataset_name: &str) -> JsonInferenceDatapoint {
-            JsonInferenceDatapoint {
+        pub fn create_sample_json_datapoint(dataset_name: &str) -> StoredJsonInferenceDatapoint {
+            StoredJsonInferenceDatapoint {
                 id: Uuid::now_v7(),
                 dataset_name: dataset_name.to_string(),
                 function_name: "test_json_function".to_string(),
@@ -830,7 +830,7 @@ mod tests {
                         "additionalProperties": false
                     }))
                     .unwrap(),
-                    implicit_tool_call_config: crate::tool::ToolCallConfig::default(),
+                    json_mode_tool_call_config: crate::tool::ToolCallConfig::default(),
                     description: None,
                     experimentation: ExperimentationConfig::default(),
                     all_explicit_template_names: HashSet::new(),
@@ -890,8 +890,8 @@ mod tests {
         }
 
         /// Helper to create a sample JsonInferenceDatapoint
-        fn create_sample_json_datapoint(dataset_name: &str) -> JsonInferenceDatapoint {
-            JsonInferenceDatapoint {
+        fn create_sample_json_datapoint(dataset_name: &str) -> StoredJsonInferenceDatapoint {
+            StoredJsonInferenceDatapoint {
                 id: Uuid::now_v7(),
                 dataset_name: dataset_name.to_string(),
                 function_name: "test_json_function".to_string(),
@@ -951,9 +951,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: Default::default(),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1010,9 +1014,13 @@ mod tests {
                 id: existing.id,
                 input: Some(new_input),
                 output: None,
-                tool_params: Default::default(),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1061,9 +1069,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(new_output.clone()),
-                tool_params: Default::default(),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1097,9 +1109,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: Default::default(), // Omitted - should remain unchanged
+                tool_params: UpdateDynamicToolParamsRequest::default(), // Omitted - should remain unchanged
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1147,8 +1163,12 @@ mod tests {
                     parallel_tool_calls: Some(Some(false)),
                     provider_tools: Some(vec![]),
                 },
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1215,9 +1235,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: Default::default(),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1240,9 +1264,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: Default::default(),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: Some(HashMap::new()),
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1266,9 +1294,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: Default::default(),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: Some(new_tags.clone()),
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1299,9 +1331,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: Default::default(),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1324,9 +1360,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: Default::default(),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
                 metadata: DatapointMetadataUpdate { name: Some(None) },
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1349,11 +1389,15 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: Default::default(),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
                 metadata: DatapointMetadataUpdate {
                     name: Some(Some("new_name".to_string())),
                 },
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1409,6 +1453,10 @@ mod tests {
                 metadata: DatapointMetadataUpdate {
                     name: Some(Some("updated_name".to_string())),
                 },
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1451,7 +1499,9 @@ mod tests {
                 output: None,
                 output_schema: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1498,7 +1548,9 @@ mod tests {
                 output: None, // Omitted
                 output_schema: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1532,7 +1584,9 @@ mod tests {
                 output: Some(None), // Set to null
                 output_schema: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1570,7 +1624,9 @@ mod tests {
                 })),
                 output_schema: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1615,7 +1671,9 @@ mod tests {
                 output: None,
                 output_schema: Some(new_schema.clone()),
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1655,7 +1713,9 @@ mod tests {
                 })),
                 output_schema: Some(new_schema.clone()),
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1695,7 +1755,9 @@ mod tests {
                 })),
                 output_schema: None, // Will use existing schema which expects {value: string}
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1735,7 +1797,9 @@ mod tests {
                 output: None,
                 output_schema: Some(invalid_schema),
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1775,7 +1839,9 @@ mod tests {
                 output: None,
                 output_schema: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_json_update(
                 &app_state,
@@ -1825,6 +1891,8 @@ mod tests {
                 metadata: DatapointMetadataUpdate {
                     name: Some(Some("json_updated".to_string())),
                 },
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1866,9 +1934,13 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "edited output".to_string(),
                 })]),
-                tool_params: Default::default(),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1909,9 +1981,13 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "edited output".to_string(),
                 })]),
-                tool_params: Default::default(),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1956,7 +2032,9 @@ mod tests {
                 })),
                 output_schema: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -2000,7 +2078,9 @@ mod tests {
                 })),
                 output_schema: None,
                 tags: None,
-                metadata: Default::default(),
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
