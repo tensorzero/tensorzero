@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 #![deny(clippy::all)]
 use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
+use tensorzero_core::config::ConfigLoadInfo;
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 use url::Url;
 
@@ -139,16 +140,18 @@ pub async fn run_evaluation_streaming(
             ))
         })?;
 
-    let config = Arc::new(
-        Config::load_from_path_optional_verify_credentials(&config_glob, false)
-            .await
-            .map_err(|e| {
-                napi::Error::from_reason(format!(
-                    "Failed to load configuration from {}: {e}",
-                    params.config_path
-                ))
-            })?,
-    );
+    let ConfigLoadInfo {
+        config,
+        snapshot: _,
+    } = Config::load_from_path_optional_verify_credentials(&config_glob, false)
+        .await
+        .map_err(|e| {
+            napi::Error::from_reason(format!(
+                "Failed to load configuration from {}: {e}",
+                params.config_path
+            ))
+        })?;
+    let config = Arc::new(config);
 
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::HTTPGateway { url })
         .build()

@@ -93,7 +93,8 @@ async fn test_from_components_basic() {
             false,
         )
         .await
-        .unwrap(),
+        .unwrap()
+        .config,
     );
 
     // Create components
