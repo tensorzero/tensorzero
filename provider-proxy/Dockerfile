@@ -11,10 +11,8 @@ RUN git rev-parse HEAD
 
 ARG CARGO_BUILD_FLAGS=""
 
-RUN --mount=type=cache,id=tensorzero-provider-proxy-release,sharing=locked,target=/usr/local/cargo/registry \
-    --mount=type=cache,id=tensorzero-provider-proxy-release,sharing=locked,target=/usr/local/cargo/git \
-    cargo build --profile performance -p provider-proxy $CARGO_BUILD_FLAGS && \
-    cp -r /src/target/performance /release
+RUN cargo build -p provider-proxy $CARGO_BUILD_FLAGS && \
+    cp -r /src/target/debug/provider-proxy /release/provider-proxy
 
 # ========== base ==========
 
