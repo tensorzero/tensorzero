@@ -46,7 +46,7 @@ where
     serde_json::from_str(&json_str).map_err(serde::de::Error::custom)
 }
 
-/// Deserializes a "doubly-serialized" field of a struct, but allows the string "" to be the default.
+/// Deserializes a "doubly-serialized" field of a struct, but allows the string "" or null to be the default.
 /// If you have a struct like this:
 /// ```ignore
 /// #[derive(Deserialize, Default)]
@@ -57,7 +57,7 @@ where
 ///
 /// #[derive(Deserialize)]
 /// struct Outer {
-///     #[serde(deserialize_with = "deserialize_json_string")]
+///     #[serde(deserialize_with = "deserialize_defaulted_json_string")]
 ///     inner: Inner,
 /// }
 /// ```
@@ -74,16 +74,30 @@ where
 /// let outer = serde_json::from_str::<Outer>("{\"inner\": \"\"}")?;
 /// assert_eq!(outer.inner, Inner { foo: 0, bar: "".to_string() });
 /// ```
+///
+/// or this:
+/// ```ignore
+/// let outer = serde_json::from_str::<Outer>("{\"inner\": null}")?;
+/// assert_eq!(outer.inner, Inner { foo: 0, bar: "".to_string() });
+/// ```
 pub fn deserialize_defaulted_json_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: serde::Deserializer<'de>,
     T: serde::de::DeserializeOwned + Default,
 {
-    let json_str = String::deserialize(deserializer)?;
-    if json_str.is_empty() {
-        return Ok(T::default());
+    let value: Value = Deserialize::deserialize(deserializer)?;
+    match value {
+        Value::Null => Ok(T::default()),
+        Value::String(s) => {
+            if s.is_empty() {
+                return Ok(T::default());
+            }
+            serde_json::from_str(&s).map_err(serde::de::Error::custom)
+        }
+        _ => Err(serde::de::Error::custom(
+            "expected a string or null for deserialize_defaulted_json_string",
+        )),
     }
-    serde_json::from_str(&json_str).map_err(serde::de::Error::custom)
 }
 
 /// Deserializes an optional "doubly-serialized" field of a struct.
@@ -733,9 +747,16 @@ mod tests {
     #[test]
     fn test_deserialize_defaulted_json_string_valid() {
         let json = r#"{"inner": "{\"foo\": 1, \"bar\": \"test\"}"}"#;
-        let result: TestDefaultedOuter = serde_json::from_str(json).unwrap();
+        let result: TestDefaultedJsonOuter = serde_json::from_str(json).unwrap();
         assert_eq!(result.inner.foo, 1);
         assert_eq!(result.inner.bar, "test");
+    }
+
+    #[test]
+    fn test_deserialize_defaulted_json_string_null() {
+        let json = r#"{"inner": null}"#;
+        let result: TestDefaultedJsonOuter = serde_json::from_str(json).unwrap();
+        assert_eq!(result.inner, TestDefaultedStruct::default());
     }
 
     #[test]

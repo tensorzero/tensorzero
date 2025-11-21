@@ -1539,8 +1539,8 @@ it("should handle extra headers parameter", async () => {
     // @ts-expect-error - custom TensorZero property
     "tensorzero::extra_headers": [
       {
-        model_provider_name:
-          "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+        model_name: "dummy::echo_extra_info",
+        provider_name: "dummy",
         name: "x-my-extra-header",
         value: "my-extra-header-value",
       },
@@ -1555,8 +1555,8 @@ it("should handle extra headers parameter", async () => {
     extra_headers: {
       inference_extra_headers: [
         {
-          model_provider_name:
-            "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+          model_name: "dummy::echo_extra_info",
+          provider_name: "dummy",
           name: "x-my-extra-header",
           value: "my-extra-header-value",
         },
@@ -1571,8 +1571,8 @@ it("should handle extra body parameter", async () => {
     // @ts-expect-error - custom TensorZero property
     "tensorzero::extra_body": [
       {
-        model_provider_name:
-          "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+        model_name: "dummy::echo_extra_info",
+        provider_name: "dummy",
         pointer: "/thinking",
         value: {
           type: "enabled",
@@ -1589,8 +1589,8 @@ it("should handle extra body parameter", async () => {
     extra_body: {
       inference_extra_body: [
         {
-          model_provider_name:
-            "tensorzero::model_name::dummy::echo_extra_info::provider_name::dummy",
+          model_name: "dummy::echo_extra_info",
+          provider_name: "dummy",
           pointer: "/thinking",
           value: { type: "enabled", budget_tokens: 1024 },
         },
@@ -1618,4 +1618,140 @@ it("should handle multiple text blocks in message", async () => {
     "tensorzero::model_name::dummy::multiple-text-blocks"
   );
   expect(result.choices[0].message.content).toContain("Megumin");
+});
+
+// TODO: Issue #4648 - Bump OpenAI client version and add proper type definitions for custom tools
+it("should handle OpenAI custom tool with text format", async () => {
+  const episodeId = uuidv7();
+  const messages: ChatCompletionMessageParam[] = [
+    {
+      role: "user",
+      content:
+        "Generate Python code to print 'Hello, World!' using the code_generator tool.",
+    },
+  ];
+
+  const tools = [
+    {
+      type: "custom" as const,
+      custom: {
+        name: "code_generator",
+        description: "Generates Python code snippets based on requirements",
+        format: { type: "text" },
+      },
+    },
+  ];
+
+  const result = await client.chat.completions.create({
+    messages,
+    model: "tensorzero::model_name::openai::responses::gpt-5-codex",
+    // @ts-expect-error - custom tool type not yet in OpenAI types (issue #4648)
+    tools,
+    "tensorzero::episode_id": episodeId,
+  });
+
+  expect(result.model).toBe(
+    "tensorzero::model_name::openai::responses::gpt-5-codex"
+  );
+  // @ts-expect-error - custom TensorZero property
+  expect(result.episode_id).toBe(episodeId);
+
+  // Check that we got tool calls in the response
+  expect(result.choices[0].message.tool_calls).not.toBeNull();
+  expect(result.choices[0].message.tool_calls!.length).toBeGreaterThanOrEqual(
+    1
+  );
+
+  // Find the code_generator tool call
+  const codeGeneratorCalls = result.choices[0].message.tool_calls!.filter(
+    (tc) =>
+      (tc as ChatCompletionMessageFunctionToolCall).function.name ===
+      "code_generator"
+  );
+  expect(codeGeneratorCalls.length).toBe(1);
+
+  const toolCall =
+    codeGeneratorCalls[0] as ChatCompletionMessageFunctionToolCall;
+  expect(toolCall.type).toBe("function");
+  expect(toolCall.function.name).toBe("code_generator");
+  expect(toolCall.function.arguments).toBeTruthy();
+  expect(toolCall.function.arguments.length).toBeGreaterThan(0);
+});
+
+it("should handle OpenAI custom tool with Lark grammar format", async () => {
+  const episodeId = uuidv7();
+  // Simple arithmetic grammar in Lark format
+  const larkGrammar = `
+start: expr
+
+expr: term ((ADD | SUB) term)*
+term: factor ((MUL | DIV) factor)*
+factor: NUMBER
+      | "(" expr ")"
+
+ADD: "+"
+SUB: "-"
+MUL: "*"
+DIV: "/"
+
+NUMBER: /\\d+(\\.\\d+)?/
+
+%import common.WS
+%ignore WS
+`;
+
+  const messages: ChatCompletionMessageParam[] = [
+    {
+      role: "user",
+      content: "Use the calculator tool to compute 5 + 3 * 2",
+    },
+  ];
+
+  const tools = [
+    {
+      type: "custom" as const,
+      custom: {
+        name: "calculator",
+        description: "Evaluates arithmetic expressions",
+        format: {
+          type: "grammar",
+          grammar: { syntax: "lark", definition: larkGrammar },
+        },
+      },
+    },
+  ];
+
+  const result = await client.chat.completions.create({
+    messages,
+    model: "tensorzero::model_name::openai::responses::gpt-5-codex",
+    // @ts-expect-error - custom tool type not yet in OpenAI types (issue #4648)
+    tools,
+    "tensorzero::episode_id": episodeId,
+  });
+
+  expect(result.model).toBe(
+    "tensorzero::model_name::openai::responses::gpt-5-codex"
+  );
+  // @ts-expect-error - custom TensorZero property
+  expect(result.episode_id).toBe(episodeId);
+
+  // Check that we got tool calls in the response
+  expect(result.choices[0].message.tool_calls).not.toBeNull();
+  expect(result.choices[0].message.tool_calls!.length).toBeGreaterThanOrEqual(
+    1
+  );
+
+  // Find the calculator tool call
+  const calculatorCalls = result.choices[0].message.tool_calls!.filter(
+    (tc) =>
+      (tc as ChatCompletionMessageFunctionToolCall).function.name ===
+      "calculator"
+  );
+  expect(calculatorCalls.length).toBe(1);
+
+  const toolCall = calculatorCalls[0] as ChatCompletionMessageFunctionToolCall;
+  expect(toolCall.type).toBe("function");
+  expect(toolCall.function.name).toBe("calculator");
+  expect(toolCall.function.arguments).toBeTruthy();
+  expect(toolCall.function.arguments.length).toBeGreaterThan(0);
 });

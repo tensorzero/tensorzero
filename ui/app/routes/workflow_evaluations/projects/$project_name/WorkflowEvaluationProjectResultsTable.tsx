@@ -19,7 +19,10 @@ import {
 import type { WorkflowEvaluationRun } from "~/utils/clickhouse/workflow_evaluations";
 
 import { useConfig } from "~/context/config";
-import { formatMetricSummaryValue } from "~/utils/config/feedback";
+import {
+  formatMetricSummaryValue,
+  formatConfidenceInterval,
+} from "~/utils/config/feedback";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import MetricValue from "~/components/metric/MetricValue";
 import type {
@@ -300,10 +303,14 @@ const MetricProperties = ({
                 ></div>
                 <span>
                   {formatMetricSummaryValue(stat.avg_metric, metricConfig)}
-                  {stat.ci_error ? (
+                  {stat.ci_lower != null && stat.ci_upper != null ? (
                     <>
                       {" "}
-                      ± {formatMetricSummaryValue(stat.ci_error, metricConfig)}
+                      {formatConfidenceInterval(
+                        stat.ci_lower,
+                        stat.ci_upper,
+                        metricConfig,
+                      )}
                     </>
                   ) : null}{" "}
                   (n={stat.count})
@@ -398,5 +405,6 @@ interface WorkflowEvaluationStatisticsByRunId {
   count: number;
   avg_metric: number;
   stdev: number | null;
-  ci_error: number | null;
+  ci_lower: number | null;
+  ci_upper: number | null;
 }

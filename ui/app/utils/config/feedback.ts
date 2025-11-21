@@ -96,3 +96,22 @@ export const formatMetricSummaryValue = (
   }
   return value;
 };
+
+/**
+ * Format a confidence interval for display as a range [lower, upper].
+ */
+export const formatConfidenceInterval = (
+  lower: number,
+  upper: number,
+  metricConfig: MetricConfig,
+): string => {
+  if (metricConfig.type === "boolean") {
+    // Format as percentages for boolean metrics
+    const lowerPct = Math.round(lower * 100);
+    const upperPct = Math.round(upper * 100);
+    return `[${lowerPct}%, ${upperPct}%]`;
+  } else {
+    // Format with 2 decimal places for float metrics
+    return `[${lower.toFixed(2)}, ${upper.toFixed(2)}]`;
+  }
+};

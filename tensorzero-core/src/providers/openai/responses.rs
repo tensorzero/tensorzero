@@ -1,11 +1,14 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::inference::types::{
-    chat_completion_inference_params::{
-        warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
+use crate::{
+    inference::types::{
+        chat_completion_inference_params::{
+            warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
+        },
+        ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
     },
-    ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
+    tool::{OpenAICustomTool, OpenAICustomToolFormat, OpenAIGrammarSyntax, ToolConfigRef},
 };
 
 const PROVIDER_NAME: &str = "OpenAI Responses";
@@ -30,8 +33,7 @@ use crate::{
     model::fully_qualified_name,
     providers::openai::{
         prepare_file_message, prepare_system_or_developer_message_helper, OpenAIContentBlock,
-        OpenAIFile, OpenAIMessagesConfig, OpenAITool, OpenAIToolType, SystemOrDeveloper,
-        PROVIDER_TYPE,
+        OpenAIFile, OpenAIMessagesConfig, OpenAITool, SystemOrDeveloper, PROVIDER_TYPE,
     },
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
@@ -178,6 +180,15 @@ impl OpenAIResponsesResponse<'_> {
                         name: function_call.name.to_string(),
                     }));
                 }
+                FlattenUnknown::Normal(OpenAIResponsesOutputInner::CustomToolCall(
+                    custom_tool_call,
+                )) => {
+                    output.push(ContentBlockOutput::ToolCall(ToolCall {
+                        id: custom_tool_call.call_id.to_string(),
+                        arguments: custom_tool_call.input.to_string(),
+                        name: custom_tool_call.name.to_string(),
+                    }));
+                }
 
                 FlattenUnknown::Normal(OpenAIResponsesOutputInner::Reasoning {
                     encrypted_content,
@@ -259,30 +270,74 @@ pub(super) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {
 
 impl<'a> OpenAITool<'a> {
     pub fn into_openai_responses_tool(self) -> OpenAIResponsesTool<'a> {
-        OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool {
-            r#type: self.r#type,
-            name: self.function.name,
-            description: self.function.description,
-            parameters: self.function.parameters,
-            strict: self.strict,
-        })
+        match self {
+            OpenAITool::Function { function, strict } => {
+                OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool {
+                    name: function.name,
+                    description: function.description,
+                    parameters: function.parameters,
+                    strict,
+                })
+            }
+            OpenAITool::Custom {
+                custom: custom_tool,
+            } => OpenAIResponsesTool::Custom(custom_tool.into()),
+        }
     }
 }
 
 #[derive(Debug, Serialize)]
-#[serde(untagged)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAIResponsesTool<'a> {
     Function(OpenAIResponsesFunctionTool<'a>),
     BuiltIn(&'a Value),
+    Custom(OpenAIResponsesCustomTool<'a>),
 }
 
 #[derive(Serialize, Debug)]
 pub struct OpenAIResponsesFunctionTool<'a> {
-    r#type: OpenAIToolType,
     name: &'a str,
     description: Option<&'a str>,
     parameters: &'a Value,
     strict: bool,
+}
+
+/// Custom tool format for the Responses API (flattened structure)
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAIResponsesCustomToolFormat {
+    Text,
+    Grammar {
+        syntax: OpenAIGrammarSyntax,
+        definition: String,
+    },
+}
+
+#[derive(Serialize, Debug)]
+pub struct OpenAIResponsesCustomTool<'a> {
+    name: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    format: Option<OpenAIResponsesCustomToolFormat>,
+}
+
+impl<'a> From<&'a OpenAICustomTool> for OpenAIResponsesCustomTool<'a> {
+    fn from(tool: &'a OpenAICustomTool) -> Self {
+        OpenAIResponsesCustomTool {
+            name: &tool.name,
+            description: tool.description.as_deref(),
+            format: tool.format.as_ref().map(|f| match f {
+                OpenAICustomToolFormat::Text => OpenAIResponsesCustomToolFormat::Text,
+                OpenAICustomToolFormat::Grammar { grammar } => {
+                    OpenAIResponsesCustomToolFormat::Grammar {
+                        syntax: grammar.syntax.clone(),
+                        definition: grammar.definition.clone(),
+                    }
+                }
+            }),
+        }
+    }
 }
 
 #[derive(Serialize, Debug)]
@@ -345,8 +400,15 @@ impl<'a> OpenAIResponsesRequest<'a> {
             .as_ref()
             .map(|tool_config| {
                 tool_config
-                    .tools_available()
-                    .map(|tool| OpenAITool::from(tool).into_openai_responses_tool())
+                    .tools_available_with_openai_custom()
+                    .map(|tool_ref| match tool_ref {
+                        ToolConfigRef::Function(func) => {
+                            OpenAITool::from(func).into_openai_responses_tool()
+                        }
+                        ToolConfigRef::OpenAICustom(custom) => {
+                            OpenAIResponsesTool::Custom(custom.into())
+                        }
+                    })
                     .collect()
             })
             .unwrap_or_default();
@@ -529,6 +591,8 @@ pub enum OpenAIResponsesOutputInner<'a> {
     Message(OpenAIResponsesInputMessage<'a>),
     #[serde(borrow)]
     FunctionCall(OpenAIResponsesFunctionCall<'a>),
+    #[serde(borrow)]
+    CustomToolCall(OpenAIResponsesCustomToolCall<'a>),
     Reasoning {
         #[serde(default)]
         encrypted_content: Option<String>,
@@ -598,6 +662,15 @@ pub struct OpenAIResponsesFunctionCall<'a> {
     call_id: Cow<'a, str>,
     name: Cow<'a, str>,
     arguments: Cow<'a, str>,
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct OpenAIResponsesCustomToolCall<'a> {
+    id: Cow<'a, str>,
+    call_id: Cow<'a, str>,
+    name: Cow<'a, str>,
+    input: Cow<'a, str>,
+    status: Cow<'a, str>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]

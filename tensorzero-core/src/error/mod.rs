@@ -4,6 +4,7 @@ use std::time::Duration;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
 use indexmap::IndexMap;
+use minijinja_utils::AnalysisError;
 use opentelemetry::trace::Status;
 use serde::{Serialize, Serializer};
 use serde_json::{json, Value};
@@ -284,6 +285,9 @@ pub enum ErrorDetails {
     DynamicJsonSchema {
         message: String,
     },
+    DynamicTemplateLoad {
+        internal: AnalysisError,
+    },
     FileRead {
         message: String,
         file_path: String,
@@ -533,6 +537,9 @@ pub enum ErrorDetails {
     ToolNotLoaded {
         name: String,
     },
+    IncompatibleTool {
+        message: String,
+    },
     TypeConversion {
         message: String,
     },
@@ -624,6 +631,7 @@ impl ErrorDetails {
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicJsonSchema { .. } => tracing::Level::WARN,
             ErrorDetails::DynamicEndpointNotFound { .. } => tracing::Level::WARN,
+            ErrorDetails::DynamicTemplateLoad { .. } => tracing::Level::ERROR,
             ErrorDetails::FileRead { .. } => tracing::Level::ERROR,
             ErrorDetails::GCPCredentials { .. } => tracing::Level::ERROR,
             ErrorDetails::Inference { .. } => tracing::Level::ERROR,
@@ -695,6 +703,7 @@ impl ErrorDetails {
             ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ToolNotLoaded { .. } => tracing::Level::ERROR,
+            ErrorDetails::IncompatibleTool { .. } => tracing::Level::WARN,
             ErrorDetails::TypeConversion { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownCandidate { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownFunction { .. } => tracing::Level::WARN,
@@ -763,6 +772,7 @@ impl ErrorDetails {
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicJsonSchema { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::DynamicTemplateLoad { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DynamicEndpointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::FileRead { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::GCPCredentials { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -843,6 +853,7 @@ impl ErrorDetails {
             ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::IncompatibleTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownFunction { .. } => StatusCode::NOT_FOUND,
@@ -1066,6 +1077,38 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::DynamicEndpointNotFound { key_name } => {
                 write!(f, "Dynamic endpoint '{key_name}' not found in credentials")
             }
+            ErrorDetails::DynamicTemplateLoad { internal } => match internal {
+                AnalysisError::ParseError(err) => {
+                    write!(
+                        f,
+                        "Failed to parse template during validation of loads: {err}"
+                    )
+                }
+                AnalysisError::DynamicLoadsFound(loads) => {
+                    writeln!(
+                        f,
+                        "TensorZero does not allow templates with dynamic paths to be loaded. Found {} dynamic load(s):",
+                        loads.len()
+                    )?;
+                    for (i, load) in loads.iter().enumerate() {
+                        if i > 0 {
+                            writeln!(f)?;
+                        }
+                        write!(
+                            f,
+                            "  {}:{}:{}: dynamic {} - {}:\n    {}",
+                            load.template_name,
+                            load.line,
+                            load.column,
+                            load.load_kind,
+                            load.reason,
+                            load.source_quote
+                        )?;
+                    }
+                    writeln!(f, "Please use explicit paths to templates instead of variables. You may be able to use if / else statements to achieve the desired behavior.")?;
+                    Ok(())
+                }
+            },
 
             ErrorDetails::FileRead { message, file_path } => {
                 write!(f, "Error reading file {file_path}: {message}")
@@ -1447,6 +1490,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::TypeConversion { message } => write!(f, "{message}"),
             ErrorDetails::ToolNotFound { name } => write!(f, "Tool not found: {name}"),
             ErrorDetails::ToolNotLoaded { name } => write!(f, "Tool not loaded: {name}"),
+            ErrorDetails::IncompatibleTool { message } => write!(f, "{message}"),
             ErrorDetails::UnknownCandidate { name } => {
                 write!(f, "Unknown candidate variant: {name}")
             }
@@ -1546,5 +1590,11 @@ impl From<sqlx::Error> for Error {
             message: err.to_string(),
             function_name: None,
         })
+    }
+}
+
+impl From<AnalysisError> for Error {
+    fn from(err: AnalysisError) -> Self {
+        Self::new(ErrorDetails::DynamicTemplateLoad { internal: err })
     }
 }

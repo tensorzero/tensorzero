@@ -4,7 +4,7 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ${GCP_VERTEX_CREDENTIALS_PATH:-/dev/null}:/app/gcp-credentials.json:ro
-    command: --config-file /app/config/tensorzero.toml
+    command: --config-file /app/config/tensorzero.toml --log-format json
     environment:
       GCP_VERTEX_CREDENTIALS_PATH: ${GCP_VERTEX_CREDENTIALS_PATH:+/app/gcp-credentials.json}
     env_file:

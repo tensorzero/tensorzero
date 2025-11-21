@@ -343,7 +343,15 @@ impl<'a> FireworksSupervisedRow<'a> {
             .tool_params
             .additional_tools
             .as_ref()
-            .map(|tools| tools.iter().map(Into::into).collect())
+            .map(|tools| {
+                tools
+                    .iter()
+                    .filter_map(|dt| match &dt {
+                        tensorzero_core::tool::Tool::Function(func) => Some(func.into()),
+                        tensorzero_core::tool::Tool::OpenAICustom(_) => None, // Skip custom tools for SFT
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
         let mut messages = prepare_fireworks_messages(
             inference.system_input.as_deref(),

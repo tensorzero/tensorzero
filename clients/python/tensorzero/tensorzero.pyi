@@ -25,6 +25,7 @@ from tensorzero import (
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
     DynamicEvaluationRunResponse,  # DEPRECATED
     ExtraBody,
+    ExtraHeader,
     FeedbackResponse,
     InferenceChunk,
     InferenceInput,
@@ -529,7 +530,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         credentials: Optional[Dict[str, str]] = None,
         cache_options: Optional[Dict[str, Any]] = None,
         extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
-        extra_headers: Optional[List[Dict[str, Any]]] = None,
+        extra_headers: Optional[List[ExtraHeader | Dict[str, Any]]] = None,
         otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
@@ -1068,7 +1069,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         credentials: Optional[Dict[str, str]] = None,
         cache_options: Optional[Dict[str, Any]] = None,
         extra_body: Optional[List[ExtraBody | Dict[str, Any]]] = None,
-        extra_headers: Optional[List[Dict[str, Any]]] = None,
+        extra_headers: Optional[List[ExtraHeader | Dict[str, Any]]] = None,
         otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
         internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,

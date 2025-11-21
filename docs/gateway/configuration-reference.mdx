@@ -591,6 +591,26 @@ api_base = "https://example.com/v1/messages"
 # ...
 ```
 
+##### `beta_structured_outputs`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Enables Anthropic's beta structured outputs feature, which provides native support for strict JSON schema validation and strict tool parameter validation.
+
+When enabled:
+
+- Adds the `anthropic-beta: structured-outputs-2025-11-13` header to requests
+- For JSON functions with `json_mode = "strict"`, forwards the output schema in the `output_format` field
+- For tools with `strict = true`, forwards the `strict` parameter to enable strict validation
+
+```toml title="tensorzero.toml"
+[models.claude_structured.providers.anthropic]
+type = "anthropic"
+model_name = "claude-sonnet-4-5-20250929"
+beta_structured_outputs = true
+```
+
 </Accordion>
 
 <Accordion title='type: "aws_bedrock"'>
@@ -2639,7 +2659,7 @@ The supported modes are:
 - `off`: Make a chat completion request without any special JSON handling (not recommended).
 - `on`: Make a chat completion request with JSON mode (if supported by the provider).
 - `strict`: Make a chat completion request with strict JSON mode (if supported by the provider). For example, the TensorZero Gateway uses Structured Outputs for OpenAI.
-- `implicit_tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
+- `tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
@@ -3372,7 +3392,7 @@ The supported modes are:
 - `off`: Make a chat completion request without any special JSON handling (not recommended).
 - `on`: Make a chat completion request with JSON mode (if supported by the provider).
 - `strict`: Make a chat completion request with strict JSON mode (if supported by the provider). For example, the TensorZero Gateway uses Structured Outputs for OpenAI.
-- `implicit_tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
+- `tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]

@@ -36,6 +36,9 @@ async fn test_base_path_with_trailing_slash() {
 }
 
 async fn test_base_path(child_data: ChildData) {
+    // Prevent cross-container communication issues in CI
+    // (the provider-proxy container would try to connect to 'localhost')
+    std::env::remove_var("TENSORZERO_E2E_PROXY");
     // The health endpoint should be available at the base path
     let health_response = reqwest::Client::new()
         .get(format!("http://{}/my/prefix/health", child_data.addr))

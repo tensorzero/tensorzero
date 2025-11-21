@@ -237,7 +237,7 @@ optimize = "min"
 type = "chat_completion"
 model = "anthropic::claude-3-5-haiku-20241022"
 system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
-json_mode = "implicit_tool"
+json_mode = "tool"
 
 [evaluations.best_of_3.evaluators.llm_judge_bool.variants.openai_promptA]
 type = "chat_completion"
@@ -275,7 +275,7 @@ optimize = "min"
 type = "chat_completion"
 model = "anthropic::claude-3-5-haiku-20241022"
 system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
-json_mode = "implicit_tool"
+json_mode = "tool"
 
 [evaluations.mixture_of_3.evaluators.llm_judge_bool.variants.openai_promptA]
 type = "chat_completion"

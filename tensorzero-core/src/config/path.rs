@@ -52,7 +52,7 @@ impl ResolvedTomlPathData {
     /// Returns true if this is a real filesystem path (not a synthetic "fake path")
     pub fn is_real_path(&self) -> bool {
         // Fake paths use a special prefix like "tensorzero::llm_judge"
-        !self.__tensorzero_remapped_path.starts_with("tensorzero::")
+        !self.get_template_key().starts_with("tensorzero::")
     }
 
     /// Obtains the real path for this path, if it is a real path.

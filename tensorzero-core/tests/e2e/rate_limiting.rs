@@ -23,16 +23,12 @@ enabled = true
 
 {rules_toml}
 
-[models]
-
 [models."dummy"]
 routing = ["dummy"]
 
 [models."dummy".providers.dummy]
 type = "dummy"
 model_name = "input_five_output_six"
-
-[functions]
 
 [functions.basic_test]
 type = "chat"
@@ -872,16 +868,12 @@ scope = [
     {{ tag_key = "test9_user_id_{id}", tag_value = "123" }}
 ]
 
-[models]
-
 [models."dummy"]
 routing = ["dummy"]
 
 [models."dummy".providers.dummy]
 type = "dummy"
 model_name = "input_five_output_six"
-
-[functions]
 
 [functions.basic_test]
 type = "chat"
@@ -1057,16 +1049,12 @@ async fn test_rate_limiting_no_rules_helper(stream: bool) {
 [rate_limiting]
 enabled = true
 
-[models]
-
 [models."dummy"]
 routing = ["dummy"]
 
 [models."dummy".providers.dummy]
 type = "dummy"
 model_name = "dummy"
-
-[functions]
 
 [functions.basic_test]
 type = "chat"
@@ -1097,16 +1085,12 @@ async fn test_rate_limiting_no_retries() {
 [rate_limiting]
 enabled = true
 
-[models]
-
 [models."dummy"]
 routing = ["dummy"]
 
 [models."dummy".providers.dummy]
 type = "dummy"
 model_name = "flaky_rate_limit"
-
-[functions]
 
 [functions.basic_test]
 type = "chat"

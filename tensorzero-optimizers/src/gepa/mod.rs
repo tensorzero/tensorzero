@@ -24,6 +24,10 @@ use tensorzero_core::{
 
 use crate::{JobHandle, Optimizer};
 
+mod evaluate;
+
+pub use evaluate::create_evaluation_dataset;
+
 #[async_trait]
 impl Optimizer for GEPAConfig {
     type Handle = GEPAJobHandle;

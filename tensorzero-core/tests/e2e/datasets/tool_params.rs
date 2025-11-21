@@ -74,13 +74,15 @@ async fn test_datapoint_full_tool_params_round_trip() {
     // Create tool_params in storage format (ToolCallConfigDatabaseInsert)
     // This has ALL tools in dynamic_tools (merged static + dynamic)
     let tool_params = Some(ToolCallConfigDatabaseInsert::new_for_test(
-        vec![Tool::ClientSideFunction(custom_tool.clone())],
+        vec![Tool::Function(custom_tool.clone())],
         vec![ProviderTool {
             scope: ProviderToolScope::Unscoped,
             tool: json!({"foo": "bar"}),
         }],
         AllowedTools {
-            tools: vec![get_temp_tool.name.clone(), custom_tool.name.clone()],
+            tools: [get_temp_tool.name.clone(), custom_tool.name.clone()]
+                .into_iter()
+                .collect(),
             choice: AllowedToolsChoice::Explicit,
         },
         ToolChoice::Specific("get_temperature".to_string()),
@@ -159,10 +161,8 @@ async fn test_datapoint_full_tool_params_round_trip() {
     // Static tool (from function config) should be in allowed_tools
     let allowed_tools = dp["allowed_tools"].as_array().unwrap();
     assert_eq!(allowed_tools.len(), 2);
-    let allowed_tools_set: std::collections::HashSet<&str> =
-        allowed_tools.iter().map(|v| v.as_str().unwrap()).collect();
-    assert!(allowed_tools_set.contains("get_temperature"));
-    assert!(allowed_tools_set.contains("custom_weather_tool"));
+    assert_eq!(allowed_tools[0], "get_temperature");
+    assert_eq!(allowed_tools[1], "custom_weather_tool");
 
     // Dynamic tool should be in additional_tools
     let additional_tools = dp["additional_tools"].as_array().unwrap();
@@ -212,7 +212,7 @@ async fn test_datapoint_update_tool_params() {
     };
 
     let original_tool_params = Some(ToolCallConfigDatabaseInsert::new_for_test(
-        vec![Tool::ClientSideFunction(get_temp_tool.clone())],
+        vec![Tool::Function(get_temp_tool.clone())],
         vec![],
         AllowedTools {
             tools: vec![get_temp_tool.name.clone()],
@@ -441,7 +441,7 @@ async fn test_list_datapoints_with_tool_params() {
         },
         output: None,
         tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-            vec![Tool::ClientSideFunction(custom_tool_1.clone())],
+            vec![Tool::Function(custom_tool_1.clone())],
             vec![],
             AllowedTools {
                 tools: vec![base_tool.name.clone(), custom_tool_1.name.clone()],
@@ -475,7 +475,7 @@ async fn test_list_datapoints_with_tool_params() {
         },
         output: None,
         tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-            vec![Tool::ClientSideFunction(custom_tool_2.clone())],
+            vec![Tool::Function(custom_tool_2.clone())],
             vec![],
             AllowedTools {
                 tools: vec![custom_tool_2.name.clone()],
@@ -535,15 +535,10 @@ async fn test_list_datapoints_with_tool_params() {
 
     // Verify DP2: Static + one dynamic (flattened)
     let dp2_json = find_dp(&dp2_id);
-    let allowed_tools: std::collections::HashSet<&str> = dp2_json["allowed_tools"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| v.as_str().unwrap())
-        .collect();
-    let expected_tools: std::collections::HashSet<&str> =
-        ["get_temperature", "tool_1"].into_iter().collect();
-    assert_eq!(allowed_tools, expected_tools);
+    assert_eq!(
+        dp2_json["allowed_tools"],
+        json!(["get_temperature", "tool_1"])
+    );
     let add_tools_2 = dp2_json["additional_tools"].as_array().unwrap();
     assert_eq!(add_tools_2.len(), 1);
     assert_eq!(add_tools_2[0]["name"], "tool_1");
@@ -701,7 +696,7 @@ async fn test_datapoint_only_dynamic_tools() {
         },
         output: None,
         tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-            vec![Tool::ClientSideFunction(dynamic_tool.clone())],
+            vec![Tool::Function(dynamic_tool.clone())],
             vec![],
             AllowedTools {
                 tools: vec![static_tool.name.clone(), dynamic_tool.name.clone()],
@@ -795,7 +790,7 @@ async fn test_datapoint_tool_params_three_states() {
         },
         output: None,
         tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-            vec![Tool::ClientSideFunction(tool.clone())],
+            vec![Tool::Function(tool.clone())],
             vec![],
             AllowedTools {
                 tools: vec![tool.name.clone()],

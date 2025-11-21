@@ -19,6 +19,7 @@ use tensorzero::DynamicToolParams;
 use tensorzero::FunctionTool;
 use tensorzero::InferenceOutput;
 use tensorzero::InferenceResponse;
+use tensorzero::Tool;
 use tensorzero_core::cache::cache_lookup_streaming;
 use tensorzero_core::cache::start_cache_write_streaming;
 use tensorzero_core::cache::CacheData;
@@ -419,7 +420,7 @@ pub async fn test_dont_cache_tool_call_schema_error() {
             max_age_s: None,
         },
         dynamic_tool_params: DynamicToolParams {
-            additional_tools: Some(vec![FunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "get_temperature".to_string(),
                 description: "Get the temperature".to_string(),
                 parameters: json!({
@@ -430,7 +431,7 @@ pub async fn test_dont_cache_tool_call_schema_error() {
                     "required": ["other_param"]
                 }),
                 strict: true,
-            }]),
+            })]),
             ..Default::default()
         },
         ..Default::default()

@@ -178,9 +178,19 @@ async def test_patch_openai_client_with_async_client_async_setup_false_streaming
     lines = list(captured.out.splitlines())
     print("Output lines: ", lines)
     # Allow various env vars to be set when running this test
-    assert len(lines) <= 2
+    assert len(lines) <= 4
     for line in lines:
-        assert "Pseudonymous usage analytic" in line or "Using proxy URL from TENSORZERO_E2E_PROXY" in line
+        assert any(
+            [
+                expected in line
+                for expected in [
+                    "Pseudonymous usage analytic",
+                    "Using proxy URL from TENSORZERO_E2E_PROXY",
+                    "Waiting for deferred tasks to finish",
+                    "Deferred tasks finished",
+                ]
+            ]
+        )
     assert captured.err == ""
 
 

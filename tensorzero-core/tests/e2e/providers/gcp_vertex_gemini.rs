@@ -270,3 +270,105 @@ async fn test_gcp_vertex_gemini_bad_model_id() {
     let error = response_json.get("error").unwrap().as_str().unwrap();
     assert!(error.contains("Model or endpoint not found. You may be specifying the wrong one of these. Standard GCP models should use a `model_id` and not an `endpoint_id`, while fine-tuned models should use an `endpoint_id`."));
 }
+
+/// Test that thought signatures with tool calls can round-trip correctly
+/// This mirrors test_gemini_multi_turn_thought_non_streaming in google_ai_studio_gemini.rs
+#[tokio::test]
+async fn test_gcp_vertex_multi_turn_thought_non_streaming() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+    let payload = json!({
+        "function_name": "weather_helper",
+        "variant_name": "gcp-vertex-gemini-pro",
+        "episode_id": episode_id,
+        "input":{
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+
+    println!("Original Content blocks: {content_blocks:?}");
+    assert!(
+        content_blocks.len() == 2,
+        "Unexpected content blocks: {content_blocks:?}"
+    );
+    let signature = content_blocks[0]
+        .get("signature")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!(
+        content_blocks[0],
+        json!({
+            "type": "thought",
+            "text": null,
+            "signature": signature,
+            "_internal_provider_type": "gcp_vertex_gemini",
+        })
+    );
+    assert_eq!(content_blocks[1]["type"], "tool_call");
+    let tool_id = content_blocks[1]["id"].as_str().unwrap();
+
+    let tensorzero_content_blocks = content_blocks.clone();
+
+    let mut new_messages = vec![
+        serde_json::json!({
+            "role": "user",
+            "content": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"
+        }),
+        serde_json::json!({
+            "role": "assistant",
+            "content": tensorzero_content_blocks,
+        }),
+    ];
+
+    new_messages.push(serde_json::json!({
+        "role": "user",
+        "content": [{"type": "tool_result", "name": "My result", "result": "13", "id": tool_id}],
+    }));
+
+    let payload = json!({
+        "function_name": "weather_helper",
+        "variant_name": "gcp-vertex-gemini-pro",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "AskJeeves"},
+            "messages": new_messages
+        },
+        "stream": false,
+    });
+    println!("New payload: {payload}");
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    let response_json = response.json::<Value>().await.unwrap();
+    let new_content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    assert_eq!(
+        new_content_blocks.len(),
+        1,
+        "Unexpected new content blocks: {new_content_blocks:?}"
+    );
+    assert_eq!(new_content_blocks[0]["type"], "text");
+
+    // Don't bother checking ClickHouse, as we do that in lots of other tests
+}

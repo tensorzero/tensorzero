@@ -25,7 +25,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
-use crate::tool::create_implicit_tool_call_config_with_allowed_tools;
+use crate::tool::create_json_mode_tool_call_config_with_allowed_tools;
 use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
 use crate::utils::unbounded_recursion_wrapper;
 use crate::variant::mixture_of_n::stream_inference_from_non_stream;
@@ -69,6 +69,18 @@ impl BestOfNSamplingConfig {
 
     pub fn evaluator(&self) -> &BestOfNEvaluatorConfig {
         &self.evaluator
+    }
+
+    /// Converts this initialized config back to its uninitialized form.
+    pub fn into_uninitialized(self) -> UninitializedBestOfNSamplingConfig {
+        UninitializedBestOfNSamplingConfig {
+            weight: self.weight,
+            timeout_s: self.timeout_s,
+            candidates: self.candidates,
+            evaluator: UninitializedBestOfNEvaluatorConfig {
+                inner: self.evaluator.inner.into_uninitialized(),
+            },
+        }
     }
 }
 
@@ -144,8 +156,8 @@ lazy_static! {
         }))
         .expect("Failed to create schema for evaluator output")
     };
-    static ref IMPLICIT_TOOL_CALL_CONFIG: ToolCallConfig = {
-        create_implicit_tool_call_config_with_allowed_tools(
+    static ref JSON_MODE_TOOL_CALL_CONFIG: ToolCallConfig = {
+        create_json_mode_tool_call_config_with_allowed_tools(
             EVALUATOR_OUTPUT_SCHEMA.clone(),
             AllowedTools {
                 tools: [IMPLICIT_TOOL_NAME.to_string()].into_iter().collect(),
@@ -755,7 +767,7 @@ impl BestOfNEvaluatorConfig {
             .or_else(|| self.inner.json_mode().cloned())
             .unwrap_or(JsonMode::Strict);
         let tool_config = match json_mode {
-            JsonMode::ImplicitTool => Some(Cow::Borrowed(&*IMPLICIT_TOOL_CALL_CONFIG)),
+            JsonMode::Tool => Some(Cow::Borrowed(&*JSON_MODE_TOOL_CALL_CONFIG)),
             JsonMode::Off | JsonMode::On | JsonMode::Strict => None,
         };
         if !inference_config.extra_body.is_empty() {
@@ -866,9 +878,9 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_prepare_system_message() {
-        let templates = get_test_template_config();
+    #[tokio::test]
+    async fn test_prepare_system_message() {
+        let templates = get_test_template_config().await;
 
         let system_schema = StaticJSONSchema::from_value(serde_json::json!({
             "type": "object",
@@ -1052,7 +1064,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_candidate_message() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Create an EvaluatorConfig
         // Prepare some candidate InferenceResults
@@ -1087,6 +1099,7 @@ mod tests {
                 vec![model_inference_response],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,
@@ -1124,6 +1137,7 @@ mod tests {
                 None,
                 InferenceParams::default(),
                 None,
+                None,
             )
             .await,
         );
@@ -1144,7 +1158,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_candidate_message_json() {
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
 
         // Prepare some candidate InferenceResults - some valid, some malformed
         let model_inference_response_valid = ModelInferenceResponseWithMetadata {
@@ -1256,7 +1270,7 @@ mod tests {
             evaluator: evaluator_config,
         };
 
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -1289,6 +1303,7 @@ mod tests {
                 vec![model_inference_response0],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,
@@ -1325,6 +1340,7 @@ mod tests {
                 vec![model_inference_response1],
                 None,
                 InferenceParams::default(),
+                None,
                 None,
             )
             .await,
@@ -1684,5 +1700,126 @@ mod tests {
         // Case 5: Skipped indices out of range
         let skipped = vec![10, 20];
         assert_eq!(map_evaluator_to_actual_index(5, &skipped), 5);
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_basic_fields() {
+        let uninitialized = UninitializedBestOfNSamplingConfig {
+            weight: Some(1.0),
+            timeout_s: 60.0,
+            candidates: vec!["variant1".to_string(), "variant2".to_string()],
+            evaluator: UninitializedBestOfNEvaluatorConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-4".into(),
+                    temperature: Some(0.3),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.weight, Some(1.0));
+        assert_eq!(exported.timeout_s, 60.0);
+        assert_eq!(
+            exported.candidates,
+            vec!["variant1".to_string(), "variant2".to_string()]
+        );
+        assert_eq!(exported.evaluator.inner.model, "gpt-4".into());
+        assert_eq!(exported.evaluator.inner.temperature, Some(0.3));
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_nested_evaluator() {
+        let uninitialized = UninitializedBestOfNSamplingConfig {
+            weight: None,
+            timeout_s: 300.0,
+            candidates: vec!["v1".to_string()],
+            evaluator: UninitializedBestOfNEvaluatorConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "judge-model".into(),
+                    temperature: Some(0.1),
+                    max_tokens: Some(50),
+                    seed: Some(99),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.evaluator.inner.model, "judge-model".into());
+        assert_eq!(exported.evaluator.inner.temperature, Some(0.1));
+        assert_eq!(exported.evaluator.inner.max_tokens, Some(50));
+        assert_eq!(exported.evaluator.inner.seed, Some(99));
+    }
+
+    #[test]
+    fn test_into_uninitialized_with_empty_candidates() {
+        let uninitialized = UninitializedBestOfNSamplingConfig {
+            weight: None,
+            timeout_s: 300.0,
+            candidates: vec![],
+            evaluator: UninitializedBestOfNEvaluatorConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-4".into(),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert!(exported.candidates.is_empty());
+    }
+
+    #[test]
+    fn test_into_uninitialized_serialization_round_trip() {
+        let original = UninitializedBestOfNSamplingConfig {
+            weight: Some(0.7),
+            timeout_s: 120.0,
+            candidates: vec!["a".to_string(), "b".to_string()],
+            evaluator: UninitializedBestOfNEvaluatorConfig {
+                inner: UninitializedChatCompletionConfig {
+                    model: "gpt-3.5-turbo".into(),
+                    ..Default::default()
+                },
+            },
+        };
+
+        let config = original
+            .clone()
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.into_uninitialized();
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&exported).unwrap();
+        let deserialized: UninitializedBestOfNSamplingConfig = serde_json::from_str(&json).unwrap();
+
+        // Should be able to load again
+        let reloaded = deserialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        assert_eq!(reloaded.weight(), Some(0.7));
+        assert_eq!(reloaded.timeout_s(), 120.0);
+        assert_eq!(
+            reloaded.candidates(),
+            &vec!["a".to_string(), "b".to_string()]
+        );
     }
 }

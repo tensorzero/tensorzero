@@ -71,7 +71,7 @@ mod tests {
     use tensorzero_core::client::Role;
     use tensorzero_core::{
         endpoints::{
-            datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint},
+            datasets::{StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint},
             inference::{ChatInferenceResponse, JsonInferenceResponse},
         },
         inference::types::{
@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn test_exact_match_evaluator_json() {
         // Test a match
-        let datapoint = StoredDatapoint::Json(JsonInferenceDatapoint {
+        let datapoint = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
             id: Uuid::now_v7(),
             input: StoredInput {
                 system: None,
@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(result, Some(Value::Bool(false)));
 
         // Test with missing output (should be None)
-        let datapoint = StoredDatapoint::Json(JsonInferenceDatapoint {
+        let datapoint = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
             id: Uuid::now_v7(),
             input: StoredInput {
                 system: None,
@@ -290,7 +290,7 @@ mod tests {
         assert_eq!(result, None);
 
         // Test with datapoint with malformed output schema (should be None)
-        let datapoint = StoredDatapoint::Json(JsonInferenceDatapoint {
+        let datapoint = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
             id: Uuid::now_v7(),
             input: StoredInput {
                 system: None,

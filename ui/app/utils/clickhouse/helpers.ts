@@ -86,3 +86,95 @@ export function getStaledWindowQuery(run_timestamps: Date[]): string {
 
   return clauses.join(" OR ");
 }
+
+/**
+ * Generates a ClickHouse SQL expression for computing the lower bound of a 95% Wald confidence interval.
+ * Wald CI uses the normal approximation: mean ± 1.96 * (stddev / sqrt(n))
+ *
+ * Use this for float-valued metrics in evaluators.
+ *
+ * @param valueExpr - SQL expression for the values to compute CI over (e.g., "value", "f.value")
+ * @returns SQL expression that computes the CI lower bound (suitable for use in SELECT)
+ */
+export function waldConfidenceIntervalLower(valueExpr: string): string {
+  return `avg(${valueExpr}) - 1.96 * (stddevSamp(${valueExpr}) / sqrt(count()))`;
+}
+
+/**
+ * Generates a ClickHouse SQL expression for computing the upper bound of a 95% Wald confidence interval.
+ * Wald CI uses the normal approximation: mean ± 1.96 * (stddev / sqrt(n))
+ *
+ * Use this for float-valued metrics.
+ *
+ * @param valueExpr - SQL expression for the values to compute CI over (e.g., "value", "f.value")
+ * @returns SQL expression that computes the CI upper bound (suitable for use in SELECT)
+ */
+export function waldConfidenceIntervalUpper(valueExpr: string): string {
+  return `avg(${valueExpr}) + 1.96 * (stddevSamp(${valueExpr}) / sqrt(count()))`;
+}
+
+/**
+ * Generates a ClickHouse SQL expression for computing the lower bound of a 95% Wilson confidence interval.
+ * Wilson CIs are more accurate than Wald CIs for binary/Bernoulli data with small sample sizes or
+ * extreme proportions (close to 0 or 1).
+ *
+ * Use this for boolean-valued metrics (values that are 0 or 1).
+ *
+ * Wilson interval: (p̂ + z²/(2n) ± z·√[p̂(1-p̂)/n + z²/(4n²)]) / (1 + z²/n)
+ *
+ * @param valueExpr - SQL expression for the values (should be 0 or 1 for boolean metrics)
+ * @returns SQL expression that computes the CI lower bound, clamped to [0, 1] (suitable for use in SELECT)
+ */
+export function wilsonConfidenceIntervalLower(valueExpr: string): string {
+  const z = 1.96;
+  const zSquared = z * z;
+
+  // Build the Wilson interval formula step by step for readability
+  const p = `avg(${valueExpr})`;
+  const n = "count()";
+
+  // scale = 1 / (1 + z²/n)
+  const scale = `1.0 / (1.0 + ${zSquared} / ${n})`;
+
+  // center = p + z²/(2n)
+  const center = `${p} + ${zSquared} / (2.0 * ${n})`;
+
+  // margin = z * sqrt(p(1-p)/n + z²/(4n²))
+  const margin = `${z} * sqrt((${p} * (1.0 - ${p})) / ${n} + ${zSquared} / (4.0 * ${n} * ${n}))`;
+
+  // lower = (center - margin) * scale, clamped to [0, 1]
+  return `greatest(0.0, least(1.0, (${center} - ${margin}) * ${scale}))`;
+}
+
+/**
+ * Generates a ClickHouse SQL expression for computing the upper bound of a 95% Wilson confidence interval.
+ * Wilson CIs are more accurate than Wald CIs for binary/Bernoulli data with small sample sizes or
+ * extreme proportions (close to 0 or 1).
+ *
+ * Use this for boolean-valued metrics (values that are 0 or 1).
+ *
+ * Wilson interval: (p̂ + z²/(2n) ± z·√[p̂(1-p̂)/n + z²/(4n²)]) / (1 + z²/n)
+ *
+ * @param valueExpr - SQL expression for the values (should be 0 or 1 for boolean metrics)
+ * @returns SQL expression that computes the CI upper bound, clamped to [0, 1] (suitable for use in SELECT)
+ */
+export function wilsonConfidenceIntervalUpper(valueExpr: string): string {
+  const z = 1.96;
+  const zSquared = z * z;
+
+  // Build the Wilson interval formula step by step for readability
+  const p = `avg(${valueExpr})`;
+  const n = "count()";
+
+  // scale = 1 / (1 + z²/n)
+  const scale = `1.0 / (1.0 + ${zSquared} / ${n})`;
+
+  // center = p + z²/(2n)
+  const center = `${p} + ${zSquared} / (2.0 * ${n})`;
+
+  // margin = z * sqrt(p(1-p)/n + z²/(4n²))
+  const margin = `${z} * sqrt((${p} * (1.0 - ${p})) / ${n} + ${zSquared} / (4.0 * ${n} * ${n}))`;
+
+  // upper = (center + margin) * scale, clamped to [0, 1]
+  return `least(1.0, greatest(0.0, (${center} + ${margin}) * ${scale}))`;
+}

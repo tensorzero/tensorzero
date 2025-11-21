@@ -34,10 +34,11 @@ test("countInferencesForFunction returns correct counts", async () => {
     schemas: {},
     description: "",
     output_schema: { value: {} },
-    implicit_tool_call_config: {
+    json_mode_tool_call_config: {
       static_tools_available: [],
       dynamic_tools_available: [],
       provider_tools: [],
+      openai_custom_tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
       allowed_tools: { tools: [], choice: "function_default" },
@@ -69,10 +70,11 @@ test("countInferencesForVariant returns correct counts", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
+        openai_custom_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
         allowed_tools: {

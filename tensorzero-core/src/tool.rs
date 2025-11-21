@@ -49,23 +49,30 @@ use strum::AsRefStr;
  */
 
 /// `Tool` is the generic form for all tools that TensorZero itself manages.
-/// Today, this is only FunctionTools (the original kind), but soon we'll
-/// implement OpenAI's custom tools standard, MCP, and potentially more.
+/// This includes function tools (the original kind) and OpenAI's custom tools
+/// (which support text and grammar formats). Future additions may include MCP and other standards.
+///
 /// We store this type (serialized) in the Array(String) in the `dynamic_tools` column
 /// in the ChatInference, ChatInferenceDatapoint, and BatchModelInference tables.
-/// Most likely, this will eventually become the wire type too with a custom deserializer
-/// so that folks can specify FunctionTools without tags but then can
-/// add tags and specify other kinds of tool.
+///
+/// For the wire format, we use `DynamicTool` which wraps this enum with a custom deserializer
+/// that allows function tools to be specified without type tags for backward compatibility,
+/// while other tool types require explicit tagging.
 ///
 /// Notably, provider tools (like OpenAI websearch) are not part of this enum
 /// as there's not really anything we can do besides experiment with them.
 /// They are a separate type `ProviderTool`.
-#[derive(ts_rs::TS, AsRefStr, Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
+#[derive(AsRefStr, Clone, Debug, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export)]
 #[strum(serialize_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum Tool {
-    ClientSideFunction(FunctionTool),
+    #[schemars(title = "FunctionTool")]
+    Function(FunctionTool), // Custom deserializer below accepts no type or type="client_side_function" (legacy)
+    #[schemars(title = "OpenAICustomTool")]
+    #[serde(rename = "openai_custom")]
+    OpenAICustom(OpenAICustomTool),
 }
 
 impl std::fmt::Display for Tool {
@@ -75,22 +82,61 @@ impl std::fmt::Display for Tool {
     }
 }
 
+/// Custom deserializer for Tool that provides backward compatibility.
+/// If the type tag is present, deserialize normally. If missing, assume Function.
+///
+/// Additionally, accept `"client_side_function"` as an alias for `"function"`.
+/// We've stored the former in the database, so we can't remove this alias.
+impl<'de> Deserialize<'de> for Tool {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(tag = "type", rename_all = "snake_case")]
+        enum TaggedTool {
+            #[serde(rename = "function", alias = "client_side_function")]
+            Function(FunctionTool),
+            #[serde(rename = "openai_custom")]
+            OpenAICustom(OpenAICustomTool),
+        }
+
+        let value = serde_json::Value::deserialize(deserializer)?;
+
+        // First, try to deserialize as a tagged Tool (new format)
+        if let Ok(tagged) = serde_json::from_value::<TaggedTool>(value.clone()) {
+            return Ok(match tagged {
+                TaggedTool::Function(tool) => Tool::Function(tool),
+                TaggedTool::OpenAICustom(tool) => Tool::OpenAICustom(tool),
+            });
+        }
+
+        // Fall back to untagged FunctionTool format (legacy backward compatibility)
+        match serde_json::from_value::<FunctionTool>(value) {
+            Ok(function_tool) => Ok(Tool::Function(function_tool)),
+            Err(e) => Err(serde::de::Error::custom(format!(
+                "Failed to parse as `Tool` (tagged) or `FunctionTool` (untagged): {e}"
+            ))),
+        }
+    }
+}
+
 impl Tool {
     fn name(&self) -> &str {
         match self {
-            Tool::ClientSideFunction(tool) => &tool.name,
+            Tool::Function(tool) => &tool.name,
+            Tool::OpenAICustom(tool) => &tool.name,
         }
     }
 
-    fn into_dynamic_tool_config(self) -> DynamicToolConfig {
-        match self {
-            Tool::ClientSideFunction(tool) => DynamicToolConfig {
-                description: tool.description,
-                parameters: DynamicJSONSchema::new(tool.parameters),
-                name: tool.name,
-                strict: tool.strict,
-            },
-        }
+    /// Returns true if this is a custom tool (not a function tool)
+    pub fn is_custom(&self) -> bool {
+        matches!(self, Tool::OpenAICustom(_))
+    }
+
+    /// Returns true if this is a function tool
+    pub fn is_function(&self) -> bool {
+        matches!(self, Tool::Function(_))
     }
 }
 
@@ -111,30 +157,53 @@ impl Tool {
     #[getter]
     pub fn get_parameters<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match self {
-            Tool::ClientSideFunction(tool) => {
+            Tool::Function(tool) => {
                 serialize_to_dict(py, tool.parameters.clone()).map(|x| x.into_bound(py))
             }
+            Tool::OpenAICustom(_) => Err(pyo3::exceptions::PyAttributeError::new_err(
+                "Custom tools do not have parameters. Check type field first.",
+            )),
         }
     }
 
     #[getter]
-    pub fn get_description(&self) -> &str {
+    pub fn get_description(&self) -> PyResult<String> {
         match self {
-            Tool::ClientSideFunction(tool) => &tool.description,
+            Tool::Function(tool) => Ok(tool.description.clone()),
+            Tool::OpenAICustom(tool) => tool.description.clone().ok_or_else(|| {
+                pyo3::exceptions::PyAttributeError::new_err("This custom tool has no description")
+            }),
         }
     }
 
     #[getter]
     pub fn get_name(&self) -> &str {
         match self {
-            Tool::ClientSideFunction(tool) => &tool.name,
+            Tool::Function(tool) => &tool.name,
+            Tool::OpenAICustom(tool) => &tool.name,
         }
     }
 
     #[getter]
-    pub fn get_strict(&self) -> bool {
+    pub fn get_strict(&self) -> PyResult<bool> {
         match self {
-            Tool::ClientSideFunction(tool) => tool.strict,
+            Tool::Function(tool) => Ok(tool.strict),
+            Tool::OpenAICustom(_) => Err(pyo3::exceptions::PyAttributeError::new_err(
+                "Custom tools do not have strict mode. Check type field first.",
+            )),
+        }
+    }
+
+    #[getter]
+    pub fn get_format<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            Tool::OpenAICustom(tool) => match &tool.format {
+                Some(format) => serialize_to_dict(py, format.clone()).map(|x| x.into_bound(py)),
+                None => Ok(py.None().into_bound(py)),
+            },
+            Tool::Function(_) => Err(pyo3::exceptions::PyAttributeError::new_err(
+                "Function tools do not have format. Check type field first.",
+            )),
         }
     }
 
@@ -151,7 +220,6 @@ impl Tool {
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
-#[export_schema]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct FunctionTool {
     pub description: String,
@@ -201,6 +269,92 @@ impl FunctionTool {
     }
 }
 
+impl FunctionTool {
+    pub(crate) fn into_dynamic_tool_config(self) -> DynamicToolConfig {
+        DynamicToolConfig {
+            description: self.description,
+            parameters: DynamicJSONSchema::new(self.parameters),
+            name: self.name,
+            strict: self.strict,
+        }
+    }
+}
+
+/// `OpenAICustomTool` represents OpenAI's custom tool format, which allows
+/// for text or grammar-based tool definitions beyond standard function calling.
+/// Currently, this type is a wire + outbound + storage type so it forces a consistent format.
+/// This only applies to the Chat Completions API. The Responses API has a slightly different request
+/// shape so we implement a conversion in `responses.rs`.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct OpenAICustomTool {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<OpenAICustomToolFormat>,
+}
+
+impl std::fmt::Display for OpenAICustomTool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OpenAICustomToolFormat {
+    #[schemars(title = "OpenAICustomToolFormatText")]
+    Text,
+    #[schemars(title = "OpenAICustomToolFormatGrammar")]
+    Grammar { grammar: OpenAIGrammarDefinition },
+}
+
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
+pub struct OpenAIGrammarDefinition {
+    pub syntax: OpenAIGrammarSyntax,
+    pub definition: String,
+}
+
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]
+#[ts(export)]
+#[serde(rename_all = "snake_case")]
+pub enum OpenAIGrammarSyntax {
+    Lark,
+    Regex,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl OpenAICustomTool {
+    #[getter]
+    pub fn get_name(&self) -> &str {
+        &self.name
+    }
+
+    #[getter]
+    pub fn get_description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    #[getter]
+    pub fn get_format<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
+        match &self.format {
+            Some(format) => serialize_to_dict(py, format.clone()).map(|x| Some(x.into_bound(py))),
+            None => Ok(None),
+        }
+    }
+
+    pub fn __repr__(&self) -> String {
+        format!("OpenAICustomTool(name='{}')", self.name)
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(untagged)]
 #[export_schema]
@@ -247,6 +401,14 @@ impl std::fmt::Display for ProviderTool {
 #[ts(export)]
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ToolConfig {
+    Function(FunctionToolConfig),
+    OpenAICustom(OpenAICustomTool),
+}
+
+#[derive(ts_rs::TS)]
+#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum FunctionToolConfig {
     Static(Arc<StaticToolConfig>),
     Dynamic(DynamicToolConfig),
     Implicit(ImplicitToolConfig),
@@ -342,15 +504,23 @@ pub enum AllowedToolsChoice {
     Explicit,
 }
 
+/// Reference to either a function tool config or an OpenAI custom tool.
+/// Used by the OpenAI provider to iterate over all available tools.
+pub enum ToolConfigRef<'a> {
+    Function(&'a FunctionToolConfig),
+    OpenAICustom(&'a OpenAICustomTool),
+}
+
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ToolCallConfig {
-    pub(crate) static_tools_available: Vec<ToolConfig>,
-    pub(crate) dynamic_tools_available: Vec<ToolConfig>,
+    pub(crate) static_tools_available: Vec<FunctionToolConfig>,
+    pub(crate) dynamic_tools_available: Vec<FunctionToolConfig>,
     pub provider_tools: Vec<ProviderTool>,
+    pub openai_custom_tools: Vec<OpenAICustomTool>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     pub allowed_tools: AllowedTools,
@@ -405,9 +575,7 @@ impl<'a> ToolCallConfigConstructorArgs<'a> {
             function_parallel_tool_calls,
             static_tools,
             dynamic_allowed_tools: dynamic_tool_params.allowed_tools,
-            dynamic_additional_tools: dynamic_tool_params
-                .additional_tools
-                .map(|tools| tools.into_iter().map(Tool::ClientSideFunction).collect()),
+            dynamic_additional_tools: dynamic_tool_params.additional_tools,
             dynamic_tool_choice: dynamic_tool_params.tool_choice,
             dynamic_parallel_tool_calls: dynamic_tool_params.parallel_tool_calls,
             dynamic_provider_tools: dynamic_tool_params.provider_tools,
@@ -466,7 +634,7 @@ impl ToolCallConfig {
         // Build set of all available tool names (static + dynamic)
         let additional_tool_names: HashSet<&str> = dynamic_additional_tools
             .as_ref()
-            .map(|tools| tools.iter().map(Tool::name).collect())
+            .map(|tools| tools.iter().map(|dt| dt.name()).collect())
             .unwrap_or_default();
 
         let all_available_tool_names: HashSet<String> = static_tools
@@ -499,25 +667,33 @@ impl ToolCallConfig {
             }
         }
 
-        let static_tools_available: Vec<ToolConfig> = static_tool_names
+        let static_tools_available: Vec<FunctionToolConfig> = static_tool_names
             .iter()
             .filter_map(|tool_name| {
                 static_tools
                     .get(*tool_name)
-                    .map(|static_tool| ToolConfig::Static(static_tool.clone()))
+                    .map(|static_tool| FunctionToolConfig::Static(static_tool.clone()))
             })
             .collect();
 
         // Get all dynamic tools
-        let dynamic_tools_available: Vec<ToolConfig> = dynamic_additional_tools
-            .into_iter()
-            .flatten()
-            .map(|tool| ToolConfig::Dynamic(tool.into_dynamic_tool_config()))
-            .collect();
+        let mut dynamic_tools_available: Vec<FunctionToolConfig> = Vec::new();
+        let mut openai_custom_tools: Vec<OpenAICustomTool> = Vec::new();
+        if let Some(dynamic_additional_tools) = dynamic_additional_tools {
+            for tool in dynamic_additional_tools {
+                match tool {
+                    Tool::Function(func) => dynamic_tools_available
+                        .push(FunctionToolConfig::Dynamic(func.into_dynamic_tool_config())),
+                    Tool::OpenAICustom(custom_tool) => {
+                        openai_custom_tools.push(custom_tool);
+                    }
+                }
+            }
+        }
 
         let mut tool_display_names = HashSet::new();
 
-        // Check for duplicate tool names.
+        // Check for duplicate tool names among function tools
         for tool in static_tools_available
             .iter()
             .chain(dynamic_tools_available.iter())
@@ -530,6 +706,17 @@ impl ToolCallConfig {
             }
         }
 
+        // Check for duplicate tool names in OpenAI custom tools
+        // and ensure they don't conflict with function tool names
+        for custom_tool in &openai_custom_tools {
+            let duplicate = !tool_display_names.insert(custom_tool.name.as_str());
+            if duplicate {
+                return Err(Error::new(ErrorDetails::DuplicateTool {
+                    name: custom_tool.name.clone(),
+                }));
+            }
+        }
+
         let tool_choice = dynamic_tool_choice.unwrap_or_else(|| function_tool_choice.clone());
 
         // If the tool choice is a specific tool, make sure it's in the list of available tools
@@ -538,11 +725,14 @@ impl ToolCallConfig {
                 .iter()
                 .chain(dynamic_tools_available.iter())
                 .any(|tool| match tool {
-                    ToolConfig::Static(config) => config.name == *tool_name,
-                    ToolConfig::Dynamic(config) => config.name == *tool_name,
-                    ToolConfig::Implicit(_) => false,
-                    ToolConfig::DynamicImplicit(_) => false,
-                });
+                    FunctionToolConfig::Static(config) => config.name == *tool_name,
+                    FunctionToolConfig::Dynamic(config) => config.name == *tool_name,
+                    FunctionToolConfig::Implicit(_) => false,
+                    FunctionToolConfig::DynamicImplicit(_) => false,
+                })
+                || openai_custom_tools
+                    .iter()
+                    .any(|tool| tool.name == *tool_name);
 
             if !tool_found {
                 return Err(ErrorDetails::ToolNotFound {
@@ -557,12 +747,14 @@ impl ToolCallConfig {
         let tool_call_config_option = if static_tools_available.is_empty()
             && dynamic_tools_available.is_empty()
             && dynamic_provider_tools.is_empty()
+            && openai_custom_tools.is_empty()
         {
             None
         } else {
             Some(Self {
                 static_tools_available,
                 dynamic_tools_available,
+                openai_custom_tools,
                 tool_choice,
                 provider_tools: dynamic_provider_tools,
                 parallel_tool_calls,
@@ -573,29 +765,75 @@ impl ToolCallConfig {
         Ok(tool_call_config_option)
     }
 
-    /// Returns an iterator over references to all tools (both static and dynamic)
-    pub fn tools_available(&self) -> impl Iterator<Item = &ToolConfig> {
-        self.static_tools_available
-            .iter()
-            .chain(self.dynamic_tools_available.iter())
+    /// Returns an iterator over all available tools (function tools only).
+    /// Returns an error if OpenAI custom tools are present, as they are not compatible
+    /// with standard function tool iteration.
+    pub fn tools_available(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = &FunctionToolConfig> + '_>, Error> {
+        if !self.openai_custom_tools.is_empty() {
+            return Err(Error::new(ErrorDetails::IncompatibleTool {
+                message: "OpenAI custom tools are not supported by this provider".to_string(),
+            }));
+        }
+        Ok(Box::new(
+            self.static_tools_available
+                .iter()
+                .chain(self.dynamic_tools_available.iter()),
+        ))
     }
 
-    /// Returns an iterator over tools that respects the allowed_tools list.
-    /// - For FunctionDefault and DynamicAllowedTools (a legacy format): returns all tools (same as tools_available)
-    /// - For AllAllowedTools: filters to only tools in the allowed_tools list
-    pub fn strict_tools_available(&self) -> Box<dyn Iterator<Item = &ToolConfig> + '_> {
+    /// Returns an iterator over all available tools including OpenAI custom tools.
+    /// This method is intended for the OpenAI provider only.
+    pub fn tools_available_with_openai_custom(
+        &self,
+    ) -> Box<dyn Iterator<Item = ToolConfigRef<'_>> + '_> {
+        Box::new(
+            self.static_tools_available
+                .iter()
+                .map(ToolConfigRef::Function)
+                .chain(
+                    self.dynamic_tools_available
+                        .iter()
+                        .map(ToolConfigRef::Function),
+                )
+                .chain(
+                    self.openai_custom_tools
+                        .iter()
+                        .map(ToolConfigRef::OpenAICustom),
+                ),
+        )
+    }
+
+    /// Returns tools filtered by allowed_tools list and tool type filter.
+    /// Returns an error if OpenAI custom tools are present, as they are not compatible
+    /// with standard function tool filtering.
+    ///
+    /// # Behavior
+    /// - For FunctionDefault and DynamicAllowedTools modes: returns tools based on type filter
+    /// - For Explicit mode: applies allowed_tools filtering first, then tool type filtering
+    pub fn strict_tools_available(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = &FunctionToolConfig> + '_>, Error> {
+        if !self.openai_custom_tools.is_empty() {
+            return Err(Error::new(ErrorDetails::IncompatibleTool {
+                message: "OpenAI custom tools are not supported by this provider".to_string(),
+            }));
+        }
         match self.allowed_tools.choice {
             #[expect(deprecated)] // DynamicAllowedTools
             AllowedToolsChoice::FunctionDefault | AllowedToolsChoice::DynamicAllowedTools => {
-                // Return all tools (lenient mode)
-                Box::new(self.tools_available())
+                // Return all tools based on type filter (lenient mode)
+                self.tools_available()
             }
             AllowedToolsChoice::Explicit => {
-                // Filter to only allowed tools (strict mode)
-                Box::new(
-                    self.tools_available()
+                // Filter by allowed_tools list, then apply type filter
+                Ok(Box::new(
+                    self.static_tools_available
+                        .iter()
+                        .chain(self.dynamic_tools_available.iter())
                         .filter(|tool| self.allowed_tools.tools.iter().any(|t| t == tool.name())),
-                )
+                ))
             }
         }
     }
@@ -604,19 +842,23 @@ impl ToolCallConfig {
         !(self.static_tools_available.is_empty() && self.dynamic_tools_available.is_empty())
     }
 
-    pub fn get_tool(&self, name: &str) -> Option<&ToolConfig> {
-        self.tools_available().find(|tool_cfg| match tool_cfg {
-            ToolConfig::Static(config) => config.name == name,
-            ToolConfig::Dynamic(config) => config.name == name,
-            ToolConfig::Implicit(_config) => false,
-            ToolConfig::DynamicImplicit(_config) => false,
-        })
+    /// This only gets Function tools and skips OpenAI tools
+    pub fn get_function_tool(&self, name: &str) -> Option<&FunctionToolConfig> {
+        self.static_tools_available
+            .iter()
+            .chain(self.dynamic_tools_available.iter())
+            .find(|tool_cfg| match tool_cfg {
+                FunctionToolConfig::Static(config) => config.name == name,
+                FunctionToolConfig::Dynamic(config) => config.name == name,
+                FunctionToolConfig::Implicit(_config) => false,
+                FunctionToolConfig::DynamicImplicit(_config) => false,
+            })
     }
 
     #[cfg(test)]
     pub fn with_tools_available(
-        static_tools_available: Vec<ToolConfig>,
-        dynamic_tools_available: Vec<ToolConfig>,
+        static_tools_available: Vec<FunctionToolConfig>,
+        dynamic_tools_available: Vec<FunctionToolConfig>,
     ) -> Self {
         Self {
             static_tools_available,
@@ -1026,7 +1268,7 @@ impl ToolCallConfigDatabaseInsert {
     /// // Function has: tools = ["static1"]
     /// // User provides new tools at runtime
     /// ToolCallConfigDatabaseInsert::new_for_test(
-    ///     vec![Tool::ClientSideFunction(dynamic1), Tool::ClientSideFunction(dynamic2)],
+    ///     vec![Tool::Function(dynamic1), Tool::Function(dynamic2)],
     ///     vec![],
     ///     AllowedTools {
     ///         tools: vec![],  // Empty because these are dynamic, not in function config
@@ -1042,7 +1284,7 @@ impl ToolCallConfigDatabaseInsert {
     /// // Function has: tools = ["a", "b"]
     /// // User also provides dynamic tools x, y
     /// ToolCallConfigDatabaseInsert::new_for_test(
-    ///     vec![Tool::ClientSideFunction(x), Tool::ClientSideFunction(y)],
+    ///     vec![Tool::Function(x), Tool::Function(y)],
     ///     vec![],
     ///     AllowedTools {
     ///         tools: vec!["a".to_string(), "b".to_string()],
@@ -1064,8 +1306,9 @@ impl ToolCallConfigDatabaseInsert {
         let tool_config = LegacyToolCallConfigDatabaseInsert {
             tools_available: dynamic_tools
                 .iter()
-                .map(|t| match t {
-                    Tool::ClientSideFunction(csf) => csf.clone(),
+                .filter_map(|t| match t {
+                    Tool::Function(csf) => Some(csf.clone()),
+                    Tool::OpenAICustom(_) => None, // Custom tools not supported in legacy format
                 })
                 .collect(),
             tool_choice: tool_choice.clone(),
@@ -1135,7 +1378,7 @@ impl ToolCallConfigDatabaseInsert {
             .iter()
             .filter_map(|tool_name| {
                 config.tools.get(tool_name).map(|static_tool| {
-                    Tool::ClientSideFunction(FunctionTool {
+                    Tool::Function(FunctionTool {
                         description: static_tool.description.clone(),
                         parameters: static_tool.parameters.value.clone(),
                         name: static_tool.name.clone(),
@@ -1289,7 +1532,7 @@ pub struct LegacyToolCallConfigDatabaseInsert {
 /// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
-#[ts(optional_fields)]
+#[ts(optional_fields, export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[export_schema]
 pub struct DynamicToolParams {
@@ -1300,9 +1543,8 @@ pub struct DynamicToolParams {
 
     /// Tools that the user provided at inference time (not in function config), in addition to the function-configured
     /// tools, that are also allowed.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub additional_tools: Option<Vec<FunctionTool>>,
-
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub additional_tools: Option<Vec<Tool>>,
     /// User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
     /// Optional.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1334,7 +1576,7 @@ impl DynamicToolParams {
     }
 
     #[getter]
-    pub fn additional_tools(&self) -> Option<Vec<FunctionTool>> {
+    pub fn additional_tools(&self) -> Option<Vec<Tool>> {
         self.additional_tools.clone()
     }
 
@@ -1379,16 +1621,7 @@ impl From<ToolCallConfigDatabaseInsert> for DynamicToolParams {
         let additional_tools = if dynamic_tools.is_empty() {
             None
         } else {
-            Some(
-                dynamic_tools
-                    .into_iter()
-                    .map(|tool| match tool {
-                        Tool::ClientSideFunction(client_tool) => client_tool,
-                        // When new Tool variants are added, this will cause a compile error,
-                        // forcing us to handle them explicitly
-                    })
-                    .collect(),
-            )
+            Some(dynamic_tools)
         };
 
         DynamicToolParams {
@@ -1404,7 +1637,7 @@ impl From<ToolCallConfigDatabaseInsert> for DynamicToolParams {
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct BatchDynamicToolParams {
     pub allowed_tools: Option<Vec<Option<Vec<String>>>>,
-    pub additional_tools: Option<Vec<Option<Vec<FunctionTool>>>>,
+    pub additional_tools: Option<Vec<Option<Vec<Tool>>>>,
     pub tool_choice: Option<Vec<Option<ToolChoice>>>,
     pub parallel_tool_calls: Option<Vec<Option<bool>>>,
     pub provider_tools: Option<Vec<Option<Vec<ProviderTool>>>>,
@@ -1542,25 +1775,40 @@ impl InferenceResponseToolCall {
     /// First, it finds the ToolConfig for the ToolCall
     /// Then, it validates the ToolCall arguments against the ToolConfig
     pub async fn new(tool_call: ToolCall, tool_cfg: Option<&ToolCallConfig>) -> Self {
-        let tool = tool_cfg.and_then(|t| t.get_tool(&tool_call.name));
-        let parsed_name = match tool {
-            Some(_) => Some(tool_call.name.clone()),
-            None => None,
+        // Check if this is a function tool
+        let function_tool = tool_cfg.and_then(|t| t.get_function_tool(&tool_call.name));
+
+        // Check if this is a custom tool
+        let is_custom_tool = tool_cfg
+            .map(|t| {
+                t.openai_custom_tools
+                    .iter()
+                    .any(|ct| ct.name == tool_call.name)
+            })
+            .unwrap_or(false);
+
+        // Set parsed_name if tool exists (either function or custom)
+        let parsed_name = if function_tool.is_some() || is_custom_tool {
+            Some(tool_call.name.clone())
+        } else {
+            None
         };
-        let parsed_arguments = match &tool {
-            Some(tool) => {
-                if let Ok(arguments) = serde_json::from_str(&tool_call.arguments) {
-                    if tool.validate_arguments(&arguments).await.is_ok() {
-                        Some(arguments)
-                    } else {
-                        None
-                    }
+
+        // Validate arguments only for function tools (custom tools don't use JSON schemas)
+        let parsed_arguments = if let Some(tool) = function_tool {
+            if let Ok(arguments) = serde_json::from_str(&tool_call.arguments) {
+                if tool.validate_arguments(&arguments).await.is_ok() {
+                    Some(arguments)
                 } else {
                     None
                 }
+            } else {
+                None
             }
-            None => None,
+        } else {
+            None
         };
+
         Self {
             arguments: parsed_arguments,
             id: tool_call.id,
@@ -1576,10 +1824,11 @@ impl ToolCallConfig {
     #[expect(clippy::missing_panics_doc)]
     pub fn implicit_from_value(value: &Value) -> Self {
         let parameters = StaticJSONSchema::from_value(value.clone()).unwrap();
-        let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });
+        let implicit_tool_config = FunctionToolConfig::Implicit(ImplicitToolConfig { parameters });
         Self {
             static_tools_available: vec![implicit_tool_config],
             dynamic_tools_available: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
             parallel_tool_calls: None,
             provider_tools: vec![],
@@ -1670,49 +1919,51 @@ where
 pub const IMPLICIT_TOOL_NAME: &str = "respond";
 pub const IMPLICIT_TOOL_DESCRIPTION: &str = "Respond to the user using the output schema provided.";
 
-impl ToolConfig {
+impl FunctionToolConfig {
     pub async fn validate_arguments(&self, arguments: &Value) -> Result<(), Error> {
         match self {
-            ToolConfig::Static(config) => config.parameters.validate(arguments),
-            ToolConfig::Dynamic(config) => config.parameters.validate(arguments).await,
-            ToolConfig::Implicit(config) => config.parameters.validate(arguments),
-            ToolConfig::DynamicImplicit(config) => config.parameters.validate(arguments).await,
+            FunctionToolConfig::Static(config) => config.parameters.validate(arguments),
+            FunctionToolConfig::Dynamic(config) => config.parameters.validate(arguments).await,
+            FunctionToolConfig::Implicit(config) => config.parameters.validate(arguments),
+            FunctionToolConfig::DynamicImplicit(config) => {
+                config.parameters.validate(arguments).await
+            }
         }
     }
 
     pub fn description(&self) -> &str {
         match self {
-            ToolConfig::Static(config) => &config.description,
-            ToolConfig::Dynamic(config) => &config.description,
-            ToolConfig::Implicit(_config) => IMPLICIT_TOOL_DESCRIPTION,
-            ToolConfig::DynamicImplicit(_config) => IMPLICIT_TOOL_DESCRIPTION,
+            FunctionToolConfig::Static(config) => &config.description,
+            FunctionToolConfig::Dynamic(config) => &config.description,
+            FunctionToolConfig::Implicit(_config) => IMPLICIT_TOOL_DESCRIPTION,
+            FunctionToolConfig::DynamicImplicit(_config) => IMPLICIT_TOOL_DESCRIPTION,
         }
     }
 
     pub fn parameters(&self) -> &Value {
         match self {
-            ToolConfig::Static(config) => &config.parameters.value,
-            ToolConfig::Dynamic(config) => &config.parameters.value,
-            ToolConfig::Implicit(config) => &config.parameters.value,
-            ToolConfig::DynamicImplicit(config) => &config.parameters.value,
+            FunctionToolConfig::Static(config) => &config.parameters.value,
+            FunctionToolConfig::Dynamic(config) => &config.parameters.value,
+            FunctionToolConfig::Implicit(config) => &config.parameters.value,
+            FunctionToolConfig::DynamicImplicit(config) => &config.parameters.value,
         }
     }
 
     pub fn name(&self) -> &str {
         match self {
-            ToolConfig::Static(config) => &config.name,
-            ToolConfig::Dynamic(config) => &config.name,
-            ToolConfig::Implicit(_config) => IMPLICIT_TOOL_NAME,
-            ToolConfig::DynamicImplicit(_config) => IMPLICIT_TOOL_NAME,
+            FunctionToolConfig::Static(config) => &config.name,
+            FunctionToolConfig::Dynamic(config) => &config.name,
+            FunctionToolConfig::Implicit(_config) => IMPLICIT_TOOL_NAME,
+            FunctionToolConfig::DynamicImplicit(_config) => IMPLICIT_TOOL_NAME,
         }
     }
 
     pub fn strict(&self) -> bool {
         match self {
-            ToolConfig::Static(config) => config.strict,
-            ToolConfig::Dynamic(config) => config.strict,
-            ToolConfig::Implicit(_config) => false,
-            ToolConfig::DynamicImplicit(_config) => false,
+            FunctionToolConfig::Static(config) => config.strict,
+            FunctionToolConfig::Dynamic(config) => config.strict,
+            FunctionToolConfig::Implicit(_config) => false,
+            FunctionToolConfig::DynamicImplicit(_config) => false,
         }
     }
 }
@@ -1726,7 +1977,7 @@ fn tool_call_config_to_legacy_tool_database_insert(
             .iter()
             .chain(tool_call_config.dynamic_tools_available.iter())
             .cloned()
-            .map(ToolConfig::into)
+            .map(FunctionToolConfig::into)
             .collect(),
         tool_choice: tool_call_config.tool_choice.clone(),
         parallel_tool_calls: tool_call_config.parallel_tool_calls,
@@ -1734,8 +1985,8 @@ fn tool_call_config_to_legacy_tool_database_insert(
 }
 
 // For now, this is required to convert to LegacyToolCallConfigDatabaseInsert for writing to the databse
-impl From<ToolConfig> for FunctionTool {
-    fn from(tool_config: ToolConfig) -> Self {
+impl From<FunctionToolConfig> for FunctionTool {
+    fn from(tool_config: FunctionToolConfig) -> Self {
         FunctionTool {
             description: tool_config.description().to_string(),
             parameters: tool_config.parameters().clone(),
@@ -1753,6 +2004,7 @@ impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
             // because we want these to be specified by the function and eventually function version.
             static_tools_available: _,
             dynamic_tools_available,
+            openai_custom_tools,
             allowed_tools,
             tool_choice,
             parallel_tool_calls,
@@ -1763,6 +2015,7 @@ impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
             dynamic_tools: dynamic_tools_available
                 .into_iter()
                 .map(Tool::from)
+                .chain(openai_custom_tools.into_iter().map(Tool::OpenAICustom))
                 .collect(),
             dynamic_provider_tools: provider_tools,
             allowed_tools,
@@ -1774,7 +2027,16 @@ impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
 
 impl From<ToolConfig> for Tool {
     fn from(tool_config: ToolConfig) -> Self {
-        Self::ClientSideFunction(FunctionTool {
+        match tool_config {
+            ToolConfig::OpenAICustom(config) => Tool::OpenAICustom(config),
+            ToolConfig::Function(tool) => tool.into(),
+        }
+    }
+}
+
+impl From<FunctionToolConfig> for Tool {
+    fn from(tool_config: FunctionToolConfig) -> Self {
+        Self::Function(FunctionTool {
             description: tool_config.description().to_string(),
             parameters: tool_config.parameters().clone(),
             name: tool_config.name().to_string(),
@@ -1785,12 +2047,13 @@ impl From<ToolConfig> for Tool {
 
 pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
     let tool_schema = DynamicJSONSchema::new(schema);
-    let implicit_tool = ToolConfig::DynamicImplicit(DynamicImplicitToolConfig {
+    let implicit_tool = FunctionToolConfig::DynamicImplicit(DynamicImplicitToolConfig {
         parameters: tool_schema,
     });
     ToolCallConfig {
         static_tools_available: vec![],
         dynamic_tools_available: vec![implicit_tool],
+        openai_custom_tools: vec![],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
         provider_tools: vec![],
@@ -1919,19 +2182,20 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
 
 /// For use in initializing JSON functions
 /// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments
-pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallConfig {
-    create_implicit_tool_call_config_with_allowed_tools(schema, AllowedTools::default())
+pub fn create_json_mode_tool_call_config(schema: StaticJSONSchema) -> ToolCallConfig {
+    create_json_mode_tool_call_config_with_allowed_tools(schema, AllowedTools::default())
 }
 
-pub fn create_implicit_tool_call_config_with_allowed_tools(
+pub fn create_json_mode_tool_call_config_with_allowed_tools(
     schema: StaticJSONSchema,
     allowed_tools: AllowedTools,
 ) -> ToolCallConfig {
-    let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig { parameters: schema });
+    let implicit_tool = FunctionToolConfig::Implicit(ImplicitToolConfig { parameters: schema });
     ToolCallConfig {
         static_tools_available: vec![implicit_tool],
         dynamic_tools_available: vec![],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
+        openai_custom_tools: vec![],
         parallel_tool_calls: None,
         provider_tools: vec![],
         allowed_tools,
@@ -2018,17 +2282,20 @@ mod tests {
         ))
         .unwrap()
         .unwrap();
-        assert_eq!(tool_call_config.tools_available().count(), 2);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 2);
 
         // strict_tools_available should return all tools (FunctionDefault mode)
-        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            2
+        );
         assert!(matches!(
             tool_call_config.allowed_tools.choice,
             AllowedToolsChoice::FunctionDefault
         ));
         assert_eq!(tool_call_config.tool_choice, ToolChoice::Auto);
         assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
-        let tools: Vec<_> = tool_call_config.tools_available().collect();
+        let tools: Vec<_> = tool_call_config.tools_available().unwrap().collect();
         assert!(tools[0].strict());
         assert!(!tools[1].strict());
 
@@ -2067,7 +2334,7 @@ mod tests {
         ))
         .unwrap()
         .unwrap();
-        assert_eq!(tool_call_config.tools_available().count(), 2);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 2);
         assert_eq!(
             tool_call_config.tool_choice,
             ToolChoice::Specific("get_temperature".to_string())
@@ -2099,12 +2366,12 @@ mod tests {
         // All function tools are still included, plus the dynamic tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![FunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({}),
                 strict: false,
-            }]),
+            })]),
             ..Default::default()
         };
         let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
@@ -2117,27 +2384,30 @@ mod tests {
         .unwrap()
         .unwrap();
         // Should have all function tools (get_temperature, query_articles) + dynamic tool (establish_campground)
-        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "get_temperature"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "query_articles"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "establish_campground"));
 
         // We pass a list of a single allowed tool and then configure a new tool
         // All function tools are still included, plus the dynamic tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![FunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({}),
                 strict: false,
-            }]),
+            })]),
             parallel_tool_calls: Some(false),
             ..Default::default()
         };
@@ -2151,15 +2421,18 @@ mod tests {
         .unwrap()
         .unwrap();
         // Should have all function tools + dynamic tool
-        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "get_temperature"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "query_articles"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "establish_campground"));
         assert_eq!(tool_call_config.parallel_tool_calls, Some(false));
 
@@ -2167,12 +2440,12 @@ mod tests {
         // All function tools are still included, plus the dynamic tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![FunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({}),
                 strict: false,
-            }]),
+            })]),
             tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
@@ -2186,9 +2459,10 @@ mod tests {
         .unwrap()
         .unwrap();
         // Should have all function tools + dynamic tool
-        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "establish_campground"));
         assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
         assert_eq!(
@@ -2278,12 +2552,12 @@ mod tests {
             Some(true),
             &TOOLS,
             DynamicToolParams {
-                additional_tools: Some(vec![FunctionTool {
+                additional_tools: Some(vec![Tool::Function(FunctionTool {
                     name: "establish_campground".to_string(),
                     description: "Establish a campground".to_string(),
                     parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}),
                     strict: false,
-                }]),
+                })]),
                 ..Default::default()
             },
         ))
@@ -2313,6 +2587,130 @@ mod tests {
             inference_response_tool_call.arguments,
             Some(json!({"location": "Lucky Dog"}))
         );
+    }
+
+    #[tokio::test]
+    async fn test_inference_response_tool_call_with_custom_tools() {
+        // Create a ToolCallConfig with a custom tool
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &EMPTY_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &EMPTY_TOOLS,
+            DynamicToolParams {
+                additional_tools: Some(vec![Tool::OpenAICustom(OpenAICustomTool {
+                    name: "code_generator".to_string(),
+                    description: Some("Generates code snippets".to_string()),
+                    format: Some(OpenAICustomToolFormat::Text),
+                })]),
+                ..Default::default()
+            },
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Valid custom tool call - name should be validated
+        let tool_call = ToolCall {
+            name: "code_generator".to_string(),
+            arguments: "{\"description\": \"Print hello world\"}".to_string(),
+            id: "ctc_123".to_string(),
+        };
+        let inference_response_tool_call =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+
+        // The parsed_name should be set since this is a valid custom tool
+        assert_eq!(
+            inference_response_tool_call.name,
+            Some("code_generator".to_string())
+        );
+        assert_eq!(inference_response_tool_call.raw_name, "code_generator");
+        assert_eq!(
+            inference_response_tool_call.raw_arguments,
+            "{\"description\": \"Print hello world\"}"
+        );
+        assert_eq!(inference_response_tool_call.id, "ctc_123");
+        // Custom tools don't validate arguments against JSON schemas, so parsed_arguments should be None
+        assert_eq!(inference_response_tool_call.arguments, None);
+
+        // Invalid custom tool name - name should not be validated
+        let tool_call = ToolCall {
+            name: "not_a_custom_tool".to_string(),
+            arguments: "{\"description\": \"Test\"}".to_string(),
+            id: "ctc_456".to_string(),
+        };
+        let inference_response_tool_call =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+
+        // The parsed_name should be None since this tool doesn't exist
+        assert_eq!(inference_response_tool_call.name, None);
+        assert_eq!(inference_response_tool_call.raw_name, "not_a_custom_tool");
+        assert_eq!(
+            inference_response_tool_call.raw_arguments,
+            "{\"description\": \"Test\"}"
+        );
+        assert_eq!(inference_response_tool_call.id, "ctc_456");
+        assert_eq!(inference_response_tool_call.arguments, None);
+
+        // Test with both function tools and custom tools
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            DynamicToolParams {
+                additional_tools: Some(vec![Tool::OpenAICustom(OpenAICustomTool {
+                    name: "calculator".to_string(),
+                    description: Some("Performs calculations".to_string()),
+                    format: Some(OpenAICustomToolFormat::Grammar {
+                        grammar: OpenAIGrammarDefinition {
+                            syntax: OpenAIGrammarSyntax::Lark,
+                            definition: "start: NUMBER".to_string(),
+                        },
+                    }),
+                })]),
+                ..Default::default()
+            },
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Valid function tool should still work
+        let tool_call = ToolCall {
+            name: "get_temperature".to_string(),
+            arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
+            id: "123".to_string(),
+        };
+        let inference_response_tool_call =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+        assert_eq!(
+            inference_response_tool_call.name,
+            Some("get_temperature".to_string())
+        );
+        assert_eq!(
+            inference_response_tool_call.arguments,
+            Some(json!({
+                "location": "San Francisco",
+                "unit": "celsius"
+            }))
+        );
+
+        // Valid custom tool should also work
+        let tool_call = ToolCall {
+            name: "calculator".to_string(),
+            arguments: "42".to_string(),
+            id: "ctc_789".to_string(),
+        };
+        let inference_response_tool_call =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+        assert_eq!(
+            inference_response_tool_call.name,
+            Some("calculator".to_string())
+        );
+        assert_eq!(inference_response_tool_call.raw_name, "calculator");
+        assert_eq!(inference_response_tool_call.raw_arguments, "42");
+        assert_eq!(inference_response_tool_call.id, "ctc_789");
+        // Custom tools don't validate arguments, so parsed_arguments is None
+        assert_eq!(inference_response_tool_call.arguments, None);
     }
 
     #[test]
@@ -2417,7 +2815,7 @@ mod tests {
     async fn test_duplicate_tool_names_error() {
         // Test case where dynamic tool params add a tool with the same name as a static tool
         let dynamic_tool_params = DynamicToolParams {
-            additional_tools: Some(vec![FunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "get_temperature".to_string(), // Same name as static tool
                 description: "Another temperature tool".to_string(),
                 parameters: json!({
@@ -2428,7 +2826,74 @@ mod tests {
                     "required": ["city"]
                 }),
                 strict: false,
-            }]),
+            })]),
+            ..Default::default()
+        };
+
+        let err = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        ))
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            ErrorDetails::DuplicateTool {
+                name: "get_temperature".to_string()
+            }
+            .into()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_custom_tool_names_error() {
+        // Test case where two custom tools have the same name
+        let dynamic_tool_params = DynamicToolParams {
+            additional_tools: Some(vec![
+                Tool::OpenAICustom(OpenAICustomTool {
+                    name: "custom_tool".to_string(),
+                    description: Some("First custom tool".to_string()),
+                    format: None,
+                }),
+                Tool::OpenAICustom(OpenAICustomTool {
+                    name: "custom_tool".to_string(), // Duplicate name
+                    description: Some("Second custom tool".to_string()),
+                    format: Some(OpenAICustomToolFormat::Text),
+                }),
+            ]),
+            ..Default::default()
+        };
+
+        let err = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &EMPTY_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        ))
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            ErrorDetails::DuplicateTool {
+                name: "custom_tool".to_string()
+            }
+            .into()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_custom_tool_conflicts_with_function_tool() {
+        // Test case where a custom tool has the same name as a function tool
+        let dynamic_tool_params = DynamicToolParams {
+            additional_tools: Some(vec![Tool::OpenAICustom(OpenAICustomTool {
+                name: "get_temperature".to_string(), // Same name as static function tool
+                description: Some("Custom temperature tool".to_string()),
+                format: None,
+            })]),
             ..Default::default()
         };
 
@@ -2515,12 +2980,12 @@ mod tests {
                 "get_temperature".to_string(),
                 "establish_campground".to_string(),
             ]),
-            additional_tools: Some(vec![FunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
                 strict: false,
-            }]),
+            })]),
             ..Default::default()
         };
 
@@ -2537,28 +3002,36 @@ mod tests {
         // Should have all function tools plus dynamic tools
         // function_tools: get_temperature, query_articles
         // dynamic tools: establish_campground
-        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
 
         // Verify the static tools are included
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "get_temperature"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "query_articles"));
 
         // Verify the dynamic tool is included
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "establish_campground"));
 
         // strict_tools_available should filter to only allowed_tools (AllAllowedTools mode)
-        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            2
+        );
         assert!(tool_call_config
             .strict_tools_available()
+            .unwrap()
             .any(|t| t.name() == "get_temperature"));
         assert!(tool_call_config
             .strict_tools_available()
+            .unwrap()
             .any(|t| t.name() == "establish_campground"));
     }
 
@@ -2570,12 +3043,12 @@ mod tests {
                 "get_temperature".to_string(),
                 "nonexistent_tool".to_string(),
             ]),
-            additional_tools: Some(vec![FunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({"type": "object"}),
                 strict: false,
-            }]),
+            })]),
             ..Default::default()
         };
 
@@ -2603,12 +3076,12 @@ mod tests {
         // when allowed_tools is explicitly set (AllAllowedTools mode)
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![FunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
                 strict: false,
-            }]),
+            })]),
             ..Default::default()
         };
 
@@ -2625,15 +3098,18 @@ mod tests {
         // All tool definitions should be available (sent to provider)
         // function_tools: get_temperature, query_articles
         // dynamic tools: establish_campground
-        assert_eq!(tool_call_config.tools_available().count(), 3);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "get_temperature"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "query_articles"));
         assert!(tool_call_config
             .tools_available()
+            .unwrap()
             .any(|t| t.name() == "establish_campground"));
 
         // But only get_temperature should be in allowed_tools
@@ -2641,17 +3117,20 @@ mod tests {
         assert!(tool_call_config
             .allowed_tools
             .tools
-            .iter()
-            .any(|t| t == "get_temperature"));
+            .contains(&"get_temperature".to_string()));
         assert!(matches!(
             tool_call_config.allowed_tools.choice,
             AllowedToolsChoice::Explicit
         ));
 
         // strict_tools_available should filter to only allowed_tools (AllAllowedTools mode)
-        assert_eq!(tool_call_config.strict_tools_available().count(), 1);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            1
+        );
         assert!(tool_call_config
             .strict_tools_available()
+            .unwrap()
             .any(|t| t.name() == "get_temperature"));
     }
 
@@ -2680,7 +3159,7 @@ mod tests {
         let json = json!({
             "baz": "test_value",
             "dynamic_tools": [
-                r#"{"type":"client_side_function","name":"ragged_tool","description":"A ragged tool","parameters":{"type":"string"},"strict":true}"#
+                r#"{"type":"function","name":"ragged_tool","description":"A ragged tool","parameters":{"type":"string"},"strict":true}"#
             ],
             "dynamic_provider_tools": [],
             "allowed_tools": r#"{"tools":["ragged_tool"],"choice":"function_default"}"#,
@@ -2700,10 +3179,7 @@ mod tests {
         assert_eq!(tool_info.dynamic_tools.len(), 1);
         assert_eq!(tool_info.dynamic_tools[0].name(), "ragged_tool");
         assert_eq!(tool_info.dynamic_provider_tools.len(), 0);
-        assert_eq!(
-            tool_info.allowed_tools.tools,
-            vec!["ragged_tool".to_string()]
-        );
+        assert_eq!(tool_info.allowed_tools.tools, vec!["ragged_tool"]);
         assert_eq!(
             tool_info.tool_choice,
             ToolChoice::Specific("ragged_tool".to_string())
@@ -2817,7 +3293,7 @@ mod tests {
         let json = json!({
             "baz": "test",
             "dynamic_tools": [
-                r#"{"type":"client_side_function","description":"A test tool","parameters":{"type":"object"}}"#
+                r#"{"type":"function","description":"A test tool","parameters":{"type":"object"}}"#
             ],
             "dynamic_provider_tools": [],
             "allowed_tools": r#"{"tools":["test_tool"],"choice":"function_default"}"#,
@@ -2963,7 +3439,7 @@ mod tests {
         let json = json!({
             "baz": "test",
             "dynamic_tools": [
-                r#"{"type":"client_side_function","name":"","description":"A test tool","parameters":{"type":"object"}}"#
+                r#"{"type":"function","name":"","description":"A test tool","parameters":{"type":"object"}}"#
             ],
             "dynamic_provider_tools": [],
             "allowed_tools": r#"{"tools":[""],"choice":"function_default"}"#,
@@ -2985,7 +3461,7 @@ mod tests {
         let json = json!({
             "baz": "test",
             "dynamic_tools": [
-                r#"{"type":"client_side_function","name":"specific_tool","description":"A specific tool","parameters":{"type":"object"}}"#
+                r#"{"type":"function","name":"specific_tool","description":"A specific tool","parameters":{"type":"object"}}"#
             ],
             "dynamic_provider_tools": [],
             "allowed_tools": r#"{"tools":["specific_tool"],"choice":"function_default"}"#,
@@ -3011,7 +3487,7 @@ mod tests {
         let json = json!({
             "baz": "test",
             "dynamic_tools": [
-                r#"{"type":"client_side_function","name":"valid_tool","description":"A valid tool","parameters":{"type":"object"}}"#,
+                r#"{"type":"function","name":"valid_tool","description":"A valid tool","parameters":{"type":"object"}}"#,
                 r#"{"type":"invalid_type","name":"invalid_tool"}"#
             ],
             "dynamic_provider_tools": [],
@@ -3142,17 +3618,18 @@ mod tests {
         // Test that FunctionDefault returns all available tools
         let config = ToolCallConfig {
             static_tools_available: vec![
-                ToolConfig::Static(TOOLS.get("get_temperature").unwrap().clone()),
-                ToolConfig::Static(TOOLS.get("query_articles").unwrap().clone()),
+                FunctionToolConfig::Static(TOOLS.get("get_temperature").unwrap().clone()),
+                FunctionToolConfig::Static(TOOLS.get("query_articles").unwrap().clone()),
             ],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools::default(), // FunctionDefault
         };
 
-        let tools: Vec<_> = config.strict_tools_available().collect();
+        let tools: Vec<_> = config.strict_tools_available().unwrap().collect();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].name(), "get_temperature");
         assert_eq!(tools[1].name(), "query_articles");
@@ -3163,20 +3640,21 @@ mod tests {
         // Test that AllAllowedTools filters to the specified subset
         let config = ToolCallConfig {
             static_tools_available: vec![
-                ToolConfig::Static(TOOLS.get("get_temperature").unwrap().clone()),
-                ToolConfig::Static(TOOLS.get("query_articles").unwrap().clone()),
+                FunctionToolConfig::Static(TOOLS.get("get_temperature").unwrap().clone()),
+                FunctionToolConfig::Static(TOOLS.get("query_articles").unwrap().clone()),
             ],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
-                tools: vec!["get_temperature".to_string()],
+                tools: vec!["get_temperature".to_string()].into_iter().collect(),
                 choice: AllowedToolsChoice::Explicit,
             },
         };
 
-        let tools: Vec<_> = config.strict_tools_available().collect();
+        let tools: Vec<_> = config.strict_tools_available().unwrap().collect();
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0].name(), "get_temperature");
     }
@@ -3209,13 +3687,17 @@ mod tests {
         .unwrap();
 
         // Should have 2 tools available (both get_temperature and query_articles)
-        assert_eq!(tool_call_config.tools_available().count(), 2);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 2);
 
         // Both should be in strict_tools_available since they're in allowed_tools
-        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            2
+        );
 
         let tool_names: Vec<_> = tool_call_config
             .tools_available()
+            .unwrap()
             .map(|t| t.name())
             .collect();
         assert!(tool_names.contains(&"get_temperature"));
@@ -3249,8 +3731,11 @@ mod tests {
         .unwrap();
 
         // Should have 2 tools available (both from config via allowed_tools)
-        assert_eq!(tool_call_config.tools_available().count(), 2);
-        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 2);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            2
+        );
     }
 
     #[tokio::test]
@@ -3279,8 +3764,11 @@ mod tests {
         .unwrap()
         .unwrap();
 
-        assert_eq!(tool_call_config.tools_available().count(), 2);
-        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 2);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            2
+        );
 
         // Verify choice is AllAllowedTools
         assert!(matches!(
@@ -3301,12 +3789,12 @@ mod tests {
                 "query_articles".to_string(),       // config-only
                 "establish_campground".to_string(), // dynamic
             ]),
-            additional_tools: Some(vec![FunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "establish_campground".to_string(),
                 description: "Establish a campground".to_string(),
                 parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
                 strict: false,
-            }]),
+            })]),
             ..Default::default()
         };
 
@@ -3321,11 +3809,15 @@ mod tests {
         .unwrap();
 
         // Should have 3 tools: get_temperature (function), query_articles (config-only), establish_campground (dynamic)
-        assert_eq!(tool_call_config.tools_available().count(), 3);
-        assert_eq!(tool_call_config.strict_tools_available().count(), 3);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 3);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            3
+        );
 
         let tool_names: Vec<_> = tool_call_config
             .tools_available()
+            .unwrap()
             .map(|t| t.name())
             .collect();
         assert!(tool_names.contains(&"get_temperature"));
@@ -3348,8 +3840,11 @@ mod tests {
         .unwrap();
 
         // Should have all function tools
-        assert_eq!(tool_call_config.tools_available().count(), 2);
-        assert_eq!(tool_call_config.strict_tools_available().count(), 2);
+        assert_eq!(tool_call_config.tools_available().unwrap().count(), 2);
+        assert_eq!(
+            tool_call_config.strict_tools_available().unwrap().count(),
+            2
+        );
 
         // Should be FunctionDefault mode
         assert!(matches!(
@@ -3358,214 +3853,1039 @@ mod tests {
         ));
     }
 
-    mod tool_params_conversion_tests {
-        use super::*;
+    // ============================================================================
+    // Tests for OpenAI Custom Tools (DynamicTool wrapper and Tool::Custom variant)
+    // ============================================================================
 
-        fn create_test_tool(name: &str, strict: bool) -> FunctionTool {
-            FunctionTool {
-                name: name.to_string(),
-                description: format!("Description for {name}"),
-                parameters: json!({"type": "object", "properties": {"input": {"type": "string"}}}),
-                strict,
+    /// Test DynamicTool deserialization with untagged (legacy) format for backward compatibility
+    #[test]
+    fn test_dynamic_tool_deserialize_untagged_function() {
+        let json = json!({
+            "name": "legacy_tool",
+            "description": "A tool in legacy format",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "input": {"type": "string"}
+                }
+            },
+            "strict": false
+        });
+
+        let result: Tool = serde_json::from_value(json).unwrap();
+        assert!(matches!(result, Tool::Function(_)));
+        if let Tool::Function(func) = result {
+            assert_eq!(func.name, "legacy_tool");
+            assert_eq!(func.description, "A tool in legacy format");
+            assert!(!func.strict);
+        }
+    }
+
+    /// Test DynamicTool deserialization with new tagged format
+    #[test]
+    fn test_dynamic_tool_deserialize_tagged_formats() {
+        // Test tagged function format
+        let function_json = json!({
+            "type": "function",
+            "name": "tagged_function",
+            "description": "A function tool with tag",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "arg": {"type": "string"}
+                }
+            },
+            "strict": true
+        });
+
+        let result: Tool = serde_json::from_value(function_json).unwrap();
+        assert!(matches!(result, Tool::Function(_)));
+        assert!(result.is_function());
+        assert!(!result.is_custom());
+
+        // Test tagged custom format
+        let custom_json = json!({
+            "type": "openai_custom",
+            "name": "custom_tool",
+            "description": "A custom tool",
+            "format": {
+                "type": "text"
+            }
+        });
+
+        let result: Tool = serde_json::from_value(custom_json).unwrap();
+        assert!(matches!(result, Tool::OpenAICustom(_)));
+        assert!(result.is_custom());
+        assert!(!result.is_function());
+    }
+
+    /// Test DynamicTool with various custom tool formats
+    #[test]
+    fn test_dynamic_tool_custom_variants() {
+        // Text format
+        let text_json = json!({
+            "type": "openai_custom",
+            "name": "text_tool",
+            "format": {
+                "type": "text"
+            }
+        });
+        let result: Tool = serde_json::from_value(text_json).unwrap();
+        if let Tool::OpenAICustom(custom) = result {
+            assert_eq!(custom.name, "text_tool");
+            assert!(matches!(custom.format, Some(OpenAICustomToolFormat::Text)));
+        } else {
+            panic!("Expected Tool::Custom");
+        }
+
+        // Lark grammar format
+        let lark_json = json!({
+            "type": "openai_custom",
+            "name": "lark_tool",
+            "description": "Uses Lark grammar",
+            "format": {
+                "type": "grammar",
+                "grammar": {
+                    "syntax": "lark",
+                    "definition": "start: \"hello\""
+                }
+            }
+        });
+        let result: Tool = serde_json::from_value(lark_json).unwrap();
+        if let Tool::OpenAICustom(custom) = result {
+            assert_eq!(custom.name, "lark_tool");
+            assert_eq!(custom.description, Some("Uses Lark grammar".to_string()));
+            if let Some(OpenAICustomToolFormat::Grammar { grammar }) = custom.format {
+                assert!(matches!(grammar.syntax, OpenAIGrammarSyntax::Lark));
+                assert_eq!(grammar.definition, "start: \"hello\"");
+            } else {
+                panic!("Expected Grammar format");
             }
         }
 
-        #[test]
-        fn test_tool_partitioning() {
-            // Test 1: Only static tools (all match function config)
-            // Static tools are NOT stored in dynamic_tools, only their names in allowed_tools
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![], // No dynamic tools - these are static from function config
-                vec![],
-                AllowedTools {
-                    tools: vec!["tool1".to_string(), "tool2".to_string()],
-                    #[expect(deprecated)]
-                    choice: AllowedToolsChoice::DynamicAllowedTools, // Explicit list
-                },
-                ToolChoice::Required,
-                Some(false),
-            );
-            let result: DynamicToolParams = db_insert.into();
-            assert_eq!(
-                result.allowed_tools,
-                Some(vec!["tool1".to_string(), "tool2".to_string()])
-            );
-            assert_eq!(result.additional_tools, None);
-
-            // Test 2: Only dynamic tools (none match function config)
-            // Dynamic tools are stored in dynamic_tools, allowed_tools uses function defaults
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![
-                    Tool::ClientSideFunction(create_test_tool("dynamic1", false)),
-                    Tool::ClientSideFunction(create_test_tool("dynamic2", true)),
-                ],
-                vec![],
-                AllowedTools {
-                    tools: vec![], // Empty, will use function's defaults (static1)
-                    choice: AllowedToolsChoice::FunctionDefault, // Use function defaults
-                },
-                ToolChoice::None,
-                Some(true),
-            );
-            let result: DynamicToolParams = db_insert.into();
-            assert_eq!(result.allowed_tools, None);
-            assert_eq!(result.additional_tools.as_ref().unwrap().len(), 2);
-            assert_eq!(
-                result.additional_tools.as_ref().unwrap()[0].name,
-                "dynamic1"
-            );
-            assert_eq!(
-                result.additional_tools.as_ref().unwrap()[1].name,
-                "dynamic2"
-            );
-
-            // Test 3: Mixed static and dynamic tools
-            // Static tools (a, b) go in allowed_tools, dynamic tools (x, y) go in dynamic_tools
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![
-                    Tool::ClientSideFunction(create_test_tool("x", true)),
-                    Tool::ClientSideFunction(create_test_tool("y", true)),
-                ],
-                vec![],
-                AllowedTools {
-                    tools: vec!["a".to_string(), "b".to_string()], // Only static tools
-                    choice: AllowedToolsChoice::Explicit,
-                },
-                ToolChoice::Auto,
-                None,
-            );
-            let result: DynamicToolParams = db_insert.into();
-            assert_eq!(
-                result.allowed_tools,
-                Some(vec!["a".to_string(), "b".to_string()])
-            );
-            let additional = result.additional_tools.unwrap();
-            assert_eq!(additional.len(), 2);
-            assert_eq!(additional[0].name, "x");
-            assert_eq!(additional[1].name, "y");
-            assert!(additional[0].strict);
-            assert!(additional[1].strict);
-
-            // Test 4: Empty tools list
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![],
-                vec![],
-                AllowedTools {
-                    tools: vec![],
-                    choice: AllowedToolsChoice::FunctionDefault,
-                },
-                ToolChoice::None,
-                None,
-            );
-            let result: DynamicToolParams = db_insert.into();
-            assert_eq!(result.allowed_tools, None);
-            assert_eq!(result.additional_tools, None);
-
-            // Test 5: Chat function with no tools in config, all provided dynamically
-            // Function has no static tools, so allowed_tools should be None (use function defaults)
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![
-                    Tool::ClientSideFunction(create_test_tool("tool1", false)),
-                    Tool::ClientSideFunction(create_test_tool("tool2", true)),
-                ],
-                vec![],
-                AllowedTools {
-                    tools: vec![], // Function has no defaults
-                    choice: AllowedToolsChoice::FunctionDefault,
-                },
-                ToolChoice::Auto,
-                None,
-            );
-            let result: DynamicToolParams = db_insert.into();
-            assert_eq!(result.allowed_tools, None);
-            assert_eq!(result.additional_tools.as_ref().unwrap().len(), 2);
+        // Regex grammar format
+        let regex_json = json!({
+            "type": "openai_custom",
+            "name": "regex_tool",
+            "format": {
+                "type": "grammar",
+                "grammar": {
+                    "syntax": "regex",
+                    "definition": "[a-z]+"
+                }
+            }
+        });
+        let result: Tool = serde_json::from_value(regex_json).unwrap();
+        if let Tool::OpenAICustom(custom) = result {
+            if let Some(OpenAICustomToolFormat::Grammar { grammar }) = custom.format {
+                assert!(matches!(grammar.syntax, OpenAIGrammarSyntax::Regex));
+            }
         }
 
-        #[test]
-        fn test_field_preservation() {
-            // Test tool_choice variants
-            // tool1 is a static tool (in function config), so don't store in dynamic_tools
-            for choice in [
-                ToolChoice::None,
-                ToolChoice::Auto,
-                ToolChoice::Required,
-                ToolChoice::Specific("tool1".to_string()),
-            ] {
-                let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                    vec![], // Empty - tool1 is static
-                    vec![],
-                    AllowedTools {
-                        tools: vec!["tool1".to_string()],
-                        choice: AllowedToolsChoice::Explicit,
-                    },
-                    choice.clone(),
-                    None,
-                );
-                let result: DynamicToolParams = db_insert.into();
-                assert_eq!(result.tool_choice, Some(choice));
-            }
-
-            // Test parallel_tool_calls variants
-            for ptc in [None, Some(true), Some(false)] {
-                let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                    vec![], // Empty - tool1 is static
-                    vec![],
-                    AllowedTools {
-                        tools: vec!["tool1".to_string()],
-                        choice: AllowedToolsChoice::Explicit,
-                    },
-                    ToolChoice::Auto,
-                    ptc,
-                );
-                let result: DynamicToolParams = db_insert.into();
-                assert_eq!(result.parallel_tool_calls, ptc);
-            }
-
-            // Test provider_tools are preserved (no longer lossy!)
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![], // Empty - tool1 is static
-                vec![], // Empty provider tools
-                AllowedTools {
-                    tools: vec!["tool1".to_string()],
-                    choice: AllowedToolsChoice::Explicit,
-                },
-                ToolChoice::Auto,
-                None,
-            );
-            let result: DynamicToolParams = db_insert.into();
-            assert_eq!(result.provider_tools, vec![]);
+        // Minimal custom tool (no description, no format)
+        let minimal_json = json!({
+            "type": "openai_custom",
+            "name": "minimal_tool"
+        });
+        let result: Tool = serde_json::from_value(minimal_json).unwrap();
+        if let Tool::OpenAICustom(custom) = result {
+            assert_eq!(custom.name, "minimal_tool");
+            assert!(custom.description.is_none());
+            assert!(custom.format.is_none());
         }
+    }
 
-        #[test]
-        fn test_tool_metadata_preservation() {
-            let tool = FunctionTool {
-                name: "test_tool".to_string(),
-                description: "A detailed description".to_string(),
-                parameters: json!({
-                    "type": "object",
-                    "properties": {"param1": {"type": "string"}, "param2": {"type": "number"}},
-                    "required": ["param1"]
+    /// Test DynamicTool error handling with invalid formats
+    #[test]
+    fn test_dynamic_tool_deserialize_invalid() {
+        // Missing required name field
+        let invalid_json = json!({
+            "type": "openai_custom",
+            "description": "Missing name"
+        });
+        let result = serde_json::from_value::<Tool>(invalid_json);
+        assert!(result.is_err());
+
+        // Unknown type
+        let invalid_json = json!({
+            "type": "unknown_type",
+            "name": "test"
+        });
+        let result = serde_json::from_value::<Tool>(invalid_json);
+        assert!(result.is_err());
+
+        // Invalid structure (neither Tool nor FunctionTool)
+        let invalid_json = json!({
+            "completely": "wrong"
+        });
+        let result = serde_json::from_value::<Tool>(invalid_json);
+        assert!(result.is_err());
+    }
+
+    /// Test Tool deserialization fallback from tagged to untagged format
+    #[test]
+    fn test_tool_deserialize_fallback_behavior() {
+        // Test that a valid FunctionTool without type field uses fallback path (legacy format)
+        let untagged_function = json!({
+            "name": "fallback_tool",
+            "description": "Testing fallback",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "param": {"type": "string"}
+                }
+            },
+            "strict": false
+        });
+
+        let result: Tool = serde_json::from_value(untagged_function).unwrap();
+        assert!(result.is_function());
+        assert_eq!(result.name(), "fallback_tool");
+        let Tool::Function(func) = result else {
+            panic!("Expected Tool::Function, got different variant");
+        };
+        assert_eq!(func.description, "Testing fallback");
+        assert!(!func.strict);
+
+        // Test error message when neither tagged nor untagged format matches
+        let completely_invalid = json!({
+            "type": "invalid_type",
+            "wrong_field": "value"
+        });
+
+        let result = serde_json::from_value::<Tool>(completely_invalid);
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(
+            error_msg.contains("Failed to parse as `Tool` (tagged) or `FunctionTool` (untagged)")
+        );
+
+        // Test that missing required fields in both formats produces an error
+        let missing_name = json!({
+            "description": "No name field",
+            "parameters": {"type": "object"},
+            "strict": false
+        });
+
+        let result = serde_json::from_value::<Tool>(missing_name);
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("Failed to parse"));
+    }
+
+    /// Test that both "function" and "client_side_function" tags are accepted for Function variant
+    #[test]
+    fn test_tool_deserialize_function_tag_variants() {
+        // Test new "function" tag
+        let function_tag_json = json!({
+            "type": "function",
+            "name": "new_format_tool",
+            "description": "Uses new function tag",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "arg": {"type": "string"}
+                }
+            },
+            "strict": true
+        });
+
+        let result: Tool = serde_json::from_value(function_tag_json).unwrap();
+        let Tool::Function(func) = result else {
+            panic!("Expected Tool::Function, got different variant");
+        };
+        assert_eq!(func.name, "new_format_tool");
+        assert_eq!(func.description, "Uses new function tag");
+        assert!(func.strict);
+
+        // Test legacy "client_side_function" tag (backward compatibility)
+        // We've stored the former in the database, so we can't remove this alias.
+        let legacy_tag_json = json!({
+            "type": "client_side_function",
+            "name": "legacy_format_tool",
+            "description": "Uses legacy client_side_function tag",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "arg": {"type": "number"}
+                }
+            },
+            "strict": false
+        });
+
+        let result: Tool = serde_json::from_value(legacy_tag_json).unwrap();
+        let Tool::Function(func) = result else {
+            panic!("Expected Tool::Function, got different variant");
+        };
+        assert_eq!(func.name, "legacy_format_tool");
+        assert_eq!(func.description, "Uses legacy client_side_function tag");
+        assert!(!func.strict);
+    }
+
+    /// Test Tool enum serialization round-trip and helper methods
+    #[test]
+    fn test_tool_serialization_and_methods() {
+        // Function tool round-trip
+        let function_tool = Tool::Function(FunctionTool {
+            name: "test_func".to_string(),
+            description: "Test function".to_string(),
+            parameters: json!({"type": "object"}),
+            strict: true,
+        });
+
+        let json = serde_json::to_value(&function_tool).unwrap();
+        let deserialized: Tool = serde_json::from_value(json).unwrap();
+        assert_eq!(function_tool, deserialized);
+        assert_eq!(deserialized.name(), "test_func");
+        assert!(!deserialized.is_custom());
+        assert!(deserialized.is_function());
+
+        // Custom tool round-trip
+        let custom_tool = Tool::OpenAICustom(OpenAICustomTool {
+            name: "custom_func".to_string(),
+            description: Some("Custom function".to_string()),
+            format: Some(OpenAICustomToolFormat::Text),
+        });
+
+        let json = serde_json::to_value(&custom_tool).unwrap();
+        let deserialized: Tool = serde_json::from_value(json).unwrap();
+        assert_eq!(custom_tool, deserialized);
+        assert_eq!(deserialized.name(), "custom_func");
+        assert!(deserialized.is_custom());
+        assert!(!deserialized.is_function());
+    }
+
+    /// Test DynamicTool <-> Tool conversions
+    #[test]
+    fn test_dynamic_tool_conversions() {
+        // Tool -> DynamicTool
+        let tool = Tool::OpenAICustom(OpenAICustomTool {
+            name: "test".to_string(),
+            description: None,
+            format: None,
+        });
+        let dynamic: Tool = tool.clone();
+        assert_eq!(dynamic, tool);
+
+        // DynamicTool -> Tool
+        let tool_back: Tool = dynamic;
+        assert_eq!(tool_back, tool);
+
+        // Mixed vector conversion
+        let tools = vec![
+            Tool::Function(FunctionTool {
+                name: "func1".to_string(),
+                description: "Function 1".to_string(),
+                parameters: json!({"type": "object"}),
+                strict: false,
+            }),
+            Tool::OpenAICustom(OpenAICustomTool {
+                name: "custom1".to_string(),
+                description: None,
+                format: Some(OpenAICustomToolFormat::Text),
+            }),
+        ];
+
+        let extracted: Vec<Tool> = tools.into_iter().collect();
+        assert_eq!(extracted.len(), 2);
+        assert!(extracted[0].is_function());
+        assert!(extracted[1].is_custom());
+    }
+
+    /// Test DynamicToolParams with custom tools
+    #[test]
+    fn test_dynamic_tool_params_with_custom_tools() {
+        let params = DynamicToolParams {
+            allowed_tools: Some(vec!["tool1".to_string()]),
+            additional_tools: Some(vec![
+                Tool::Function(FunctionTool {
+                    name: "func_tool".to_string(),
+                    description: "Function tool".to_string(),
+                    parameters: json!({"type": "object"}),
+                    strict: false,
                 }),
-                strict: true,
-            };
+                Tool::OpenAICustom(OpenAICustomTool {
+                    name: "custom_tool".to_string(),
+                    description: Some("Custom tool".to_string()),
+                    format: Some(OpenAICustomToolFormat::Text),
+                }),
+            ]),
+            tool_choice: Some(ToolChoice::Auto),
+            parallel_tool_calls: Some(true),
+            provider_tools: vec![],
+        };
 
-            let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![Tool::ClientSideFunction(tool.clone())],
-                vec![],
-                AllowedTools {
-                    tools: vec![], // Function has no defaults
-                    choice: AllowedToolsChoice::FunctionDefault,
+        // Test serialization
+        let json = serde_json::to_value(&params).unwrap();
+        assert!(json["additional_tools"].is_array());
+        assert_eq!(json["additional_tools"].as_array().unwrap().len(), 2);
+
+        // Test deserialization round-trip
+        let deserialized: DynamicToolParams = serde_json::from_value(json).unwrap();
+        assert_eq!(deserialized.additional_tools.as_ref().unwrap().len(), 2);
+        assert!(deserialized.additional_tools.as_ref().unwrap()[0].is_function());
+        assert!(deserialized.additional_tools.as_ref().unwrap()[1].is_custom());
+    }
+
+    /// Test DynamicToolParams with mixed tagged and untagged tools
+    #[test]
+    fn test_dynamic_tool_params_mixed_deserialization() {
+        let json = json!({
+            "additional_tools": [
+                {
+                    "name": "untagged_tool",
+                    "description": "Legacy format",
+                    "parameters": {"type": "object"},
+                    "strict": false
                 },
-                ToolChoice::Auto,
-                Some(false),
-            );
-            let result: DynamicToolParams = db_insert.into();
+                {
+                    "type": "function",
+                    "name": "tagged_function",
+                    "description": "New format",
+                    "parameters": {"type": "object"},
+                    "strict": true
+                },
+                {
+                    "type": "openai_custom",
+                    "name": "custom_tool",
+                    "format": {"type": "text"}
+                }
+            ]
+        });
 
-            let result_tool = &result.additional_tools.unwrap()[0];
-            assert_eq!(result_tool.name, tool.name);
-            assert_eq!(result_tool.description, tool.description);
-            assert_eq!(result_tool.parameters, tool.parameters);
-            assert_eq!(result_tool.strict, tool.strict);
+        let params: DynamicToolParams = serde_json::from_value(json).unwrap();
+        let tools = params.additional_tools.unwrap();
+        assert_eq!(tools.len(), 3);
+
+        // First should be function (from untagged)
+        assert!(tools[0].is_function());
+        // Second should be function (from tagged)
+        assert!(tools[1].is_function());
+        // Third should be custom
+        assert!(tools[2].is_custom());
+    }
+
+    /// Test ToolCallConfig iterator behavior with custom tools
+    #[tokio::test]
+    async fn test_tool_call_config_iterators_with_custom_tools() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: Some(vec![
+                Tool::Function(FunctionTool {
+                    name: "dynamic_func".to_string(),
+                    description: "Dynamic function".to_string(),
+                    parameters: json!({"type": "object"}),
+                    strict: false,
+                }),
+                Tool::OpenAICustom(OpenAICustomTool {
+                    name: "dynamic_custom".to_string(),
+                    description: Some("Dynamic custom".to_string()),
+                    format: Some(OpenAICustomToolFormat::Text),
+                }),
+            ]),
+            tool_choice: Some(ToolChoice::Auto),
+            parallel_tool_calls: Some(true),
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Verify we have both function and custom tools
+        // tools_available() should error when custom tools are present
+        assert!(tool_call_config.tools_available().is_err());
+        let custom_tools_count = tool_call_config.openai_custom_tools.len();
+        assert_eq!(custom_tools_count, 1); // dynamic_custom
+
+        // Verify the function tool is still accessible by name even with custom tools present
+        let func_tool = tool_call_config.get_function_tool("dynamic_func").unwrap();
+        assert_eq!(func_tool.name(), "dynamic_func");
+
+        // Verify the custom tool is in the custom tools list
+        let custom_tool = &tool_call_config.openai_custom_tools[0];
+        assert_eq!(custom_tool.name, "dynamic_custom");
+    }
+
+    /// Test ToolCallConfig strict filtering with custom tools
+    #[tokio::test]
+    async fn test_tool_call_config_strict_filtering_with_custom() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "dynamic_custom".to_string(),
+            ]),
+            additional_tools: Some(vec![Tool::OpenAICustom(OpenAICustomTool {
+                name: "dynamic_custom".to_string(),
+                description: None,
+                format: Some(OpenAICustomToolFormat::Text),
+            })]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // strict_tools_available() should error when custom tools are present
+        assert!(tool_call_config.strict_tools_available().is_err());
+
+        // Custom tools are separate - check that the custom tool is in the list
+        assert_eq!(tool_call_config.openai_custom_tools.len(), 1);
+        assert_eq!(
+            tool_call_config.openai_custom_tools[0].name,
+            "dynamic_custom"
+        );
+    }
+
+    /// Test ToolCallConfig construction creates correct ToolConfig variants
+    #[tokio::test]
+    async fn test_tool_call_config_construction_with_custom_tools() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: Some(vec![
+                Tool::Function(FunctionTool {
+                    name: "dynamic_func".to_string(),
+                    description: "Func".to_string(),
+                    parameters: json!({"type": "object"}),
+                    strict: true,
+                }),
+                Tool::OpenAICustom(OpenAICustomTool {
+                    name: "dynamic_custom".to_string(),
+                    description: Some("Custom".to_string()),
+                    format: Some(OpenAICustomToolFormat::Text),
+                }),
+            ]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &EMPTY_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Verify function tool became DynamicToolConfig
+        let func_config = tool_call_config.get_function_tool("dynamic_func").unwrap();
+        assert!(matches!(func_config, FunctionToolConfig::Dynamic(_)));
+
+        // Verify custom tool is in the custom tools list
+        let custom_config = tool_call_config
+            .openai_custom_tools
+            .iter()
+            .find(|t| t.name == "dynamic_custom")
+            .expect("dynamic_custom should be in openai_custom_tools");
+        assert_eq!(custom_config.description, Some("Custom".to_string()));
+    }
+
+    /// Test ToolCallConfigDatabaseInsert with custom tools
+    #[tokio::test]
+    async fn test_database_insert_with_custom_tools() {
+        let tools = vec![
+            Tool::Function(FunctionTool {
+                name: "func_tool".to_string(),
+                description: "Function".to_string(),
+                parameters: json!({"type": "object"}),
+                strict: false,
+            }),
+            Tool::OpenAICustom(OpenAICustomTool {
+                name: "custom_tool".to_string(),
+                description: Some("Custom".to_string()),
+                format: Some(OpenAICustomToolFormat::Text),
+            }),
+        ];
+
+        let db_insert = ToolCallConfigDatabaseInsert {
+            allowed_tools: AllowedTools::default(),
+            dynamic_tools: tools.clone(),
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: Some(true),
+            dynamic_provider_tools: vec![],
+            tool_params: Default::default(),
+        };
+
+        // Test serialization
+        let json = serde_json::to_value(&db_insert).unwrap();
+        assert!(json["dynamic_tools"].is_array());
+        assert_eq!(json["dynamic_tools"].as_array().unwrap().len(), 2);
+
+        // Test deserialization round-trip
+        let deserialized: ToolCallConfigDatabaseInsert = serde_json::from_value(json).unwrap();
+        assert_eq!(deserialized.dynamic_tools.len(), 2);
+        assert!(deserialized.dynamic_tools[0].is_function());
+        assert!(deserialized.dynamic_tools[1].is_custom());
+
+        // Verify custom tool data preserved
+        if let Tool::OpenAICustom(custom) = &deserialized.dynamic_tools[1] {
+            assert_eq!(custom.name, "custom_tool");
+            assert_eq!(custom.description, Some("Custom".to_string()));
+        } else {
+            panic!("Expected custom tool");
         }
+    }
+
+    /// Test backward compatibility with legacy database records
+    #[tokio::test]
+    async fn test_database_insert_legacy_compatibility() {
+        // Simulate old database format without custom tools (using legacy format)
+        let legacy_json = json!({
+            "allowed_tools": {
+                "choice": "function_default",
+                "tools": []
+            },
+            "dynamic_tools": [],
+            "tool_choice": "auto",
+            "parallel_tool_calls": true,
+            "dynamic_provider_tools": []
+        });
+
+        let result: Result<ToolCallConfigDatabaseInsert, _> = serde_json::from_value(legacy_json);
+        assert!(result.is_ok());
+        let db_insert = result.unwrap();
+        assert_eq!(db_insert.dynamic_tools.len(), 0);
+
+        // Old records with only function tools should still work
+        let function_only_json = json!({
+            "allowed_tools": {
+                "choice": "function_default",
+                "tools": []
+            },
+            "dynamic_tools": [
+                {
+                    "type": "function",
+                    "name": "old_tool",
+                    "description": "Old function tool",
+                    "parameters": {"type": "object"},
+                    "strict": false
+                }
+            ],
+            "tool_choice": "auto",
+            "parallel_tool_calls": false,
+            "dynamic_provider_tools": []
+        });
+
+        let result: ToolCallConfigDatabaseInsert =
+            serde_json::from_value(function_only_json).unwrap();
+        assert_eq!(result.dynamic_tools.len(), 1);
+        assert!(result.dynamic_tools[0].is_function());
+    }
+
+    /// Test edge cases for custom tools
+    #[test]
+    fn test_custom_tools_edge_cases() {
+        // Empty additional_tools vec
+        let params = DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: Some(vec![]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+        let json = serde_json::to_value(&params).unwrap();
+        let deserialized: DynamicToolParams = serde_json::from_value(json).unwrap();
+        assert_eq!(deserialized.additional_tools.unwrap().len(), 0);
+
+        // None additional_tools
+        let params = DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+        let json = serde_json::to_value(&params).unwrap();
+        let deserialized: DynamicToolParams = serde_json::from_value(json).unwrap();
+        assert!(deserialized.additional_tools.is_none());
+
+        // Custom tool with minimal fields
+        let minimal_custom = Tool::OpenAICustom(OpenAICustomTool {
+            name: "min".to_string(),
+            description: None,
+            format: None,
+        });
+        let json = serde_json::to_value(&minimal_custom).unwrap();
+        let deserialized: Tool = serde_json::from_value(json).unwrap();
+        assert_eq!(deserialized.name(), "min");
+
+        // Tool name deduplication should work with custom tools (name() method works)
+        let custom1 = Tool::OpenAICustom(OpenAICustomTool {
+            name: "duplicate".to_string(),
+            description: None,
+            format: None,
+        });
+        let custom2 = Tool::OpenAICustom(OpenAICustomTool {
+            name: "duplicate".to_string(),
+            description: Some("Different description".to_string()),
+            format: Some(OpenAICustomToolFormat::Text),
+        });
+        assert_eq!(custom1.name(), custom2.name());
+    }
+
+    /// Test that ToolCallConfig is created (not None) when ONLY custom tools are provided
+    /// This is a regression test for a bug where ToolCallConfig::new would return None
+    /// if there were custom tools but no function tools.
+    #[tokio::test]
+    async fn test_tool_call_config_with_only_custom_tools() {
+        // Create params with ONLY custom tools - no function tools, no provider tools
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: Some(vec![
+                Tool::OpenAICustom(OpenAICustomTool {
+                    name: "only_custom_1".to_string(),
+                    description: Some("First custom tool".to_string()),
+                    format: Some(OpenAICustomToolFormat::Text),
+                }),
+                Tool::OpenAICustom(OpenAICustomTool {
+                    name: "only_custom_2".to_string(),
+                    description: Some("Second custom tool".to_string()),
+                    format: Some(OpenAICustomToolFormat::Grammar {
+                        grammar: OpenAIGrammarDefinition {
+                            syntax: OpenAIGrammarSyntax::Lark,
+                            definition: "start: WORD+".to_string(),
+                        },
+                    }),
+                }),
+            ]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        // Create ToolCallConfig with NO static function tools
+        let tool_call_config_result =
+            ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+                &EMPTY_FUNCTION_TOOLS, // No static function tools
+                &AUTO_TOOL_CHOICE,
+                Some(true),
+                &TOOLS,
+                dynamic_params,
+            ))
+            .unwrap();
+
+        // CRITICAL: This should be Some, not None, even though there are no function tools
+        assert!(
+            tool_call_config_result.is_some(),
+            "ToolCallConfig should be Some when only custom tools are provided"
+        );
+
+        let tool_call_config = tool_call_config_result.unwrap();
+
+        // Verify custom tools are present
+        assert_eq!(tool_call_config.openai_custom_tools.len(), 2);
+        assert_eq!(
+            tool_call_config.openai_custom_tools[0].name,
+            "only_custom_1"
+        );
+        assert_eq!(
+            tool_call_config.openai_custom_tools[1].name,
+            "only_custom_2"
+        );
+
+        // Verify no function tools are present
+        // tools_available() should error when custom tools are present
+        assert!(tool_call_config.tools_available().is_err());
+
+        // Verify tool choice and parallel_tool_calls are set correctly
+        assert!(matches!(
+            tool_call_config.tool_choice,
+            ToolChoice::Auto | ToolChoice::Required
+        ));
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
+    }
+
+    /// Test that tools_available() returns an error when custom tools are present
+    #[tokio::test]
+    async fn test_tools_available_errors_with_custom_tools() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: Some(vec!["get_temperature".to_string()]),
+            additional_tools: Some(vec![Tool::OpenAICustom(OpenAICustomTool {
+                name: "custom_tool".to_string(),
+                description: Some("A custom tool".to_string()),
+                format: Some(OpenAICustomToolFormat::Text),
+            })]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &["get_temperature".to_string()],
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // tools_available() should error
+        let result = tool_call_config.tools_available();
+        assert!(result.is_err());
+
+        let err = match result {
+            Err(e) => e,
+            Ok(_) => panic!("Expected error, got Ok"),
+        };
+        assert!(matches!(
+            err.get_details(),
+            ErrorDetails::IncompatibleTool { .. }
+        ));
+
+        // Check error message
+        if let ErrorDetails::IncompatibleTool { message } = err.get_details() {
+            assert!(message.contains("OpenAI custom tools are not supported by this provider"));
+        }
+    }
+
+    /// Test that strict_tools_available() returns an error when custom tools are present
+    #[tokio::test]
+    async fn test_strict_tools_available_errors_with_custom_tools() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: Some(vec!["get_temperature".to_string()]),
+            additional_tools: Some(vec![Tool::OpenAICustom(OpenAICustomTool {
+                name: "custom_tool".to_string(),
+                description: Some("A custom tool".to_string()),
+                format: Some(OpenAICustomToolFormat::Text),
+            })]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &["get_temperature".to_string()],
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // strict_tools_available() should error
+        let result = tool_call_config.strict_tools_available();
+        assert!(result.is_err());
+
+        let err = match result {
+            Err(e) => e,
+            Ok(_) => panic!("Expected error, got Ok"),
+        };
+        assert!(matches!(
+            err.get_details(),
+            ErrorDetails::IncompatibleTool { .. }
+        ));
+    }
+
+    /// Test that tools_available_with_openai_custom() works correctly with only function tools
+    #[tokio::test]
+    async fn test_tools_available_with_openai_custom_function_tools_only() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "query_articles".to_string(),
+            ]),
+            additional_tools: None, // No custom tools
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &["get_temperature".to_string()],
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Should have 2 function tools
+        let tools: Vec<_> = tool_call_config
+            .tools_available_with_openai_custom()
+            .collect();
+        assert_eq!(tools.len(), 2);
+
+        // All should be function tools
+        for tool_ref in tools {
+            assert!(matches!(tool_ref, ToolConfigRef::Function(_)));
+        }
+    }
+
+    /// Test that tools_available_with_openai_custom() works correctly with only custom tools
+    #[tokio::test]
+    async fn test_tools_available_with_openai_custom_custom_tools_only() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: Some(vec![
+                Tool::OpenAICustom(OpenAICustomTool {
+                    name: "custom_1".to_string(),
+                    description: Some("First custom tool".to_string()),
+                    format: Some(OpenAICustomToolFormat::Text),
+                }),
+                Tool::OpenAICustom(OpenAICustomTool {
+                    name: "custom_2".to_string(),
+                    description: Some("Second custom tool".to_string()),
+                    format: Some(OpenAICustomToolFormat::Text),
+                }),
+            ]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &EMPTY_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Should have 2 custom tools
+        let tools: Vec<_> = tool_call_config
+            .tools_available_with_openai_custom()
+            .collect();
+        assert_eq!(tools.len(), 2);
+
+        // All should be custom tools
+        for tool_ref in tools {
+            assert!(matches!(tool_ref, ToolConfigRef::OpenAICustom(_)));
+        }
+    }
+
+    /// Test that tools_available_with_openai_custom() works correctly with both function and custom tools
+    #[tokio::test]
+    async fn test_tools_available_with_openai_custom_mixed_tools() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "query_articles".to_string(),
+            ]),
+            additional_tools: Some(vec![Tool::OpenAICustom(OpenAICustomTool {
+                name: "custom_1".to_string(),
+                description: Some("Custom tool".to_string()),
+                format: Some(OpenAICustomToolFormat::Text),
+            })]),
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &["get_temperature".to_string()],
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // Should have 3 tools total (2 function + 1 custom)
+        let tools: Vec<_> = tool_call_config
+            .tools_available_with_openai_custom()
+            .collect();
+        assert_eq!(tools.len(), 3);
+
+        // First 2 should be function tools, last should be custom
+        let mut function_count = 0;
+        let mut custom_count = 0;
+
+        for tool_ref in tools {
+            match tool_ref {
+                ToolConfigRef::Function(_) => function_count += 1,
+                ToolConfigRef::OpenAICustom(_) => custom_count += 1,
+            }
+        }
+
+        assert_eq!(function_count, 2);
+        assert_eq!(custom_count, 1);
+    }
+
+    /// Test that tools_available() succeeds when no custom tools are present
+    #[tokio::test]
+    async fn test_tools_available_succeeds_without_custom_tools() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "query_articles".to_string(),
+            ]),
+            additional_tools: None, // No custom tools
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &["get_temperature".to_string()],
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // tools_available() should succeed when no custom tools
+        let result = tool_call_config.tools_available();
+        assert!(result.is_ok());
+
+        let tools: Vec<_> = result.unwrap().collect();
+        assert_eq!(tools.len(), 2);
+    }
+
+    /// Test that strict_tools_available() succeeds when no custom tools are present
+    #[tokio::test]
+    async fn test_strict_tools_available_succeeds_without_custom_tools() {
+        let dynamic_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "query_articles".to_string(),
+            ]),
+            additional_tools: None, // No custom tools
+            tool_choice: None,
+            parallel_tool_calls: None,
+            provider_tools: vec![],
+        };
+
+        let tool_call_config = ToolCallConfig::new(ToolCallConfigConstructorArgs::new_for_test(
+            &["get_temperature".to_string()],
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_params,
+        ))
+        .unwrap()
+        .unwrap();
+
+        // strict_tools_available() should succeed when no custom tools
+        let result = tool_call_config.strict_tools_available();
+        assert!(result.is_ok());
+
+        let tools: Vec<_> = result.unwrap().collect();
+        assert_eq!(tools.len(), 2);
     }
 }

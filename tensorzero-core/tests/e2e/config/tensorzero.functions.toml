@@ -435,7 +435,7 @@ candidates = ["variant0", "variant1", "variant2"]
 [functions.best_of_n_json.variants.best_of_n_variant_implicit_tool.evaluator]
 model = "claude-3-haiku-20240307-anthropic"
 system_template = "../../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-json_mode = "implicit_tool"
+json_mode = "tool"
 
 [functions.best_of_n_json_repeated]
 type = "json"

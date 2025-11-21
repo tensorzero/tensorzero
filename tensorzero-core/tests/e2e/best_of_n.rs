@@ -771,7 +771,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
 /// and one that gives an incorrect but well-formed JSON response.
 /// We check that the good response is selected and that the other responses are not
 /// but they get stored to the ModelInference table.
-/// This test uses implicit_tool in the evaluator, so we also check that there was actually a tool call made under the hood.
+/// This test uses `json_mode="tool"` in the evaluator, so we also check that there was actually a tool call made under the hood.
 #[tokio::test]
 async fn e2e_test_best_of_n_json_real_judge_implicit_tool() {
     let episode_id = Uuid::now_v7();

@@ -15,7 +15,10 @@ import type {
 import { TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { Tooltip } from "~/components/ui/tooltip";
 import { useConfig } from "~/context/config";
-import { formatMetricSummaryValue } from "~/utils/config/feedback";
+import {
+  formatMetricSummaryValue,
+  formatConfidenceInterval,
+} from "~/utils/config/feedback";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import KVChip from "~/components/ui/KVChip";
 import MetricValue from "~/components/metric/MetricValue";
@@ -202,13 +205,14 @@ function MetricHeader({
             <div className="text-muted-foreground mt-2 text-xs">
               <span>
                 {formatMetricSummaryValue(metricStats.avg_metric, metricConfig)}
-                {/* Display CI error if it's non-zero and available */}
-                {metricStats.ci_error != null && metricStats.ci_error !== 0 ? (
+                {/* Display CI bounds as a range */}
+                {metricStats.ci_lower != null &&
+                metricStats.ci_upper != null ? (
                   <>
                     {" "}
-                    ±{" "}
-                    {formatMetricSummaryValue(
-                      metricStats.ci_error,
+                    {formatConfidenceInterval(
+                      metricStats.ci_lower,
+                      metricStats.ci_upper,
                       metricConfig,
                     )}
                   </>

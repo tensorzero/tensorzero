@@ -426,8 +426,8 @@ mod tests {
 
     use serde_json::json;
     use tensorzero_core::client::{File, Role, UrlFile};
-    use tensorzero_core::endpoints::datasets::JsonInferenceDatapoint;
     use tensorzero_core::endpoints::datasets::StoredChatInferenceDatapoint;
+    use tensorzero_core::endpoints::datasets::StoredJsonInferenceDatapoint;
     use tensorzero_core::endpoints::inference::ChatInferenceResponse;
     use tensorzero_core::endpoints::inference::JsonInferenceResponse;
     use tensorzero_core::evaluations::LLMJudgeIncludeConfig;
@@ -555,6 +555,7 @@ mod tests {
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig::default(),
+            description: None,
         };
         let input = ClientInput {
             system: Some(System::Text("You are a helpful assistant".to_string())),
@@ -632,6 +633,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: true,
             },
+            description: None,
         };
         let input = prepare_llm_judge_input(
             &llm_judge_config,
@@ -839,6 +841,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: false,
             },
+            description: None,
         };
         let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
@@ -872,6 +875,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: true,
             },
+            description: None,
         };
         let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
@@ -928,7 +932,7 @@ mod tests {
         assert_eq!(result, r#"[{"type":"text","text":"Reference text"}]"#);
 
         // Test with reference output enabled and present (json)
-        let datapoint = StoredDatapoint::Json(JsonInferenceDatapoint {
+        let datapoint = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
@@ -968,6 +972,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: true,
             },
+            description: None,
         };
         let result = prepare_final_message_messages_input(&config, "Generated", None);
         assert_eq!(result, None);
@@ -990,6 +995,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: false,
             },
+            description: None,
         };
         let message = prepare_final_message_messages_input(&config, "Generated", None).unwrap();
         let expected = format!(
@@ -1010,6 +1016,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: false,
             },
+            description: None,
         };
         let input = ClientInput {
             system: Some(System::Text("System instruction".to_string())),
@@ -1124,6 +1131,7 @@ mod tests {
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig::default(),
+            description: None,
         };
         let input = ClientInput {
             system: None,
@@ -1149,7 +1157,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &StoredDatapoint::Json(JsonInferenceDatapoint {
+            &StoredDatapoint::Json(StoredJsonInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 name: None,

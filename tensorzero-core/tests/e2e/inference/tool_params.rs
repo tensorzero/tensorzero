@@ -164,12 +164,14 @@ async fn test_inference_full_tool_params_round_trip() {
     // Dynamic tools should be in additional_tools
     let additional_tools = retrieved_tool_params.additional_tools.as_ref().unwrap();
     assert_eq!(additional_tools.len(), 1);
-    assert_eq!(additional_tools[0].name, "custom_weather_tool");
-    assert_eq!(
-        additional_tools[0].description,
-        "A custom tool added dynamically"
-    );
-    assert!(!additional_tools[0].strict);
+    let tool = &additional_tools[0];
+    if let tensorzero_core::tool::Tool::Function(func) = tool {
+        assert_eq!(func.name, "custom_weather_tool");
+        assert_eq!(func.description, "A custom tool added dynamically");
+        assert!(!func.strict);
+    } else {
+        panic!("Expected Function tool");
+    }
 
     // Other fields should match
     assert_eq!(
@@ -340,8 +342,13 @@ async fn test_inference_only_dynamic_tools() {
     // Dynamic tool should be in additional_tools
     let additional_tools = retrieved_tool_params.additional_tools.as_ref().unwrap();
     assert_eq!(additional_tools.len(), 1);
-    assert_eq!(additional_tools[0].name, "runtime_tool");
-    assert!(additional_tools[0].strict);
+    let tool = &additional_tools[0];
+    if let tensorzero_core::tool::Tool::Function(func) = tool {
+        assert_eq!(func.name, "runtime_tool");
+        assert!(func.strict);
+    } else {
+        panic!("Expected Function tool");
+    }
 }
 
 /// Test 4: Empty tool params (None/default behavior)
@@ -576,15 +583,31 @@ async fn test_tool_strict_flag_preserved() {
     // Find the tools (order might not be preserved)
     let strict_tool = additional_tools
         .iter()
-        .find(|t| t.name == "strict_tool")
+        .find(|dt| {
+            if let tensorzero_core::tool::Tool::Function(func) = &dt {
+                func.name == "strict_tool"
+            } else {
+                false
+            }
+        })
         .expect("Should find strict_tool");
     let non_strict_tool = additional_tools
         .iter()
-        .find(|t| t.name == "non_strict_tool")
+        .find(|dt| {
+            if let tensorzero_core::tool::Tool::Function(func) = &dt {
+                func.name == "non_strict_tool"
+            } else {
+                false
+            }
+        })
         .expect("Should find non_strict_tool");
 
-    assert!(strict_tool.strict, "strict flag should be true");
-    assert!(!non_strict_tool.strict, "strict flag should be false");
+    if let tensorzero_core::tool::Tool::Function(func) = &strict_tool {
+        assert!(func.strict, "strict flag should be true");
+    }
+    if let tensorzero_core::tool::Tool::Function(func) = &non_strict_tool {
+        assert!(!func.strict, "strict flag should be false");
+    }
 }
 
 /// Test 7: Multiple static tools with allowed_tools restriction

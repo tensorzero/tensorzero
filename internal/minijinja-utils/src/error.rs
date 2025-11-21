@@ -1,10 +1,11 @@
+use serde::Serialize;
 use std::fmt;
 
 /// Describes the type of template loading statement found during analysis.
 ///
 /// MiniJinja supports four different ways to load or reference other templates.
 /// This enum identifies which type of statement was encountered.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum LoadKind {
     /// An `{% include %}` statement that embeds another template's content.
     ///
@@ -61,7 +62,7 @@ impl fmt::Display for LoadKind {
 /// template.html:5:12: dynamic include - variable:
 ///   {% include template_name %}
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DynamicLoadLocation {
     /// The name of the template containing the dynamic load.
     pub template_name: String,
@@ -111,7 +112,8 @@ impl fmt::Display for DynamicLoadLocation {
 }
 
 /// Errors that can occur during template analysis.
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", content = "details")]
 pub enum AnalysisError {
     /// A template could not be parsed due to syntax errors.
     ///
@@ -123,6 +125,7 @@ pub enum AnalysisError {
     /// ```text
     /// Failed to parse template: unexpected end of template, expected end of block
     /// ```
+    #[serde(serialize_with = "serialize_parse_error")]
     ParseError(minijinja::Error),
 
     /// One or more templates contain dynamic loads that cannot be statically resolved.
@@ -178,4 +181,27 @@ impl From<minijinja::Error> for AnalysisError {
     fn from(err: minijinja::Error) -> Self {
         AnalysisError::ParseError(err)
     }
+}
+
+impl PartialEq for AnalysisError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            // Compare ParseError by their string representation since minijinja::Error doesn't implement PartialEq
+            (AnalysisError::ParseError(a), AnalysisError::ParseError(b)) => {
+                a.to_string() == b.to_string()
+            }
+            (AnalysisError::DynamicLoadsFound(a), AnalysisError::DynamicLoadsFound(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for AnalysisError {}
+
+/// Custom serialization for ParseError variant to convert minijinja::Error to a string
+fn serialize_parse_error<S>(err: &minijinja::Error, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(&err.to_string())
 }

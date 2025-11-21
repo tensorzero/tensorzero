@@ -294,7 +294,10 @@ export const DICLVariant: Story = {
       embedding_model: "text-embedding-3-small",
       k: 10,
       model: "gpt-4o-mini",
-      system_instructions: "You are a helpful assistant for entity extraction.",
+      system_instructions: {
+        __tensorzero_remapped_path: "system_instructions.minijinja",
+        __data: "You are a helpful assistant for entity extraction.",
+      },
       temperature: null,
       top_p: null,
       stop_sequences: null,
@@ -307,6 +310,7 @@ export const DICLVariant: Story = {
         num_retries: 3,
         max_delay_s: 10,
       },
+      max_distance: null,
     } as VariantConfig,
   },
 };

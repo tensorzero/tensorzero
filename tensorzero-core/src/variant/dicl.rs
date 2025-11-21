@@ -51,14 +51,14 @@ use super::{
 /// We need a helper to deserialize the config because it relies on
 /// a path to a file for system instructions and we need to use the
 /// load() step to get the fully qualified path.
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct DiclConfig {
     weight: Option<f64>,
     embedding_model: Arc<str>,
     k: u32, // k as in k-nearest neighbors
     model: Arc<str>,
-    system_instructions: String,
+    system_instructions: ResolvedTomlPathData,
     temperature: Option<f32>,
     top_p: Option<f32>,
     stop_sequences: Option<Vec<String>>,
@@ -99,7 +99,7 @@ impl DiclConfig {
     }
 
     pub fn system_instructions(&self) -> &str {
-        &self.system_instructions
+        self.system_instructions.data()
     }
 
     pub fn temperature(&self) -> Option<f32> {
@@ -156,6 +156,38 @@ impl DiclConfig {
 
     pub fn max_distance(&self) -> Option<f32> {
         self.max_distance
+    }
+
+    /// Converts this initialized config back to its uninitialized form.
+    /// Note: Real file paths for system_instructions are preserved. Fake paths
+    /// (like defaults) are converted to None and will be regenerated on load.
+    pub fn into_uninitialized(self) -> UninitializedDiclConfig {
+        UninitializedDiclConfig {
+            weight: self.weight,
+            embedding_model: self.embedding_model.to_string(),
+            k: self.k,
+            model: self.model.to_string(),
+            system_instructions: if self.system_instructions.is_real_path() {
+                Some(self.system_instructions)
+            } else {
+                None
+            },
+            temperature: self.temperature,
+            top_p: self.top_p,
+            stop_sequences: self.stop_sequences,
+            presence_penalty: self.presence_penalty,
+            frequency_penalty: self.frequency_penalty,
+            max_tokens: self.max_tokens,
+            seed: self.seed,
+            reasoning_effort: self.inference_params_v2.reasoning_effort,
+            thinking_budget_tokens: self.inference_params_v2.thinking_budget_tokens,
+            verbosity: self.inference_params_v2.verbosity,
+            json_mode: self.json_mode,
+            extra_body: self.extra_body,
+            retries: self.retries,
+            extra_headers: self.extra_headers,
+            max_distance: self.max_distance,
+        }
     }
 }
 
@@ -900,8 +932,11 @@ pub fn default_system_instructions() -> String {
 impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
     fn load(self) -> Result<DiclConfig, Error> {
         let system_instructions = match self.system_instructions {
-            Some(path) => path.data().to_string(),
-            None => default_system_instructions(),
+            Some(path) => path,
+            None => ResolvedTomlPathData::new_fake_path(
+                "tensorzero::dicl::default_system_instructions".to_string(),
+                default_system_instructions(),
+            ),
         };
 
         Ok(DiclConfig {
@@ -1386,7 +1421,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "DICL system instructions that should NOT be used".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "DICL system instructions that should NOT be used".to_string(),
+            ),
             temperature: Some(0.7),
             top_p: None,
             max_tokens: Some(100),
@@ -1422,7 +1460,7 @@ mod tests {
         };
 
         // Setup inference config
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         let inference_config = InferenceConfig {
             templates: Arc::new(templates),
             tool_config: None,
@@ -1501,7 +1539,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "DICL system instructions".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "DICL system instructions".to_string(),
+            ),
             temperature: Some(0.7),
             top_p: None,
             max_tokens: Some(100),
@@ -1549,7 +1590,7 @@ mod tests {
         });
 
         // Setup inference config
-        let templates = get_test_template_config();
+        let templates = get_test_template_config().await;
         let inference_config = InferenceConfig {
             templates: Arc::new(templates),
             tool_config: None,
@@ -1632,7 +1673,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "test".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "test".to_string(),
+            ),
             temperature: None,
             top_p: None,
             max_tokens: None,
@@ -1660,7 +1704,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "test".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "test".to_string(),
+            ),
             temperature: None,
             top_p: None,
             max_tokens: None,
@@ -1687,7 +1734,10 @@ mod tests {
             embedding_model: "test_embedding".into(),
             k: 3,
             model: "test_model".into(),
-            system_instructions: "test".to_string(),
+            system_instructions: ResolvedTomlPathData::new_fake_path(
+                "test".to_string(),
+                "test".to_string(),
+            ),
             temperature: None,
             top_p: None,
             max_tokens: None,
@@ -1786,5 +1836,176 @@ mod tests {
             }
             _ => panic!("Expected Text content after template stringification"),
         }
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_basic_fields() {
+        let uninitialized = UninitializedDiclConfig {
+            weight: Some(0.9),
+            embedding_model: "text-embedding-ada-002".to_string(),
+            k: 5,
+            model: "gpt-4".to_string(),
+            system_instructions: Some(ResolvedTomlPathData::new_fake_path(
+                "test.txt".to_string(),
+                "Custom instructions".to_string(),
+            )),
+            temperature: Some(0.7),
+            top_p: Some(0.9),
+            max_tokens: Some(150),
+            seed: Some(42),
+            stop_sequences: Some(vec!["STOP".to_string()]),
+            max_distance: Some(0.8),
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.weight, Some(0.9));
+        assert_eq!(exported.embedding_model, "text-embedding-ada-002");
+        assert_eq!(exported.k, 5);
+        assert_eq!(exported.model, "gpt-4");
+        assert_eq!(exported.temperature, Some(0.7));
+        assert_eq!(exported.top_p, Some(0.9));
+        assert_eq!(exported.max_tokens, Some(150));
+        assert_eq!(exported.seed, Some(42));
+        assert_eq!(exported.stop_sequences, Some(vec!["STOP".to_string()]));
+        assert_eq!(exported.max_distance, Some(0.8));
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_real_path_system_instructions() {
+        let instructions_content = "These are system instructions";
+        // Using from_path_and_data to create a real path
+        let real_path = ResolvedTomlPathData::new_for_tests(
+            "test.txt".into(),
+            Some(instructions_content.to_string()),
+        );
+
+        let uninitialized = UninitializedDiclConfig {
+            embedding_model: "embed-model".to_string(),
+            k: 3,
+            model: "gpt-3.5-turbo".to_string(),
+            system_instructions: Some(real_path),
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.into_uninitialized();
+
+        // Verify real path is preserved
+        assert!(exported.system_instructions.is_some());
+        assert_eq!(
+            exported.system_instructions.unwrap().data(),
+            instructions_content
+        );
+    }
+
+    #[test]
+    fn test_into_uninitialized_fake_path_becomes_none() {
+        let instructions_content = "These are system instructions";
+        let uninitialized = UninitializedDiclConfig {
+            embedding_model: "embed-model".to_string(),
+            k: 3,
+            model: "gpt-3.5-turbo".to_string(),
+            system_instructions: Some(ResolvedTomlPathData::new_fake_path(
+                "tensorzero::test".to_string(),
+                instructions_content.to_string(),
+            )),
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.into_uninitialized();
+
+        // Verify fake path becomes None
+        assert_eq!(exported.system_instructions, None);
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_inference_params_v2() {
+        let uninitialized = UninitializedDiclConfig {
+            embedding_model: "embed".to_string(),
+            k: 1,
+            model: "gpt-4".to_string(),
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1000),
+            verbosity: Some("verbose".to_string()),
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.reasoning_effort, Some("high".to_string()));
+        assert_eq!(exported.thinking_budget_tokens, Some(1000));
+        assert_eq!(exported.verbosity, Some("verbose".to_string()));
+    }
+
+    #[test]
+    fn test_into_uninitialized_preserves_none_values() {
+        let uninitialized = UninitializedDiclConfig {
+            embedding_model: "embed".to_string(),
+            k: 1,
+            model: "gpt-4".to_string(),
+            system_instructions: None,
+            weight: None,
+            temperature: None,
+            max_tokens: None,
+            stop_sequences: None,
+            max_distance: None,
+            reasoning_effort: None,
+            thinking_budget_tokens: None,
+            verbosity: None,
+            ..Default::default()
+        };
+
+        let config = uninitialized.load().unwrap();
+
+        let exported = config.into_uninitialized();
+
+        assert_eq!(exported.weight, None);
+        assert_eq!(exported.temperature, None);
+        assert_eq!(exported.max_tokens, None);
+        assert_eq!(exported.stop_sequences, None);
+        assert_eq!(exported.max_distance, None);
+        assert_eq!(exported.reasoning_effort, None);
+        assert_eq!(exported.thinking_budget_tokens, None);
+        assert_eq!(exported.verbosity, None);
+        // system_instructions becomes None because the default is a fake path
+        assert_eq!(exported.system_instructions, None);
+    }
+
+    #[test]
+    fn test_into_uninitialized_serialization_round_trip() {
+        let original = UninitializedDiclConfig {
+            weight: Some(0.6),
+            embedding_model: "ada-002".to_string(),
+            k: 10,
+            model: "gpt-3.5-turbo".to_string(),
+            temperature: Some(0.5),
+            ..Default::default()
+        };
+
+        let config = original.clone().load().unwrap();
+
+        let exported = config.into_uninitialized();
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&exported).unwrap();
+        let deserialized: UninitializedDiclConfig = serde_json::from_str(&json).unwrap();
+
+        // Should be able to load again
+        let reloaded = deserialized.load().unwrap();
+
+        assert_eq!(reloaded.weight(), Some(0.6));
+        assert_eq!(reloaded.embedding_model(), &Arc::from("ada-002"));
+        assert_eq!(reloaded.k(), 10);
+        assert_eq!(reloaded.model(), &Arc::from("gpt-3.5-turbo"));
+        assert_eq!(reloaded.temperature(), Some(0.5));
     }
 }
