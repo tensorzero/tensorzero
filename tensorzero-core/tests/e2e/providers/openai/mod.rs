@@ -743,59 +743,6 @@ async fn test_chat_function_json_override_with_mode_strict() {
     test_chat_function_json_override_with_mode(ModelInferenceRequestJsonMode::Strict).await;
 }
 
-#[tokio::test]
-async fn test_chat_function_json_override_with_mode_implicit_tool() {
-    let client = Client::new();
-    let episode_id = Uuid::now_v7();
-
-    // Note that we need to include 'json' somewhere in the messages, to stop OpenAI from complaining
-    let payload = json!({
-        "function_name": "basic_test",
-        "variant_name": "openai",
-        "episode_id": episode_id,
-        "input":
-            {"system": {"assistant_name": "AskJeeves"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "What is the capital of Japan (possibly as JSON)?"
-                }
-            ]},
-        "params": {
-            "chat_completion": {
-                "json_mode": "implicit_tool",
-            }
-        },
-        "stream": false,
-    });
-
-    let response = client
-        .post(get_gateway_endpoint("/inference"))
-        .json(&payload)
-        .send()
-        .await
-        .unwrap();
-    let response_status = response.status();
-    let response_json = response.json::<Value>().await.unwrap();
-    // Check Response is OK, then fields in order
-    assert_eq!(
-        response_status,
-        StatusCode::BAD_REQUEST,
-        "Unexpected response status, body: {response_json:?})"
-    );
-    assert_eq!(
-        response_json,
-        serde_json::json!({
-            "error": "JSON mode `implicit_tool` is not supported for chat functions",
-            "error_json": {
-                "InvalidRequest": {
-                    "message": "JSON mode `implicit_tool` is not supported for chat functions"
-                }
-            }
-        })
-    );
-}
-
 async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceRequestJsonMode) {
     let client = Client::new();
     let episode_id = Uuid::now_v7();

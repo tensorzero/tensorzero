@@ -47,7 +47,7 @@ const mockFunctions: Record<string, FunctionConfig> = {
     output_schema: {
       value: null,
     },
-    implicit_tool_call_config: {
+    json_mode_tool_call_config: {
       static_tools_available: [],
       dynamic_tools_available: [],
       provider_tools: [],
@@ -66,7 +66,7 @@ const mockFunctions: Record<string, FunctionConfig> = {
     output_schema: {
       value: null,
     },
-    implicit_tool_call_config: {
+    json_mode_tool_call_config: {
       static_tools_available: [],
       dynamic_tools_available: [],
       provider_tools: [],

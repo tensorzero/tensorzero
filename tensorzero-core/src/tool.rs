@@ -2182,11 +2182,11 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
 
 /// For use in initializing JSON functions
 /// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments
-pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallConfig {
-    create_implicit_tool_call_config_with_allowed_tools(schema, AllowedTools::default())
+pub fn create_json_mode_tool_call_config(schema: StaticJSONSchema) -> ToolCallConfig {
+    create_json_mode_tool_call_config_with_allowed_tools(schema, AllowedTools::default())
 }
 
-pub fn create_implicit_tool_call_config_with_allowed_tools(
+pub fn create_json_mode_tool_call_config_with_allowed_tools(
     schema: StaticJSONSchema,
     allowed_tools: AllowedTools,
 ) -> ToolCallConfig {

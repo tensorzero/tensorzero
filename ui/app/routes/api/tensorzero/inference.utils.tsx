@@ -726,7 +726,7 @@ function variantInfoToUninitializedVariantInfo(
         embedding_model: inner.embedding_model,
         k: inner.k,
         model: inner.model,
-        system_instructions: stringToTemplate(inner.system_instructions),
+        system_instructions: stringToTemplate(inner.system_instructions.__data),
         temperature: inner.temperature,
         top_p: inner.top_p,
         stop_sequences: inner.stop_sequences,

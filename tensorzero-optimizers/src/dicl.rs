@@ -219,7 +219,7 @@ fn validate_function_config(
         FunctionConfig::Json(json_config) => {
             // JSON functions should have exactly one implicit tool for schema validation
             let tools_count = json_config
-                .implicit_tool_call_config
+                .json_mode_tool_call_config
                 .tools_available()?
                 .count();
             if tools_count != 1 {
@@ -613,6 +613,7 @@ mod tests {
     use super::*;
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
+    use tensorzero_core::tool::Tool;
     use uuid::Uuid;
 
     use tensorzero_core::{
@@ -634,7 +635,7 @@ mod tests {
         providers::dummy::DummyProvider,
         stored_inference::{RenderedSample, StoredOutput},
         tool::{
-            create_implicit_tool_call_config, DynamicToolParams, FunctionTool, Tool, ToolCall,
+            create_json_mode_tool_call_config, DynamicToolParams, FunctionTool, ToolCall,
             ToolCallConfig, ToolChoice, ToolResult,
         },
     };
@@ -1074,13 +1075,13 @@ mod tests {
         }))
         .unwrap();
 
-        let implicit_tool_call_config = create_implicit_tool_call_config(output_schema.clone());
+        let json_mode_tool_call_config = create_json_mode_tool_call_config(output_schema.clone());
 
         FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1104,7 +1105,7 @@ mod tests {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema,
-            implicit_tool_call_config: invalid_tool_call_config,
+            json_mode_tool_call_config: invalid_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
