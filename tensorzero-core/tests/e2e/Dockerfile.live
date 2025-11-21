@@ -1,6 +1,6 @@
 # ========== base ==========
 
-FROM rust:1.90.0-slim AS base
+FROM rust:1.90.0-alpine AS base
 
 # Install required system dependencies
 RUN apt-get update && \
