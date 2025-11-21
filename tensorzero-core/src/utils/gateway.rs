@@ -543,7 +543,11 @@ pub struct GatewayHandleTestOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{gateway::GatewayConfig, ObservabilityConfig, PostgresConfig};
+    use crate::config::{
+        gateway::GatewayConfig, snapshot::ConfigSnapshot, unwritten_config::UnwrittenConfig,
+        ObservabilityConfig, PostgresConfig,
+    };
+    use std::collections::HashMap;
 
     #[tokio::test]
     async fn test_setup_clickhouse() {
@@ -569,12 +573,21 @@ mod tests {
             global_outbound_http_timeout: Default::default(),
         };
 
-        let config = Box::leak(Box::new(Config {
+        let config = Config {
             gateway: gateway_config,
             ..Default::default()
-        }));
+        };
+        let config_load_info = ConfigLoadInfo::new(
+            UnwrittenConfig::new(config),
+            ConfigSnapshot {
+                config: String::new(),
+                extra_templates: HashMap::new(),
+            },
+        );
 
-        let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
+        let clickhouse_connection_info = setup_clickhouse(&config_load_info, None, false)
+            .await
+            .unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
             ClickHouseClientType::Disabled
@@ -595,11 +608,20 @@ mod tests {
             unstable_error_json: false,
             ..Default::default()
         };
-        let config = Box::leak(Box::new(Config {
+        let config = Config {
             gateway: gateway_config,
             ..Default::default()
-        }));
-        let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
+        };
+        let config_load_info = ConfigLoadInfo::new(
+            UnwrittenConfig::new(config),
+            ConfigSnapshot {
+                config: String::new(),
+                extra_templates: HashMap::new(),
+            },
+        );
+        let clickhouse_connection_info = setup_clickhouse(&config_load_info, None, false)
+            .await
+            .unwrap();
         assert_eq!(
             clickhouse_connection_info.client_type(),
             ClickHouseClientType::Disabled
@@ -633,12 +655,21 @@ mod tests {
             global_outbound_http_timeout: Default::default(),
         };
 
-        let config = Box::leak(Box::new(Config {
+        let config = Config {
             gateway: gateway_config,
             ..Default::default()
-        }));
+        };
+        let config_load_info = ConfigLoadInfo::new(
+            UnwrittenConfig::new(config),
+            ConfigSnapshot {
+                config: String::new(),
+                extra_templates: HashMap::new(),
+            },
+        );
 
-        let err = setup_clickhouse(config, None, false).await.unwrap_err();
+        let err = setup_clickhouse(&config_load_info, None, false)
+            .await
+            .unwrap_err();
         assert!(err
             .to_string()
             .contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"));
@@ -663,11 +694,18 @@ mod tests {
             auth: Default::default(),
             global_outbound_http_timeout: Default::default(),
         };
-        let config = Box::leak(Box::new(Config {
+        let config = Config {
             gateway: gateway_config,
             ..Default::default()
-        }));
-        setup_clickhouse(config, Some("bad_url".to_string()), false)
+        };
+        let config_load_info = ConfigLoadInfo::new(
+            UnwrittenConfig::new(config),
+            ConfigSnapshot {
+                config: String::new(),
+                extra_templates: HashMap::new(),
+            },
+        );
+        setup_clickhouse(&config_load_info, Some("bad_url".to_string()), false)
             .await
             .expect_err("ClickHouse setup should fail given a bad URL");
         assert!(logs_contain("Invalid ClickHouse database URL"));
@@ -700,8 +738,15 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
+        let config_load_info = ConfigLoadInfo::new(
+            UnwrittenConfig::new(config),
+            ConfigSnapshot {
+                config: String::new(),
+                extra_templates: HashMap::new(),
+            },
+        );
         setup_clickhouse(
-            &config,
+            &config_load_info,
             Some("https://tensorzero.invalid:8123".to_string()),
             false,
         )

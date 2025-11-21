@@ -3,8 +3,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tensorzero_core::{
     config::{
-        unwritten_config::ConfigLoadInfo, Config, MetricConfig, MetricConfigLevel,
-        MetricConfigOptimize, MetricConfigType,
+        Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
     },
     db::{
         clickhouse::test_helpers::{
