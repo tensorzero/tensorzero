@@ -17,7 +17,8 @@ use crate::{
     },
     optimization::{OptimizationJobInfo, OptimizerOutput},
     providers::gcp_vertex_gemini::{
-        GCPVertexGeminiContent, GCPVertexGeminiContentPart, GCPVertexGeminiRole, PROVIDER_TYPE,
+        GCPVertexGeminiContent, GCPVertexGeminiContentPart, GCPVertexGeminiPartData,
+        GCPVertexGeminiRole, PROVIDER_TYPE,
     },
     stored_inference::LazyRenderedSample,
 };
@@ -71,9 +72,13 @@ impl<'a> GCPVertexGeminiSupervisedRow<'a> {
                 .as_ref()
                 .map(|system_instruction| GCPVertexGeminiContent {
                     role: GCPVertexGeminiRole::System,
-                    parts: vec![FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text {
-                        text: Cow::Borrowed(system_instruction),
-                    })],
+                    parts: vec![GCPVertexGeminiContentPart {
+                        thought: false,
+                        thought_signature: None,
+                        data: FlattenUnknown::Normal(GCPVertexGeminiPartData::Text {
+                            text: Cow::Borrowed(system_instruction),
+                        }),
+                    }],
                 });
         let Some(output) = &inference.output else {
             return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
@@ -312,8 +317,8 @@ mod tests {
         let system_text = system_instruction
             .parts
             .iter()
-            .filter_map(|part| match part {
-                FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text }) => {
+            .filter_map(|part| match &part.data {
+                FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
                     Some(text.as_ref())
                 }
                 _ => None,
@@ -329,8 +334,8 @@ mod tests {
         // Check user message
         assert_eq!(row.contents[0].role, GCPVertexGeminiRole::User);
         let user_part = &row.contents[0].parts[0];
-        match user_part {
-            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text }) => {
+        match &user_part.data {
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
                 assert_eq!(text, "What is the capital of France?");
             }
             _ => panic!("First message should be a text message"),
@@ -339,8 +344,8 @@ mod tests {
         // Check assistant message
         assert_eq!(row.contents[1].role, GCPVertexGeminiRole::Model);
         let assistant_part = &row.contents[1].parts[0];
-        match assistant_part {
-            FlattenUnknown::Normal(GCPVertexGeminiContentPart::Text { text }) => {
+        match &assistant_part.data {
+            FlattenUnknown::Normal(GCPVertexGeminiPartData::Text { text }) => {
                 assert_eq!(text, "The capital of France is Paris.");
             }
             _ => panic!("Second message should be a text message"),
