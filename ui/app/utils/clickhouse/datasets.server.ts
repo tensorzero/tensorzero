@@ -7,7 +7,6 @@ import type {
   GetDatasetRowsParams,
   GetDatapointParams,
   Datapoint,
-  AdjacentDatapointIds,
 } from "~/types/tensorzero";
 import type {
   ParsedDatasetRow,
@@ -128,17 +127,6 @@ export async function countDatapointsForDatasetFunction(
     dataset_name,
     function_name,
     function_type,
-  });
-}
-
-export async function getAdjacentDatapointIds(
-  dataset_name: string,
-  datapoint_id: string,
-): Promise<AdjacentDatapointIds> {
-  const dbClient = await getNativeDatabaseClient();
-  return await dbClient.getAdjacentDatapointIds({
-    dataset_name,
-    datapoint_id,
   });
 }
 
