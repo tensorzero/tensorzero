@@ -410,6 +410,294 @@ class DeleteDatapointsResponse:
 
 
 @dataclass(kw_only=True)
+class ProviderExtraBody:
+    model_provider_name: str
+    """
+    A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
+    """
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    value: Any
+    """
+    The value to set the field to
+    """
+
+
+@dataclass(kw_only=True)
+class ProviderExtraBodyDelete:
+    model_provider_name: str
+    """
+    A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
+    """
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the field from the model provider request's body
+    """
+
+
+@dataclass(kw_only=True)
+class VariantExtraBody:
+    variant_name: str
+    """
+    A variant name in your configuration (e.g. `my_variant`)
+    """
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    value: Any
+    """
+    The value to set the field to
+    """
+
+
+@dataclass(kw_only=True)
+class VariantExtraBodyDelete:
+    variant_name: str
+    """
+    A variant name in your configuration (e.g. `my_variant`)
+    """
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the field from the model provider request's body
+    """
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraBody:
+    model_name: str
+    """
+    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    """
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    value: Any
+    """
+    The value to set the field to
+    """
+    provider_name: str | None = None
+    """
+    A provider name for the model you specified (e.g. `my_openai`)
+    """
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraBodyDelete:
+    model_name: str
+    """
+    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    """
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the field from the model provider request's body
+    """
+    provider_name: str | None = None
+    """
+    A provider name for the model you specified (e.g. `my_openai`)
+    """
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraBody:
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    value: Any
+    """
+    The value to set the field to
+    """
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraBodyDelete:
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the field from the model provider request's body
+    """
+
+
+ExtraBody = (
+    ProviderExtraBody
+    | ProviderExtraBodyDelete
+    | VariantExtraBody
+    | VariantExtraBodyDelete
+    | ModelProviderExtraBody
+    | ModelProviderExtraBodyDelete
+    | AlwaysExtraBody
+    | AlwaysExtraBodyDelete
+)
+
+
+@dataclass(kw_only=True)
+class ExtraBodyReplacementKind1:
+    value: Any
+
+
+ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKind1
+
+
+@dataclass(kw_only=True)
+class ProviderExtraHeader:
+    model_provider_name: str
+    """
+    A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    value: str
+    """
+    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
+    """
+
+
+@dataclass(kw_only=True)
+class ProviderExtraHeaderDelete:
+    model_provider_name: str
+    """
+    A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the header from the model provider request
+    """
+
+
+@dataclass(kw_only=True)
+class VariantExtraHeader:
+    variant_name: str
+    """
+    A variant name in your configuration (e.g. `my_variant`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    value: str
+    """
+    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
+    """
+
+
+@dataclass(kw_only=True)
+class VariantExtraHeaderDelete:
+    variant_name: str
+    """
+    A variant name in your configuration (e.g. `my_variant`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the header from the model provider request
+    """
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraHeader:
+    model_name: str
+    """
+    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    value: str
+    """
+    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
+    """
+    provider_name: str | None = None
+    """
+    A provider name for the model you specified (e.g. `my_openai`).
+    """
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraHeaderDelete:
+    model_name: str
+    """
+    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the header from the model provider request
+    """
+    provider_name: str | None = None
+    """
+    A provider name for the model you specified (e.g. `my_openai`)
+    """
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraHeader:
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    value: str
+    """
+    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
+    """
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraHeaderDelete:
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the header from the model provider request
+    """
+
+
+ExtraHeader = (
+    ProviderExtraHeader
+    | ProviderExtraHeaderDelete
+    | VariantExtraHeader
+    | VariantExtraHeaderDelete
+    | ModelProviderExtraHeader
+    | ModelProviderExtraHeaderDelete
+    | AlwaysExtraHeader
+    | AlwaysExtraHeaderDelete
+)
+
+
+@dataclass(kw_only=True)
 class GetDatapointsRequest:
     ids: list[str]
     """
