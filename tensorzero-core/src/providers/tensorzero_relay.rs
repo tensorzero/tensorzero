@@ -452,7 +452,7 @@ impl InferenceProvider for TensorZeroRelayProvider {
 
         let InferenceOutput::Streaming(streaming) = res.response else {
             return Err(Error::new(ErrorDetails::Inference {
-                message: "Expected non-streaming inference response".to_string(),
+                message: "Expected streaming inference response".to_string(),
             }));
         };
 
