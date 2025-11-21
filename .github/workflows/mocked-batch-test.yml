@@ -89,12 +89,13 @@ jobs:
           path: .
 
       - name: Load mock-inference-container
+        id: load-mock-inference
         continue-on-error: true  # Skip if missing (e.g. triggered via `workflow_dispatch`)
         run: |
           docker load < mock-inference-container.tar
 
       - name: Set TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG
-        if: success()  # Only run if artifact was successfully downloaded
+        if: steps.load-mock-inference.outcome == 'success'  # Only run if artifact was successfully loaded
         run: |
           echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
