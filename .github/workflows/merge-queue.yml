@@ -273,9 +273,22 @@ jobs:
           echo "flush_interval_ms = 80" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
           echo "__force_allow_embedded_batch_writes = true" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
 
+      - name: Download mock-inference-container
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-mock-inference-container
+          path: .
+
+      - name: Load mock-inference-container
+        run: docker load < mock-inference-container.tar
+
+      - name: Set TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG
+        run: |
+          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+
       - name: Launch dependency services for E2E tests
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait
 
       - name: Print ClickHouse container logs
         if: always()

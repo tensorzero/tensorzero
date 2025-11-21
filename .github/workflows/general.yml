@@ -1004,6 +1004,8 @@ jobs:
     permissions:
       # Permission to checkout the repository
       contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
 
   ui-tests:
     permissions:
