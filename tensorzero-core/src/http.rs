@@ -519,7 +519,9 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
                                 message: format!("Invalid proxy URL: {e}"),
                             })
                         })?
-                        .no_proxy(NoProxy::from_string("localhost,127.0.0.1,minio")),
+                        .no_proxy(NoProxy::from_string(
+                            "localhost,127.0.0.1,minio,mock-inference-provider",
+                        )),
                 )
                 // When running e2e tests, we use `provider-proxy` as an MITM proxy
                 // for caching, so we need to accept the invalid (self-signed) cert.
