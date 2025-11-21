@@ -28,7 +28,7 @@ mod evaluate;
 mod pareto;
 // TODO: do not re-export
 pub use evaluate::create_evaluation_dataset;
-pub use pareto::{is_improvement, update_pareto_frontier};
+pub use pareto::{is_improvement, ParetoFrontier};
 
 #[async_trait]
 impl Optimizer for GEPAConfig {
