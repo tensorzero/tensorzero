@@ -464,6 +464,15 @@ pub fn inject_extra_request_data(
             } => {
                 if *model_provider_name == expected_provider_name_fully_qualified {
                     matched_any_headers_or_body = true;
+                    let name =
+                        http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Invalid header name `{name}`: {}",
+                                    DisplayOrDebugGateway::new(e)
+                                ),
+                            })
+                        })?;
                     headers.insert(
                         name,
                         http::header::HeaderValue::from_bytes(value.as_bytes()).map_err(|e| {
@@ -1715,7 +1724,12 @@ mod tests {
 
         // Should have applied the header
         assert_eq!(
-            headers.get("X-Custom-Header-2").unwrap().to_str().unwrap(),
+            headers
+                .headers
+                .get("X-Custom-Header-2")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "test-value-2"
         );
     }
