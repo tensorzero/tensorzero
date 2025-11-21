@@ -3,7 +3,6 @@ import {
   modelInferenceInputMessageSchema,
   type TableBounds,
   type TableBoundsWithCount,
-  TableBoundsWithCountSchema,
   JsonValueSchema,
 } from "./common";
 import {
@@ -36,6 +35,7 @@ import {
 import { z } from "zod";
 import { logger } from "~/utils/logger";
 import { getConfig, getFunctionConfig } from "../config/index.server";
+import { getTensorZeroClient } from "../tensorzero.server";
 
 /**
  * Query a table of at most `limit` Inferences from ChatInference or JsonInference that are
@@ -182,45 +182,21 @@ export async function queryInferenceTable(params: {
 
 /// TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
 export async function queryInferenceTableBounds(params?: {
-  extraWhere?: string[];
-  extraParams?: Record<string, string | number>;
+  function_name?: string;
+  variant_name?: string;
+  episode_id?: string;
 }): Promise<TableBoundsWithCount> {
-  const { extraWhere = [], extraParams = {} } = params ?? {};
-
-  // Build WHERE clause
-  const whereClauses = [...extraWhere];
-  const whereClause =
-    whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
-
-  // IMPORTANT: This query will return zero UUIDs if there are no results, so we need to handle this case below.
-  const query = `
-  SELECT
-    uint_to_uuid(MIN(id_uint)) AS first_id,
-    uint_to_uuid(MAX(id_uint)) AS last_id,
-    toUInt32(COUNT()) AS count
-  FROM InferenceById FINAL
-  ${whereClause}
-  LIMIT 1
-  `;
-
   try {
-    const resultSet = await getClickhouseClient().query({
-      query,
-      format: "JSONEachRow",
-      query_params: extraParams,
-    });
-    const rows = await resultSet.json<TableBoundsWithCount>();
+    const client = getTensorZeroClient();
+    const result = await client.getInferenceBounds(params);
 
-    // Handle the case where there are no results
-    if (!rows.length || rows[0].count === 0) {
-      return {
-        first_id: null,
-        last_id: null,
-        count: 0,
-      };
-    }
-
-    return TableBoundsWithCountSchema.parse(rows[0]);
+    return {
+      // TODO: handle undefined values instead of nulls
+      first_id: result.earliest_id || null,
+      last_id: result.latest_id || null,
+      // Cast bigint to number for backward compatibility with existing UI code
+      count: Number(result.count),
+    };
   } catch (error) {
     logger.error("Failed to query inference table bounds:", error);
     throw data("Error querying inference table bounds", { status: 500 });
@@ -246,8 +222,7 @@ export async function queryInferenceTableBoundsByEpisodeId(params: {
   episode_id: string;
 }): Promise<TableBounds> {
   return queryInferenceTableBounds({
-    extraWhere: ["episode_id = {episode_id:String}"],
-    extraParams: { episode_id: params.episode_id },
+    episode_id: params.episode_id,
   });
 }
 
@@ -270,8 +245,7 @@ export async function queryInferenceTableBoundsByFunctionName(params: {
   function_name: string;
 }): Promise<TableBounds> {
   return queryInferenceTableBounds({
-    extraWhere: ["function_name = {function_name:String}"],
-    extraParams: { function_name: params.function_name },
+    function_name: params.function_name,
   });
 }
 
@@ -302,14 +276,8 @@ export async function queryInferenceTableBoundsByVariantName(params: {
   variant_name: string;
 }): Promise<TableBounds> {
   return queryInferenceTableBounds({
-    extraWhere: [
-      "function_name = {function_name:String}",
-      "variant_name = {variant_name:String}",
-    ],
-    extraParams: {
-      function_name: params.function_name,
-      variant_name: params.variant_name,
-    },
+    function_name: params.function_name,
+    variant_name: params.variant_name,
   });
 }
 

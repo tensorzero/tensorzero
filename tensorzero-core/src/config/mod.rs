@@ -50,7 +50,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
 use crate::model_table::{CowNoClone, ProviderTypeDefaultCredentials, ShorthandModelConfig};
 use crate::optimization::{OptimizerInfo, UninitializedOptimizerInfo};
-use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
+use crate::tool::{create_json_mode_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
 use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
@@ -1670,8 +1670,8 @@ impl UninitializedFunctionConfig {
                     Some(path) => StaticJSONSchema::from_path(path)?,
                     None => StaticJSONSchema::default(),
                 };
-                let implicit_tool_call_config =
-                    create_implicit_tool_call_config(output_schema.clone());
+                let json_mode_tool_call_config =
+                    create_json_mode_tool_call_config(output_schema.clone());
                 let variants = params
                     .variants
                     .into_iter()
@@ -1736,7 +1736,7 @@ impl UninitializedFunctionConfig {
                     variants,
                     schemas: schema_data,
                     output_schema,
-                    implicit_tool_call_config,
+                    json_mode_tool_call_config,
                     description: params.description,
                     all_explicit_template_names: all_template_names,
                     experimentation,
