@@ -14,8 +14,6 @@ jobs:
       id-token: write
 
     steps:
-      # TODO - investigate why using the Namespace checkout action causes
-      # 'tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT' to be `None`
       - name: Check out the repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
