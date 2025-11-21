@@ -56,7 +56,7 @@ pub struct TemplateWithSchema {
     pub legacy_definition: bool,
 }
 
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ChatCompletionConfig {
     weight: Option<f64>,

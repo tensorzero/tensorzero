@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// Holds of all of the templates and schemas used by a chat-completion variant.
-#[derive(Debug, Default, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ChatTemplates {
     #[serde(flatten)]

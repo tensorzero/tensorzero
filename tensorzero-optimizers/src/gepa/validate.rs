@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use serde::Serialize;
 use tensorzero_core::{
-    config::{path::ResolvedTomlPathData, Config},
+    config::Config,
     error::{Error, ErrorDetails},
     evaluations::EvaluationConfig,
     function::FunctionConfig,
@@ -13,12 +13,7 @@ use tensorzero_core::{
     optimization::gepa::GEPAConfig,
     stored_inference::{RenderedSample, StoredOutput},
     tool::StaticToolConfig,
-    variant::{
-        chat_completion::{
-            ChatCompletionConfig, UninitializedChatCompletionConfig, UninitializedChatTemplate,
-        },
-        VariantConfig, VariantInfo,
-    },
+    variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig, VariantInfo},
 };
 
 /// Minimum number of valid examples required for GEPA optimization
@@ -365,11 +360,9 @@ pub fn initialize_pareto_frontier(
 
             // Note: All variants in initial_variants have been validated as ChatCompletion type
             // by validate_gepa_config, so this extraction should always succeed
-            if let Some(uninitialized_chat_config) = extract_chat_completion_from_variant_info(
-                variant_info,
-                variant_name,
-                config.retries,
-            ) {
+            if let Some(uninitialized_chat_config) =
+                extract_chat_completion_from_variant_info(variant_info, variant_name)
+            {
                 frontier.insert(variant_name.clone(), uninitialized_chat_config);
                 tracing::info!("Using initial variant: {}", variant_name);
             }
@@ -383,11 +376,9 @@ pub fn initialize_pareto_frontier(
     } else {
         // Use all ChatCompletion variants from the function
         for (variant_name, variant_info) in variants {
-            if let Some(uninitialized_chat_config) = extract_chat_completion_from_variant_info(
-                variant_info,
-                variant_name,
-                config.retries,
-            ) {
+            if let Some(uninitialized_chat_config) =
+                extract_chat_completion_from_variant_info(variant_info, variant_name)
+            {
                 frontier.insert(variant_name.clone(), uninitialized_chat_config);
             }
         }
@@ -411,90 +402,6 @@ pub fn initialize_pareto_frontier(
     Ok(frontier)
 }
 
-/// Extract an `UninitializedChatCompletionConfig` from a `ChatCompletionConfig`
-///
-/// This is needed for GEPA to create new variant configurations at runtime.
-/// Since `ChatCompletionConfig` is the loaded/initialized form with templates and schemas
-/// resolved, we need to extract it back to the uninitialized form that can be serialized
-/// and used to create new variants.
-///
-/// Note: This only handles new-style templates (defined via `templates` HashMap).
-/// Legacy templates (system_template, user_template, assistant_template, input_wrappers)
-/// are not extracted since `ChatCompletionConfig` has already unified them into `ChatTemplates`.
-fn extract_chat_completion_config(
-    config: &ChatCompletionConfig,
-    retries: tensorzero_core::utils::retries::RetryConfig,
-) -> UninitializedChatCompletionConfig {
-    // Extract new-style templates from ChatTemplates
-    // Since UninitializedChatTemplates has a private `inner` field with #[serde(flatten)],
-    // we construct it via serde (serialize HashMap, then deserialize to UninitializedChatTemplates)
-    let templates = {
-        let mut inner = HashMap::new();
-
-        // Get all explicit template names (filters out deprecated legacy templates with no schema)
-        let template_names = config.templates().get_all_explicit_template_names();
-
-        for template_name in template_names {
-            if let Some(template_with_schema) =
-                config.templates().get_named_template(&template_name)
-            {
-                // Create a new fake path with inline content to avoid duplicate path errors
-                // when multiple variants use the same template files
-                let fake_path = ResolvedTomlPathData::new_fake_path(
-                    format!("gepa_extracted/{template_name}"),
-                    template_with_schema.template.contents.clone(),
-                );
-
-                inner.insert(template_name, UninitializedChatTemplate { path: fake_path });
-            }
-        }
-        // Use serde to construct UninitializedChatTemplates from HashMap
-        // The #[serde(flatten)] attribute makes this work correctly
-        #[expect(clippy::expect_used)]
-        let inner_value = serde_json::to_value(&inner)
-            .expect("Failed to serialize inner HashMap for UninitializedChatTemplates");
-        #[expect(clippy::expect_used)]
-        serde_json::from_value(inner_value)
-            .expect("Failed to deserialize UninitializedChatTemplates from serialized HashMap")
-    };
-
-    // Extract inference_params_v2 fields
-    let reasoning_effort = config.reasoning_effort().cloned();
-    let service_tier = config.service_tier().cloned();
-    let thinking_budget_tokens = config.thinking_budget_tokens();
-    let verbosity = config.verbosity().cloned();
-
-    UninitializedChatCompletionConfig {
-        weight: config.weight(),
-        model: config.model().clone(),
-        // Legacy fields - set to None since we only extract new-style templates
-        system_template: None,
-        user_template: None,
-        assistant_template: None,
-        input_wrappers: None,
-        // New-style templates
-        templates,
-        // Simple config fields
-        temperature: config.temperature(),
-        top_p: config.top_p(),
-        max_tokens: config.max_tokens(),
-        presence_penalty: config.presence_penalty(),
-        frequency_penalty: config.frequency_penalty(),
-        seed: config.seed(),
-        stop_sequences: config.stop_sequences().cloned(),
-        // Inference params v2 fields (flattened)
-        reasoning_effort,
-        service_tier,
-        thinking_budget_tokens,
-        verbosity,
-        // Other config
-        json_mode: config.json_mode().cloned(),
-        retries,
-        extra_body: config.extra_body().cloned(),
-        extra_headers: config.extra_headers().cloned(),
-    }
-}
-
 /// Extracts a ChatCompletion config from a VariantInfo
 ///
 /// Returns `Some(config)` if the variant is a ChatCompletion variant,
@@ -506,12 +413,11 @@ fn extract_chat_completion_config(
 fn extract_chat_completion_from_variant_info(
     variant_info: &VariantInfo,
     variant_name: &str,
-    retries: tensorzero_core::utils::retries::RetryConfig,
 ) -> Option<UninitializedChatCompletionConfig> {
     match &variant_info.inner {
         VariantConfig::ChatCompletion(chat_config) => {
-            // Use the pure conversion function to extract the config
-            let uninitialized = extract_chat_completion_config(chat_config, retries);
+            // Use the built-in conversion method
+            let uninitialized = chat_config.clone().into_uninitialized();
             tracing::debug!(
                 "Extracted ChatCompletion config for variant: {}",
                 variant_name
@@ -1101,6 +1007,7 @@ mod tests {
         Arc::new(EvaluationConfig::Inference(InferenceEvaluationConfig {
             evaluators: HashMap::new(),
             function_name: "test_function".to_string(),
+            description: Some("test_evaluation".to_string()),
         }))
     }
 
@@ -1225,106 +1132,18 @@ mod tests {
     }
 
     // ============================================================================
-    // Tests for extract_chat_completion_config (via initialize_pareto_frontier)
-    // ============================================================================
-
-    #[test]
-    fn test_extract_chat_completion_config_basic_fields() {
-        // Create a ChatCompletionConfig with known values
-        let config = create_chat_completion_config("openai::gpt-4", Some("Test system prompt"));
-        let retries = RetryConfig::default();
-
-        // Extract it
-        let extracted = extract_chat_completion_config(&config, retries);
-
-        // Verify basic fields
-        assert_eq!(extracted.model, config.model().clone());
-        assert_eq!(extracted.weight, config.weight());
-        assert_eq!(extracted.temperature, config.temperature());
-        assert_eq!(extracted.top_p, config.top_p());
-        assert_eq!(extracted.max_tokens, config.max_tokens());
-        assert_eq!(extracted.presence_penalty, config.presence_penalty());
-        assert_eq!(extracted.frequency_penalty, config.frequency_penalty());
-        assert_eq!(extracted.seed, config.seed());
-        assert_eq!(extracted.stop_sequences, config.stop_sequences().cloned());
-        assert_eq!(extracted.retries.num_retries, retries.num_retries);
-        assert_eq!(extracted.retries.max_delay_s, retries.max_delay_s);
-    }
-
-    #[test]
-    fn test_extract_chat_completion_config_inference_params_v2() {
-        // Create config with inference_params_v2 fields set
-        let mut uninitialized = create_uninitialized_chat_config("openai::gpt-4", Some("Test"));
-        uninitialized.reasoning_effort = Some("high".to_string());
-        uninitialized.thinking_budget_tokens = Some(1000);
-        uninitialized.verbosity = Some("verbose".to_string());
-
-        let schemas = SchemaData::default();
-        let error_context = ErrorContext {
-            function_name: "test".to_string(),
-            variant_name: "test".to_string(),
-        };
-        let config = uninitialized.load(&schemas, &error_context).unwrap();
-
-        let retries = RetryConfig::default();
-        let extracted = extract_chat_completion_config(&config, retries);
-
-        // Verify inference_params_v2 fields are extracted
-        assert_eq!(extracted.reasoning_effort, Some("high".to_string()));
-        assert_eq!(extracted.thinking_budget_tokens, Some(1000));
-        assert_eq!(extracted.verbosity, Some("verbose".to_string()));
-    }
-
-    #[test]
-    fn test_extract_chat_completion_config_custom_retries() {
-        let config = create_chat_completion_config("openai::gpt-4", Some("Test"));
-
-        // Custom retry config
-        let custom_retries = RetryConfig {
-            num_retries: 5,
-            max_delay_s: 30.0,
-        };
-
-        let extracted = extract_chat_completion_config(&config, custom_retries);
-
-        // Verify custom retries are used (not the original config's retries)
-        assert_eq!(extracted.retries.num_retries, custom_retries.num_retries);
-        assert_eq!(extracted.retries.max_delay_s, custom_retries.max_delay_s);
-    }
-
-    #[test]
-    fn test_extract_chat_completion_config_legacy_fields_none() {
-        // Create config with templates
-        let config =
-            create_chat_completion_config("openai::gpt-4", Some("System template content"));
-        let retries = RetryConfig::default();
-
-        let extracted = extract_chat_completion_config(&config, retries);
-
-        // Legacy fields should be None
-        assert!(extracted.system_template.is_none());
-        assert!(extracted.user_template.is_none());
-        assert!(extracted.assistant_template.is_none());
-        assert!(extracted.input_wrappers.is_none());
-    }
-
-    // ============================================================================
     // Tests for extract_chat_completion_from_variant_info
     // ============================================================================
 
     #[test]
     fn test_extract_from_variant_info_chat_completion() {
         let variant_info = create_variant_info("openai::gpt-4", Some("Test"));
-        let retries = RetryConfig::default();
 
-        let result =
-            extract_chat_completion_from_variant_info(&variant_info, "test_variant", retries);
+        let result = extract_chat_completion_from_variant_info(&variant_info, "test_variant");
 
         assert!(result.is_some());
         let extracted = result.unwrap();
         assert_eq!(extracted.model.as_ref(), "openai::gpt-4");
-        assert_eq!(extracted.retries.num_retries, retries.num_retries);
-        assert_eq!(extracted.retries.max_delay_s, retries.max_delay_s);
     }
 
     #[test]
@@ -1354,12 +1173,7 @@ mod tests {
             timeouts: TimeoutsConfig::default(),
         });
 
-        let retries = RetryConfig {
-            num_retries: 3,
-            max_delay_s: 15.0,
-        };
-
-        let result = extract_chat_completion_from_variant_info(&variant_info, "test", retries);
+        let result = extract_chat_completion_from_variant_info(&variant_info, "test");
         assert!(result.is_some());
 
         let extracted = result.unwrap();
@@ -1374,7 +1188,5 @@ mod tests {
         assert_eq!(extracted.seed, Some(12345));
         assert_eq!(extracted.stop_sequences, Some(vec!["STOP".to_string()]));
         assert_eq!(extracted.reasoning_effort, Some("medium".to_string()));
-        assert_eq!(extracted.retries.num_retries, 3);
-        assert_eq!(extracted.retries.max_delay_s, 15.0);
     }
 }
