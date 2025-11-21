@@ -23,8 +23,6 @@ import {
   modelInferenceRowSchema,
   parsedModelInferenceRowSchema,
   parseInferenceOutput,
-  adjacentIdsSchema,
-  type AdjacentIds,
   type InferenceByIdRow,
   type InferenceRow,
   type ModelInferenceRow,
@@ -505,53 +503,4 @@ export async function countInferencesByFunction(): Promise<
   const rows = await resultSet.json<FunctionCountInfo[]>();
   const validatedRows = z.array(functionCountInfoSchema).parse(rows);
   return validatedRows;
-}
-
-export async function getAdjacentInferenceIds(
-  currentInferenceId: string,
-): Promise<AdjacentIds> {
-  // TODO (soon): add the ability to pass filters by some fields
-  const query = `
-    SELECT
-      NULLIF(
-        (SELECT uint_to_uuid(max(id_uint)) FROM InferenceById WHERE id_uint < toUInt128({current_inference_id:UUID})),
-        toUUID('00000000-0000-0000-0000-000000000000')
-      ) as previous_id,
-      NULLIF(
-        (SELECT uint_to_uuid(min(id_uint)) FROM InferenceById WHERE id_uint > toUInt128({current_inference_id:UUID})),
-        toUUID('00000000-0000-0000-0000-000000000000')
-      ) as next_id
-  `;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { current_inference_id: currentInferenceId },
-  });
-  const rows = await resultSet.json<AdjacentIds>();
-  const parsedRows = rows.map((row) => adjacentIdsSchema.parse(row));
-  return parsedRows[0];
-}
-
-export async function getAdjacentEpisodeIds(
-  currentEpisodeId: string,
-): Promise<AdjacentIds> {
-  const query = `
-    SELECT
-      NULLIF(
-        (SELECT DISTINCT uint_to_uuid(max(episode_id_uint)) FROM InferenceByEpisodeId WHERE episode_id_uint < toUInt128({current_episode_id:UUID})),
-        toUUID('00000000-0000-0000-0000-000000000000')
-      ) as previous_id,
-      NULLIF(
-        (SELECT DISTINCT uint_to_uuid(min(episode_id_uint)) FROM InferenceByEpisodeId WHERE episode_id_uint > toUInt128({current_episode_id:UUID})),
-        toUUID('00000000-0000-0000-0000-000000000000')
-      ) as next_id
-  `;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { current_episode_id: currentEpisodeId },
-  });
-  const rows = await resultSet.json<AdjacentIds>();
-  const parsedRows = rows.map((row) => adjacentIdsSchema.parse(row));
-  return parsedRows[0];
 }

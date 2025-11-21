@@ -14,8 +14,8 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 };
 use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
-    DatasetMetadata, DatasetOutputSource, DatasetQueries, GetAdjacentDatapointIdsParams,
-    GetDatapointsParams, GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter,
+    DatasetMetadata, DatasetOutputSource, DatasetQueries, GetDatapointsParams,
+    GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter,
 };
 use tensorzero_core::endpoints::datasets::DatapointKind;
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
@@ -1505,104 +1505,6 @@ async fn test_insert_datapoint_handles_invalid_dataset_names() {
     assert!(
         result.is_err(),
         "Should reject reserved dataset name 'builder'"
-    );
-}
-
-#[tokio::test]
-async fn test_get_adjacent_datapoint_ids() {
-    let clickhouse = get_clickhouse().await;
-
-    let dataset_name = format!("test_adjacent_{}", Uuid::now_v7());
-
-    // Insert three datapoints
-    let id1 = Uuid::now_v7();
-    let id2 = Uuid::now_v7();
-    let id3 = Uuid::now_v7();
-
-    for id in [id1, id2, id3] {
-        let datapoint = ChatInferenceDatapointInsert {
-            dataset_name: dataset_name.clone(),
-            function_name: "test_function".to_string(),
-            id,
-            name: None,
-            episode_id: None,
-            input: StoredInput {
-                system: None,
-                messages: vec![],
-            },
-            output: Some(vec![ContentBlockChatOutput::Text(Text {
-                text: "test".to_string(),
-            })]),
-            tool_params: None,
-            tags: None,
-            auxiliary: String::new(),
-            staled_at: None,
-            source_inference_id: None,
-            is_custom: true,
-        };
-
-        clickhouse
-            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
-            .await
-            .unwrap();
-    }
-
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Test middle datapoint
-    let adjacent = clickhouse
-        .get_adjacent_datapoint_ids(&GetAdjacentDatapointIdsParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: id2,
-        })
-        .await
-        .unwrap();
-    assert_eq!(
-        adjacent.previous_id,
-        Some(id1),
-        "Should return previous id for the middle datapoint"
-    );
-    assert_eq!(
-        adjacent.next_id,
-        Some(id3),
-        "Should return next id for the middle datapoint"
-    );
-
-    // Test first datapoint
-    let adjacent = clickhouse
-        .get_adjacent_datapoint_ids(&GetAdjacentDatapointIdsParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: id1,
-        })
-        .await
-        .unwrap();
-    assert_eq!(
-        adjacent.previous_id, None,
-        "Should return None as previous id for the first datapoint"
-    );
-    assert_eq!(
-        adjacent.next_id,
-        Some(id2),
-        "Should return next id for the first datapoint"
-    );
-
-    // Test last datapoint
-    let adjacent = clickhouse
-        .get_adjacent_datapoint_ids(&GetAdjacentDatapointIdsParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: id3,
-        })
-        .await
-        .unwrap();
-    assert_eq!(
-        adjacent.previous_id,
-        Some(id2),
-        "Should return previous id for the last datapoint"
-    );
-    assert_eq!(
-        adjacent.next_id, None,
-        "Should return None as next id for the last datapoint"
     );
 }
 
