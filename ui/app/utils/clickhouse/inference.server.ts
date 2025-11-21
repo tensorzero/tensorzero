@@ -1,10 +1,8 @@
 import {
   CountSchema,
   modelInferenceInputMessageSchema,
-  type ZodTableBounds,
-  type ZodTableBoundsWithCount,
-  TableBoundsWithCountSchema,
   ZodJsonValueSchema,
+  type ZodTableBounds,
 } from "./common";
 import {
   contentBlockOutputSchema,
@@ -16,6 +14,7 @@ import type {
   FunctionConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
+  TableBoundsWithCount,
 } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
@@ -36,6 +35,7 @@ import {
 import { z } from "zod";
 import { logger } from "~/utils/logger";
 import { getConfig, getFunctionConfig } from "../config/index.server";
+import { getTensorZeroClient } from "../tensorzero.server";
 
 /**
  * Query a table of at most `limit` Inferences from ChatInference or JsonInference that are
@@ -182,45 +182,20 @@ export async function queryInferenceTable(params: {
 
 /// TODO (#2788): Create MVs for sorting episodes and inferences by ID DESC
 export async function queryInferenceTableBounds(params?: {
-  extraWhere?: string[];
-  extraParams?: Record<string, string | number>;
-}): Promise<ZodTableBoundsWithCount> {
-  const { extraWhere = [], extraParams = {} } = params ?? {};
-
-  // Build WHERE clause
-  const whereClauses = [...extraWhere];
-  const whereClause =
-    whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
-
-  // IMPORTANT: This query will return zero UUIDs if there are no results, so we need to handle this case below.
-  const query = `
-  SELECT
-    uint_to_uuid(MIN(id_uint)) AS first_id,
-    uint_to_uuid(MAX(id_uint)) AS last_id,
-    toUInt32(COUNT()) AS count
-  FROM InferenceById FINAL
-  ${whereClause}
-  LIMIT 1
-  `;
-
+  function_name?: string;
+  variant_name?: string;
+  episode_id?: string;
+}): Promise<TableBoundsWithCount> {
   try {
-    const resultSet = await getClickhouseClient().query({
-      query,
-      format: "JSONEachRow",
-      query_params: extraParams,
-    });
-    const rows = await resultSet.json<ZodTableBoundsWithCount>();
+    const client = getTensorZeroClient();
+    const result = await client.getInferenceBounds(params);
 
-    // Handle the case where there are no results
-    if (!rows.length || rows[0].count === 0) {
-      return {
-        first_id: null,
-        last_id: null,
-        count: 0,
-      };
-    }
-
-    return TableBoundsWithCountSchema.parse(rows[0]);
+    return {
+      // TODO: handle undefined values instead of nulls
+      first_id: result.earliest_id || null,
+      last_id: result.latest_id || null,
+      count: result.count,
+    };
   } catch (error) {
     logger.error("Failed to query inference table bounds:", error);
     throw data("Error querying inference table bounds", { status: 500 });
@@ -246,8 +221,7 @@ export async function queryInferenceTableBoundsByEpisodeId(params: {
   episode_id: string;
 }): Promise<ZodTableBounds> {
   return queryInferenceTableBounds({
-    extraWhere: ["episode_id = {episode_id:String}"],
-    extraParams: { episode_id: params.episode_id },
+    episode_id: params.episode_id,
   });
 }
 
@@ -270,8 +244,7 @@ export async function queryInferenceTableBoundsByFunctionName(params: {
   function_name: string;
 }): Promise<ZodTableBounds> {
   return queryInferenceTableBounds({
-    extraWhere: ["function_name = {function_name:String}"],
-    extraParams: { function_name: params.function_name },
+    function_name: params.function_name,
   });
 }
 
@@ -302,14 +275,8 @@ export async function queryInferenceTableBoundsByVariantName(params: {
   variant_name: string;
 }): Promise<ZodTableBounds> {
   return queryInferenceTableBounds({
-    extraWhere: [
-      "function_name = {function_name:String}",
-      "variant_name = {variant_name:String}",
-    ],
-    extraParams: {
-      function_name: params.function_name,
-      variant_name: params.variant_name,
-    },
+    function_name: params.function_name,
+    variant_name: params.variant_name,
   });
 }
 

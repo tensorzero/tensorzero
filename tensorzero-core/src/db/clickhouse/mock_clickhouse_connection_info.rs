@@ -9,7 +9,10 @@ use crate::db::datasets::{
     GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatapointsParams,
     GetDatasetMetadataParams, GetDatasetRowsParams, MockDatasetQueries,
 };
-use crate::db::inferences::{InferenceQueries, ListInferencesParams, MockInferenceQueries};
+use crate::db::inferences::{
+    GetInferenceBoundsParams, InferenceBounds, InferenceQueries, ListInferencesParams,
+    MockInferenceQueries,
+};
 use crate::endpoints::datasets::StoredDatapoint;
 use crate::error::Error;
 use crate::stored_inference::StoredInferenceDatabase;
@@ -46,6 +49,13 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
         params: &ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInferenceDatabase>, Error> {
         self.inference_queries.list_inferences(config, params).await
+    }
+
+    async fn get_inference_bounds(
+        &self,
+        params: GetInferenceBoundsParams,
+    ) -> Result<InferenceBounds, Error> {
+        self.inference_queries.get_inference_bounds(params).await
     }
 }
 
