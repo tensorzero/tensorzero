@@ -637,9 +637,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@b9e51907a09c216f16ebe8536097933489208112  # v4.3.0
         with:
-          version: "latest"
+          version: "3.18.6"  # Conservatively match the `Helm 3.2.0+` version specified in examples/production-deployment-k8s-helm/README.md
 
       - name: Install helm-values-schema-json plugin
         run: helm plugin install https://github.com/losisin/helm-values-schema-json.git
