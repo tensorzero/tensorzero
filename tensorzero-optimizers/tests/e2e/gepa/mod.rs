@@ -3,11 +3,14 @@
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tensorzero::DynamicToolParams;
+use tensorzero_core::client::{ClientBuilder, ClientBuilderMode};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_dataset_clickhouse, select_json_dataset_clickhouse,
 };
+use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::endpoints::datasets::v1::delete_dataset;
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{
@@ -16,7 +19,10 @@ use tensorzero_core::inference::types::{
     System, Template, Text,
 };
 use tensorzero_core::stored_inference::{RenderedSample, StoredOutput};
-use tensorzero_optimizers::gepa::create_evaluation_dataset;
+use tensorzero_core::variant::VariantConfig;
+use tensorzero_optimizers::gepa::{
+    create_evaluation_dataset, evaluate_variant, EvaluateVariantParams,
+};
 use uuid::Uuid;
 
 pub mod analyze;
@@ -141,7 +147,7 @@ fn create_test_json_rendered_sample(input: &str, output: &str) -> RenderedSample
 }
 
 #[tokio::test]
-async fn test_create_evaluation_dataset_chat() {
+async fn test_gepa_evaluate_variant_chat() {
     let clickhouse = get_clickhouse().await;
     let http_client = TensorzeroHttpClient::new_testing().unwrap();
     let config = get_e2e_config().await;
@@ -196,6 +202,104 @@ async fn test_create_evaluation_dataset_chat() {
     // Verify output is present
     assert!(first_datapoint.output.is_some());
 
+    // Test evaluate_variant function
+    let gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
+        config: config.clone(),
+        clickhouse_connection_info: clickhouse.clone(),
+        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        http_client: http_client.clone(),
+        timeout: Some(Duration::from_secs(60)),
+    })
+    .build()
+    .await
+    .expect("Failed to build gateway client");
+
+    // Get the test_evaluation config
+    let evaluation_config = config
+        .evaluations
+        .get("test_evaluation")
+        .expect("test_evaluation should exist in config")
+        .clone();
+
+    // Get the variant from the loaded config
+    let function = config
+        .functions
+        .get("basic_test")
+        .expect("basic_test function should exist in config");
+    let variant = function
+        .variants()
+        .get("openai")
+        .expect("openai variant should exist in basic_test function");
+    let variant_config = match &variant.inner {
+        VariantConfig::ChatCompletion(chat_config) => chat_config.as_uninitialized(),
+        _ => panic!("Expected ChatCompletion variant"),
+    };
+
+    // Call evaluate_variant
+    let evaluation_params = EvaluateVariantParams {
+        gateway_client,
+        clickhouse_connection_info: clickhouse.clone(),
+        tensorzero_config: config.clone(),
+        evaluation_config,
+        evaluation_name: "test_evaluation".to_string(),
+        variant_name: "test_variant".to_string(),
+        variant_config,
+        dataset_name: dataset_name.clone(),
+        concurrency: 2,
+    };
+
+    let evaluation_result = evaluate_variant(evaluation_params).await;
+    assert!(
+        evaluation_result.is_ok(),
+        "Failed to evaluate variant: {:?}",
+        evaluation_result.err()
+    );
+
+    let evaluation_results = evaluation_result.unwrap();
+
+    // Assert evaluation results
+    assert_eq!(
+        evaluation_results.evaluation_infos.len(),
+        3,
+        "Expected 3 evaluation results, got {}",
+        evaluation_results.evaluation_infos.len()
+    );
+
+    // Verify we have stats for all 4 evaluators
+    assert!(
+        evaluation_results
+            .evaluation_stats
+            .contains_key("happy_bool"),
+        "Expected happy_bool evaluator stats"
+    );
+    assert!(
+        evaluation_results.evaluation_stats.contains_key("sad_bool"),
+        "Expected sad_bool evaluator stats"
+    );
+    assert!(
+        evaluation_results.evaluation_stats.contains_key("zero"),
+        "Expected zero evaluator stats"
+    );
+    assert!(
+        evaluation_results.evaluation_stats.contains_key("one"),
+        "Expected one evaluator stats"
+    );
+
+    // Verify each evaluator has valid stats
+    for (evaluator_name, stats) in &evaluation_results.evaluation_stats {
+        assert_eq!(
+            stats.count, 3,
+            "Expected count of 3 for {}, got {}",
+            evaluator_name, stats.count
+        );
+        assert!(
+            stats.mean.is_finite(),
+            "Expected mean to be finite for {}, got {}",
+            evaluator_name,
+            stats.mean
+        );
+    }
+
     // Delete the dataset
     let delete_result = delete_dataset(&clickhouse, &dataset_name).await;
     assert!(
@@ -220,7 +324,7 @@ async fn test_create_evaluation_dataset_chat() {
 }
 
 #[tokio::test]
-async fn test_create_evaluation_dataset_json() {
+async fn test_gepa_evaluate_variant_json() {
     let clickhouse = get_clickhouse().await;
     let http_client = TensorzeroHttpClient::new_testing().unwrap();
     let config = get_e2e_config().await;
@@ -280,6 +384,104 @@ async fn test_create_evaluation_dataset_json() {
     // Verify output_schema is preserved
     assert!(first_datapoint.output_schema.get("type").is_some());
     assert_eq!(first_datapoint.output_schema.get("type").unwrap(), "object");
+
+    // Test evaluate_variant function
+    let gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
+        config: config.clone(),
+        clickhouse_connection_info: clickhouse.clone(),
+        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        http_client: http_client.clone(),
+        timeout: Some(Duration::from_secs(60)),
+    })
+    .build()
+    .await
+    .expect("Failed to build gateway client");
+
+    // Get the json_evaluation config
+    let evaluation_config = config
+        .evaluations
+        .get("json_evaluation")
+        .expect("json_evaluation should exist in config")
+        .clone();
+
+    // Get the variant from the loaded config
+    let function = config
+        .functions
+        .get("json_success")
+        .expect("json_success function should exist in config");
+    let variant = function
+        .variants()
+        .get("openai")
+        .expect("openai variant should exist in json_success function");
+    let variant_config = match &variant.inner {
+        VariantConfig::ChatCompletion(chat_config) => chat_config.as_uninitialized(),
+        _ => panic!("Expected ChatCompletion variant"),
+    };
+
+    // Call evaluate_variant
+    let evaluation_params = EvaluateVariantParams {
+        gateway_client,
+        clickhouse_connection_info: clickhouse.clone(),
+        tensorzero_config: config.clone(),
+        evaluation_config,
+        evaluation_name: "json_evaluation".to_string(),
+        variant_name: "test_variant".to_string(),
+        variant_config,
+        dataset_name: dataset_name.clone(),
+        concurrency: 2,
+    };
+
+    let evaluation_result = evaluate_variant(evaluation_params).await;
+    assert!(
+        evaluation_result.is_ok(),
+        "Failed to evaluate variant: {:?}",
+        evaluation_result.err()
+    );
+
+    let evaluation_results = evaluation_result.unwrap();
+
+    // Assert evaluation results
+    assert_eq!(
+        evaluation_results.evaluation_infos.len(),
+        2,
+        "Expected 2 evaluation results, got {}",
+        evaluation_results.evaluation_infos.len()
+    );
+
+    // Verify we have stats for all 4 evaluators
+    assert!(
+        evaluation_results
+            .evaluation_stats
+            .contains_key("happy_bool"),
+        "Expected happy_bool evaluator stats"
+    );
+    assert!(
+        evaluation_results.evaluation_stats.contains_key("sad_bool"),
+        "Expected sad_bool evaluator stats"
+    );
+    assert!(
+        evaluation_results.evaluation_stats.contains_key("zero"),
+        "Expected zero evaluator stats"
+    );
+    assert!(
+        evaluation_results.evaluation_stats.contains_key("one"),
+        "Expected one evaluator stats"
+    );
+
+    // Verify each evaluator has valid stats
+    for (evaluator_name, stats) in &evaluation_results.evaluation_stats {
+        assert_eq!(
+            stats.count, 2,
+            "Expected count of 2 for {}, got {}",
+            evaluator_name, stats.count
+        );
+        assert!(
+            stats.mean.is_finite(),
+            "Expected mean to be finite for {}, got {}",
+            evaluator_name,
+            stats.mean
+        );
+    }
 
     // Delete the dataset
     let delete_result = delete_dataset(&clickhouse, &dataset_name).await;
