@@ -316,6 +316,40 @@ impl<'a> Migration for Migration0043<'a> {
             .run_query_synchronous_no_params(query)
             .await?;
 
+        let query = format!(
+            "
+            ALTER TABLE ChatInferenceTagView{on_cluster_name} MODIFY QUERY
+            SELECT
+                function_name,
+                key,
+                tags[key] as value,
+                id as inference_id,
+                snapshot_hash
+            FROM ChatInference
+            ARRAY JOIN mapKeys(tags) as key
+        "
+        );
+        self.clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
+
+        let query = format!(
+            "
+            ALTER TABLE JsonInferenceTagView{on_cluster_name} MODIFY QUERY
+            SELECT
+                function_name,
+                key,
+                tags[key] as value,
+                id as inference_id,
+                snapshot_hash
+            FROM JsonInference
+            ARRAY JOIN mapKeys(tags) as key
+        "
+        );
+        self.clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
+
         // Group 4: Feedback by variant views (with JOINs)
         let query = format!(
             "
@@ -543,6 +577,24 @@ SELECT
     'json' as function_type,
     key,
     tags[key] as value
+FROM JsonInference
+ARRAY JOIN mapKeys(tags) as key;
+
+ALTER TABLE ChatInferenceTagView{on_cluster_name} MODIFY QUERY
+SELECT
+    function_name,
+    key,
+    tags[key] as value,
+    id as inference_id
+FROM ChatInference
+ARRAY JOIN mapKeys(tags) as key;
+
+ALTER TABLE JsonInferenceTagView{on_cluster_name} MODIFY QUERY
+SELECT
+    function_name,
+    key,
+    tags[key] as value,
+    id as inference_id
 FROM JsonInference
 ARRAY JOIN mapKeys(tags) as key;
 
