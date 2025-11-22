@@ -2,14 +2,18 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use tensorzero_core::client::{Client, ClientBuilder, ClientBuilderMode};
+use tensorzero_core::config::{Config, ConfigFileGlob, ConfigLoadInfo};
 use tensorzero_core::db::clickhouse::{
     test_helpers::{get_clickhouse, CLICKHOUSE_URL},
     TableName,
 };
-use tensorzero_core::endpoints::datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
+use tensorzero_core::endpoints::datasets::{
+    StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint,
+};
 use uuid::Uuid;
 
 /// Takes a chat fixture as a path to a JSONL file and writes the fixture to the dataset.
@@ -46,10 +50,10 @@ pub async fn write_json_fixture_to_dataset(
 ) {
     let fixture = std::fs::read_to_string(fixture_path).unwrap();
     let fixture = fixture.trim();
-    let mut datapoints: Vec<JsonInferenceDatapoint> = Vec::new();
+    let mut datapoints: Vec<StoredJsonInferenceDatapoint> = Vec::new();
     // Iterate over the lines in the string
     for line in fixture.lines() {
-        let mut datapoint: JsonInferenceDatapoint = serde_json::from_str(line).unwrap();
+        let mut datapoint: StoredJsonInferenceDatapoint = serde_json::from_str(line).unwrap();
         datapoint.id = Uuid::now_v7();
         if let Some(dataset_name) = dataset_name_mapping.get(&datapoint.dataset_name) {
             datapoint.dataset_name = dataset_name.to_string();
@@ -78,4 +82,21 @@ pub async fn get_tensorzero_client() -> Client {
     .build()
     .await
     .unwrap()
+}
+
+pub async fn get_config() -> Arc<Config> {
+    let ConfigLoadInfo {
+        config,
+        snapshot: _,
+    } = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new_from_path(&PathBuf::from(&format!(
+            "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )))
+        .unwrap(),
+        false,
+    )
+    .await
+    .unwrap();
+    Arc::new(config)
 }
