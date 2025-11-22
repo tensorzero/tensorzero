@@ -11,3 +11,18 @@
  * GOOD: `import type { StoredInput } from "~/types/tensorzero";`
  */
 export type * from "tensorzero-node";
+
+/**
+ * Response type for the /internal/inferences/by-id endpoint
+ */
+export interface InternalListInferencesByIdResponse {
+  inferences: Array<{
+    id: string;
+    function_name: string;
+    variant_name: string;
+    episode_id: string;
+    function_type: string;
+    timestamp: string;
+    tags: Record<string, string>;
+  }>;
+}

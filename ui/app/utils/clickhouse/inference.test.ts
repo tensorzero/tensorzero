@@ -5,14 +5,8 @@ import {
   queryInferenceById,
   queryInferenceTable,
   queryInferenceTableBounds,
-  queryInferenceTableBoundsByEpisodeId,
-  queryInferenceTableByEpisodeId,
   countInferencesByFunction,
   countInferencesForVariant,
-  queryInferenceTableByVariantName,
-  queryInferenceTableByFunctionName,
-  queryInferenceTableBoundsByFunctionName,
-  queryInferenceTableBoundsByVariantName,
   queryModelInferencesByInferenceId,
   getAdjacentInferenceIds,
   getAdjacentEpisodeIds,
@@ -238,12 +232,12 @@ test("queryInferenceTable before past timestamp is empty", async () => {
   expect(inferences.length).toBe(0);
 });
 
-test("queryInferenceTableByEpisodeId pages through initial and final pages correctly using before with episode_id", async () => {
+test("queryInferenceTable pages through initial and final pages correctly using before with episode_id", async () => {
   const LIMIT = 20;
   const episodeId = "01942e26-618b-7b80-b492-34bed9f6d872";
 
   // First page
-  const firstPage = await queryInferenceTableByEpisodeId({
+  const firstPage = await queryInferenceTable({
     limit: LIMIT,
     episode_id: episodeId,
   });
@@ -255,7 +249,7 @@ test("queryInferenceTableByEpisodeId pages through initial and final pages corre
   }
 
   // Next (and in this case final) page
-  const lastPage = await queryInferenceTableByEpisodeId({
+  const lastPage = await queryInferenceTable({
     before: firstPage[firstPage.length - 1].id,
     limit: LIMIT,
     episode_id: episodeId,
@@ -271,12 +265,12 @@ test("queryInferenceTableByEpisodeId pages through initial and final pages corre
   expect(firstPage.length + lastPage.length).toBe(35);
 });
 
-test("queryInferenceTableByEpisodeId pages through a sample of results correctly using after with episode_id", async () => {
+test("queryInferenceTable pages through a sample of results correctly using after with episode_id", async () => {
   const LIMIT = 20;
   const episodeId = "01942e26-469a-7553-af00-cb0495dc7bb5";
 
   // Get the first page
-  const firstPage = await queryInferenceTableByEpisodeId({
+  const firstPage = await queryInferenceTable({
     limit: LIMIT,
     episode_id: episodeId,
   });
@@ -288,7 +282,7 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
   }
 
   // Get the second page using the last ID of the first page
-  const secondPage = await queryInferenceTableByEpisodeId({
+  const secondPage = await queryInferenceTable({
     before: firstPage[firstPage.length - 1].id,
     limit: LIMIT,
     episode_id: episodeId,
@@ -302,7 +296,7 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
 
   // Now test paging forward using after
   // Get a page starting after the first item of the second page
-  const forwardPage = await queryInferenceTableByEpisodeId({
+  const forwardPage = await queryInferenceTable({
     after: secondPage[0].id,
     limit: LIMIT,
     episode_id: episodeId,
@@ -324,7 +318,7 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
   // Just get a couple more pages to avoid too many queries
   for (let i = 0; i < 2 && nextPage.length === LIMIT; i++) {
     lastPage = nextPage;
-    nextPage = await queryInferenceTableByEpisodeId({
+    nextPage = await queryInferenceTable({
       before: lastPage[lastPage.length - 1].id,
       limit: LIMIT,
       episode_id: episodeId,
@@ -350,7 +344,7 @@ test("queryInferenceTableBounds", async () => {
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
-  const bounds = await queryInferenceTableBoundsByEpisodeId({
+  const bounds = await queryInferenceTableBounds({
     episode_id: "01942e26-6497-7910-89d6-d9d1c735d3df",
   });
   expect(bounds.first_id).toBe("01942e26-6e50-7fa0-8d61-9fd730a73a8b");
@@ -358,15 +352,15 @@ test("queryInferenceTableBounds with episode_id", async () => {
 });
 
 test("queryInferenceTableBounds with invalid episode_id", async () => {
-  const bounds = await queryInferenceTableBoundsByEpisodeId({
+  const bounds = await queryInferenceTableBounds({
     episode_id: "01942e26-6497-7910-89d6-d9c1c735d3df",
   });
   expect(bounds.first_id).toBe(null);
   expect(bounds.last_id).toBe(null);
 });
 
-test("queryInferenceTableByFunctionName", async () => {
-  const inferences = await queryInferenceTableByFunctionName({
+test("queryInferenceTable with function_name", async () => {
+  const inferences = await queryInferenceTable({
     function_name: "extract_entities",
     limit: 10,
   });
@@ -378,7 +372,7 @@ test("queryInferenceTableByFunctionName", async () => {
   }
 
   // Test pagination with before
-  const inferences2 = await queryInferenceTableByFunctionName({
+  const inferences2 = await queryInferenceTable({
     function_name: "extract_entities",
     before: inferences[inferences.length - 1].id,
     limit: 10,
@@ -386,7 +380,7 @@ test("queryInferenceTableByFunctionName", async () => {
   expect(inferences2.length).toBe(10);
 
   // Test pagination with after
-  const inferences3 = await queryInferenceTableByFunctionName({
+  const inferences3 = await queryInferenceTable({
     function_name: "extract_entities",
     after: inferences[0].id,
     limit: 10,
@@ -394,16 +388,16 @@ test("queryInferenceTableByFunctionName", async () => {
   expect(inferences3.length).toBe(0);
 });
 
-test("queryInferenceTableBoundsByFunctionName", async () => {
-  const bounds = await queryInferenceTableBoundsByFunctionName({
+test("queryInferenceTableBounds with function_name", async () => {
+  const bounds = await queryInferenceTableBounds({
     function_name: "extract_entities",
   });
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
   expect(bounds.last_id).toBe("0196374c-2c92-74b3-843f-ffa611b577b4");
 });
 
-test("queryInferenceTableByVariantName", async () => {
-  const inferences = await queryInferenceTableByVariantName({
+test("queryInferenceTable with variant_name", async () => {
+  const inferences = await queryInferenceTable({
     function_name: "extract_entities",
     variant_name: "gpt4o_initial_prompt",
     limit: 10,
@@ -416,7 +410,7 @@ test("queryInferenceTableByVariantName", async () => {
   }
 
   // Test pagination with before
-  const inferences2 = await queryInferenceTableByVariantName({
+  const inferences2 = await queryInferenceTable({
     function_name: "extract_entities",
     variant_name: "gpt4o_initial_prompt",
     before: inferences[inferences.length - 1].id,
@@ -425,7 +419,7 @@ test("queryInferenceTableByVariantName", async () => {
   expect(inferences2.length).toBe(10);
 
   // Test pagination with after
-  const inferences3 = await queryInferenceTableByVariantName({
+  const inferences3 = await queryInferenceTable({
     function_name: "extract_entities",
     variant_name: "gpt4o_initial_prompt",
     after: inferences[0].id,
@@ -434,8 +428,8 @@ test("queryInferenceTableByVariantName", async () => {
   expect(inferences3.length).toBe(0);
 });
 
-test("queryInferenceTableBoundsByVariantName", async () => {
-  const bounds = await queryInferenceTableBoundsByVariantName({
+test("queryInferenceTableBounds with variant_name", async () => {
+  const bounds = await queryInferenceTableBounds({
     function_name: "extract_entities",
     variant_name: "gpt4o_initial_prompt",
   });
