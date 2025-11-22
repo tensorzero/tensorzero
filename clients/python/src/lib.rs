@@ -65,9 +65,9 @@ use tensorzero_core::{
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
-    Datapoint, DynamicToolParams, FeedbackParams, FunctionTool, InferenceOutput, InferenceParams,
+    Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
     InferenceStream, LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams,
-    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError,
+    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
     WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
@@ -438,12 +438,12 @@ impl BaseTensorZeroGateway {
             None
         };
 
-        let additional_tools: Option<Vec<FunctionTool>> = if let Some(tools) = additional_tools {
+        let additional_tools: Option<Vec<Tool>> = if let Some(tools) = additional_tools {
             Some(
                 tools
                     .into_iter()
-                    .map(|key_vals| parse_tool(py, key_vals))
-                    .collect::<Result<Vec<FunctionTool>, PyErr>>()?,
+                    .map(|key_vals| parse_tool(py, key_vals).map(Tool::Function))
+                    .collect::<Result<Vec<Tool>, PyErr>>()?,
             )
         } else {
             None
@@ -1354,7 +1354,7 @@ impl TensorZeroGateway {
         concurrency: usize,
         inference_cache: String,
         internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
-        max_datapoints: Option<usize>,
+        max_datapoints: Option<u32>,
         adaptive_stopping: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<EvaluationJobHandler> {
         let client = this.as_super().client.clone();
@@ -2533,7 +2533,7 @@ impl AsyncTensorZeroGateway {
         concurrency: usize,
         inference_cache: String,
         internal_dynamic_variant_config: Option<&Bound<'py, PyDict>>,
-        max_datapoints: Option<usize>,
+        max_datapoints: Option<u32>,
         adaptive_stopping: Option<&Bound<'py, PyDict>>,
     ) -> PyResult<Bound<'py, PyAny>> {
         let client = this.as_super().client.clone();

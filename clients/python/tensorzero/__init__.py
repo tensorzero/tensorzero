@@ -13,6 +13,10 @@ from .client import (
 
 # Generated dataclasses
 from .generated_types import (
+    AlwaysExtraBody,
+    AlwaysExtraBodyDelete,
+    AlwaysExtraHeader,
+    AlwaysExtraHeaderDelete,
     ContentBlockChatOutput,
     ContentBlockChatOutputText,
     ContentBlockChatOutputToolCall,
@@ -23,6 +27,8 @@ from .generated_types import (
     CreateDatapointsResponse,
     DatapointMetadataUpdate,
     DeleteDatapointsResponse,
+    ExtraBody,
+    ExtraHeader,
     FunctionTool,
     GetDatapointsResponse,
     GetInferencesRequest,
@@ -43,6 +49,14 @@ from .generated_types import (
     JsonInferenceOutput,
     ListDatapointsRequest,
     ListInferencesRequest,
+    ModelProviderExtraBody,
+    ModelProviderExtraBodyDelete,
+    ModelProviderExtraHeader,
+    ModelProviderExtraHeaderDelete,
+    ProviderExtraBody,  # DEPRECATED
+    ProviderExtraBodyDelete,  # DEPRECATED
+    ProviderExtraHeader,  # DEPRECATED
+    ProviderExtraHeaderDelete,  # DEPRECATED
     StorageKind,
     StorageKindDisabled,
     StorageKindFilesystem,
@@ -62,6 +76,10 @@ from .generated_types import (
     StoredInputMessageContentUnknown,
     UpdateDatapointMetadataRequest,
     UpdateDatapointsResponse,
+    VariantExtraBody,
+    VariantExtraBodyDelete,
+    VariantExtraHeader,
+    VariantExtraHeaderDelete,
 )
 from .tensorzero import (
     BestOfNSamplingConfig,
@@ -101,7 +119,6 @@ from .types import (
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
     DynamicEvaluationRunResponse,  # DEPRECATED
     EvaluatorStatsDict,
-    ExtraBody,
     FeedbackResponse,
     FileBase64,
     FileUrl,
@@ -176,6 +193,10 @@ ChatInferenceOutput = t.List[ContentBlock]
 
 
 __all__ = [
+    "AlwaysExtraBody",
+    "AlwaysExtraBodyDelete",
+    "AlwaysExtraHeader",
+    "AlwaysExtraHeaderDelete",
     "AndFilter",
     "AsyncTensorZeroGateway",
     "BaseTensorZeroError",
@@ -207,6 +228,7 @@ __all__ = [
     "DynamicEvaluationRunResponse",  # DEPRECATED
     "EvaluatorStatsDict",
     "ExtraBody",
+    "ExtraHeader",
     "FeedbackResponse",
     "FileBase64",
     "FileUrl",
@@ -248,6 +270,10 @@ __all__ = [
     "ListInferencesRequest",
     "Message",
     "MixtureOfNConfig",
+    "ModelProviderExtraBody",
+    "ModelProviderExtraBodyDelete",
+    "ModelProviderExtraHeader",
+    "ModelProviderExtraHeaderDelete",
     "NotFilter",
     "OpenAIRFTConfig",
     "OpenAISFTConfig",
@@ -258,6 +284,10 @@ __all__ = [
     "OrderBy",
     "OrFilter",
     "patch_openai_client",
+    "ProviderExtraBody",  # DEPRECATED
+    "ProviderExtraBodyDelete",  # DEPRECATED
+    "ProviderExtraHeader",  # DEPRECATED
+    "ProviderExtraHeaderDelete",  # DEPRECATED
     "RawText",
     "RenderedSample",
     "RenderedStoredInference",  # DEPRECATED
@@ -302,6 +332,10 @@ __all__ = [
     "UpdateDatapointMetadataRequest",
     "UpdateDatapointsResponse",
     "Usage",
+    "VariantExtraBody",
+    "VariantExtraBodyDelete",
+    "VariantExtraHeader",
+    "VariantExtraHeaderDelete",
     "VariantsConfig",
     "WorkflowEvaluationRunEpisodeResponse",
     "WorkflowEvaluationRunResponse",

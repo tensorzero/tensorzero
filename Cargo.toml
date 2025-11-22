@@ -19,7 +19,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.11.4"
+version = "2025.11.5"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 
@@ -34,8 +34,9 @@ serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_path_to_error = "0.1.17"
 uuid = { version = "1.18.1", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
+serde_with = "3.16.0"
 secrecy = { version = "0.10.2", features = ["serde"] }
-toml = "0.9.8"
+toml = { version = "0.9.8", features = ["preserve_order"] }
 reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 async-trait = "0.1.89"
@@ -59,7 +60,8 @@ minijinja = { version = "2.12.0", features = [
     "unstable_machinery",
 ] }
 url = "2.5.4"
-google-cloud-auth = "1.1.0"
+# TODO - unpin when https://github.com/EmbarkStudios/cargo-deny/issues/803 is fixed
+google-cloud-auth = "=1.1.0"
 serde-untagged = "0.1.8"
 object_store = { version = "0.12.2", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
@@ -81,7 +83,14 @@ tower-http = { version = "0.6.6", features = ["trace"] }
 mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a640e4e9ba2a784b7f7d", features = [
     "serde1",
 ] }
-sqlx = { version = "0.8.6", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "chrono", "uuid"] }
+sqlx = { version = "0.8.6", features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "postgres",
+    "migrate",
+    "chrono",
+    "uuid",
+] }
 rlt = "0.2.1"
 metrics-exporter-prometheus = { version = "0.17.2", features = [
     "http-listener",
@@ -130,6 +139,9 @@ single_match_else = "allow"
 
 # This lint cannot be fixed with 'cargo fmt', and we don't currently generate docs
 doc_lazy_continuation = "allow"
+
+[profile.dev]
+debug = "limited"
 
 [profile.performance]
 inherits = "release"

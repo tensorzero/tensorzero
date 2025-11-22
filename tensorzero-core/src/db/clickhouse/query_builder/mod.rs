@@ -450,11 +450,13 @@ mod tests {
     async fn get_e2e_config() -> Config {
         // Read the e2e config file
         Config::load_from_path_optional_verify_credentials(
-            &ConfigFileGlob::new_from_path(Path::new("tests/e2e/tensorzero.toml")).unwrap(),
+            &ConfigFileGlob::new_from_path(Path::new("tests/e2e/config/tensorzero.*.toml"))
+                .unwrap(),
             false,
         )
         .await
         .unwrap()
+        .config
     }
 
     /// Tests the simplest possible query: list inferences for a function with no filters

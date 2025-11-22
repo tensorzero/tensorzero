@@ -13,7 +13,7 @@ use tensorzero::{
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob},
+    config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob, ConfigLoadInfo},
     db::{
         clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo},
         postgres::PostgresConnectionInfo,
@@ -31,7 +31,7 @@ use tensorzero_core::{
     model_table::ProviderTypeDefaultCredentials,
     optimization::{OptimizationJobInfo, OptimizerOutput, UninitializedOptimizerInfo},
     stored_inference::StoredOutput,
-    tool::{DynamicToolParams, FunctionTool, ToolCall, ToolChoice, ToolResult},
+    tool::{DynamicToolParams, FunctionTool, Tool, ToolCall, ToolChoice, ToolResult},
     variant::JsonMode,
 };
 use tensorzero_optimizers::{JobHandle, Optimizer};
@@ -83,7 +83,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     let credentials: HashMap<String, secrecy::SecretBox<str>> = HashMap::new();
 
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("../tensorzero-core/tests/e2e/tensorzero.toml");
+    config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
 
     // Create an embedded client so that we run migrations
     let tensorzero_client =
@@ -106,7 +106,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .clone();
 
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let config = Config::load_from_path_optional_verify_credentials(
+    let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )
@@ -441,7 +441,7 @@ fn generate_tool_call_example() -> RenderedSample {
         stored_output: Some(StoredOutput::Chat(inference_response_tool_call)),
         tool_params: DynamicToolParams {
             allowed_tools: None,
-            additional_tools: Some(vec![FunctionTool {
+            additional_tools: Some(vec![Tool::Function(FunctionTool {
                 name: "get_weather".to_string(),
                 description: "Get the weather for a location".to_string(),
                 parameters: serde_json::json!({
@@ -455,7 +455,7 @@ fn generate_tool_call_example() -> RenderedSample {
                     "required": ["location"]
                 }),
                 strict: false,
-            }]),
+            })]),
             tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: None,
             provider_tools: vec![],
@@ -565,7 +565,7 @@ macro_rules! embedded_workflow_test_case {
     ($fn_name:ident, $constructor:expr) => {
         ::paste::paste! {
             #[tokio::test(flavor = "multi_thread")]
-            async fn [<test_embedded_slow_optimization_ $fn_name>]() {
+            async fn [<test_embedded_mock_optimization_ $fn_name>]() {
                 let client = tensorzero::test_helpers::make_embedded_gateway().await;
                 $crate::common::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
             }
@@ -581,7 +581,7 @@ macro_rules! http_workflow_test_case {
     ($fn_name:ident, $constructor:expr) => {
         ::paste::paste! {
             #[tokio::test]
-            async fn [<test_http_slow_optimization_ $fn_name>]() {
+            async fn [<test_http_mock_optimization_ $fn_name>]() {
                 let client = tensorzero::test_helpers::make_http_gateway().await;
                 $crate::common::run_workflow_test_case_with_tensorzero_client(&$constructor, &client).await;
             }

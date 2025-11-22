@@ -107,6 +107,7 @@ pub mod batch;
 pub mod chat_completion_inference_params;
 pub mod extra_body;
 pub mod extra_headers;
+pub mod extra_stuff;
 pub mod file;
 mod input_message;
 #[cfg(feature = "pyo3")]
@@ -607,6 +608,19 @@ impl LazyResolvedInputMessageContent {
 pub struct InputMessage {
     pub role: Role,
     pub content: Vec<InputMessageContent>,
+}
+
+impl From<StoredInputMessage> for InputMessage {
+    fn from(stored_input_message: StoredInputMessage) -> Self {
+        InputMessage {
+            role: stored_input_message.role,
+            content: stored_input_message
+                .content
+                .into_iter()
+                .map(StoredInputMessageContent::into_input_message_content)
+                .collect(),
+        }
+    }
 }
 
 /// A newtype wrapper around Map<String, Value> for template and system arguments
@@ -1957,9 +1971,10 @@ impl ChatInferenceResult {
         tool_config: Option<&ToolCallConfig>,
         inference_params: InferenceParams,
         original_response: Option<String>,
+        json_mode: Option<JsonMode>,
     ) -> Self {
         let created = current_timestamp();
-        let content = parse_chat_output(raw_content, tool_config).await;
+        let content = parse_chat_output(raw_content, tool_config, json_mode).await;
         let finish_reason = get_finish_reason(&model_inference_results);
         Self {
             inference_id,
@@ -1987,6 +2002,7 @@ fn get_finish_reason(
 pub async fn parse_chat_output(
     content: Vec<ContentBlockOutput>,
     tool_config: Option<&ToolCallConfig>,
+    json_mode: Option<JsonMode>,
 ) -> Vec<ContentBlockChatOutput> {
     if content.is_empty() {
         Error::new(ErrorDetails::Inference {
@@ -2001,12 +2017,19 @@ pub async fn parse_chat_output(
                 output.push(ContentBlockChatOutput::Text(text));
             }
             ContentBlockOutput::ToolCall(tool_call) => {
-                // Parse the tool call arguments
-                let inference_response_tool_call =
-                    InferenceResponseToolCall::new(tool_call, tool_config).await;
-                output.push(ContentBlockChatOutput::ToolCall(
-                    inference_response_tool_call,
-                ));
+                // If using json_mode="tool", convert tool call arguments to text
+                if json_mode == Some(JsonMode::Tool) {
+                    output.push(ContentBlockChatOutput::Text(Text {
+                        text: tool_call.arguments,
+                    }));
+                } else {
+                    // Normal tool call handling
+                    let inference_response_tool_call =
+                        InferenceResponseToolCall::new(tool_call, tool_config).await;
+                    output.push(ContentBlockChatOutput::ToolCall(
+                        inference_response_tool_call,
+                    ));
+                }
             }
             ContentBlockOutput::Thought(thought) => {
                 output.push(ContentBlockChatOutput::Thought(thought));
@@ -2174,7 +2197,7 @@ impl From<JsonMode> for ModelInferenceRequestJsonMode {
         match json_enforcement {
             JsonMode::On => ModelInferenceRequestJsonMode::On,
             JsonMode::Strict => ModelInferenceRequestJsonMode::Strict,
-            JsonMode::ImplicitTool => ModelInferenceRequestJsonMode::Off,
+            JsonMode::Tool => ModelInferenceRequestJsonMode::Off,
             JsonMode::Off => ModelInferenceRequestJsonMode::Off,
         }
     }
@@ -2224,10 +2247,39 @@ where
     let val = bool::deserialize(d)?;
     if !val {
         return Err(D::Error::custom(
-            "Error deserializing replacement config: 'delete' must be 'true', or not set",
+            "Error deserializing replacement config: `delete` must be `true`, or not set",
         ));
     }
     Ok(())
+}
+
+// Field-aware versions for struct fields (not enum variants)
+#[expect(clippy::trivially_copy_pass_by_ref)]
+pub(super) fn serialize_delete_field<S>(_: &(), s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    true.serialize(s)
+}
+
+pub(super) fn deserialize_delete_field<'de, D>(d: D) -> Result<(), D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = bool::deserialize(d)?;
+    if !val {
+        return Err(D::Error::custom(
+            "Error deserializing replacement config: `delete` must be `true`, or not set",
+        ));
+    }
+    Ok(())
+}
+
+pub(super) fn schema_for_delete_field(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    let mut map = Map::new();
+    map.insert("type".to_owned(), Value::String("boolean".to_owned()));
+    map.insert("const".to_owned(), Value::Bool(true));
+    schemars::Schema::from(map)
 }
 
 #[cfg(test)]
@@ -2235,7 +2287,7 @@ mod tests {
     use super::*;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{DynamicToolConfig, ToolChoice, ToolConfig};
+    use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolChoice};
     use serde_json::json;
     use tokio::time::Instant;
 
@@ -2272,6 +2324,7 @@ mod tests {
             model_inference_responses,
             None,
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2323,6 +2376,7 @@ mod tests {
             Some(&weather_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2373,6 +2427,7 @@ mod tests {
             Some(&weather_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2419,6 +2474,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2486,6 +2542,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2572,6 +2629,7 @@ mod tests {
             Some(&weather_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 2);
@@ -2615,7 +2673,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             ..ToolCallConfig::with_tools_available(
                 vec![],
-                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "custom_tool".to_string(),
                     description: "A custom tool".to_string(),
                     parameters: DynamicJSONSchema::new(
@@ -2665,6 +2723,7 @@ mod tests {
             model_inference_responses,
             Some(&additional_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2716,6 +2775,7 @@ mod tests {
             Some(&additional_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2738,7 +2798,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             ..ToolCallConfig::with_tools_available(
                 vec![],
-                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "weather_tool".to_string(),
                     description: "Get weather information".to_string(),
                     parameters: DynamicJSONSchema::new(
@@ -2789,6 +2849,7 @@ mod tests {
             model_inference_responses,
             Some(&restricted_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2845,6 +2906,7 @@ mod tests {
             model_inference_responses,
             Some(&restricted_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -3059,6 +3121,7 @@ mod tests {
             None,
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         let result_all_some = InferenceResult::Chat(chat_result_all_some);
@@ -3089,6 +3152,7 @@ mod tests {
             model_responses_input_none,
             None,
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -3121,6 +3185,7 @@ mod tests {
             None,
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         let result_output_none = InferenceResult::Chat(chat_result_output_none);
@@ -3151,6 +3216,7 @@ mod tests {
             model_responses_all_none,
             None,
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -3183,6 +3249,7 @@ mod tests {
             model_responses_mixed,
             None,
             InferenceParams::default(),
+            None,
             None,
         )
         .await;

@@ -22,7 +22,8 @@ response = client.chat.completions.create(
     extra_body={
         "tensorzero::extra_headers": [
             {
-                "model_provider_name": "tensorzero::model_name::helicone_gpt_4o_mini::provider_name::helicone",
+                "model_name": "helicone_gpt_4o_mini",
+                "provider_name": "helicone",
                 "name": "Helicone-Auth",
                 "value": f"Bearer {helicone_api_key}",
             },
@@ -42,7 +43,8 @@ response = client.chat.completions.create(
     extra_body={
         "tensorzero::extra_headers": [
             {
-                "model_provider_name": "tensorzero::model_name::helicone_grok_3::provider_name::helicone",
+                "model_name": "helicone_grok_3",
+                "provider_name": "helicone",
                 "name": "Helicone-Auth",
                 "value": f"Bearer {helicone_api_key}",
             },

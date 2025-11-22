@@ -7,9 +7,12 @@ use crate::db::datasets::{
     AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetDetailRow, DatasetMetadata, DatasetQueries, DatasetQueryParams,
     GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatapointsParams,
-    GetDatasetMetadataParams, GetDatasetRowsParams, MockDatasetQueries, StaleDatapointParams,
+    GetDatasetMetadataParams, GetDatasetRowsParams, MockDatasetQueries,
 };
-use crate::db::inferences::{InferenceQueries, ListInferencesParams, MockInferenceQueries};
+use crate::db::inferences::{
+    GetInferenceBoundsParams, InferenceBounds, InferenceQueries, ListInferencesParams,
+    MockInferenceQueries,
+};
 use crate::endpoints::datasets::StoredDatapoint;
 use crate::error::Error;
 use crate::stored_inference::StoredInferenceDatabase;
@@ -47,6 +50,13 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
     ) -> Result<Vec<StoredInferenceDatabase>, Error> {
         self.inference_queries.list_inferences(config, params).await
     }
+
+    async fn get_inference_bounds(
+        &self,
+        params: GetInferenceBoundsParams,
+    ) -> Result<InferenceBounds, Error> {
+        self.inference_queries.get_inference_bounds(params).await
+    }
 }
 
 #[async_trait]
@@ -75,10 +85,6 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
 
     async fn count_datasets(&self) -> Result<u32, Error> {
         self.dataset_queries.count_datasets().await
-    }
-
-    async fn stale_datapoint(&self, params: &StaleDatapointParams) -> Result<(), Error> {
-        self.dataset_queries.stale_datapoint(params).await
     }
 
     async fn insert_datapoints(&self, datapoints: &[DatapointInsert]) -> Result<u64, Error> {

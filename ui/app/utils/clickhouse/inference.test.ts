@@ -18,7 +18,7 @@ import {
   getAdjacentEpisodeIds,
 } from "./inference.server";
 import { countInferencesForFunction } from "./inference.server";
-import type { TextContent } from "./common";
+import type { ZodTextContent } from "./common";
 import { displayModelInferenceInputMessageContentSchema } from "./common";
 import { getClickhouseClient } from "./client.server";
 import type {
@@ -34,10 +34,11 @@ test("countInferencesForFunction returns correct counts", async () => {
     schemas: {},
     description: "",
     output_schema: { value: {} },
-    implicit_tool_call_config: {
+    json_mode_tool_call_config: {
       static_tools_available: [],
       dynamic_tools_available: [],
       provider_tools: [],
+      openai_custom_tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
       allowed_tools: { tools: [], choice: "function_default" },
@@ -69,10 +70,11 @@ test("countInferencesForVariant returns correct counts", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
+        openai_custom_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
         allowed_tools: {
@@ -462,7 +464,7 @@ test("queryInferenceById for chat inference", async () => {
   expect(inference?.function_type).toBe("chat");
   expect(inference?.input.messages.length).toBeGreaterThan(0);
   const output = inference?.output as ContentBlockChatOutput[];
-  const firstOutput = output[0] as TextContent;
+  const firstOutput = output[0] as ZodTextContent;
   expect(firstOutput.type).toBe("text");
   expect(firstOutput.text).toBe("Yes.");
 });

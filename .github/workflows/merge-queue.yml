@@ -268,10 +268,10 @@ jobs:
       - name: Configure batch writes in tensorzero.toml
         if: matrix.batch_writes == true
         run: |
-          echo "[gateway.observability.batch_writes]" >> tensorzero-core/tests/e2e/tensorzero.toml
-          echo "enabled = true" >> tensorzero-core/tests/e2e/tensorzero.toml
-          echo "flush_interval_ms = 80" >> tensorzero-core/tests/e2e/tensorzero.toml
-          echo "__force_allow_embedded_batch_writes = true" >> tensorzero-core/tests/e2e/tensorzero.toml
+          echo "[gateway.observability.batch_writes]" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+          echo "enabled = true" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+          echo "flush_interval_ms = 80" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
+          echo "__force_allow_embedded_batch_writes = true" >> tensorzero-core/tests/e2e/config/tensorzero.misc.toml
 
       - name: Launch dependency services for E2E tests
         run: |
@@ -412,43 +412,6 @@ jobs:
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY PROVIDER_PROXY_CACHE_BUCKET=provider-proxy-cache-client-tests ./ci/upload-provider-proxy-cache.sh
 
-  check-production-docker-container:
-    permissions:
-      contents: read
-    runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Build Docker container for production deployment tests
-        run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
-
-      - name: Launch ClickHouse container for E2E tests
-        run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse -d --wait
-
-      - name: Set up .env file for production deployment tests
-        run: |
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
-          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
-          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> examples/production-deployment/.env
-
-      - name: Run docker compose for production deployment tests
-        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
-
-      - name: Run inference for production deployment tests
-        run: examples/production-deployment/run.sh
-
-      - name: Print Docker compose logs
-        if: always()
-        run: |
-          docker compose -f examples/production-deployment/docker-compose.yml logs -t
-
-      - name: Take down docker compose for production deployment tests
-        run: |
-          docker compose -f examples/production-deployment/docker-compose.yml down
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
-
   # Test that the ui e2e tests still pass after we regenerate the model inference cache
   ui-tests-e2e-regen-model-inference-cache:
     permissions:
@@ -474,7 +437,6 @@ jobs:
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
-        check-production-docker-container,
         ui-tests-e2e-regen-model-inference-cache,
         client-tests,
         live-tests,

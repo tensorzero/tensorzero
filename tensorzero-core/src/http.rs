@@ -242,6 +242,22 @@ impl TensorzeroHttpClient {
         }
     }
 
+    pub fn patch<U: IntoUrl>(&self, url: U) -> TensorzeroRequestBuilder<'_> {
+        let ticket = self.take_ticket();
+        TensorzeroRequestBuilder {
+            builder: ticket.client.client.patch(url),
+            ticket,
+        }
+    }
+
+    pub fn delete<U: IntoUrl>(&self, url: U) -> TensorzeroRequestBuilder<'_> {
+        let ticket = self.take_ticket();
+        TensorzeroRequestBuilder {
+            builder: ticket.client.client.delete(url),
+            ticket,
+        }
+    }
+
     pub fn request<U: IntoUrl>(
         &self,
         method: reqwest::Method,
@@ -341,6 +357,13 @@ impl<'a> TensorzeroRequestBuilder<'a> {
     pub fn timeout(self, timeout: std::time::Duration) -> TensorzeroRequestBuilder<'a> {
         Self {
             builder: self.builder.timeout(timeout),
+            ticket: self.ticket,
+        }
+    }
+
+    pub fn query<T: Serialize + ?Sized>(self, query: &T) -> TensorzeroRequestBuilder<'a> {
+        Self {
+            builder: self.builder.query(query),
             ticket: self.ticket,
         }
     }
@@ -496,7 +519,9 @@ fn build_client(global_outbound_http_timeout: Duration) -> Result<Client, Error>
                                 message: format!("Invalid proxy URL: {e}"),
                             })
                         })?
-                        .no_proxy(NoProxy::from_string("localhost,127.0.0.1,minio")),
+                        .no_proxy(NoProxy::from_string(
+                            "localhost,127.0.0.1,minio,mock-inference-provider,gateway,provider-proxy,clickhouse",
+                        )),
                 )
                 // When running e2e tests, we use `provider-proxy` as an MITM proxy
                 // for caching, so we need to accept the invalid (self-signed) cert.

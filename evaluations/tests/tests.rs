@@ -4,8 +4,8 @@
 )]
 mod common;
 use clap::Parser;
-use evaluations::dataset::query_dataset;
 use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEvaluatorParams};
+use evaluations::stopping::MIN_DATAPOINTS;
 use evaluations::Clients;
 use serde_json::json;
 use tensorzero_core::cache::CacheEnabledMode;
@@ -13,9 +13,11 @@ use tensorzero_core::client::input_handling::resolved_input_to_client_input;
 use tensorzero_core::db::clickhouse::test_helpers::{
     select_inference_evaluation_human_feedback_clickhouse, select_model_inferences_clickhouse,
 };
-use tensorzero_core::endpoints::datasets::StoredDatapoint;
+use tensorzero_core::endpoints::datasets::{
+    v1::{list_datapoints, types::ListDatapointsRequest},
+    ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
+};
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
-use tensorzero_core::function::{FunctionConfig, FunctionConfigJson};
 use tensorzero_core::inference::types::{
     StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
 };
@@ -23,7 +25,7 @@ use tokio::time::sleep;
 use url::Url;
 
 use crate::common::write_json_fixture_to_dataset;
-use common::{get_tensorzero_client, write_chat_fixture_to_dataset};
+use common::{get_config, get_tensorzero_client, write_chat_fixture_to_dataset};
 use evaluations::{
     run_evaluation, run_evaluation_core_streaming,
     stats::{EvaluationUpdate, PerEvaluatorStats},
@@ -47,10 +49,7 @@ use tensorzero_core::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Usage},
 };
 use tensorzero_core::{
-    endpoints::{
-        datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint},
-        inference::{ChatInferenceResponse, JsonInferenceResponse},
-    },
+    endpoints::inference::{ChatInferenceResponse, JsonInferenceResponse},
     evaluations::{LLMJudgeIncludeConfig, LLMJudgeOptimize},
 };
 use uuid::Uuid;
@@ -74,7 +73,7 @@ async fn run_evaluations_json() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -88,6 +87,8 @@ async fn run_evaluations_json() {
         format: OutputFormat::Jsonl,
         // This test relies on the cache (see below), so we need to enable it
         inference_cache: CacheEnabledMode::On,
+        max_datapoints: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -349,7 +350,7 @@ async fn run_exact_match_evaluation_chat() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -362,6 +363,8 @@ async fn run_exact_match_evaluation_chat() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
+        max_datapoints: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -472,7 +475,7 @@ async fn run_llm_judge_evaluation_chat() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let tensorzero_client = get_tensorzero_client().await;
@@ -486,6 +489,8 @@ async fn run_llm_judge_evaluation_chat() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::On,
+        max_datapoints: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -694,7 +699,7 @@ async fn run_image_evaluation() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -707,6 +712,8 @@ async fn run_image_evaluation() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::WriteOnly,
+        max_datapoints: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -909,7 +916,7 @@ async fn check_invalid_image_evaluation() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -922,6 +929,8 @@ async fn check_invalid_image_evaluation() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
+        max_datapoints: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -1010,7 +1019,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1023,6 +1032,8 @@ async fn run_llm_judge_evaluation_chat_pretty() {
         concurrency: 10,
         format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::Off,
+        max_datapoints: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -1053,7 +1064,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1066,6 +1077,8 @@ async fn run_llm_judge_evaluation_json_pretty() {
         concurrency: 10,
         format: OutputFormat::Pretty,
         inference_cache: CacheEnabledMode::Off,
+        max_datapoints: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -1212,7 +1225,7 @@ async fn run_evaluations_errors() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1225,6 +1238,8 @@ async fn run_evaluations_errors() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
+        max_datapoints: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -1257,7 +1272,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     init_tracing_for_tests();
     let tensorzero_client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(PathBuf::from(&format!(
-            "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+            "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
             std::env::var("CARGO_MANIFEST_DIR").unwrap()
         ))),
         clickhouse_url: None,
@@ -1287,7 +1302,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         },
         variant_name: "test_variant".to_string(),
     });
-    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
@@ -1307,7 +1322,7 @@ async fn test_run_llm_judge_evaluator_chat() {
             text: "Hello, world!".to_string(),
         })]),
         tags: None,
-        tool_params: None,
+        tool_params: Default::default(),
         source_inference_id: None,
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
@@ -1322,6 +1337,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         optimize: LLMJudgeOptimize::Max,
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
+        description: None,
     };
     let input = resolved_input_to_client_input(
         datapoint
@@ -1397,7 +1413,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     assert_eq!(result.value, json!(1));
 
     // Try without output
-    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
@@ -1415,7 +1431,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         function_name: "test_function".to_string(),
         output: None,
         tags: None,
-        tool_params: None,
+        tool_params: Default::default(),
         source_inference_id: None,
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
@@ -1462,7 +1478,7 @@ async fn test_run_llm_judge_evaluator_json() {
         },
         variant_name: "test_variant".to_string(),
     });
-    let datapoint = StoredDatapoint::Json(JsonInferenceDatapoint {
+    let datapoint = Datapoint::Json(JsonInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
@@ -1498,6 +1514,7 @@ async fn test_run_llm_judge_evaluator_json() {
         optimize: LLMJudgeOptimize::Max,
         output_type: LLMJudgeOutputType::Boolean,
         cutoff: None,
+        description: None,
     };
     let input = resolved_input_to_client_input(
         datapoint
@@ -1573,7 +1590,7 @@ async fn test_run_llm_judge_evaluator_json() {
     assert_eq!(result.value, json!(1));
 
     // Try without output
-    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
@@ -1591,7 +1608,7 @@ async fn test_run_llm_judge_evaluator_json() {
         function_name: "test_function".to_string(),
         output: None,
         tags: None,
-        tool_params: None,
+        tool_params: Default::default(),
         source_inference_id: None,
         staled_at: None,
         updated_at: "2025-10-13T20:17:36Z".to_string(),
@@ -1629,7 +1646,7 @@ async fn run_evaluations_best_of_3() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1642,6 +1659,8 @@ async fn run_evaluations_best_of_3() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
+        max_datapoints: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -1817,7 +1836,7 @@ async fn run_evaluations_mixture_of_3() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -1830,6 +1849,8 @@ async fn run_evaluations_mixture_of_3() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
+        max_datapoints: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -2008,7 +2029,7 @@ async fn run_evaluations_dicl() {
     )
     .await;
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
     let evaluation_run_id = Uuid::now_v7();
@@ -2021,6 +2042,8 @@ async fn run_evaluations_dicl() {
         concurrency: 10,
         format: OutputFormat::Jsonl,
         inference_cache: CacheEnabledMode::Off,
+        max_datapoints: None,
+        precision_targets: vec![],
     };
 
     let mut output = Vec::new();
@@ -2202,15 +2225,21 @@ async fn test_query_skips_staled_datapoints() {
     )
     .await;
 
-    let dataset = query_dataset(
-        &clickhouse,
-        &dataset_name,
-        "extract_entities",
-        &FunctionConfig::Json(FunctionConfigJson::default()),
-        None, // No limit
-    )
-    .await
-    .unwrap();
+    let config = get_config().await;
+
+    #[expect(deprecated)]
+    let request = ListDatapointsRequest {
+        function_name: Some("extract_entities".to_string()),
+        limit: Some(u32::MAX), // Get all datapoints
+        page_size: None,       // deprecated but required
+        offset: Some(0),
+        filter: None,
+    };
+    let dataset = list_datapoints(&clickhouse, &config, dataset_name.clone(), request)
+        .await
+        .unwrap()
+        .datapoints;
+
     // This ID should not be returned
     let staled_id = Uuid::parse_str("01957bbb-44a8-7490-bfe7-32f8ed2fc797").unwrap();
     let staled_datapoint = dataset.iter().find(|dp| dp.id() == staled_id);
@@ -2233,7 +2262,7 @@ async fn test_evaluation_with_dynamic_variant() {
     .await;
 
     let config_path = PathBuf::from(&format!(
-        "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
         std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ));
 
@@ -2305,6 +2334,7 @@ async fn test_evaluation_with_dynamic_variant() {
     assert!(result.run_info.num_datapoints > 0);
 }
 
+/// Tests that `run_evaluation_core_streaming` correctly respects the `max_datapoints` parameter.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_max_datapoints_parameter() {
     init_tracing_for_tests();
@@ -2322,18 +2352,7 @@ async fn test_max_datapoints_parameter() {
     )
     .await;
 
-    let config = Arc::new(
-        Config::load_from_path_optional_verify_credentials(
-            &tensorzero_core::config::ConfigFileGlob::new_from_path(&PathBuf::from(&format!(
-                "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
-                std::env::var("CARGO_MANIFEST_DIR").unwrap()
-            )))
-            .unwrap(),
-            false,
-        )
-        .await
-        .unwrap(),
-    );
+    let config = get_config().await;
 
     let evaluation_run_id = Uuid::now_v7();
 
@@ -2376,8 +2395,10 @@ async fn test_max_datapoints_parameter() {
     );
 }
 
+/// Tests that `run_evaluation_core_streaming` correctly implements adaptive stopping with precision targets
+/// for multiple evaluators.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_precision_limits_parameter() {
+async fn test_precision_targets_parameter() {
     init_tracing_for_tests();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("good-haiku-data-precision-{}", Uuid::now_v7());
@@ -2393,27 +2414,16 @@ async fn test_precision_limits_parameter() {
     )
     .await;
 
-    let config = Arc::new(
-        Config::load_from_path_optional_verify_credentials(
-            &tensorzero_core::config::ConfigFileGlob::new_from_path(&PathBuf::from(&format!(
-                "{}/../tensorzero-core/tests/e2e/tensorzero.toml",
-                std::env::var("CARGO_MANIFEST_DIR").unwrap()
-            )))
-            .unwrap(),
-            false,
-        )
-        .await
-        .unwrap(),
-    );
+    let config = get_config().await;
 
     let evaluation_run_id = Uuid::now_v7();
 
-    // Set precision limits for both evaluators
+    // Set precision targets for both evaluators
     // exact_match: CI half-width <= 0.10
     // topic_starts_with_f: CI half-width <= 0.13
-    let mut precision_limits = HashMap::new();
-    precision_limits.insert("exact_match".to_string(), 0.20);
-    precision_limits.insert("topic_starts_with_f".to_string(), 0.13);
+    let mut precision_targets = HashMap::new();
+    precision_targets.insert("exact_match".to_string(), 0.20);
+    precision_targets.insert("topic_starts_with_f".to_string(), 0.13);
 
     let core_args = EvaluationCoreArgs {
         tensorzero_client: tensorzero_client.clone(),
@@ -2427,11 +2437,11 @@ async fn test_precision_limits_parameter() {
         concurrency: 5,
     };
 
-    // Run with precision limits
+    // Run with precision targets
     let result = run_evaluation_core_streaming(
         core_args,
         None, // No max_datapoints limit
-        precision_limits.clone(),
+        precision_targets.clone(),
     )
     .await
     .unwrap();
@@ -2466,7 +2476,7 @@ async fn test_precision_limits_parameter() {
         "Should process at least min_datapoints (20) datapoints, got {total_datapoints}"
     );
 
-    // Verify that both evaluators achieved their precision limits
+    // Verify that both evaluators achieved their precision targets
     let exact_match_ci = exact_match_stats.ci_half_width();
     let topic_ci = topic_stats.ci_half_width();
 
@@ -2476,10 +2486,10 @@ async fn test_precision_limits_parameter() {
         "exact_match should have computed CI half-width"
     );
     assert!(
-        exact_match_ci.unwrap() <= precision_limits["exact_match"],
+        exact_match_ci.unwrap() <= precision_targets["exact_match"],
         "exact_match CI half-width {:.3} should be <= limit {:.3}",
         exact_match_ci.unwrap(),
-        precision_limits["exact_match"]
+        precision_targets["exact_match"]
     );
 
     assert!(
@@ -2487,9 +2497,152 @@ async fn test_precision_limits_parameter() {
         "topic_starts_with_f should have computed CI half-width"
     );
     assert!(
-        topic_ci.unwrap() <= precision_limits["topic_starts_with_f"],
+        topic_ci.unwrap() <= precision_targets["topic_starts_with_f"],
         "topic_starts_with_f CI half-width {:.3} should be <= limit {:.3}",
         topic_ci.unwrap(),
-        precision_limits["topic_starts_with_f"]
+        precision_targets["topic_starts_with_f"]
+    );
+}
+
+/// Tests that the CLI interface (`run_evaluation`) correctly respects the `max_datapoints` constraint.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_cli_args_max_datapoints() {
+    init_tracing_for_tests();
+    let dataset_name = format!("good-haiku-data-cli-max-{}", Uuid::now_v7());
+    write_chat_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
+    )
+    .await;
+
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let evaluation_run_id = Uuid::now_v7();
+
+    // Test CLI Args with max_datapoints limit
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        evaluation_name: "haiku_with_outputs".to_string(),
+        dataset_name: dataset_name.clone(),
+        variant_name: "gpt_4o_mini".to_string(),
+        concurrency: 10,
+        format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::Off,
+        max_datapoints: Some(21),
+        precision_targets: vec![],
+    };
+
+    let mut output = Vec::new();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
+
+    // Parse output and verify max_datapoints constraint was respected
+    let output_str = String::from_utf8(output).unwrap();
+    let lines: Vec<&str> = output_str.lines().collect();
+
+    // First line should be RunInfo
+    let run_info: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    let num_datapoints = run_info["num_datapoints"].as_u64().unwrap() as usize;
+
+    // Should be bounded between MIN_DATAPOINTS and max_datapoints (21)
+    assert!(
+        num_datapoints >= MIN_DATAPOINTS,
+        "Should have at least MIN_DATAPOINTS ({MIN_DATAPOINTS}) inferences, got {num_datapoints}"
+    );
+    assert!(
+        num_datapoints <= 21,
+        "Should not exceed max_datapoints (20), got {num_datapoints}"
+    );
+}
+
+/// Tests that the CLI interface (`run_evaluation`) correctly implements adaptive stopping with precision targets.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_cli_args_precision_targets() {
+    init_tracing_for_tests();
+    let dataset_name = format!("good-haiku-data-cli-precision-{}", Uuid::now_v7());
+    write_chat_fixture_to_dataset(
+        &PathBuf::from(&format!(
+            "{}/../tensorzero-core/fixtures/datasets/chat_datapoint_fixture.jsonl",
+            std::env::var("CARGO_MANIFEST_DIR").unwrap()
+        )),
+        &HashMap::from([("good-haiku-data".to_string(), dataset_name.clone())]),
+    )
+    .await;
+
+    let config_path = PathBuf::from(&format!(
+        "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
+        std::env::var("CARGO_MANIFEST_DIR").unwrap()
+    ));
+    let evaluation_run_id = Uuid::now_v7();
+
+    // Test CLI Args with precision_targets for adaptive stopping
+    // Set a liberal precision target so the test completes quickly
+    let args = Args {
+        config_file: config_path,
+        gateway_url: None,
+        evaluation_name: "haiku_with_outputs".to_string(),
+        dataset_name: dataset_name.clone(),
+        variant_name: "gpt_4o_mini".to_string(),
+        concurrency: 10,
+        format: OutputFormat::Jsonl,
+        inference_cache: CacheEnabledMode::Off,
+        max_datapoints: None,
+        precision_targets: vec![("exact_match".to_string(), 0.2)],
+    };
+
+    let mut output = Vec::new();
+    run_evaluation(args, evaluation_run_id, &mut output)
+        .await
+        .unwrap();
+
+    // Parse output and verify precision target was reached
+    let output_str = String::from_utf8(output).unwrap();
+    let lines: Vec<&str> = output_str.lines().collect();
+
+    // First line should be RunInfo
+    let run_info: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    let num_datapoints = run_info["num_datapoints"].as_u64().unwrap() as usize;
+
+    // Collect evaluation results and compute CI half-width for exact_match
+    let mut exact_match_values = Vec::new();
+    for line in lines.iter().skip(1) {
+        if let Ok(result) = serde_json::from_str::<serde_json::Value>(line) {
+            // Each line (after the first) is a result with evaluations
+            if let Some(exact_match) = result["evaluations"]["exact_match"].as_bool() {
+                exact_match_values.push(if exact_match { 1.0 } else { 0.0 });
+            }
+        }
+    }
+
+    // Compute CI half-width
+    let mut stats = PerEvaluatorStats::default();
+    for value in exact_match_values {
+        stats.push(value);
+    }
+
+    let ci_half_width = stats.ci_half_width();
+    assert!(
+        ci_half_width.is_some(),
+        "Should have computed CI half-width for exact_match"
+    );
+
+    // Verify that the CI half-width meets the precision target
+    let ci_half_width = ci_half_width.unwrap();
+    assert!(
+        ci_half_width <= 0.2,
+        "CI half-width {ci_half_width:.3} should be <= precision target 0.2"
+    );
+
+    // Should have processed at least MIN_DATAPOINTS datapoints
+    assert!(
+        num_datapoints >= MIN_DATAPOINTS,
+        "Should have at least MIN_DATAPOINTS ({MIN_DATAPOINTS}) inferences, got {num_datapoints}"
     );
 }

@@ -22,7 +22,6 @@ import type {
   ModelUsageTimePoint,
   OptimizationJobHandle,
   OptimizationJobInfo,
-  StaleDatapointParams,
   StaleDatasetResponse,
   TableBoundsWithCount,
   FeedbackRow,
@@ -154,6 +153,8 @@ interface RunEvaluationStreamingParams {
   variantName: string;
   concurrency: number;
   inferenceCache: CacheEnabledMode;
+  maxDatapoints?: number;
+  precisionTargets?: string;
   onEvent: (event: EvaluationRunEvent) => void;
 }
 
@@ -383,11 +384,6 @@ export class DatabaseClient {
 
   async countDatasets(): Promise<number> {
     return this.nativeDatabaseClient.countDatasets();
-  }
-
-  async staleDatapoint(params: StaleDatapointParams): Promise<void> {
-    const paramsString = safeStringify(params);
-    await this.nativeDatabaseClient.staleDatapoint(paramsString);
   }
 
   async countDatapointsForDatasetFunction(

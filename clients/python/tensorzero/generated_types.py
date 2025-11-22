@@ -178,6 +178,7 @@ class FunctionTool:
     description: str
     parameters: Any
     name: str
+    type: Literal["function"] = "function"
     strict: bool | None = False
     """
     `strict` here specifies that TensorZero should attempt to use any facilities
@@ -186,6 +187,14 @@ class FunctionTool:
     This imposes additional restrictions on the JSON schema that may vary across providers
     so we allow it to be configurable.
     """
+
+
+@dataclass(kw_only=True)
+class OpenAICustomToolFormatText:
+    type: Literal["text"] = "text"
+
+
+OpenAIGrammarSyntax = Literal["lark", "regex"]
 
 
 @dataclass(kw_only=True)
@@ -283,7 +292,7 @@ class FileBase64(Base64File):
 
 @dataclass(kw_only=True)
 class JsonDatapointOutputUpdate:
-    raw: str
+    raw: str | None = None
     """
     The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
     """
@@ -354,6 +363,14 @@ OrderDirection = Literal["ascending", "descending"]
 
 
 @dataclass(kw_only=True)
+class DatapointMetadataUpdate:
+    name: str | None | UnsetType = UNSET
+    """
+    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+
+
+@dataclass(kw_only=True)
 class UpdateDatapointMetadataRequest:
     id: str
     """
@@ -386,14 +403,6 @@ class CreateDatapointsResponse:
 
 
 @dataclass(kw_only=True)
-class DatapointMetadataUpdate:
-    name: str | None | UnsetType = UNSET
-    """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    """
-
-
-@dataclass(kw_only=True)
 class DeleteDatapointsRequest:
     ids: list[str]
     """
@@ -407,6 +416,294 @@ class DeleteDatapointsResponse:
     """
     The number of deleted datapoints.
     """
+
+
+@dataclass(kw_only=True)
+class ProviderExtraBody:
+    model_provider_name: str
+    """
+    A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
+    """
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    value: Any
+    """
+    The value to set the field to
+    """
+
+
+@dataclass(kw_only=True)
+class ProviderExtraBodyDelete:
+    model_provider_name: str
+    """
+    A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
+    """
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the field from the model provider request's body
+    """
+
+
+@dataclass(kw_only=True)
+class VariantExtraBody:
+    variant_name: str
+    """
+    A variant name in your configuration (e.g. `my_variant`)
+    """
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    value: Any
+    """
+    The value to set the field to
+    """
+
+
+@dataclass(kw_only=True)
+class VariantExtraBodyDelete:
+    variant_name: str
+    """
+    A variant name in your configuration (e.g. `my_variant`)
+    """
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the field from the model provider request's body
+    """
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraBody:
+    model_name: str
+    """
+    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    """
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    value: Any
+    """
+    The value to set the field to
+    """
+    provider_name: str | None = None
+    """
+    A provider name for the model you specified (e.g. `my_openai`)
+    """
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraBodyDelete:
+    model_name: str
+    """
+    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    """
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the field from the model provider request's body
+    """
+    provider_name: str | None = None
+    """
+    A provider name for the model you specified (e.g. `my_openai`)
+    """
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraBody:
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    value: Any
+    """
+    The value to set the field to
+    """
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraBodyDelete:
+    pointer: str
+    """
+    A JSON Pointer to the field to update (e.g. `/enable_agi`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the field from the model provider request's body
+    """
+
+
+ExtraBody = (
+    ProviderExtraBody
+    | ProviderExtraBodyDelete
+    | VariantExtraBody
+    | VariantExtraBodyDelete
+    | ModelProviderExtraBody
+    | ModelProviderExtraBodyDelete
+    | AlwaysExtraBody
+    | AlwaysExtraBodyDelete
+)
+
+
+@dataclass(kw_only=True)
+class ExtraBodyReplacementKind1:
+    value: Any
+
+
+ExtraBodyReplacementKind = Literal["delete"] | ExtraBodyReplacementKind1
+
+
+@dataclass(kw_only=True)
+class ProviderExtraHeader:
+    model_provider_name: str
+    """
+    A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    value: str
+    """
+    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
+    """
+
+
+@dataclass(kw_only=True)
+class ProviderExtraHeaderDelete:
+    model_provider_name: str
+    """
+    A fully-qualified model provider name in your configuration (e.g. `tensorzero::model_name::my_model::provider_name::my_provider`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the header from the model provider request
+    """
+
+
+@dataclass(kw_only=True)
+class VariantExtraHeader:
+    variant_name: str
+    """
+    A variant name in your configuration (e.g. `my_variant`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    value: str
+    """
+    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
+    """
+
+
+@dataclass(kw_only=True)
+class VariantExtraHeaderDelete:
+    variant_name: str
+    """
+    A variant name in your configuration (e.g. `my_variant`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the header from the model provider request
+    """
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraHeader:
+    model_name: str
+    """
+    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    value: str
+    """
+    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
+    """
+    provider_name: str | None = None
+    """
+    A provider name for the model you specified (e.g. `my_openai`).
+    """
+
+
+@dataclass(kw_only=True)
+class ModelProviderExtraHeaderDelete:
+    model_name: str
+    """
+    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    """
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the header from the model provider request
+    """
+    provider_name: str | None = None
+    """
+    A provider name for the model you specified (e.g. `my_openai`)
+    """
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraHeader:
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    value: str
+    """
+    The value of the HTTP header (e.g. `feature1,feature2,feature3`)
+    """
+
+
+@dataclass(kw_only=True)
+class AlwaysExtraHeaderDelete:
+    name: str
+    """
+    The name of the HTTP header (e.g. `anthropic-beta`)
+    """
+    delete: Literal[True] = True
+    """
+    Set to true to remove the header from the model provider request
+    """
+
+
+ExtraHeader = (
+    ProviderExtraHeader
+    | ProviderExtraHeaderDelete
+    | VariantExtraHeader
+    | VariantExtraHeaderDelete
+    | ModelProviderExtraHeader
+    | ModelProviderExtraHeaderDelete
+    | AlwaysExtraHeader
+    | AlwaysExtraHeaderDelete
+)
 
 
 @dataclass(kw_only=True)
@@ -517,6 +814,12 @@ ContentBlockChatOutput = (
     | ContentBlockChatOutputThought
     | ContentBlockChatOutputUnknown
 )
+
+
+@dataclass(kw_only=True)
+class OpenAIGrammarDefinition:
+    syntax: OpenAIGrammarSyntax
+    definition: str
 
 
 @dataclass(kw_only=True)
@@ -632,66 +935,6 @@ OrderBy = OrderByTimestamp | OrderByMetric | OrderBySearchRelevance
 
 
 @dataclass(kw_only=True)
-class DynamicToolParams:
-    allowed_tools: list[str] | None = None
-    """
-    A subset of static tools configured for the function that the inference is allowed to use. Optional.
-    If not provided, all static tools are allowed.
-    """
-    additional_tools: list[FunctionTool] | None = None
-    """
-    Tools that the user provided at inference time (not in function config), in addition to the function-configured
-    tools, that are also allowed.
-    """
-    tool_choice: ToolChoice | None = None
-    """
-    User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
-    Optional.
-    """
-    parallel_tool_calls: bool | None = None
-    """
-    Whether to use parallel tool calls in the inference. Optional.
-    If provided during inference, it will override the function-configured parallel tool calls.
-    """
-    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
-    """
-    Provider-specific tool configurations
-    """
-
-
-@dataclass(kw_only=True)
-class UpdateDynamicToolParamsRequest:
-    allowed_tools: list[str] | None | UnsetType = UNSET
-    """
-    A subset of static tools configured for the function that the inference is explicitly allowed to use.
-    If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
-    provided at inference time). If specified as a value, it will be set to the provided value.
-    """
-    additional_tools: list[FunctionTool] | None = None
-    """
-    Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
-    Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
-    new tools or exclude removed tools.
-    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
-    """
-    tool_choice: ToolChoice | None | UnsetType = UNSET
-    """
-    User-specified tool choice strategy.
-    If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
-    """
-    parallel_tool_calls: bool | None | UnsetType = UNSET
-    """
-    Whether to use parallel tool calls in the inference.
-    If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    """
-    provider_tools: list[ProviderTool] | None = None
-    """
-    Provider-specific tool configurations
-    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
-    """
-
-
-@dataclass(kw_only=True)
 class StoredInputMessageContentFile:
     mime_type: str
     storage_path: StoragePath
@@ -711,6 +954,15 @@ StoredInputMessageContent = (
     | StoredInputMessageContentFile
     | StoredInputMessageContentUnknown
 )
+
+
+@dataclass(kw_only=True)
+class OpenAICustomToolFormatGrammar:
+    grammar: OpenAIGrammarDefinition
+    type: Literal["grammar"] = "grammar"
+
+
+OpenAICustomToolFormat = OpenAICustomToolFormatText | OpenAICustomToolFormatGrammar
 
 
 @dataclass(kw_only=True)
@@ -737,9 +989,80 @@ class StoredInputMessage:
 
 
 @dataclass(kw_only=True)
+class OpenAICustomTool:
+    name: str
+    type: Literal["openai_custom"] = "openai_custom"
+    description: str | None = None
+    format: OpenAICustomToolFormat | None = None
+
+
+Tool = FunctionTool | OpenAICustomTool
+
+
+@dataclass(kw_only=True)
 class InputMessage:
     role: Role
     content: list[InputMessageContent]
+
+
+@dataclass(kw_only=True)
+class UpdateDynamicToolParamsRequest:
+    allowed_tools: list[str] | None | UnsetType = UNSET
+    """
+    A subset of static tools configured for the function that the inference is explicitly allowed to use.
+    If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
+    provided at inference time). If specified as a value, it will be set to the provided value.
+    """
+    additional_tools: list[Tool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
+    Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
+    new tools or exclude removed tools.
+    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    """
+    tool_choice: ToolChoice | None | UnsetType = UNSET
+    """
+    User-specified tool choice strategy.
+    If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
+    """
+    parallel_tool_calls: bool | None | UnsetType = UNSET
+    """
+    Whether to use parallel tool calls in the inference.
+    If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    provider_tools: list[ProviderTool] | None = None
+    """
+    Provider-specific tool configurations
+    If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
+    """
+
+
+@dataclass(kw_only=True)
+class DynamicToolParams:
+    allowed_tools: list[str] | None = None
+    """
+    A subset of static tools configured for the function that the inference is allowed to use. Optional.
+    If not provided, all static tools are allowed.
+    """
+    additional_tools: list[Tool] | None = None
+    """
+    Tools that the user provided at inference time (not in function config), in addition to the function-configured
+    tools, that are also allowed.
+    """
+    tool_choice: ToolChoice | None = None
+    """
+    User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+    Optional.
+    """
+    parallel_tool_calls: bool | None = None
+    """
+    Whether to use parallel tool calls in the inference. Optional.
+    If provided during inference, it will override the function-configured parallel tool calls.
+    """
+    provider_tools: list[ProviderTool] | None = field(default_factory=lambda: [])
+    """
+    Provider-specific tool configurations
+    """
 
 
 @dataclass(kw_only=True)
@@ -777,7 +1100,7 @@ class CreateChatDatapointRequest:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[FunctionTool] | None = None
+    additional_tools: list[Tool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -869,7 +1192,7 @@ class ChatInferenceDatapoint:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[FunctionTool] | None = None
+    additional_tools: list[Tool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -943,7 +1266,7 @@ class StoredChatInference:
     A subset of static tools configured for the function that the inference is allowed to use. Optional.
     If not provided, all static tools are allowed.
     """
-    additional_tools: list[FunctionTool] | None = None
+    additional_tools: list[Tool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured
     tools, that are also allowed.
@@ -1000,7 +1323,7 @@ class UpdateChatDatapointRequestInternal:
     If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
     provided at inference time). If specified as a value, it will be set to the provided value.
     """
-    additional_tools: list[FunctionTool] | None = None
+    additional_tools: list[Tool] | None = None
     """
     Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
     Modifying `additional_tools` DOES NOT automatically modify `allowed_tools`; `allowed_tools` must be explicitly updated to include
@@ -1022,6 +1345,11 @@ class UpdateChatDatapointRequestInternal:
     Provider-specific tool configurations
     If omitted, it will be left unchanged. If specified as a value, it will be set to the provided value.
     """
+    tool_params: UpdateDynamicToolParamsRequest | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Datapoint tool parameters.
+    Moving forward, don't nest these fields.
+    """
     tags: dict[str, Any] | None = None
     """
     Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
@@ -1030,6 +1358,11 @@ class UpdateChatDatapointRequestInternal:
     name: str | None | UnsetType = UNSET
     """
     Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    metadata: DatapointMetadataUpdate | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
+    Moving forward, don't nest these fields.
     """
 
 
@@ -1062,6 +1395,11 @@ class UpdateJsonDatapointRequestInternal:
     name: str | None | UnsetType = UNSET
     """
     Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    """
+    metadata: DatapointMetadataUpdate | None = None
+    """
+    DEPRECATED (#4725 / 2026.2+): Metadata fields to update.
+    Moving forward, don't nest these fields.
     """
 
 

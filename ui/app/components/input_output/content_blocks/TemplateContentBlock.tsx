@@ -5,7 +5,7 @@ import { ContentBlockLabel } from "~/components/input_output/content_blocks/Cont
 import { Input } from "~/components/ui/input";
 import { CodeEditor, useFormattedJson } from "~/components/ui/code-editor";
 import { type Template } from "~/types/tensorzero";
-import { JsonValueSchema } from "~/utils/clickhouse/common";
+import { ZodJsonValueSchema } from "~/utils/clickhouse/common";
 
 export interface TemplateContentBlockProps {
   block: Template;
@@ -17,7 +17,7 @@ export interface TemplateContentBlockProps {
 // Schema for validating `block.arguments`
 const templateArgumentsSchema = z.record(
   z.string(),
-  JsonValueSchema.optional(),
+  ZodJsonValueSchema.optional(),
 );
 
 export function TemplateContentBlock({

@@ -1,10 +1,10 @@
-import type { ModelInferenceOutputContentBlock } from "~/utils/clickhouse/common";
+import type { ZodModelInferenceOutputContentBlock } from "~/utils/clickhouse/common";
 import { SnippetLayout } from "../layout/SnippetLayout";
 import { EmptyMessage } from "../layout/SnippetContent";
 import { TextMessage, ToolCallMessage } from "../layout/SnippetContent";
 
 interface ModelInferenceOutputProps {
-  output: ModelInferenceOutputContentBlock[];
+  output: ZodModelInferenceOutputContentBlock[];
 }
 
 export default function ModelInferenceOutput({
