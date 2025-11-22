@@ -17,12 +17,7 @@ use tensorzero_core::{
     evaluations::{EvaluatorConfig, InferenceEvaluationConfig},
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
-
-// Type aliases for cleaner score map signatures (TODO(#4669): move to evaluation module)
-pub type EvaluatorName = String;
-
-/// Unique identifier for a datapoint/example in a dataset
-pub type DatapointId = String;
+use uuid::Uuid;
 
 /// Threshold for warning about high missing score rates
 ///
@@ -31,11 +26,21 @@ pub type DatapointId = String;
 /// systematic evaluation failures.
 const HIGH_MISSING_RATE_THRESHOLD: f32 = 0.3;
 
+// Type aliases for cleaner score map signatures (TODO(#4669): move to evaluation module)
+pub type EvaluatorName = String;
+pub type VariantName = String;
+
+/// Unique identifier for a datapoint/example in a dataset
+pub type DatapointId = Uuid;
+
 /// Scores for all evaluators on a single datapoint
 pub type DatapointScores = HashMap<EvaluatorName, Option<f32>>;
 
 /// Scores for all datapoints for a single variant
 pub type VariantScores = HashMap<DatapointId, DatapointScores>;
+
+/// Scores map keyed by variant name
+pub type VariantScoresMap = HashMap<VariantName, VariantScores>;
 
 /// Result of Pareto frontier filtering with frequency-based sampling weights
 ///
@@ -45,40 +50,40 @@ pub type VariantScores = HashMap<DatapointId, DatapointScores>;
 #[derive(Debug)]
 pub struct ParetoFrontier {
     /// Pareto-optimal variants (non-dominated after GEPA's 3-step filtering)
-    pub variants: HashMap<String, UninitializedChatCompletionConfig>,
+    pub variants: HashMap<VariantName, UninitializedChatCompletionConfig>,
 
     /// Instance-wise membership frequencies for weighted sampling
     ///
     /// Maps each variant to the count of datapoints where it's Pareto-optimal.
     /// Higher values indicate the variant performs well across more instances.
     /// Used for proportional sampling in GEPA's mutation step.
-    pub frequencies: HashMap<String, usize>,
+    pub frequencies: HashMap<VariantName, usize>,
 
     /// Validation scores for current variants (pruned after each update)
     ///
     /// Maps variant names to their scores on each datapoint/evaluator pair.
     /// Only contains entries for variants in `self.variants`.
     /// Private - internal implementation detail.
-    val_scores: HashMap<String, VariantScores>,
+    val_scores: VariantScoresMap,
 
     /// Cached objective vectors for efficient dominance checking
     ///
     /// Maps variant names to pre-computed flattened objective vectors.
     /// Vectors are keyed by variant name and validated against the layout fingerprint.
     /// Private - internal implementation detail for performance optimization.
-    objective_vector_cache: HashMap<String, Arc<Vec<f32>>>,
+    objective_vector_cache: HashMap<VariantName, Arc<Vec<f32>>>,
 
     /// Datapoint IDs defining the objective space (layout fingerprint)
     ///
     /// This ordering must remain constant for cache correctness.
     /// Private to enforce validation through update methods.
-    datapoint_ids: Vec<String>,
+    datapoint_ids: Vec<DatapointId>,
 
     /// Optimization directions for each metric (min or max)
     ///
     /// Maps evaluator names to their optimization direction.
     /// Private to enforce validation through update methods.
-    optimize_directions: HashMap<String, MetricConfigOptimize>,
+    optimize_directions: HashMap<EvaluatorName, MetricConfigOptimize>,
 }
 
 impl ParetoFrontier {
@@ -90,7 +95,10 @@ impl ParetoFrontier {
     ///
     /// # Returns
     /// * Empty ParetoFrontier ready for iterative updates
-    pub fn new(datapoint_ids: Vec<String>, evaluators: &HashMap<String, EvaluatorConfig>) -> Self {
+    pub fn new(
+        datapoint_ids: Vec<DatapointId>,
+        evaluators: &HashMap<EvaluatorName, EvaluatorConfig>,
+    ) -> Self {
         let optimize_directions = extract_optimize_directions(evaluators);
         Self {
             variants: HashMap::new(),
@@ -137,8 +145,8 @@ impl ParetoFrontier {
     /// * Returns error if new_variant_scores contains datapoints not in self.datapoint_ids
     pub fn update(
         &mut self,
-        new_variants: HashMap<String, UninitializedChatCompletionConfig>,
-        new_variant_scores: HashMap<String, VariantScores>,
+        new_variants: HashMap<VariantName, UninitializedChatCompletionConfig>,
+        new_variant_scores: VariantScoresMap,
     ) -> Result<(), Error> {
         tracing::info!(
             "Updating Pareto frontier: merging {} new variants with {} existing variants",
@@ -178,7 +186,8 @@ impl ParetoFrontier {
         }
 
         // Step 2: Merge new variants with existing frontier variants
-        let mut all_candidates = self.variants.clone();
+        let mut all_candidates: HashMap<VariantName, UninitializedChatCompletionConfig> =
+            self.variants.clone();
         all_candidates.extend(new_variants);
 
         // Check if we have any valid scores (before merging to avoid unnecessary clone)
@@ -197,7 +206,7 @@ impl ParetoFrontier {
         );
 
         // Step 3: Merge new scores with existing scores (consuming new_variant_scores)
-        let mut all_scores = self.val_scores.clone();
+        let mut all_scores: VariantScoresMap = self.val_scores.clone();
         all_scores.extend(new_variant_scores);
 
         // Check if there are any datapoints - if yes, ensure at least one valid score exists
@@ -224,26 +233,35 @@ impl ParetoFrontier {
         }
 
         // Validate that all_scores datapoints match self.datapoint_ids
-        let actual_datapoints: HashSet<&String> = all_scores
+        let actual_datapoints: HashSet<DatapointId> = all_scores
             .values()
-            .flat_map(|scores| scores.keys())
+            .flat_map(|scores| scores.keys().copied())
             .collect();
-        let expected_datapoints: HashSet<&String> = self.datapoint_ids.iter().collect();
+        let expected_datapoints: HashSet<DatapointId> =
+            self.datapoint_ids.iter().copied().collect();
 
         if !actual_datapoints
             .iter()
             .all(|dp| expected_datapoints.contains(dp))
         {
-            let unexpected: Vec<String> = actual_datapoints
+            let unexpected: Vec<DatapointId> = actual_datapoints
                 .difference(&expected_datapoints)
-                .map(|s| (*s).clone())
+                .copied()
                 .collect();
             let unexpected_list = if unexpected.len() <= 5 {
-                unexpected.join(", ")
+                unexpected
+                    .iter()
+                    .map(|u| u.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             } else {
                 format!(
                     "{} and {} more",
-                    unexpected[..5].join(", "),
+                    unexpected[..5]
+                        .iter()
+                        .map(|u| u.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", "),
                     unexpected.len() - 5
                 )
             };
@@ -306,11 +324,12 @@ impl ParetoFrontier {
         // Step 1: Build instance-wise Pareto sets P*[i] for each datapoint
         // Original paper: P*[i] = {variants with max score on instance i} (single evaluator)
         // Our extension: P*[i] = {Pareto non-dominated variants on instance i} (multiple evaluators)
-        let mut instance_pareto_sets: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut instance_pareto_sets: HashMap<DatapointId, HashSet<VariantName>> = HashMap::new();
 
         for datapoint_id in &self.datapoint_ids {
             // Collect scores for this datapoint across all variants
-            let mut instance_scores: Vec<(String, HashMap<String, Option<f32>>)> = Vec::new();
+            let mut instance_scores: Vec<(VariantName, HashMap<EvaluatorName, Option<f32>>)> =
+                Vec::new();
 
             for (variant_name, variant_scores) in &all_scores {
                 // Only consider variants that are in the combined candidates
@@ -323,18 +342,18 @@ impl ParetoFrontier {
             }
 
             if instance_scores.is_empty() {
-                instance_pareto_sets.insert(datapoint_id.clone(), HashSet::new());
+                instance_pareto_sets.insert(*datapoint_id, HashSet::new());
                 continue;
             }
 
             // Find non-dominated variants for this instance
             let non_dominated =
                 find_non_dominated_variants(&instance_scores, &self.optimize_directions);
-            instance_pareto_sets.insert(datapoint_id.clone(), non_dominated.into_iter().collect());
+            instance_pareto_sets.insert(*datapoint_id, non_dominated.into_iter().collect());
         }
 
         // Step 2: Build candidate set C (union of all instance-wise Pareto sets)
-        let candidate_set: HashSet<String> = instance_pareto_sets
+        let candidate_set: HashSet<VariantName> = instance_pareto_sets
             .values()
             .flat_map(|set| set.iter().cloned())
             .collect();
@@ -354,14 +373,14 @@ impl ParetoFrontier {
         if candidate_set.len() <= 1 {
             let frequencies = calculate_frequencies(&candidate_set, &instance_pareto_sets);
 
-            let filtered_candidates: HashMap<String, UninitializedChatCompletionConfig> =
+            let filtered_candidates: HashMap<VariantName, UninitializedChatCompletionConfig> =
                 all_candidates
                     .into_iter()
                     .filter(|(name, _)| candidate_set.contains(name))
                     .collect();
 
             // Prune val_scores to only contain variants in filtered_candidates
-            let filtered_val_scores: HashMap<String, VariantScores> = all_scores
+            let filtered_val_scores: VariantScoresMap = all_scores
                 .into_iter()
                 .filter(|(name, _)| filtered_candidates.contains_key(name))
                 .collect();
@@ -385,7 +404,7 @@ impl ParetoFrontier {
 
         // Pre-compute objective vectors for efficient dominance checking
         let expected_vector_length = self.expected_vector_length();
-        let mut objective_vectors: HashMap<String, Arc<Vec<f32>>> = HashMap::new();
+        let mut objective_vectors: HashMap<VariantName, Arc<Vec<f32>>> = HashMap::new();
         let mut new_variants_count = 0;
         let mut cached_variants_count = 0;
 
@@ -500,14 +519,14 @@ impl ParetoFrontier {
         let frequencies = calculate_frequencies(&non_dominated, &instance_pareto_sets);
 
         // Filter out variants not in final non-dominated set
-        let filtered_candidates: HashMap<String, UninitializedChatCompletionConfig> =
+        let filtered_candidates: HashMap<VariantName, UninitializedChatCompletionConfig> =
             all_candidates
                 .into_iter()
                 .filter(|(name, _)| non_dominated.contains(name))
                 .collect();
 
         // Prune val_scores to only contain variants in filtered_candidates
-        let filtered_val_scores: HashMap<String, VariantScores> = all_scores
+        let filtered_val_scores: VariantScoresMap = all_scores
             .into_iter()
             .filter(|(name, _)| filtered_candidates.contains_key(name))
             .collect();
@@ -548,8 +567,8 @@ impl ParetoFrontier {
 /// # Returns
 /// * `bool` - True if child Pareto-dominates parent (better/equal on all, strictly better on ≥1 evaluator summary stats)
 pub fn is_improvement(
-    parent_stats: &HashMap<String, EvaluatorStats>,
-    child_stats: &HashMap<String, EvaluatorStats>,
+    parent_stats: &HashMap<EvaluatorName, EvaluatorStats>,
+    child_stats: &HashMap<EvaluatorName, EvaluatorStats>,
     evaluation_config: &InferenceEvaluationConfig,
 ) -> bool {
     // Get evaluators from the evaluation config
@@ -643,8 +662,8 @@ fn compare_values(a_val: f32, b_val: f32, optimize: MetricConfigOptimize) -> (bo
 
 /// Extract optimization directions from evaluator configs
 fn extract_optimize_directions(
-    evaluators: &HashMap<String, EvaluatorConfig>,
-) -> HashMap<String, MetricConfigOptimize> {
+    evaluators: &HashMap<EvaluatorName, EvaluatorConfig>,
+) -> HashMap<EvaluatorName, MetricConfigOptimize> {
     evaluators
         .iter()
         .map(|(name, config)| (name.clone(), config.optimize()))
@@ -666,8 +685,8 @@ fn extract_optimize_directions(
 /// * `Vec<f32>` - Flattened vector of length D×E where each element is an imputed score
 fn compute_objective_vector(
     variant_name: &str,
-    val_scores_map: &HashMap<String, VariantScores>,
-    datapoint_ids: &[String],
+    val_scores_map: &VariantScoresMap,
+    datapoint_ids: &[DatapointId],
     sorted_evaluators: &[(&String, &MetricConfigOptimize)],
 ) -> Vec<f32> {
     let mut vec = Vec::with_capacity(datapoint_ids.len() * sorted_evaluators.len());
@@ -748,9 +767,9 @@ fn vector_dominates(
 /// # Returns
 /// HashMap mapping each variant name to its frequency (count of instance-wise Pareto set memberships)
 fn calculate_frequencies(
-    variants: &HashSet<String>,
-    instance_pareto_sets: &HashMap<String, HashSet<String>>,
-) -> HashMap<String, usize> {
+    variants: &HashSet<VariantName>,
+    instance_pareto_sets: &HashMap<DatapointId, HashSet<VariantName>>,
+) -> HashMap<VariantName, usize> {
     variants
         .iter()
         .map(|v| {
@@ -784,8 +803,8 @@ fn calculate_frequencies(
 fn global_dominates(
     variant_a_name: &str,
     variant_b_name: &str,
-    val_scores_map: &HashMap<String, VariantScores>,
-    optimize_directions: &HashMap<String, MetricConfigOptimize>,
+    val_scores_map: &VariantScoresMap,
+    optimize_directions: &HashMap<EvaluatorName, MetricConfigOptimize>,
 ) -> bool {
     let mut better_or_equal_on_all = true;
     let mut strictly_better_on_at_least_one = false;
@@ -806,7 +825,7 @@ fn global_dominates(
         .flat_map(|datapoint_id| {
             optimize_directions
                 .keys()
-                .map(move |evaluator_name| (datapoint_id.clone(), evaluator_name.clone()))
+                .map(move |evaluator_name| (*datapoint_id, evaluator_name.clone()))
         })
         .collect();
 
@@ -857,9 +876,9 @@ fn global_dominates(
 /// # Returns
 /// * `bool` - True if variant A instance-dominates variant B on this datapoint
 fn instance_dominates(
-    a_scores: &HashMap<String, Option<f32>>,
-    b_scores: &HashMap<String, Option<f32>>,
-    optimize_directions: &HashMap<String, MetricConfigOptimize>,
+    a_scores: &HashMap<EvaluatorName, Option<f32>>,
+    b_scores: &HashMap<EvaluatorName, Option<f32>>,
+    optimize_directions: &HashMap<EvaluatorName, MetricConfigOptimize>,
 ) -> bool {
     let mut better_or_equal_on_all = true;
     let mut strictly_better_on_at_least_one = false;
@@ -894,9 +913,9 @@ fn instance_dominates(
 /// # Returns
 /// Vector of variant names that are not dominated by any other variant on this instance
 fn find_non_dominated_variants(
-    instance_scores: &[(String, HashMap<String, Option<f32>>)],
-    optimize_directions: &HashMap<String, MetricConfigOptimize>,
-) -> Vec<String> {
+    instance_scores: &[(VariantName, HashMap<EvaluatorName, Option<f32>>)],
+    optimize_directions: &HashMap<EvaluatorName, MetricConfigOptimize>,
+) -> Vec<VariantName> {
     let mut non_dominated = Vec::new();
 
     for (variant_a_name, variant_a_scores) in instance_scores {
@@ -927,6 +946,7 @@ fn find_non_dominated_variants(
 mod tests {
     use super::*;
     use tensorzero_core::evaluations::EvaluatorConfig;
+    use uuid::Uuid;
 
     // ============================================================================
     // Test Helper Functions
@@ -937,7 +957,9 @@ mod tests {
     /// # Arguments
     /// * `evaluators` - Slice of (evaluator_name, optimize_direction) tuples
     ///   where optimize_direction is "max" or "min"
-    fn create_test_evaluators(evaluators: &[(&str, &str)]) -> HashMap<String, EvaluatorConfig> {
+    fn create_test_evaluators(
+        evaluators: &[(&str, &str)],
+    ) -> HashMap<EvaluatorName, EvaluatorConfig> {
         use tensorzero_core::evaluations::{
             ExactMatchConfig, LLMJudgeConfig, LLMJudgeIncludeConfig, LLMJudgeInputFormat,
             LLMJudgeOptimize, LLMJudgeOutputType,
@@ -972,7 +994,9 @@ mod tests {
     }
 
     /// Create a HashMap of test variants
-    fn create_test_variants(names: &[&str]) -> HashMap<String, UninitializedChatCompletionConfig> {
+    fn create_test_variants(
+        names: &[&str],
+    ) -> HashMap<VariantName, UninitializedChatCompletionConfig> {
         names
             .iter()
             .map(|&name| {
@@ -997,18 +1021,19 @@ mod tests {
     /// * `val_scores_map` - Map of variant names to their per-datapoint scores
     ///
     /// # Returns
-    /// * `Vec<String>` - Sorted list of unique datapoint IDs
-    fn extract_sorted_datapoint_ids(
-        val_scores_map: &HashMap<String, VariantScores>,
-    ) -> Vec<String> {
-        let mut datapoint_ids: Vec<String> = val_scores_map
+    /// * `Vec<DatapointId>` - Sorted list of unique datapoint IDs
+    fn extract_sorted_datapoint_ids(val_scores_map: &VariantScoresMap) -> Vec<DatapointId> {
+        let mut datapoint_ids: Vec<DatapointId> = val_scores_map
             .values()
-            .flat_map(|scores| scores.keys().cloned())
-            .collect::<HashSet<_>>()
-            .into_iter()
+            .flat_map(|scores| scores.keys().copied())
             .collect();
         datapoint_ids.sort();
         datapoint_ids
+    }
+
+    /// Deterministic datapoint ID helper for tests
+    fn dp(id: u128) -> DatapointId {
+        Uuid::from_u128(id)
     }
 
     /// Create a HashMap of EvaluatorStats for testing is_improvement
@@ -1017,7 +1042,7 @@ mod tests {
     /// * `stats` - Slice of (evaluator_name, mean, stderr, count) tuples
     fn create_evaluator_stats(
         stats: &[(&str, f32, f32, usize)],
-    ) -> HashMap<String, EvaluatorStats> {
+    ) -> HashMap<EvaluatorName, EvaluatorStats> {
         stats
             .iter()
             .map(|(name, mean, stderr, count)| {
@@ -1207,27 +1232,15 @@ mod tests {
             (
                 "a".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.9))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.8))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.9))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.8))])),
                 ]),
             ),
             (
                 "b".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.7))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.6))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.7))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.6))])),
                 ]),
             ),
         ]);
@@ -1256,27 +1269,15 @@ mod tests {
             (
                 "a".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.9))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.6))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.9))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.6))])),
                 ]),
             ),
             (
                 "b".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.7))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.8))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.7))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.8))])),
                 ]),
             ),
         ]);
@@ -1470,27 +1471,15 @@ mod tests {
             (
                 "variant_a".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.9))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.8))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.9))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.8))])),
                 ]),
             ),
             (
                 "variant_b".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.7))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.6))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.7))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.6))])),
                 ]),
             ),
         ]);
@@ -1522,27 +1511,15 @@ mod tests {
             (
                 "variant_a".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.9))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.6))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.9))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.6))])),
                 ]),
             ),
             (
                 "variant_b".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.7))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.8))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.7))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.8))])),
                 ]),
             ),
         ]);
@@ -1575,14 +1552,14 @@ mod tests {
                 "variant_a".to_string(),
                 HashMap::from([
                     (
-                        "dp1".to_string(),
+                        dp(1),
                         HashMap::from([
                             ("acc".to_string(), Some(0.9)),
                             ("f1".to_string(), Some(0.8)),
                         ]),
                     ),
                     (
-                        "dp2".to_string(),
+                        dp(2),
                         HashMap::from([
                             ("acc".to_string(), Some(0.6)),
                             ("f1".to_string(), Some(0.7)),
@@ -1594,14 +1571,14 @@ mod tests {
                 "variant_b".to_string(),
                 HashMap::from([
                     (
-                        "dp1".to_string(),
+                        dp(1),
                         HashMap::from([
                             ("acc".to_string(), Some(0.7)),
                             ("f1".to_string(), Some(0.9)),
                         ]),
                     ),
                     (
-                        "dp2".to_string(),
+                        dp(2),
                         HashMap::from([
                             ("acc".to_string(), Some(0.8)),
                             ("f1".to_string(), Some(0.6)),
@@ -1613,14 +1590,14 @@ mod tests {
                 "variant_c".to_string(),
                 HashMap::from([
                     (
-                        "dp1".to_string(),
+                        dp(1),
                         HashMap::from([
                             ("acc".to_string(), Some(0.5)),
                             ("f1".to_string(), Some(0.5)),
                         ]),
                     ),
                     (
-                        "dp2".to_string(),
+                        dp(2),
                         HashMap::from([
                             ("acc".to_string(), Some(0.5)),
                             ("f1".to_string(), Some(0.5)),
@@ -1652,7 +1629,7 @@ mod tests {
             (
                 "variant_a".to_string(),
                 HashMap::from([(
-                    "dp1".to_string(),
+                    dp(1),
                     HashMap::from([
                         ("accuracy".to_string(), Some(0.9)),
                         ("latency".to_string(), Some(0.1)),
@@ -1662,7 +1639,7 @@ mod tests {
             (
                 "variant_b".to_string(),
                 HashMap::from([(
-                    "dp1".to_string(),
+                    dp(1),
                     HashMap::from([
                         ("accuracy".to_string(), Some(0.7)),
                         ("latency".to_string(), Some(0.3)),
@@ -1692,27 +1669,15 @@ mod tests {
             (
                 "variant_a".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), None)]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.8))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), None)])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.8))])),
                 ]),
             ),
             (
                 "variant_b".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.7))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), None)]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.7))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), None)])),
                 ]),
             ),
         ]);
@@ -1736,10 +1701,7 @@ mod tests {
 
         let variant_scores = HashMap::from([(
             "variant_a".to_string(),
-            HashMap::from([(
-                "dp1".to_string(),
-                HashMap::from([("accuracy".to_string(), Some(0.9))]),
-            )]),
+            HashMap::from([(dp(1), HashMap::from([("accuracy".to_string(), Some(0.9))]))]),
         )]);
 
         let candidates = create_test_variants(&["variant_a"]);
@@ -1764,22 +1726,13 @@ mod tests {
             (
                 "variant_a".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.9))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.8))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.9))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.8))])),
                 ]),
             ),
             (
                 "variant_b".to_string(),
-                HashMap::from([(
-                    "dp2".to_string(),
-                    HashMap::from([("accuracy".to_string(), Some(0.6))]),
-                )]),
+                HashMap::from([(dp(2), HashMap::from([("accuracy".to_string(), Some(0.6))]))]),
             ),
         ]);
 
@@ -1802,24 +1755,15 @@ mod tests {
         let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
-                HashMap::from([(
-                    "dp1".to_string(),
-                    HashMap::from([("accuracy".to_string(), Some(0.8))]),
-                )]),
+                HashMap::from([(dp(1), HashMap::from([("accuracy".to_string(), Some(0.8))]))]),
             ),
             (
                 "variant_b".to_string(),
-                HashMap::from([(
-                    "dp1".to_string(),
-                    HashMap::from([("accuracy".to_string(), Some(0.8))]),
-                )]),
+                HashMap::from([(dp(1), HashMap::from([("accuracy".to_string(), Some(0.8))]))]),
             ),
             (
                 "variant_c".to_string(),
-                HashMap::from([(
-                    "dp1".to_string(),
-                    HashMap::from([("accuracy".to_string(), Some(0.8))]),
-                )]),
+                HashMap::from([(dp(1), HashMap::from([("accuracy".to_string(), Some(0.8))]))]),
             ),
         ]);
 
@@ -1848,27 +1792,15 @@ mod tests {
             (
                 "variant_a".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.9))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), None)]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.9))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), None)])),
                 ]),
             ),
             (
                 "variant_b".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), None)]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.7))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), None)])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.7))])),
                 ]),
             ),
         ]);
@@ -1899,14 +1831,14 @@ mod tests {
             (
                 "variant_a".to_string(),
                 HashMap::from([(
-                    "dp1".to_string(),
+                    dp(1),
                     HashMap::from([("exact_match".to_string(), Some(1.0))]),
                 )]),
             ),
             (
                 "variant_b".to_string(),
                 HashMap::from([(
-                    "dp1".to_string(),
+                    dp(1),
                     HashMap::from([("exact_match".to_string(), Some(0.0))]),
                 )]),
             ),
@@ -1932,7 +1864,7 @@ mod tests {
         let variant_scores = HashMap::from([(
             "variant_a".to_string(),
             HashMap::from([(
-                "dp1".to_string(),
+                dp(1),
                 HashMap::from([
                     ("accuracy".to_string(), Some(0.9)),
                     ("weird_metric".to_string(), Some(0.1)),
@@ -1963,27 +1895,15 @@ mod tests {
             (
                 "variant_a".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.8))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.9))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.8))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.9))])),
                 ]),
             ),
             (
                 "variant_b".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.8))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.7))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.8))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.7))])),
                 ]),
             ),
         ]);
@@ -2015,24 +1935,15 @@ mod tests {
         let variant_scores = HashMap::from([
             (
                 "variant_a".to_string(),
-                HashMap::from([(
-                    "dp1".to_string(),
-                    HashMap::from([("accuracy".to_string(), Some(0.9))]),
-                )]),
+                HashMap::from([(dp(1), HashMap::from([("accuracy".to_string(), Some(0.9))]))]),
             ),
             (
                 "variant_b".to_string(),
-                HashMap::from([(
-                    "dp1".to_string(),
-                    HashMap::from([("accuracy".to_string(), Some(0.7))]),
-                )]),
+                HashMap::from([(dp(1), HashMap::from([("accuracy".to_string(), Some(0.7))]))]),
             ),
             (
                 "variant_c".to_string(),
-                HashMap::from([(
-                    "dp1".to_string(),
-                    HashMap::from([("accuracy".to_string(), Some(0.5))]),
-                )]),
+                HashMap::from([(dp(1), HashMap::from([("accuracy".to_string(), Some(0.5))]))]),
             ),
         ]);
 
@@ -2064,7 +1975,7 @@ mod tests {
             let mut datapoint_scores = HashMap::new();
 
             for d in 0..num_datapoints {
-                let datapoint_id = format!("dp_{d}");
+                let datapoint_id = dp(d as u128 + 1);
                 // Use deterministic "random" values for reproducibility
                 let score = ((v * 17 + d * 31) % 100) as f32 / 100.0;
                 datapoint_scores.insert(
@@ -2113,9 +2024,8 @@ mod tests {
     fn test_empty_candidates() {
         let config = create_evaluation_config(&[("accuracy", "max")]);
 
-        let val_scores_map: HashMap<String, HashMap<String, HashMap<String, Option<f32>>>> =
-            HashMap::new();
-        let candidates: HashMap<String, UninitializedChatCompletionConfig> = HashMap::new();
+        let val_scores_map: VariantScoresMap = HashMap::new();
+        let candidates: HashMap<VariantName, UninitializedChatCompletionConfig> = HashMap::new();
 
         let datapoint_ids = extract_sorted_datapoint_ids(&val_scores_map);
         let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
@@ -2130,8 +2040,7 @@ mod tests {
         let config = create_evaluation_config(&[("accuracy", "max")]);
 
         // All val_scores entries are None (evaluation failed)
-        let val_scores_map: HashMap<String, HashMap<String, HashMap<String, Option<f32>>>> =
-            HashMap::new();
+        let val_scores_map: VariantScoresMap = HashMap::new();
         let candidates = create_test_variants(&["variant_a", "variant_b"]);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&val_scores_map);
@@ -2155,27 +2064,15 @@ mod tests {
             (
                 "variant_a".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), None)]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), None)]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), None)])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), None)])),
                 ]),
             ),
             (
                 "variant_b".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), None)]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), None)]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), None)])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), None)])),
                 ]),
             ),
         ]);
@@ -2227,52 +2124,25 @@ mod tests {
             (
                 "variant_a".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.9))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.9))]),
-                    ),
-                    (
-                        "dp3".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.5))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.9))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.9))])),
+                    (dp(3), HashMap::from([("accuracy".to_string(), Some(0.5))])),
                 ]),
             ),
             (
                 "variant_b".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.7))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.7))]),
-                    ),
-                    (
-                        "dp3".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.9))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.7))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.7))])),
+                    (dp(3), HashMap::from([("accuracy".to_string(), Some(0.9))])),
                 ]),
             ),
             (
                 "variant_c".to_string(),
                 HashMap::from([
-                    (
-                        "dp1".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.5))]),
-                    ),
-                    (
-                        "dp2".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.5))]),
-                    ),
-                    (
-                        "dp3".to_string(),
-                        HashMap::from([("accuracy".to_string(), Some(0.5))]),
-                    ),
+                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.5))])),
+                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.5))])),
+                    (dp(3), HashMap::from([("accuracy".to_string(), Some(0.5))])),
                 ]),
             ),
         ]);
@@ -2306,26 +2176,11 @@ mod tests {
         let variant_scores = HashMap::from([(
             "variant_a".to_string(),
             HashMap::from([
-                (
-                    "dp1".to_string(),
-                    HashMap::from([("accuracy".to_string(), Some(0.9))]),
-                ),
-                (
-                    "dp2".to_string(),
-                    HashMap::from([("accuracy".to_string(), Some(0.9))]),
-                ),
-                (
-                    "dp3".to_string(),
-                    HashMap::from([("accuracy".to_string(), None)]),
-                ),
-                (
-                    "dp4".to_string(),
-                    HashMap::from([("accuracy".to_string(), None)]),
-                ),
-                (
-                    "dp5".to_string(),
-                    HashMap::from([("accuracy".to_string(), None)]),
-                ),
+                (dp(1), HashMap::from([("accuracy".to_string(), Some(0.9))])),
+                (dp(2), HashMap::from([("accuracy".to_string(), Some(0.9))])),
+                (dp(3), HashMap::from([("accuracy".to_string(), None)])),
+                (dp(4), HashMap::from([("accuracy".to_string(), None)])),
+                (dp(5), HashMap::from([("accuracy".to_string(), None)])),
             ]),
         )]);
 
@@ -2359,14 +2214,14 @@ mod tests {
                 "variant_a".to_string(),
                 HashMap::from([
                     (
-                        "dp1".to_string(),
+                        dp(1),
                         HashMap::from([
                             ("accuracy".to_string(), Some(0.9)),
                             ("latency".to_string(), Some(0.2)),
                         ]),
                     ),
                     (
-                        "dp2".to_string(),
+                        dp(2),
                         HashMap::from([
                             ("accuracy".to_string(), Some(0.8)),
                             ("latency".to_string(), Some(0.3)),
@@ -2378,14 +2233,14 @@ mod tests {
                 "variant_b".to_string(),
                 HashMap::from([
                     (
-                        "dp1".to_string(),
+                        dp(1),
                         HashMap::from([
                             ("accuracy".to_string(), Some(0.7)),
                             ("latency".to_string(), Some(0.1)),
                         ]),
                     ),
                     (
-                        "dp2".to_string(),
+                        dp(2),
                         HashMap::from([
                             ("accuracy".to_string(), Some(0.9)),
                             ("latency".to_string(), Some(0.2)),
@@ -2397,14 +2252,14 @@ mod tests {
                 "variant_c".to_string(),
                 HashMap::from([
                     (
-                        "dp1".to_string(),
+                        dp(1),
                         HashMap::from([
                             ("accuracy".to_string(), Some(0.6)),
                             ("latency".to_string(), Some(0.4)),
                         ]),
                     ),
                     (
-                        "dp2".to_string(),
+                        dp(2),
                         HashMap::from([
                             ("accuracy".to_string(), Some(0.7)),
                             ("latency".to_string(), Some(0.5)),
@@ -2441,14 +2296,14 @@ mod tests {
             "variant_d".to_string(),
             HashMap::from([
                 (
-                    "dp1".to_string(),
+                    dp(1),
                     HashMap::from([
                         ("accuracy".to_string(), Some(0.85)),
                         ("latency".to_string(), Some(0.15)),
                     ]),
                 ),
                 (
-                    "dp2".to_string(),
+                    dp(2),
                     HashMap::from([
                         ("accuracy".to_string(), Some(0.75)),
                         ("latency".to_string(), Some(0.25)),
