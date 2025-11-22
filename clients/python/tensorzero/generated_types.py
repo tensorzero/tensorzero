@@ -346,6 +346,9 @@ class JsonInferenceOutput:
     """
 
 
+OrderDirection = Literal["ascending", "descending"]
+
+
 InferenceOutputSource = str
 
 
@@ -359,7 +362,59 @@ class TimeDatapointFilter(TimeFilter):
     type: Literal["time"] = "time"
 
 
-OrderDirection = Literal["ascending", "descending"]
+@dataclass(kw_only=True)
+class DatapointOrderByTimestamp:
+    direction: OrderDirection
+    """
+    The ordering direction.
+    """
+    by: Literal["timestamp"] = "timestamp"
+
+
+@dataclass(kw_only=True)
+class DatapointOrderBySearchRelevance:
+    direction: OrderDirection
+    """
+    The ordering direction.
+    """
+    by: Literal["search_relevance"] = "search_relevance"
+
+
+DatapointOrderBy = DatapointOrderByTimestamp | DatapointOrderBySearchRelevance
+
+
+@dataclass(kw_only=True)
+class OrderByTimestamp:
+    direction: OrderDirection
+    """
+    The ordering direction.
+    """
+    by: Literal["timestamp"] = "timestamp"
+
+
+@dataclass(kw_only=True)
+class OrderByMetric:
+    direction: OrderDirection
+    """
+    The ordering direction.
+    """
+    name: str
+    """
+    The name of the metric to order by.
+    """
+    by: Literal["metric"] = "metric"
+
+
+@dataclass(kw_only=True)
+class OrderBySearchRelevance:
+    direction: OrderDirection
+    """
+    The ordering direction.
+    """
+    by: Literal["search_relevance"] = "search_relevance"
+
+
+OrderBy = OrderByTimestamp | OrderByMetric | OrderBySearchRelevance
 
 
 @dataclass(kw_only=True)
@@ -898,40 +953,6 @@ class InferenceFilterTag(TagFilter):
 @dataclass(kw_only=True)
 class InferenceFilterTime(TimeFilter):
     type: Literal["time"] = "time"
-
-
-@dataclass(kw_only=True)
-class OrderByTimestamp:
-    direction: OrderDirection
-    """
-    The ordering direction.
-    """
-    by: Literal["timestamp"] = "timestamp"
-
-
-@dataclass(kw_only=True)
-class OrderByMetric:
-    direction: OrderDirection
-    """
-    The ordering direction.
-    """
-    name: str
-    """
-    The name of the metric to order by.
-    """
-    by: Literal["metric"] = "metric"
-
-
-@dataclass(kw_only=True)
-class OrderBySearchRelevance:
-    direction: OrderDirection
-    """
-    The ordering direction.
-    """
-    by: Literal["search_relevance"] = "search_relevance"
-
-
-OrderBy = OrderByTimestamp | OrderByMetric | OrderBySearchRelevance
 
 
 @dataclass(kw_only=True)
@@ -1559,6 +1580,26 @@ class ListDatapointsRequest:
     """
     Optional filter to apply when querying datapoints.
     Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
+    """
+    order_by: list[DatapointOrderBy] | None = None
+    """
+    Optional ordering criteria for the results.
+    Supports multiple sort criteria (e.g., sort by timestamp then by search relevance).
+    """
+    search_query_experimental: str | None = None
+    """
+    Text query to filter. Case-insensitive substring search over the datapoints' input and output.
+
+    THIS FEATURE IS EXPERIMENTAL, and we may change or remove it at any time.
+    We recommend against depending on this feature for critical use cases.
+
+    Important limitations:
+    - This requires an exact substring match; we do not tokenize this query string.
+    - This doesn't search for any content in the template itself.
+    - Quality is based on term frequency > 0, without any relevance scoring.
+    - There are no performance guarantees (it's best effort only). Today, with no other
+      filters, it will perform a full table scan, which may be extremely slow depending
+      on the data volume.
     """
 
 

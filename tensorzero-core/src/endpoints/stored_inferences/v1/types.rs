@@ -9,6 +9,9 @@ use crate::db::inferences::{
 };
 use crate::stored_inference::StoredInference;
 
+// Re-exported for backwards compatibility.
+pub use crate::endpoints::shared_types::OrderDirection;
+
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 pub struct FloatMetricFilter {
@@ -87,16 +90,6 @@ pub enum TagComparisonOperator {
     Equal,
     #[serde(rename = "!=")]
     NotEqual,
-}
-
-/// The ordering direction.
-#[derive(Clone, Debug, Deserialize, Serialize, JsonSchema, PartialEq, ts_rs::TS)]
-#[ts(export)]
-pub enum OrderDirection {
-    #[serde(rename = "ascending")]
-    Asc,
-    #[serde(rename = "descending")]
-    Desc,
 }
 
 /// The property to order by.

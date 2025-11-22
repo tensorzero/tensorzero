@@ -71,6 +71,8 @@ async fn test_delete_datapoints_single_chat() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -104,6 +106,8 @@ async fn test_delete_datapoints_single_chat() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -119,6 +123,8 @@ async fn test_delete_datapoints_single_chat() {
             offset: 0,
             allow_stale: true,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -260,6 +266,8 @@ async fn test_delete_datapoints_multiple_mixed() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -361,6 +369,8 @@ async fn test_delete_datapoints_non_existent_id() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
