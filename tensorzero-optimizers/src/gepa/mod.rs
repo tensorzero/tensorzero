@@ -26,9 +26,12 @@ use crate::{JobHandle, Optimizer};
 
 mod analyze;
 mod evaluate;
+mod pareto;
+// TODO: do not re-export
 
 pub use analyze::{analyze_inferences, Analysis, FunctionContext};
 pub use evaluate::create_evaluation_dataset;
+pub use pareto::{is_improvement, ParetoFrontier};
 
 #[async_trait]
 impl Optimizer for GEPAConfig {
