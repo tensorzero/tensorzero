@@ -60,6 +60,27 @@ impl<'a> Migration for Migration0043<'a> {
             return Ok(true);
         }
 
+        // Check if hash conversion functions exist
+        let query =
+            "SELECT 1 FROM system.functions WHERE name = 'tensorzero_hex_to_hash'".to_string();
+        let result = self
+            .clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
+        if !result.response.contains("1") {
+            return Ok(true);
+        }
+
+        let query =
+            "SELECT 1 FROM system.functions WHERE name = 'tensorzero_hash_to_hex'".to_string();
+        let result = self
+            .clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
+        if !result.response.contains("1") {
+            return Ok(true);
+        }
+
         // Check if any of the tables is missing the snapshot_hash column
         for table in SNAPSHOT_TRACKED_TABLES {
             if !check_column_exists(self.clickhouse, table, "snapshot_hash", MIGRATION_ID).await? {
@@ -70,9 +91,12 @@ impl<'a> Migration for Migration0043<'a> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+
         // Create ConfigSnapshot table
-        let create_table_query = "
-            CREATE TABLE IF NOT EXISTS ConfigSnapshot (
+        let create_table_query = format!(
+            "
+            CREATE TABLE IF NOT EXISTS ConfigSnapshot{on_cluster_name} (
                 config String,
                 extra_templates Map(String, String),
                 version_hash UInt256,
@@ -82,9 +106,25 @@ impl<'a> Migration for Migration0043<'a> {
             ) ENGINE = ReplacingMergeTree(last_used)
             ORDER BY version_hash
             SETTINGS index_granularity = 256
-        ";
+        "
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(create_table_query.to_string())
+            .run_query_synchronous_no_params(create_table_query)
+            .await?;
+
+        // Create hash conversion functions for round-tripping UInt256 hashes with hex strings
+        let query = format!(
+            r"CREATE FUNCTION IF NOT EXISTS tensorzero_hex_to_hash{on_cluster_name} AS (hex_string) -> reinterpretAsUInt256(reverse(unhex(hex_string)))",
+        );
+        self.clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
+
+        let query = format!(
+            r"CREATE FUNCTION IF NOT EXISTS tensorzero_hash_to_hex{on_cluster_name} AS (hash) -> lower(hex(reverse(reinterpretAsFixedString(hash))))",
+        );
+        self.clickhouse
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Add snapshot_hash column to existing tables
@@ -99,8 +139,9 @@ impl<'a> Migration for Migration0043<'a> {
 
         // Update materialized views to propagate snapshot_hash from source tables
         // Group 1: Feedback indexing views
-        let query = "
-            ALTER TABLE BooleanMetricFeedbackByTargetIdView MODIFY QUERY
+        let query = format!(
+            "
+            ALTER TABLE BooleanMetricFeedbackByTargetIdView{on_cluster_name} MODIFY QUERY
             SELECT
                 id,
                 target_id,
@@ -109,13 +150,15 @@ impl<'a> Migration for Migration0043<'a> {
                 tags,
                 snapshot_hash
             FROM BooleanMetricFeedback
-        ";
+        "
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
-        let query = "
-            ALTER TABLE FloatMetricFeedbackByTargetIdView MODIFY QUERY
+        let query = format!(
+            "
+            ALTER TABLE FloatMetricFeedbackByTargetIdView{on_cluster_name} MODIFY QUERY
             SELECT
                 id,
                 target_id,
@@ -124,13 +167,15 @@ impl<'a> Migration for Migration0043<'a> {
                 tags,
                 snapshot_hash
             FROM FloatMetricFeedback
-        ";
+        "
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
-        let query = "
-            ALTER TABLE CommentFeedbackByTargetIdView MODIFY QUERY
+        let query = format!(
+            "
+            ALTER TABLE CommentFeedbackByTargetIdView{on_cluster_name} MODIFY QUERY
             SELECT
                 id,
                 target_id,
@@ -139,13 +184,15 @@ impl<'a> Migration for Migration0043<'a> {
                 tags,
                 snapshot_hash
             FROM CommentFeedback
-        ";
+        "
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
-        let query = "
-            ALTER TABLE DemonstrationFeedbackByInferenceIdView MODIFY QUERY
+        let query = format!(
+            "
+            ALTER TABLE DemonstrationFeedbackByInferenceIdView{on_cluster_name} MODIFY QUERY
             SELECT
                 id,
                 inference_id,
@@ -153,14 +200,16 @@ impl<'a> Migration for Migration0043<'a> {
                 tags,
                 snapshot_hash
             FROM DemonstrationFeedback
-        ";
+        "
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Group 2: Inference indexing views
-        let query = "
-            ALTER TABLE ChatInferenceByIdView MODIFY QUERY
+        let query = format!(
+            "
+            ALTER TABLE ChatInferenceByIdView{on_cluster_name} MODIFY QUERY
             SELECT
                 toUInt128(id) as id_uint,
                 function_name,
@@ -169,13 +218,15 @@ impl<'a> Migration for Migration0043<'a> {
                 'chat' AS function_type,
                 snapshot_hash
             FROM ChatInference
-        ";
+        "
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
-        let query = "
-            ALTER TABLE JsonInferenceByIdView MODIFY QUERY
+        let query = format!(
+            "
+            ALTER TABLE JsonInferenceByIdView{on_cluster_name} MODIFY QUERY
             SELECT
                 toUInt128(id) as id_uint,
                 function_name,
@@ -184,13 +235,15 @@ impl<'a> Migration for Migration0043<'a> {
                 'json' AS function_type,
                 snapshot_hash
             FROM JsonInference
-        ";
+        "
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
-        let query = "
-            ALTER TABLE ChatInferenceByEpisodeIdView MODIFY QUERY
+        let query = format!(
+            "
+            ALTER TABLE ChatInferenceByEpisodeIdView{on_cluster_name} MODIFY QUERY
             SELECT
                 toUInt128(episode_id) as episode_id_uint,
                 toUInt128(id) as id_uint,
@@ -199,13 +252,15 @@ impl<'a> Migration for Migration0043<'a> {
                 'chat' as function_type,
                 snapshot_hash
             FROM ChatInference
-        ";
+        "
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
-        let query = "
-            ALTER TABLE JsonInferenceByEpisodeIdView MODIFY QUERY
+        let query = format!(
+            "
+            ALTER TABLE JsonInferenceByEpisodeIdView{on_cluster_name} MODIFY QUERY
             SELECT
                 toUInt128(episode_id) as episode_id_uint,
                 toUInt128(id) as id_uint,
@@ -214,14 +269,16 @@ impl<'a> Migration for Migration0043<'a> {
                 'json' as function_type,
                 snapshot_hash
             FROM JsonInference
-        ";
+        "
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Group 3: Tag extraction views
-        let query = "
-            ALTER TABLE TagChatInferenceView MODIFY QUERY
+        let query = format!(
+            "
+            ALTER TABLE TagChatInferenceView{on_cluster_name} MODIFY QUERY
             SELECT
                 function_name,
                 variant_name,
@@ -233,13 +290,15 @@ impl<'a> Migration for Migration0043<'a> {
                 snapshot_hash
             FROM ChatInference
             ARRAY JOIN mapKeys(tags) as key
-        ";
+        "
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
-        let query = "
-            ALTER TABLE TagJsonInferenceView MODIFY QUERY
+        let query = format!(
+            "
+            ALTER TABLE TagJsonInferenceView{on_cluster_name} MODIFY QUERY
             SELECT
                 function_name,
                 variant_name,
@@ -251,14 +310,16 @@ impl<'a> Migration for Migration0043<'a> {
                 snapshot_hash
             FROM JsonInference
             ARRAY JOIN mapKeys(tags) as key
-        ";
+        "
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         // Group 4: Feedback by variant views (with JOINs)
-        let query = "
-            ALTER TABLE FloatMetricFeedbackByVariantView MODIFY QUERY
+        let query = format!(
+            "
+            ALTER TABLE FloatMetricFeedbackByVariantView{on_cluster_name} MODIFY QUERY
             WITH
                 float_feedback AS (
                     SELECT
@@ -305,13 +366,15 @@ impl<'a> Migration for Migration0043<'a> {
                 f.snapshot_hash as snapshot_hash
             FROM float_feedback f
             JOIN targets t ON f.target_id = t.target_id
-        ";
+        "
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
-        let query = "
-            ALTER TABLE BooleanMetricFeedbackByVariantView MODIFY QUERY
+        let query = format!(
+            "
+            ALTER TABLE BooleanMetricFeedbackByVariantView{on_cluster_name} MODIFY QUERY
             WITH
                 boolean_feedback AS (
                     SELECT
@@ -358,26 +421,35 @@ impl<'a> Migration for Migration0043<'a> {
                 f.snapshot_hash as snapshot_hash
             FROM boolean_feedback f
             JOIN targets t ON f.target_id = t.target_id
-        ";
+        "
+        );
         self.clickhouse
-            .run_query_synchronous_no_params(query.to_string())
+            .run_query_synchronous_no_params(query)
             .await?;
 
         Ok(())
     }
 
     fn rollback_instructions(&self) -> String {
-        let mut instructions = String::from("DROP TABLE ConfigSnapshot;\n");
+        let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        let mut instructions = format!("DROP TABLE ConfigSnapshot{on_cluster_name};\n");
+
+        // NOTE: We do *not* drop the tensorzero_hex_to_hash and tensorzero_hash_to_hex functions here,
+        // as ClickHouse user-defined functions are globally scoped.
+        // Dropping the functions can break other migrations running concurrently in our test suite.
+        // If you need to drop them manually:
+        // DROP FUNCTION IF EXISTS tensorzero_hex_to_hash;
+        // DROP FUNCTION IF EXISTS tensorzero_hash_to_hex;
 
         for table in SNAPSHOT_TRACKED_TABLES {
             instructions.push_str(&format!("ALTER TABLE {table} DROP COLUMN snapshot_hash;\n"));
         }
 
         // Rollback materialized view modifications
-        instructions.push_str(
+        instructions.push_str(&format!(
             "
 -- Rollback Group 1: Feedback indexing views
-ALTER TABLE BooleanMetricFeedbackByTargetIdView MODIFY QUERY
+ALTER TABLE BooleanMetricFeedbackByTargetIdView{on_cluster_name} MODIFY QUERY
 SELECT
     id,
     target_id,
@@ -386,7 +458,7 @@ SELECT
     tags
 FROM BooleanMetricFeedback;
 
-ALTER TABLE FloatMetricFeedbackByTargetIdView MODIFY QUERY
+ALTER TABLE FloatMetricFeedbackByTargetIdView{on_cluster_name} MODIFY QUERY
 SELECT
     id,
     target_id,
@@ -395,7 +467,7 @@ SELECT
     tags
 FROM FloatMetricFeedback;
 
-ALTER TABLE CommentFeedbackByTargetIdView MODIFY QUERY
+ALTER TABLE CommentFeedbackByTargetIdView{on_cluster_name} MODIFY QUERY
 SELECT
     id,
     target_id,
@@ -404,7 +476,7 @@ SELECT
     tags
 FROM CommentFeedback;
 
-ALTER TABLE DemonstrationFeedbackByInferenceIdView MODIFY QUERY
+ALTER TABLE DemonstrationFeedbackByInferenceIdView{on_cluster_name} MODIFY QUERY
 SELECT
     id,
     inference_id,
@@ -413,7 +485,7 @@ SELECT
 FROM DemonstrationFeedback;
 
 -- Rollback Group 2: Inference indexing views
-ALTER TABLE ChatInferenceByIdView MODIFY QUERY
+ALTER TABLE ChatInferenceByIdView{on_cluster_name} MODIFY QUERY
 SELECT
     toUInt128(id) as id_uint,
     function_name,
@@ -422,7 +494,7 @@ SELECT
     'chat' AS function_type
 FROM ChatInference;
 
-ALTER TABLE JsonInferenceByIdView MODIFY QUERY
+ALTER TABLE JsonInferenceByIdView{on_cluster_name} MODIFY QUERY
 SELECT
     toUInt128(id) as id_uint,
     function_name,
@@ -431,7 +503,7 @@ SELECT
     'json' AS function_type
 FROM JsonInference;
 
-ALTER TABLE ChatInferenceByEpisodeIdView MODIFY QUERY
+ALTER TABLE ChatInferenceByEpisodeIdView{on_cluster_name} MODIFY QUERY
 SELECT
     toUInt128(episode_id) as episode_id_uint,
     toUInt128(id) as id_uint,
@@ -440,7 +512,7 @@ SELECT
     'chat' as function_type
 FROM ChatInference;
 
-ALTER TABLE JsonInferenceByEpisodeIdView MODIFY QUERY
+ALTER TABLE JsonInferenceByEpisodeIdView{on_cluster_name} MODIFY QUERY
 SELECT
     toUInt128(episode_id) as episode_id_uint,
     toUInt128(id) as id_uint,
@@ -450,7 +522,7 @@ SELECT
 FROM JsonInference;
 
 -- Rollback Group 3: Tag extraction views
-ALTER TABLE TagChatInferenceView MODIFY QUERY
+ALTER TABLE TagChatInferenceView{on_cluster_name} MODIFY QUERY
 SELECT
     function_name,
     variant_name,
@@ -462,7 +534,7 @@ SELECT
 FROM ChatInference
 ARRAY JOIN mapKeys(tags) as key;
 
-ALTER TABLE TagJsonInferenceView MODIFY QUERY
+ALTER TABLE TagJsonInferenceView{on_cluster_name} MODIFY QUERY
 SELECT
     function_name,
     variant_name,
@@ -475,7 +547,7 @@ FROM JsonInference
 ARRAY JOIN mapKeys(tags) as key;
 
 -- Rollback Group 4: Feedback by variant views
-ALTER TABLE FloatMetricFeedbackByVariantView MODIFY QUERY
+ALTER TABLE FloatMetricFeedbackByVariantView{on_cluster_name} MODIFY QUERY
 WITH
     float_feedback AS (
         SELECT
@@ -521,7 +593,7 @@ SELECT
 FROM float_feedback f
 JOIN targets t ON f.target_id = t.target_id;
 
-ALTER TABLE BooleanMetricFeedbackByVariantView MODIFY QUERY
+ALTER TABLE BooleanMetricFeedbackByVariantView{on_cluster_name} MODIFY QUERY
 WITH
     boolean_feedback AS (
         SELECT
@@ -566,8 +638,8 @@ SELECT
     f.tags as feedback_tags
 FROM boolean_feedback f
 JOIN targets t ON f.target_id = t.target_id;
-",
-        );
+"
+        ));
 
         instructions
     }
