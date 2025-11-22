@@ -9,12 +9,13 @@ use tensorzero::{
     Role, StoredDatapoint,
 };
 use tensorzero_core::config::{MetricConfigLevel, MetricConfigType};
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::clickhouse::test_helpers::{
+    clickhouse_flush_async_insert, get_clickhouse,
+};
 use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetMetadata, DatasetOutputSource, DatasetQueries, GetAdjacentDatapointIdsParams,
     GetDatapointsParams, GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter,
-    StaleDatapointParams,
 };
 use tensorzero_core::endpoints::datasets::DatapointKind;
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
@@ -1125,6 +1126,9 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
         .await
         .unwrap();
 
+    // Flush async insert to ensure datapoint is visible before deletion
+    clickhouse_flush_async_insert(&clickhouse).await;
+
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -1150,13 +1154,12 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
 
     // Test staling
     clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: "test_chat_dataset".to_string(),
-            datapoint_id,
-            function_type: DatapointKind::Chat,
-        })
+        .delete_datapoints("test_chat_dataset", Some(&[datapoint_id]))
         .await
         .unwrap();
+
+    // Flush async insert to ensure datapoint is deleted
+    clickhouse_flush_async_insert(&clickhouse).await;
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1256,11 +1259,7 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
 
     // Test staling
     clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: "test_json_dataset".to_string(),
-            datapoint_id,
-            function_type: DatapointKind::Json,
-        })
+        .delete_datapoints("test_json_dataset", Some(&[datapoint_id]))
         .await
         .unwrap();
 
@@ -1370,12 +1369,9 @@ async fn test_handles_staling_of_non_existent_datapoint() {
     let clickhouse = get_clickhouse().await;
 
     // Should not throw when trying to stale a non-existent datapoint
+    let datapoint_id = Uuid::now_v7();
     let result = clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: "fake".to_string(),
-            datapoint_id: Uuid::now_v7(),
-            function_type: DatapointKind::Chat,
-        })
+        .delete_datapoints("fake", Some(&[datapoint_id]))
         .await;
 
     // This should succeed without error (graceful handling)
@@ -2001,11 +1997,7 @@ async fn test_get_datapoints_respects_allow_stale_false() {
 
     // Stale the datapoint
     clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id,
-            function_type: DatapointKind::Chat,
-        })
+        .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
         .await
         .unwrap();
 
@@ -2071,11 +2063,7 @@ async fn test_get_datapoints_respects_allow_stale_true() {
 
     // Stale the datapoint
     clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id,
-            function_type: DatapointKind::Chat,
-        })
+        .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
         .await
         .unwrap();
 
@@ -2573,7 +2561,7 @@ mod tool_call_storage_tests {
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
-        let dynamic_tool = Tool::ClientSideFunction(FunctionTool {
+        let dynamic_tool = Tool::Function(FunctionTool {
             name: "runtime_tool".to_string(),
             description: "A tool provided at runtime".to_string(),
             parameters: json!({"type": "object", "properties": {}}),
@@ -2633,7 +2621,9 @@ mod tool_call_storage_tests {
             // Verify dynamic tool is present
             assert_eq!(tool_params.dynamic_tools.len(), 1);
 
-            let Tool::ClientSideFunction(tool) = &tool_params.dynamic_tools[0];
+            let Tool::Function(tool) = &tool_params.dynamic_tools[0] else {
+                panic!("Expected Function tool");
+            };
             assert_eq!(tool.name, "runtime_tool");
             assert_eq!(tool.description, "A tool provided at runtime");
             assert!(!tool.strict);
@@ -2659,7 +2649,7 @@ mod tool_call_storage_tests {
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
-        let dynamic_tool = Tool::ClientSideFunction(FunctionTool {
+        let dynamic_tool = Tool::Function(FunctionTool {
             name: "dynamic_x".to_string(),
             description: "Dynamic tool X".to_string(),
             parameters: json!({"type": "object"}),
@@ -3030,14 +3020,14 @@ mod tool_call_storage_tests {
         let datapoint_id = Uuid::now_v7();
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
-        let dynamic_tool1 = Tool::ClientSideFunction(FunctionTool {
+        let dynamic_tool1 = Tool::Function(FunctionTool {
             name: "dynamic_tool_1".to_string(),
             description: "First dynamic tool".to_string(),
             parameters: json!({"type": "object", "properties": {"param1": {"type": "string"}}}),
             strict: false,
         });
 
-        let dynamic_tool2 = Tool::ClientSideFunction(FunctionTool {
+        let dynamic_tool2 = Tool::Function(FunctionTool {
             name: "dynamic_tool_2".to_string(),
             description: "Second dynamic tool".to_string(),
             parameters: json!({"type": "object", "properties": {"param2": {"type": "number"}}}),

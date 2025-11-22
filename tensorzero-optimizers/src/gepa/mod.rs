@@ -23,9 +23,11 @@ use tensorzero_core::{
 
 use crate::{JobHandle, Optimizer};
 
+mod analyze;
 mod evaluate;
 mod validate;
 
+pub use analyze::{analyze_inferences, Analysis, FunctionContext};
 pub use evaluate::create_evaluation_dataset;
 use validate::{initialize_pareto_frontier, validate_examples, validate_gepa_config};
 

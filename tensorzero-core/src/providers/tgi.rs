@@ -523,7 +523,7 @@ impl<'a> TGIRequest<'a> {
         .await?;
 
         let (tools, tool_choice, parallel_tool_calls) =
-            prepare_chat_completion_tools(request, false);
+            prepare_chat_completion_tools(request, false)?;
 
         let mut tgi_request = TGIRequest {
             messages,

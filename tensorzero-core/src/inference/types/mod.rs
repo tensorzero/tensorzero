@@ -107,6 +107,7 @@ pub mod batch;
 pub mod chat_completion_inference_params;
 pub mod extra_body;
 pub mod extra_headers;
+pub mod extra_stuff;
 pub mod file;
 mod input_message;
 #[cfg(feature = "pyo3")]
@@ -2246,10 +2247,39 @@ where
     let val = bool::deserialize(d)?;
     if !val {
         return Err(D::Error::custom(
-            "Error deserializing replacement config: 'delete' must be 'true', or not set",
+            "Error deserializing replacement config: `delete` must be `true`, or not set",
         ));
     }
     Ok(())
+}
+
+// Field-aware versions for struct fields (not enum variants)
+#[expect(clippy::trivially_copy_pass_by_ref)]
+pub(super) fn serialize_delete_field<S>(_: &(), s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    true.serialize(s)
+}
+
+pub(super) fn deserialize_delete_field<'de, D>(d: D) -> Result<(), D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = bool::deserialize(d)?;
+    if !val {
+        return Err(D::Error::custom(
+            "Error deserializing replacement config: `delete` must be `true`, or not set",
+        ));
+    }
+    Ok(())
+}
+
+pub(super) fn schema_for_delete_field(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    let mut map = Map::new();
+    map.insert("type".to_owned(), Value::String("boolean".to_owned()));
+    map.insert("const".to_owned(), Value::Bool(true));
+    schemars::Schema::from(map)
 }
 
 #[cfg(test)]
@@ -2257,7 +2287,7 @@ mod tests {
     use super::*;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{DynamicToolConfig, ToolChoice, ToolConfig};
+    use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolChoice};
     use serde_json::json;
     use tokio::time::Instant;
 
@@ -2643,7 +2673,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             ..ToolCallConfig::with_tools_available(
                 vec![],
-                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "custom_tool".to_string(),
                     description: "A custom tool".to_string(),
                     parameters: DynamicJSONSchema::new(
@@ -2768,7 +2798,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             ..ToolCallConfig::with_tools_available(
                 vec![],
-                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "weather_tool".to_string(),
                     description: "Get weather information".to_string(),
                     parameters: DynamicJSONSchema::new(

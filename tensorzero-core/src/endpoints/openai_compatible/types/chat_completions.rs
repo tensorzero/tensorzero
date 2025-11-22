@@ -402,7 +402,7 @@ impl Params {
             allowed_tools,
             additional_tools: openai_compatible_params
                 .tools
-                .map(|tools| tools.into_iter().map(OpenAICompatibleTool::into).collect()),
+                .map(|tools| tools.into_iter().map(|t| t.into()).collect()),
             tool_choice,
             parallel_tool_calls: openai_compatible_params.parallel_tool_calls,
             provider_tools: openai_compatible_params.tensorzero_provider_tools,
