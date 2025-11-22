@@ -132,11 +132,14 @@ impl ParetoFrontier {
         }
     }
 
-    /// Get expected objective vector length for current layout
-    ///
-    /// Used for cache validation
-    fn expected_vector_length(&self) -> usize {
-        self.datapoint_ids.len() * self.optimize_directions.len()
+    /// Access frequency map for read-only callers (e.g., diagnostics)
+    pub fn frequencies(&self) -> &HashMap<VariantName, usize> {
+        &self.frequencies
+    }
+
+    /// Access variants for read-only callers (e.g., diagnostics)
+    pub fn variants(&self) -> &HashMap<VariantName, UninitializedChatCompletionConfig> {
+        &self.variants
     }
 
     /// Update the Pareto frontier with new candidates (variant config + scores)
@@ -171,35 +174,7 @@ impl ParetoFrontier {
         );
 
         // Step 1: Check for name collisions
-        let collisions: Vec<&VariantName> = new_candidates
-            .keys()
-            .filter(|name| self.variants.contains_key(*name))
-            .collect();
-
-        if !collisions.is_empty() {
-            let collision_list = if collisions.len() <= 5 {
-                collisions
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            } else {
-                format!(
-                    "{} and {} more",
-                    collisions[..5]
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    collisions.len() - 5
-                )
-            };
-            return Err(Error::new(ErrorDetails::InternalError {
-                message: format!(
-                    "Variant name collision(s) detected: {collision_list}. New variants cannot have the same names as existing frontier variants."
-                ),
-            }));
-        }
+        self.validate_no_name_collisions(&new_candidates)?;
 
         // Split candidates into configs and scores
         let mut new_variants: HashMap<VariantName, UninitializedChatCompletionConfig> =
@@ -586,14 +561,51 @@ impl ParetoFrontier {
         Ok(result)
     }
 
-    /// Access frequency map for read-only callers (e.g., diagnostics)
-    pub fn frequencies(&self) -> &HashMap<VariantName, usize> {
-        &self.frequencies
+    /// Get expected objective vector length for current layout
+    ///
+    /// Used for cache validation
+    fn expected_vector_length(&self) -> usize {
+        self.datapoint_ids.len() * self.optimize_directions.len()
     }
 
-    /// Access variants for read-only callers (e.g., diagnostics)
-    pub fn variants(&self) -> &HashMap<VariantName, UninitializedChatCompletionConfig> {
-        &self.variants
+    /// Validate that incoming candidates do not collide with existing frontier variant names
+    fn validate_no_name_collisions(
+        &self,
+        new_candidates: &HashMap<VariantName, Candidate>,
+    ) -> Result<(), Error> {
+        let collisions: Vec<&VariantName> = new_candidates
+            .keys()
+            .filter(|name| self.variants.contains_key(*name))
+            .collect();
+
+        if collisions.is_empty() {
+            return Ok(());
+        }
+
+        let collision_list = if collisions.len() <= 5 {
+            collisions
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        } else {
+            format!(
+                "{} and {} more",
+                collisions[..5]
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                collisions.len() - 5
+            )
+        };
+
+        Err(Error::new(ErrorDetails::InternalError {
+            message: format!(
+                "Variant name collision(s) detected: {collision_list}. \
+                    New variants cannot have the same names as existing frontier variants."
+            ),
+        }))
     }
 
     #[cfg(test)]
