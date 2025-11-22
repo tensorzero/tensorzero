@@ -708,7 +708,7 @@ jobs:
       contents: read
       # Permission to download artifacts and for rust-cache
       actions: read
-    needs: [build-gateway-container]
+    needs: [build-gateway-container, build-clickhouse-tests-container]
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
@@ -765,15 +765,20 @@ jobs:
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
 
-      - name: Download container images
+      - name: Download gateway container
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-*-container
-          merge-multiple: true
+          name: build-gateway-container
+
+      - name: Download clickhouse-tests container
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
+        with:
+          name: build-clickhouse-tests-container
 
       - name: Load container images
         run: |
           docker load < gateway-container.tar
+          docker load < clickhouse-tests-container.tar
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
@@ -791,9 +796,13 @@ jobs:
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
-      - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
+      - name: Set TENSORZERO_COMMIT_TAG for Docker Compose
+        run: |
+          echo "TENSORZERO_COMMIT_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Launch services with non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
-        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
+        run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.clickhouse.yml up -d clickhouse gateway fixtures
 
       - name: Launch replicated ClickHouse container for E2E tests
         if: matrix.replicated == true
@@ -806,29 +815,16 @@ jobs:
           echo "Detected ClickHouse version: $CLICKHOUSE_VERSION"
           echo "$CLICKHOUSE_VERSION" | grep -q "${{ matrix.clickhouse_version.prefix }}" || echo "WARNING: ClickHouse version does not match expected ${{ matrix.clickhouse_version.prefix }}"
 
-      # We run this as a separate step so that we can see live build logs
-      # (and fail the job immediately if the build fails)
-      - name: Build the gateway for E2E tests
-        run: cargo build-e2e
-
-      - name: Launch the gateway for E2E tests (not configured for replication)
+      - name: Wait for services to be healthy (non-replicated)
         if: matrix.replicated == false
         run: |
-          cargo run-e2e > e2e_logs.txt 2>&1 &
-            count=0
-            max_attempts=20
-            while ! curl http://localhost:3000/health; do
-              echo "Waiting for gateway to be healthy..."
-              sleep 1
-              count=$((count + 1))
-              if [ $count -ge $max_attempts ]; then
-                echo "Gateway failed to become healthy after $max_attempts attempts"
-                exit 1
-              fi
-            done
-          echo "GATEWAY_PID=$!" >> $GITHUB_ENV
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.clickhouse.yml wait clickhouse gateway fixtures
 
-      - name: Launch the gateway for E2E tests (configured for replication)
+      - name: Build the gateway for E2E tests (replicated only)
+        if: matrix.replicated == true
+        run: cargo build-e2e
+
+      - name: Launch the gateway for E2E tests (replicated only)
         if: matrix.replicated == true
         run: |
           cargo run-e2e --run-clickhouse-migrations &&
@@ -846,7 +842,14 @@ jobs:
             done
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
-      - name: Test (Rust)
+      - name: Test (Rust) - Non-replicated
+        if: matrix.replicated == false
+        env:
+          TENSORZERO_CI: 1
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.clickhouse.yml run --rm clickhouse-tests
+
+      - name: Test (Rust) - Replicated
+        if: matrix.replicated == true
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
@@ -890,10 +893,10 @@ jobs:
       - name: Print docker compose logs (non-replicated)
         if: always() && matrix.replicated == false
         run: |
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml logs -t
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.clickhouse.yml logs -t
 
-      - name: Print e2e logs
-        if: always()
+      - name: Print e2e logs (replicated only)
+        if: always() && matrix.replicated == true
         run: cat e2e_logs.txt
 
   # Run 'cargo test-optimization' against mock-inference-provider
@@ -993,6 +996,17 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+
+  build-clickhouse-tests-container:
+    uses: ./.github/workflows/build-clickhouse-tests-container.yml
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_LIMITED_TOKEN: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
   ui-tests:
     permissions:
@@ -1100,6 +1114,7 @@ jobs:
         build-windows,
         build-ui-container,
         build-gateway-container,
+        build-clickhouse-tests-container,
         build-gateway-e2e-container,
         mocked-batch-tests,
         minikube,

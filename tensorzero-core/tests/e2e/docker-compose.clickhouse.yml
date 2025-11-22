@@ -75,8 +75,9 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
+    # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
     command:
-      ["bash", "-c", "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests"]
+      ["bash", "-c", "cd /fixtures && ./load_fixtures.sh tensorzero_e2e_tests && sleep infinity"]
     # Added healthcheck to wait for the marker file created by the script
     healthcheck:
       test: ["CMD", "test", "-f", "/load_complete.marker"]
