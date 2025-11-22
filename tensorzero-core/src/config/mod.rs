@@ -1303,7 +1303,7 @@ SELECT
     new_data.extra_templates,
     toUInt256(new_data.hash) as hash,
     new_data.tensorzero_version,
-    ifNull((SELECT created_at FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{hash}') LIMIT 1), now64()) as created_at,
+    ifNull((SELECT created_at FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{version_hash}') LIMIT 1), now64()) as created_at,
     now64() as last_used
 FROM new_data"
     );

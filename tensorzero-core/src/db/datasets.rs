@@ -90,6 +90,10 @@ pub struct ChatInferenceDatapointInsert {
 
     /// If true, this datapoint was manually created or edited by the user.
     pub is_custom: bool,
+
+    /// Hash of the configuration snapshot that created this datapoint. Optional.
+    #[serde(default)]
+    pub snapshot_hash: Option<crate::config::snapshot::SnapshotHash>,
 }
 
 /// Type that gets serialized directly to be written to ClickHouse. Serialization should match
@@ -146,6 +150,10 @@ pub struct JsonInferenceDatapointInsert {
 
     /// If true, this datapoint was manually created or edited by the user.
     pub is_custom: bool,
+
+    /// Hash of the configuration snapshot that created this datapoint. Optional.
+    #[serde(default)]
+    pub snapshot_hash: Option<crate::config::snapshot::SnapshotHash>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]

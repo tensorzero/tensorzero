@@ -19,6 +19,7 @@ impl CreateChatDatapointRequest {
         config: &Config,
         fetch_context: &FetchContext<'_>,
         dataset_name: &str,
+        snapshot_hash: Option<crate::config::snapshot::SnapshotHash>,
     ) -> Result<ChatInferenceDatapointInsert, Error> {
         // Validate function exists and is a chat function
         let function_config = config.get_function(&self.function_name)?;
@@ -67,6 +68,7 @@ impl CreateChatDatapointRequest {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash,
         };
 
         Ok(insert)
@@ -80,6 +82,7 @@ impl CreateJsonDatapointRequest {
         config: &Config,
         fetch_context: &FetchContext<'_>,
         dataset_name: &str,
+        snapshot_hash: Option<crate::config::snapshot::SnapshotHash>,
     ) -> Result<JsonInferenceDatapointInsert, Error> {
         // Validate function exists and is a JSON function
         let function_config = config.get_function(&self.function_name)?;
@@ -147,6 +150,7 @@ impl CreateJsonDatapointRequest {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash,
         };
 
         Ok(insert)
@@ -258,7 +262,7 @@ mod tests {
         };
 
         let insert = request
-            .into_database_insert(&config, &fetch_context, "test_dataset")
+            .into_database_insert(&config, &fetch_context, "test_dataset", None)
             .await
             .unwrap();
 
@@ -308,7 +312,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset")
+            .into_database_insert(&config, &fetch_context, "test_dataset", None)
             .await;
 
         assert!(result.is_err());
@@ -335,7 +339,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset")
+            .into_database_insert(&config, &fetch_context, "test_dataset", None)
             .await;
 
         assert!(result.is_err());
@@ -383,7 +387,7 @@ mod tests {
         };
 
         let insert = request
-            .into_database_insert(&config, &fetch_context, "test_dataset")
+            .into_database_insert(&config, &fetch_context, "test_dataset", None)
             .await
             .unwrap();
 
@@ -438,7 +442,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset")
+            .into_database_insert(&config, &fetch_context, "test_dataset", None)
             .await;
 
         // Invalid output should be accepted, but parsed should be None due to schema validation failure.
@@ -485,7 +489,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset")
+            .into_database_insert(&config, &fetch_context, "test_dataset", None)
             .await;
 
         // Invalid JSON output should be accepted, with parsed set to None.
@@ -519,7 +523,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset")
+            .into_database_insert(&config, &fetch_context, "test_dataset", None)
             .await;
 
         assert!(result.is_err());
@@ -564,7 +568,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset")
+            .into_database_insert(&config, &fetch_context, "test_dataset", None)
             .await;
 
         assert!(result.is_ok());
@@ -597,7 +601,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset")
+            .into_database_insert(&config, &fetch_context, "test_dataset", None)
             .await;
 
         assert!(result.is_err());

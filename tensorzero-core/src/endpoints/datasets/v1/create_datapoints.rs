@@ -28,6 +28,7 @@ pub async fn create_datapoints_handler(
         &app_state.clickhouse_connection_info,
         &dataset_name,
         request,
+        Some(app_state.snapshot_hash),
     )
     .await?;
     Ok(Json(response))
@@ -44,6 +45,7 @@ pub async fn create_datapoints(
     clickhouse: &impl DatasetQueries,
     dataset_name: &str,
     request: CreateDatapointsRequest,
+    snapshot_hash: Option<crate::config::snapshot::SnapshotHash>,
 ) -> Result<CreateDatapointsResponse, Error> {
     validate_dataset_name(dataset_name)?;
 
@@ -65,7 +67,7 @@ pub async fn create_datapoints(
             let result: Result<DatapointInsert, Error> = match datapoint_request {
                 CreateDatapointRequest::Chat(chat_request) => {
                     let insert = chat_request
-                        .into_database_insert(config, &fetch_context, dataset_name)
+                        .into_database_insert(config, &fetch_context, dataset_name, snapshot_hash.clone())
                         .await
                         .map_err(|e| {
                             Error::new(ErrorDetails::InvalidRequest {
@@ -78,7 +80,7 @@ pub async fn create_datapoints(
                 }
                 CreateDatapointRequest::Json(json_request) => {
                     let insert = json_request
-                        .into_database_insert(config, &fetch_context, dataset_name)
+                        .into_database_insert(config, &fetch_context, dataset_name, snapshot_hash.clone())
                         .await
                         .map_err(|e| {
                             Error::new(ErrorDetails::InvalidRequest {
@@ -254,6 +256,7 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
+            None,
         )
         .await
         .unwrap();
@@ -329,6 +332,7 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
+            None,
         )
         .await
         .unwrap();
@@ -406,6 +410,7 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
+            None,
         )
         .await
         .unwrap();
@@ -433,6 +438,7 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
+            None,
         )
         .await;
 
@@ -473,6 +479,7 @@ mod tests {
             &mock_clickhouse,
             invalid_dataset_name,
             request,
+            None,
         )
         .await;
 
@@ -511,6 +518,7 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
+            None,
         )
         .await;
 
@@ -552,6 +560,7 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
+            None,
         )
         .await;
 
@@ -611,6 +620,7 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
+            None,
         )
         .await
         .unwrap();

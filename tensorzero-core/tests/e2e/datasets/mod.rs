@@ -3000,6 +3000,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse

@@ -50,6 +50,7 @@ pub async fn create_evaluation_dataset(
         clickhouse_connection_info,
         dataset_name,
         request,
+        None,
     )
     .await?;
 

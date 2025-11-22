@@ -811,7 +811,7 @@ pub async fn insert_datapoint(
     };
 
     let response =
-        create_datapoints(config, http_client, clickhouse, &dataset_name, v1_request).await?;
+        create_datapoints(config, http_client, clickhouse, &dataset_name, v1_request, None).await?;
 
     Ok(response.ids)
 }
@@ -1615,6 +1615,7 @@ impl From<StoredChatInferenceDatapoint> for ChatInferenceDatapointInsert {
             staled_at: datapoint.staled_at,
             source_inference_id: datapoint.source_inference_id,
             is_custom: datapoint.is_custom,
+            snapshot_hash: None,
         }
     }
 }
@@ -1746,6 +1747,7 @@ impl From<StoredJsonInferenceDatapoint> for JsonInferenceDatapointInsert {
             staled_at: datapoint.staled_at,
             source_inference_id: datapoint.source_inference_id,
             is_custom: datapoint.is_custom,
+            snapshot_hash: None,
         }
     }
 }

@@ -51,6 +51,7 @@ async fn test_delete_dataset_with_single_datapoint() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -168,6 +169,7 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         }));
     }
 
@@ -197,6 +199,7 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         }));
     }
 
@@ -342,6 +345,7 @@ async fn test_delete_dataset_twice() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse
@@ -411,6 +415,7 @@ async fn test_delete_dataset_with_different_function_names() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     let function2_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
@@ -437,6 +442,7 @@ async fn test_delete_dataset_with_different_function_names() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     });
 
     clickhouse

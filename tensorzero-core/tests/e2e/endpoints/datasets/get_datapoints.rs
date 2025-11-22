@@ -64,6 +64,7 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse
@@ -149,6 +150,7 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse
@@ -219,6 +221,7 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         let chat_insert2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
@@ -247,6 +250,7 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         let json_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
@@ -274,6 +278,7 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse
@@ -349,6 +354,7 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse
@@ -415,6 +421,7 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse
@@ -533,6 +540,7 @@ mod list_datapoints_tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                snapshot_hash: None,
             }));
         }
 
@@ -643,6 +651,7 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         let function2_id = Uuid::now_v7();
@@ -672,6 +681,7 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse
@@ -757,6 +767,7 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         let datapoint2_id = Uuid::now_v7();
@@ -786,6 +797,7 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse
@@ -876,6 +888,7 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse.insert_datapoints(&[datapoint]).await.unwrap();
@@ -975,6 +988,7 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         let datapoint2_id = Uuid::now_v7();
@@ -1004,6 +1018,7 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         let datapoint3_id = Uuid::now_v7();
@@ -1033,6 +1048,7 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse
@@ -1166,6 +1182,7 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse.insert_datapoints(&[datapoint]).await.unwrap();
@@ -1249,6 +1266,7 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         let json_id = Uuid::now_v7();
@@ -1277,6 +1295,7 @@ mod list_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse
@@ -1351,6 +1370,7 @@ mod list_datapoints_tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                snapshot_hash: None,
             }));
         }
 

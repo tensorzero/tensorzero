@@ -2219,6 +2219,7 @@ mod tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
         assert!(
             conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
@@ -2309,6 +2310,7 @@ mod tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
         assert!(
             conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
@@ -2393,6 +2395,7 @@ mod tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
         assert!(
             conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
@@ -2480,6 +2483,7 @@ mod tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         };
         assert!(
             conn.insert_datapoints(&[DatapointInsert::Json(datapoint)])
@@ -2621,6 +2625,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                snapshot_hash: None,
             }),
             DatapointInsert::Chat(ChatInferenceDatapointInsert {
                 dataset_name: "test_dataset".to_string(),
@@ -2641,6 +2646,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                snapshot_hash: None,
             }),
             DatapointInsert::Chat(ChatInferenceDatapointInsert {
                 dataset_name: "test_dataset".to_string(),
@@ -2661,6 +2667,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                snapshot_hash: None,
             }),
         ];
 
@@ -2787,6 +2794,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                snapshot_hash: None,
             }),
             DatapointInsert::Json(JsonInferenceDatapointInsert {
                 dataset_name: "test_dataset".to_string(),
@@ -2808,6 +2816,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
+                snapshot_hash: None,
             }),
         ];
 
@@ -2902,6 +2911,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
+                snapshot_hash: None,
             }),
             DatapointInsert::Json(JsonInferenceDatapointInsert {
                 dataset_name: "test_dataset".to_string(),
@@ -2923,6 +2933,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
+                snapshot_hash: None,
             }),
             DatapointInsert::Chat(ChatInferenceDatapointInsert {
                 dataset_name: "test_dataset".to_string(),
@@ -2943,6 +2954,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
+                snapshot_hash: None,
             }),
             DatapointInsert::Json(JsonInferenceDatapointInsert {
                 dataset_name: "test_dataset".to_string(),
@@ -2964,6 +2976,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
+                snapshot_hash: None,
             }),
         ];
 
@@ -3030,6 +3043,7 @@ mod tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: false,
+            snapshot_hash: None,
         })];
 
         let result = conn.insert_datapoints(&datapoints_with_builder).await;
@@ -3062,6 +3076,7 @@ mod tests {
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
+                snapshot_hash: None,
             })];
 
         let result = conn
