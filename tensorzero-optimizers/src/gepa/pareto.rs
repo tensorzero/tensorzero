@@ -135,20 +135,19 @@ impl ParetoFrontier {
     ///    c. Filter candidates globally to remove dominated variants
     /// 4. Updates frontier (variants, frequencies, scores, cache) with filtered results
     ///
-    /// This method also validates that provided validation scores match the frontier's
-    /// fixed layout (datapoint_ids and evaluator set) and prunes stored scores/cache
-    /// so they only contain variants that survive filtering.
+    /// Scores are normalized to the frontier layout: datapoints outside the layout are dropped,
+    /// missing datapoints are added with empty maps (worst-case imputation), and unknown metrics
+    /// are dropped with a warning. Stored scores/cache are pruned to the surviving variants.
     ///
     /// # Arguments
     /// * `new_candidates` - Map of variant name → `Candidate { variant config, scores }`
     ///
     /// # Returns
-    /// * `Result<(), Error>` - Ok if successful, Err if scores are invalid, names collide, or layout mismatches
+    /// * `Result<(), Error>` - Ok if successful, Err if scores are invalid or names collide
     ///
     /// # Errors
     /// * Returns error if any new variant name already exists in the frontier
     /// * Returns error if no validation scores are provided or all scores are None
-    /// * Returns error if validation scores contain datapoints or evaluators outside the frontier layout
     pub fn update(&mut self, new_candidates: HashMap<VariantName, Candidate>) -> Result<(), Error> {
         tracing::info!(
             "Updating Pareto frontier: merging {} new variants with {} existing variants",
@@ -191,10 +190,32 @@ impl ParetoFrontier {
         let mut new_variants: HashMap<VariantName, UninitializedChatCompletionConfig> =
             HashMap::with_capacity(new_candidates.len());
         let mut new_variant_scores: VariantScoresMap = HashMap::with_capacity(new_candidates.len());
+        let expected_datapoints: HashSet<DatapointId> =
+            self.datapoint_ids.iter().copied().collect();
+
+        let mut dropped_metrics: HashSet<String> = HashSet::new();
 
         for (name, candidate) in new_candidates {
             new_variants.insert(name.clone(), candidate.variant);
-            new_variant_scores.insert(name, candidate.scores);
+            let mut scores = candidate.scores;
+
+            // Normalize datapoint coverage:
+            // - Drop scores for datapoints outside the frontier layout
+            // - Insert empty score maps for missing expected datapoints so imputation applies consistently
+            scores.retain(|dp, _| expected_datapoints.contains(dp));
+            for dp in &self.datapoint_ids {
+                let per_eval = scores.entry(*dp).or_insert_with(HashMap::new);
+                // Retain only known evaluator metrics; drop unknowns
+                per_eval.retain(|metric, _| {
+                    let keep = self.optimize_directions.contains_key(metric);
+                    if !keep {
+                        dropped_metrics.insert(metric.clone());
+                    }
+                    keep
+                });
+            }
+
+            new_variant_scores.insert(name, scores);
         }
 
         // Step 2: Merge new variants with existing frontier variants
@@ -208,6 +229,20 @@ impl ParetoFrontier {
             return Err(Error::new(ErrorDetails::InternalError {
                 message: "No validation scores provided for any variant".to_string(),
             }));
+        }
+
+        if !dropped_metrics.is_empty() {
+            let mut dropped_list: Vec<_> = dropped_metrics.iter().collect();
+            dropped_list.sort();
+            tracing::warn!(
+                "Dropped {} evaluator(s) not in frontier's evaluator set: {}",
+                dropped_list.len(),
+                dropped_list
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
         }
 
         tracing::debug!(
@@ -242,85 +277,6 @@ impl ParetoFrontier {
                     message: "All variants failed to produce valid scores".to_string(),
                 }));
             }
-        }
-
-        // Validate that all_scores datapoints match self.datapoint_ids
-        let actual_datapoints: HashSet<DatapointId> = all_scores
-            .values()
-            .flat_map(|scores| scores.keys().copied())
-            .collect();
-        let expected_datapoints: HashSet<DatapointId> =
-            self.datapoint_ids.iter().copied().collect();
-
-        if !actual_datapoints
-            .iter()
-            .all(|dp| expected_datapoints.contains(dp))
-        {
-            let unexpected: Vec<DatapointId> = actual_datapoints
-                .difference(&expected_datapoints)
-                .copied()
-                .collect();
-            let unexpected_list = if unexpected.len() <= 5 {
-                unexpected
-                    .iter()
-                    .map(|u| u.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            } else {
-                format!(
-                    "{} and {} more",
-                    unexpected[..5]
-                        .iter()
-                        .map(|u| u.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    unexpected.len() - 5
-                )
-            };
-            return Err(Error::new(ErrorDetails::InternalError {
-                message: format!(
-                    "Validation scores contain {} datapoint(s) not in frontier's datapoint_ids: {unexpected_list}. \
-                     Layout must remain constant across iterations.",
-                    unexpected.len()
-                ),
-            }));
-        }
-
-        // Validate that all metric names are known in optimize_directions
-        let unknown_metrics: HashSet<String> = all_scores
-            .values()
-            .flat_map(|datapoint_scores| datapoint_scores.values())
-            .flat_map(|scores| scores.keys().cloned())
-            .filter(|metric| !self.optimize_directions.contains_key(metric))
-            .collect();
-
-        if !unknown_metrics.is_empty() {
-            let mut unknown_list: Vec<_> = unknown_metrics.iter().collect();
-            unknown_list.sort();
-            let formatted_list = if unknown_list.len() <= 5 {
-                unknown_list
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            } else {
-                format!(
-                    "{} and {} more",
-                    unknown_list[..5]
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    unknown_list.len() - 5
-                )
-            };
-            return Err(Error::new(ErrorDetails::InternalError {
-                message: format!(
-                    "Validation scores contain {} evaluator(s) not in frontier's evaluator set: {formatted_list}. \
-                     Evaluator layout must remain constant across iterations.",
-                    unknown_metrics.len()
-                ),
-            }));
         }
 
         // Create sorted metric directions for deterministic objective vector ordering
@@ -1891,12 +1847,10 @@ mod tests {
         let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
         let result = frontier.update(candidates);
 
-        assert!(result.is_err());
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("not in frontier's evaluator set"),
-            "Expected evaluator-set error, got: {err}"
-        );
+        // Unknown metric should be dropped; update should still succeed using known metrics
+        assert!(result.is_ok());
+        assert_eq!(frontier.variants.len(), 1);
+        assert!(frontier.variants.contains_key("variant_a"));
     }
 
     #[test]
