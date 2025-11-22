@@ -6,11 +6,13 @@
 //! - Missing data imputation
 
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
     sync::Arc,
 };
 
 use evaluations::EvaluatorStats;
+use rand::{prelude::IndexedRandom, rngs::StdRng, SeedableRng};
 use tensorzero_core::{
     config::MetricConfigOptimize,
     error::{Error, ErrorDetails},
@@ -64,7 +66,7 @@ pub struct ParetoFrontier {
     /// Maps each variant to the count of datapoints where it's Pareto-optimal.
     /// Higher values indicate the variant performs well across more instances.
     /// Used for proportional sampling in GEPA's mutation step.
-    pub frequencies: HashMap<VariantName, usize>,
+    frequencies: HashMap<VariantName, usize>,
 
     /// Validation scores for current variants (pruned after each update)
     ///
@@ -91,6 +93,9 @@ pub struct ParetoFrontier {
     /// Maps evaluator names to their optimization direction.
     /// Private to enforce validation through update methods.
     optimize_directions: HashMap<EvaluatorName, MetricConfigOptimize>,
+
+    /// RNG for deterministic frequency sampling (seeded in constructor)
+    rng: RefCell<StdRng>,
 }
 
 impl ParetoFrontier {
@@ -99,14 +104,23 @@ impl ParetoFrontier {
     /// # Arguments
     /// * `datapoint_ids` - Ordered list of datapoint IDs defining the objective space
     /// * `evaluators` - Borrowed evaluator configurations (optimization directions will be extracted)
+    /// * `rng_seed` - Optional seed for deterministic sampling; None uses a random seed
     ///
     /// # Returns
     /// * Empty ParetoFrontier ready for iterative updates
     pub fn new(
         datapoint_ids: Vec<DatapointId>,
         evaluators: &HashMap<EvaluatorName, EvaluatorConfig>,
+        rng_seed: Option<u64>,
     ) -> Self {
         let optimize_directions = extract_optimize_directions(evaluators);
+        let rng = match rng_seed {
+            Some(seed) => StdRng::seed_from_u64(seed),
+            None => {
+                let mut thread_rng = rand::rng();
+                StdRng::from_rng(&mut thread_rng)
+            }
+        };
         Self {
             variants: HashMap::new(),
             frequencies: HashMap::new(),
@@ -114,6 +128,7 @@ impl ParetoFrontier {
             objective_vector_cache: HashMap::new(),
             datapoint_ids,
             optimize_directions,
+            rng: RefCell::new(rng),
         }
     }
 
@@ -515,6 +530,70 @@ impl ParetoFrontier {
             .retain(|name, _| self.variants.contains_key(name));
 
         Ok(())
+    }
+
+    /// Sample a single variant using frequency weights and return it as a one-item map
+    ///
+    /// Frequencies must be non-empty and contain at least one non-zero count. Unknown
+    /// variant names (not present in `self.variants`) are ignored.
+    pub fn sample_by_frequency(
+        &self,
+    ) -> Result<HashMap<VariantName, UninitializedChatCompletionConfig>, Error> {
+        if self.frequencies.is_empty() {
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "Cannot sample from empty frequency map".to_string(),
+            }));
+        }
+
+        let total_frequency: usize = self.frequencies.values().sum();
+        if total_frequency == 0 {
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "Cannot sample when all frequencies are zero".to_string(),
+            }));
+        }
+
+        let items: Vec<_> = self
+            .frequencies
+            .iter()
+            .filter(|(name, _)| self.variants.contains_key(*name))
+            .collect();
+
+        if items.is_empty() {
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "Cannot sample because no frequencies correspond to existing variants"
+                    .to_string(),
+            }));
+        }
+
+        let mut rng = self.rng.borrow_mut();
+        let sampled_name = items
+            .choose_weighted(&mut *rng, |(_, &count)| count)
+            .map(|(name, _)| (*name).clone())
+            .map_err(|e| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!("Weighted sampling failed: {e}"),
+                })
+            })?;
+
+        let variant = self.variants.get(&sampled_name).cloned().ok_or_else(|| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Sampled variant '{sampled_name}' not found in Pareto frontier"),
+            })
+        })?;
+
+        let mut result = HashMap::new();
+        result.insert(sampled_name, variant);
+        Ok(result)
+    }
+
+    /// Access frequency map for read-only callers (e.g., diagnostics)
+    pub fn frequencies(&self) -> &HashMap<VariantName, usize> {
+        &self.frequencies
+    }
+
+    #[cfg(test)]
+    pub fn frequencies_mut(&mut self) -> &mut HashMap<VariantName, usize> {
+        &mut self.frequencies
     }
 }
 
@@ -1068,6 +1147,49 @@ mod tests {
     }
 
     #[test]
+    fn test_sample_by_frequency_single_variant() {
+        let mut frontier = ParetoFrontier::new(Vec::new(), &HashMap::new(), None);
+        frontier.variants.insert(
+            "variant_a".to_string(),
+            UninitializedChatCompletionConfig {
+                model: "test-model".into(),
+                ..Default::default()
+            },
+        );
+        frontier
+            .frequencies_mut()
+            .insert("variant_a".to_string(), 3);
+
+        let sampled = frontier
+            .sample_by_frequency()
+            .expect("sampling should succeed");
+        assert_eq!(sampled.len(), 1);
+        assert!(sampled.contains_key("variant_a"));
+    }
+
+    #[test]
+    fn test_sample_by_frequency_zero_weights_error() {
+        let mut frontier = ParetoFrontier::new(Vec::new(), &HashMap::new(), None);
+        frontier
+            .frequencies_mut()
+            .insert("variant_a".to_string(), 0);
+        frontier.variants.insert(
+            "variant_a".to_string(),
+            UninitializedChatCompletionConfig {
+                model: "test-model".into(),
+                ..Default::default()
+            },
+        );
+
+        let result = frontier.sample_by_frequency();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("frequencies are zero"));
+    }
+
+    #[test]
     fn test_instance_dominates_basic() {
         let evaluators = create_test_evaluators(&[("accuracy", "max")]);
         let optimize_directions = extract_optimize_directions(&evaluators);
@@ -1457,7 +1579,7 @@ mod tests {
         let candidates = create_test_candidates(&val_scores_map);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&val_scores_map);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         frontier
             .update(candidates)
             .expect("pareto frontier update should succeed");
@@ -1468,7 +1590,7 @@ mod tests {
         assert!(!frontier.variants.contains_key("variant_b"));
 
         // variant_a should be in Pareto set for both datapoints
-        assert_eq!(frontier.frequencies.get("variant_a"), Some(&2));
+        assert_eq!(frontier.frequencies().get("variant_a"), Some(&2));
     }
 
     #[test]
@@ -1496,7 +1618,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
@@ -1506,8 +1628,8 @@ mod tests {
         assert!(frontier.variants.contains_key("variant_b"));
 
         // Each variant is Pareto-optimal on one datapoint
-        assert_eq!(frontier.frequencies.get("variant_a"), Some(&1));
-        assert_eq!(frontier.frequencies.get("variant_b"), Some(&1));
+        assert_eq!(frontier.frequencies().get("variant_a"), Some(&1));
+        assert_eq!(frontier.frequencies().get("variant_b"), Some(&1));
     }
 
     #[test]
@@ -1579,7 +1701,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
@@ -1620,7 +1742,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
@@ -1654,7 +1776,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
@@ -1676,14 +1798,14 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
         // Single variant should be kept
         assert_eq!(frontier.variants.len(), 1);
         assert!(frontier.variants.contains_key("variant_a"));
-        assert_eq!(frontier.frequencies.get("variant_a"), Some(&1));
+        assert_eq!(frontier.frequencies().get("variant_a"), Some(&1));
     }
 
     #[test]
@@ -1708,7 +1830,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
@@ -1739,7 +1861,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
@@ -1777,7 +1899,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
@@ -1816,7 +1938,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
@@ -1844,7 +1966,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
 
         // Unknown metric should be dropped; update should still succeed using known metrics
@@ -1876,7 +1998,7 @@ mod tests {
         ]);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let candidates = create_test_candidates(&variant_scores);
 
         let result = frontier.update(candidates);
@@ -1917,7 +2039,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
@@ -1960,7 +2082,7 @@ mod tests {
         // Measure execution time
         let start = Instant::now();
         let datapoint_ids = extract_sorted_datapoint_ids(&val_scores_map);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         let elapsed = start.elapsed();
 
@@ -1992,7 +2114,7 @@ mod tests {
         let candidates: HashMap<VariantName, Candidate> = HashMap::new();
 
         let datapoint_ids = extract_sorted_datapoint_ids(&val_scores_map);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
 
         // Should return error for empty candidates
@@ -2008,7 +2130,7 @@ mod tests {
         let candidates: HashMap<VariantName, Candidate> = HashMap::new();
 
         let datapoint_ids = extract_sorted_datapoint_ids(&val_scores_map);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
 
         // Should return error when all evaluations failed
@@ -2044,7 +2166,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
 
         // Should return error when all scores are None
@@ -2068,7 +2190,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
@@ -2076,7 +2198,7 @@ mod tests {
         // so candidate_set is empty and all variants are filtered out
         assert_eq!(frontier.variants.len(), 0);
         // No variants remain, so frequencies should be empty
-        assert!(frontier.frequencies.is_empty());
+        assert!(frontier.frequencies().is_empty());
     }
 
     #[test]
@@ -2114,7 +2236,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
@@ -2124,11 +2246,11 @@ mod tests {
         assert!(frontier.variants.contains_key("variant_b"));
 
         // A should be in Pareto set for dp1 and dp2 (freq=2)
-        assert_eq!(frontier.frequencies.get("variant_a"), Some(&2));
+        assert_eq!(frontier.frequencies().get("variant_a"), Some(&2));
         // B should be in Pareto set for dp3 (freq=1)
-        assert_eq!(frontier.frequencies.get("variant_b"), Some(&1));
+        assert_eq!(frontier.frequencies().get("variant_b"), Some(&1));
         // C should not be in frequencies (filtered out)
-        assert!(!frontier.frequencies.contains_key("variant_c"));
+        assert!(!frontier.frequencies().contains_key("variant_c"));
     }
 
     #[test]
@@ -2151,7 +2273,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
@@ -2237,12 +2359,13 @@ mod tests {
 
         // Run iteration 1 with cache (frontier instance will be reused for iteration 2)
         let datapoint_ids = extract_sorted_datapoint_ids(&iteration1_scores);
-        let mut frontier1_cached = ParetoFrontier::new(datapoint_ids.clone(), &config.evaluators);
+        let mut frontier1_cached =
+            ParetoFrontier::new(datapoint_ids.clone(), &config.evaluators, None);
         let result1_cached = frontier1_cached.update(candidates1.clone());
         assert!(result1_cached.is_ok());
 
         // Run iteration 1 without cache (for comparison)
-        let mut frontier1_no_cache = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier1_no_cache = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result1_no_cache = frontier1_no_cache.update(candidates1);
         assert!(result1_no_cache.is_ok());
 
@@ -2305,7 +2428,7 @@ mod tests {
 
         // Run iteration 2 WITHOUT cache (create fresh frontier, compute all from scratch)
         let datapoint_ids = extract_sorted_datapoint_ids(&iteration2_all_scores);
-        let mut frontier2_no_cache = ParetoFrontier::new(datapoint_ids, &config.evaluators);
+        let mut frontier2_no_cache = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result2_no_cache = frontier2_no_cache.update(candidates2_all);
         assert!(result2_no_cache.is_ok());
 
