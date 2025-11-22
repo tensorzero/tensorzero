@@ -1264,7 +1264,7 @@ pub async fn write_config_snapshot(
     struct ConfigSnapshotRow<'a> {
         config: &'a str,
         extra_templates: &'a HashMap<String, String>,
-        version_hash: SnapshotHash,
+        hash: SnapshotHash,
         tensorzero_version: &'static str,
     }
 
@@ -1275,7 +1275,7 @@ pub async fn write_config_snapshot(
     let row = ConfigSnapshotRow {
         config: &snapshot.config,
         extra_templates: &snapshot.extra_templates,
-        version_hash: version_hash.clone(),
+        hash: version_hash.clone(),
         tensorzero_version: TENSORZERO_VERSION,
     };
 
@@ -1289,7 +1289,7 @@ pub async fn write_config_snapshot(
     // Create the external data info
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
-        structure: "config String, extra_templates Map(String, String), version_hash String, tensorzero_version String".to_string(),
+        structure: "config String, extra_templates Map(String, String), hash String, tensorzero_version String".to_string(),
         format: "JSONEachRow".to_string(),
         data: json_data,
     };
@@ -1297,13 +1297,13 @@ pub async fn write_config_snapshot(
     // Create the query with subquery to preserve created_at
     let query = format!(
         r"INSERT INTO ConfigSnapshot
-(config, extra_templates, version_hash, tensorzero_version, created_at, last_used)
+(config, extra_templates, hash, tensorzero_version, created_at, last_used)
 SELECT
     new_data.config,
     new_data.extra_templates,
-    toUInt256(new_data.version_hash) as version_hash,
+    toUInt256(new_data.hash) as hash,
     new_data.tensorzero_version,
-    ifNull((SELECT created_at FROM ConfigSnapshot FINAL WHERE version_hash = toUInt256('{version_hash}') LIMIT 1), now64()) as created_at,
+    ifNull((SELECT created_at FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{hash}') LIMIT 1), now64()) as created_at,
     now64() as last_used
 FROM new_data"
     );

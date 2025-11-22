@@ -171,7 +171,7 @@ routing = ["test_provider::gpt-4"]
 
     // Query the ConfigSnapshot table to verify the data was written
     let query = format!(
-        "SELECT config, tensorzero_version, version_hash, created_at, last_used FROM ConfigSnapshot FINAL WHERE version_hash = toUInt256('{hash_number}') FORMAT JSONEachRow"
+        "SELECT config, tensorzero_version, hash, created_at, last_used FROM ConfigSnapshot FINAL WHERE hash = toUInt256('{hash_number}') FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query.clone())
@@ -188,10 +188,7 @@ routing = ["test_provider::gpt-4"]
         .unwrap()
         .is_empty());
     assert_eq!(
-        snapshot_row["version_hash"]
-            .as_str()
-            .unwrap()
-            .to_lowercase(),
+        snapshot_row["hash"].as_str().unwrap().to_lowercase(),
         hash_number
     );
 
@@ -234,10 +231,7 @@ routing = ["test_provider::gpt-4"]
     // Verify the data is still correct
     assert_eq!(snapshot_row2["config"].as_str().unwrap(), config_toml);
     assert_eq!(
-        snapshot_row2["version_hash"]
-            .as_str()
-            .unwrap()
-            .to_lowercase(),
+        snapshot_row2["hash"].as_str().unwrap().to_lowercase(),
         hash_number
     );
 }
