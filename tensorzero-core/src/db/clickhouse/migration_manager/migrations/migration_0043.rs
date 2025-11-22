@@ -36,6 +36,28 @@ const SNAPSHOT_TRACKED_TABLES: &[&str] = &[
     "TagInference",
 ];
 
+/// Materialized views that are updated to propagate snapshot_hash
+const SNAPSHOT_MATERIALIZED_VIEWS: &[&str] = &[
+    "BooleanMetricFeedbackByTargetIdView",
+    "FloatMetricFeedbackByTargetIdView",
+    "CommentFeedbackByTargetIdView",
+    "DemonstrationFeedbackByInferenceIdView",
+    "ChatInferenceByIdView",
+    "JsonInferenceByIdView",
+    "ChatInferenceByEpisodeIdView",
+    "JsonInferenceByEpisodeIdView",
+    "TagChatInferenceView",
+    "TagJsonInferenceView",
+    "ChatInferenceTagView",
+    "JsonInferenceTagView",
+    "FloatMetricFeedbackByVariantView",
+    "BooleanMetricFeedbackByVariantView",
+    "BooleanMetricFeedbackTagView",
+    "CommentFeedbackTagView",
+    "DemonstrationFeedbackTagView",
+    "FloatMetricFeedbackTagView",
+];
+
 /// This migration sets up the ClickHouse data structures required
 /// for snapshotting:
 /// * the `ConfigSnapshot table`
@@ -66,6 +88,19 @@ impl<'a> Migration for Migration0043<'a> {
                 return Ok(true);
             }
         }
+
+        // Check if any materialized view hasn't been updated to include snapshot_hash
+        for view in SNAPSHOT_MATERIALIZED_VIEWS {
+            let query = format!("SHOW CREATE TABLE {view}");
+            let result = self
+                .clickhouse
+                .run_query_synchronous_no_params(query)
+                .await?;
+            if !result.response.contains("snapshot_hash") {
+                return Ok(true);
+            }
+        }
+
         Ok(false)
     }
 
@@ -425,6 +460,75 @@ impl<'a> Migration for Migration0043<'a> {
             .run_query_synchronous_no_params(query)
             .await?;
 
+        // Group 5: Feedback tag views
+        let query = format!(
+            "
+            ALTER TABLE BooleanMetricFeedbackTagView{on_cluster_name} MODIFY QUERY
+            SELECT
+                metric_name,
+                key,
+                tags[key] as value,
+                id as feedback_id,
+                snapshot_hash
+            FROM BooleanMetricFeedback
+            ARRAY JOIN mapKeys(tags) as key
+        "
+        );
+        self.clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
+
+        let query = format!(
+            "
+            ALTER TABLE CommentFeedbackTagView{on_cluster_name} MODIFY QUERY
+            SELECT
+                'comment' as metric_name,
+                key,
+                tags[key] as value,
+                id as feedback_id,
+                snapshot_hash
+            FROM CommentFeedback
+            ARRAY JOIN mapKeys(tags) as key
+        "
+        );
+        self.clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
+
+        let query = format!(
+            "
+            ALTER TABLE DemonstrationFeedbackTagView{on_cluster_name} MODIFY QUERY
+            SELECT
+                'demonstration' as metric_name,
+                key,
+                tags[key] as value,
+                id as feedback_id,
+                snapshot_hash
+            FROM DemonstrationFeedback
+            ARRAY JOIN mapKeys(tags) as key
+        "
+        );
+        self.clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
+
+        let query = format!(
+            "
+            ALTER TABLE FloatMetricFeedbackTagView{on_cluster_name} MODIFY QUERY
+            SELECT
+                metric_name,
+                key,
+                tags[key] as value,
+                id as feedback_id,
+                snapshot_hash
+            FROM FloatMetricFeedback
+            ARRAY JOIN mapKeys(tags) as key
+        "
+        );
+        self.clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
+
         Ok(())
     }
 
@@ -647,6 +751,43 @@ SELECT
     f.tags as feedback_tags
 FROM boolean_feedback f
 JOIN targets t ON f.target_id = t.target_id;
+
+-- Rollback Group 5: Feedback tag views
+ALTER TABLE BooleanMetricFeedbackTagView{on_cluster_name} MODIFY QUERY
+SELECT
+    metric_name,
+    key,
+    tags[key] as value,
+    id as feedback_id
+FROM BooleanMetricFeedback
+ARRAY JOIN mapKeys(tags) as key;
+
+ALTER TABLE CommentFeedbackTagView{on_cluster_name} MODIFY QUERY
+SELECT
+    'comment' as metric_name,
+    key,
+    tags[key] as value,
+    id as feedback_id
+FROM CommentFeedback
+ARRAY JOIN mapKeys(tags) as key;
+
+ALTER TABLE DemonstrationFeedbackTagView{on_cluster_name} MODIFY QUERY
+SELECT
+    'demonstration' as metric_name,
+    key,
+    tags[key] as value,
+    id as feedback_id
+FROM DemonstrationFeedback
+ARRAY JOIN mapKeys(tags) as key;
+
+ALTER TABLE FloatMetricFeedbackTagView{on_cluster_name} MODIFY QUERY
+SELECT
+    metric_name,
+    key,
+    tags[key] as value,
+    id as feedback_id
+FROM FloatMetricFeedback
+ARRAY JOIN mapKeys(tags) as key;
 "
         ));
 
