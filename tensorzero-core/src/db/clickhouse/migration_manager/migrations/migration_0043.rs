@@ -99,7 +99,7 @@ impl<'a> Migration for Migration0043<'a> {
             CREATE TABLE IF NOT EXISTS ConfigSnapshot{on_cluster_name} (
                 config String,
                 extra_templates Map(String, String),
-                version_hash UInt256,
+                hash UInt256,
                 tensorzero_version String,
                 created_at DateTime64(6) DEFAULT now(),
                 last_used DateTime64(6) DEFAULT now()
