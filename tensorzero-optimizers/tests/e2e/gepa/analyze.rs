@@ -9,7 +9,7 @@ use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero_core::{
     config::{path::ResolvedTomlPathData, SchemaData},
     endpoints::{
-        datasets::{StoredChatInferenceDatapoint, StoredDatapoint},
+        datasets::{Datapoint, StoredChatInferenceDatapoint},
         inference::{ChatInferenceResponse, InferenceResponse},
     },
     evaluations::{
@@ -319,7 +319,7 @@ pub fn create_test_evaluation_info(
         serde_json::from_value(serde_json::to_value(&input).expect("Failed to serialize input"))
             .expect("Failed to deserialize stored input");
 
-    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+    let stored_datapoint = StoredChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: function_name.to_string(),
         id: Uuid::now_v7(),
@@ -340,7 +340,11 @@ pub fn create_test_evaluation_info(
         staled_at: None,
         updated_at: "2025-01-01T00:00:00Z".to_string(),
         name: None,
-    });
+    };
+
+    // Convert StoredDatapoint to Datapoint
+    let function_config = create_test_function_config();
+    let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint(&function_config));
 
     let response = InferenceResponse::Chat(ChatInferenceResponse {
         inference_id: Uuid::now_v7(),
@@ -827,11 +831,11 @@ async fn test_analyze_inferences_with_schemas() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_inferences_json_function() {
     use tensorzero_core::{
-        endpoints::{datasets::StoredDatapoint, inference::JsonInferenceResponse},
+        endpoints::inference::JsonInferenceResponse,
         inference::types::{Input, JsonInferenceOutput},
     };
 
-    // Setup: Test with actual JSON function and StoredDatapoint::Json
+    // Setup: Test with actual JSON function and Datapoint::Json
     let client = make_embedded_gateway().await;
 
     // Use JSON function config
@@ -900,7 +904,7 @@ async fn test_analyze_inferences_json_function() {
     });
 
     let eval_info = evaluations::stats::EvaluationInfo {
-        datapoint: StoredDatapoint::Json(datapoint),
+        datapoint: Datapoint::Json(datapoint.into_datapoint()),
         response,
         evaluations: HashMap::new(),
         evaluator_errors: HashMap::new(),
@@ -1132,7 +1136,7 @@ async fn test_analyze_input_format_scenarios() {
 
     let mut tags_eval =
         create_test_evaluation_info("test_function", "Tagged input", "Tagged output");
-    if let StoredDatapoint::Chat(datapoint) = &mut tags_eval.datapoint {
+    if let Datapoint::Chat(datapoint) = &mut tags_eval.datapoint {
         datapoint.tags = Some(HashMap::from([
             ("environment".to_string(), "test".to_string()),
             ("user_id".to_string(), "12345".to_string()),
@@ -1201,7 +1205,9 @@ async fn test_analyze_input_format_scenarios() {
         );
 
         evaluations::stats::EvaluationInfo {
-            datapoint: tensorzero_core::endpoints::datasets::StoredDatapoint::Chat(datapoint),
+            datapoint: Datapoint::Chat(
+                datapoint.into_datapoint(&tools_function_config_tool_params),
+            ),
             response,
             evaluations: HashMap::new(),
             evaluator_errors: HashMap::new(),
