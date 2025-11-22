@@ -1097,8 +1097,11 @@ pub async fn write_completed_batch_inference<'a>(
             extra_headers: Default::default(),
             snapshot_hash: snapshot_hash.clone(),
         };
-        model_inference_rows_to_write
-            .extend(inference_result.get_serialized_model_inferences(snapshot_hash.clone()).await);
+        model_inference_rows_to_write.extend(
+            inference_result
+                .get_serialized_model_inferences(snapshot_hash.clone())
+                .await,
+        );
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 let chat_inference = ChatInferenceDatabaseInsert::new(chat_result, input, metadata);

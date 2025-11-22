@@ -810,8 +810,15 @@ pub async fn insert_datapoint(
         datapoints: v1_datapoints,
     };
 
-    let response =
-        create_datapoints(config, http_client, clickhouse, &dataset_name, v1_request, None).await?;
+    let response = create_datapoints(
+        config,
+        http_client,
+        clickhouse,
+        &dataset_name,
+        v1_request,
+        None,
+    )
+    .await?;
 
     Ok(response.ids)
 }

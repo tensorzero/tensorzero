@@ -14,6 +14,7 @@ use tokio::runtime::Handle;
 use tokio::time::sleep;
 use uuid::Uuid;
 
+use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::config::BatchWritesConfig;
 use tensorzero_core::db::clickhouse::migration_manager::migration_trait::Migration;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::check_table_exists;
@@ -29,7 +30,6 @@ use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
 use tensorzero_core::db::clickhouse::migration_manager::MigrationTableState;
 use tensorzero_core::db::feedback::FeedbackQueries;
-use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
 
 use tensorzero_core::db::clickhouse::migration_manager::{

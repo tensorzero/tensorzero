@@ -1594,7 +1594,8 @@ pub struct ChatInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
     #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
-    pub snapshot_hash: SnapshotHash,
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1619,7 +1620,8 @@ pub struct JsonInferenceDatabaseInsert {
     pub tags: HashMap<String, String>,
     #[serde(deserialize_with = "deserialize_defaulted_json_string")]
     pub extra_body: UnfilteredInferenceExtraBody,
-    pub snapshot_hash: SnapshotHash,
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -1890,7 +1892,9 @@ impl InferenceResult {
                     Ok(model_inference) => model_inference,
                     Err(e) => {
                         ErrorDetails::Serialization {
-                            message: format!("Failed to construct ModelInferenceDatabaseInsert: {e:?}"),
+                            message: format!(
+                                "Failed to construct ModelInferenceDatabaseInsert: {e:?}"
+                            ),
                         }
                         .log();
                         return Default::default();
@@ -1900,7 +1904,9 @@ impl InferenceResult {
                     Ok(v) => v,
                     Err(e) => {
                         ErrorDetails::Serialization {
-                            message: format!("Failed to serialize ModelInferenceDatabaseInsert: {e:?}"),
+                            message: format!(
+                                "Failed to serialize ModelInferenceDatabaseInsert: {e:?}"
+                            ),
                         }
                         .log();
                         Default::default()
@@ -2087,7 +2093,7 @@ impl ChatInferenceDatabaseInsert {
             tags: metadata.tags,
             ttft_ms: metadata.ttft_ms,
             extra_body: metadata.extra_body,
-            snapshot_hash: metadata.snapshot_hash,
+            snapshot_hash: Some(metadata.snapshot_hash),
         }
     }
 }
@@ -2125,7 +2131,7 @@ impl JsonInferenceDatabaseInsert {
             tags: metadata.tags,
             extra_body: metadata.extra_body,
             ttft_ms: metadata.ttft_ms,
-            snapshot_hash: metadata.snapshot_hash,
+            snapshot_hash: Some(metadata.snapshot_hash),
         }
     }
 }

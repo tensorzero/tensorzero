@@ -486,8 +486,14 @@ mod tests {
         };
 
         // Dataset name "builder" is reserved
-        let result =
-            create_from_inferences(&config, &mock_clickhouse, "builder".to_string(), request, None).await;
+        let result = create_from_inferences(
+            &config,
+            &mock_clickhouse,
+            "builder".to_string(),
+            request,
+            None,
+        )
+        .await;
 
         assert!(result.is_err());
         let error = result.unwrap_err();

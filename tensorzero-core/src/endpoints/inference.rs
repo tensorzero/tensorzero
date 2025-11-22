@@ -232,6 +232,7 @@ pub struct InferenceIds {
         otel.name = "function_inference"
     )
 )]
+#[expect(clippy::too_many_arguments)]
 pub async fn inference(
     config: Arc<Config>,
     snapshot_hash: SnapshotHash,

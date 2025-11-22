@@ -13,9 +13,7 @@ use tensorzero::{
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{
-        provider_types::ProviderTypesConfig, snapshot::SnapshotHash, Config, ConfigFileGlob,
-    },
+    config::{provider_types::ProviderTypesConfig, snapshot::SnapshotHash, Config, ConfigFileGlob},
     db::{
         clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo},
         postgres::PostgresConnectionInfo,

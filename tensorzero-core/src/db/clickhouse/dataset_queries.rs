@@ -2178,6 +2178,7 @@ mod tests {
                     "source_inference_id": null,
                     "is_custom": true,
                     "staled_at": null,
+                    "snapshot_hash": null,
                 });
                 assert_eq!(
                     actual_row_as_json, expected_row_as_json,
@@ -2440,6 +2441,7 @@ mod tests {
                     "source_inference_id": null,
                     "is_custom": true,
                     "staled_at": null,
+                    "snapshot_hash": null,
                 });
 
                 assert_eq!(

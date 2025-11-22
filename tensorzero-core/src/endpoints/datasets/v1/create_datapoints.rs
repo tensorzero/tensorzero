@@ -67,7 +67,12 @@ pub async fn create_datapoints(
             let result: Result<DatapointInsert, Error> = match datapoint_request {
                 CreateDatapointRequest::Chat(chat_request) => {
                     let insert = chat_request
-                        .into_database_insert(config, &fetch_context, dataset_name, snapshot_hash.clone())
+                        .into_database_insert(
+                            config,
+                            &fetch_context,
+                            dataset_name,
+                            snapshot_hash.clone(),
+                        )
                         .await
                         .map_err(|e| {
                             Error::new(ErrorDetails::InvalidRequest {
@@ -80,7 +85,12 @@ pub async fn create_datapoints(
                 }
                 CreateDatapointRequest::Json(json_request) => {
                     let insert = json_request
-                        .into_database_insert(config, &fetch_context, dataset_name, snapshot_hash.clone())
+                        .into_database_insert(
+                            config,
+                            &fetch_context,
+                            dataset_name,
+                            snapshot_hash.clone(),
+                        )
                         .await
                         .map_err(|e| {
                             Error::new(ErrorDetails::InvalidRequest {

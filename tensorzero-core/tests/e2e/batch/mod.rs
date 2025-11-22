@@ -365,10 +365,15 @@ async fn test_write_read_completed_batch_inference_chat() {
         raw_request: raw_request.clone(),
         raw_response: raw_response.clone(),
     };
-    let mut inference_responses =
-        write_completed_batch_inference(&clickhouse, &batch_request, response, &config, SnapshotHash::new_test())
-            .await
-            .unwrap();
+    let mut inference_responses = write_completed_batch_inference(
+        &clickhouse,
+        &batch_request,
+        response,
+        &config,
+        SnapshotHash::new_test(),
+    )
+    .await
+    .unwrap();
 
     // Sort inferences by inference_id to ensure consistent ordering
     inference_responses.sort_by_key(tensorzero::InferenceResponse::inference_id);
@@ -570,10 +575,15 @@ async fn test_write_read_completed_batch_inference_json() {
         raw_request,
         raw_response,
     };
-    let inference_responses =
-        write_completed_batch_inference(&clickhouse, &batch_request, response, &config, SnapshotHash::new_test())
-            .await
-            .unwrap();
+    let inference_responses = write_completed_batch_inference(
+        &clickhouse,
+        &batch_request,
+        response,
+        &config,
+        SnapshotHash::new_test(),
+    )
+    .await
+    .unwrap();
 
     assert_eq!(inference_responses.len(), 2);
 
