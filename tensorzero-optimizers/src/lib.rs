@@ -9,7 +9,7 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use tensorzero_core::{
-    config::{snapshot::SnapshotHashHex, Config},
+    config::{snapshot::SnapshotHash, Config},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::Error,
@@ -103,7 +103,7 @@ pub trait Optimizer {
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: Arc<Config>,
-        snapshot_hash: SnapshotHashHex,
+        snapshot_hash: SnapshotHash,
     ) -> Result<Self::Handle, Error>;
 }
 
@@ -119,7 +119,7 @@ impl Optimizer for OptimizerInfo {
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: Arc<Config>,
-        snapshot_hash: SnapshotHashHex,
+        snapshot_hash: SnapshotHash,
     ) -> Result<Self::Handle, Error> {
         match &self.inner {
             OptimizerConfig::Dicl(optimizer_config) => optimizer_config

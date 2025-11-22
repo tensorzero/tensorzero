@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde_json::json;
+use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::config::{unwritten_config::ConfigLoadInfo, Config};
 use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 /// End-to-end tests for particular internal functionality in the batch inference endpoint
@@ -158,6 +159,7 @@ async fn test_write_poll_batch_inference() {
             raw_response: raw_response.clone(),
         },
         &config,
+        SnapshotHash::new_test(),
     )
     .await
     .unwrap();
@@ -193,6 +195,7 @@ async fn test_write_poll_batch_inference() {
             raw_response: raw_response.clone(),
         },
         &config,
+        SnapshotHash::new_test(),
     )
     .await
     .unwrap();
@@ -363,7 +366,7 @@ async fn test_write_read_completed_batch_inference_chat() {
         raw_response: raw_response.clone(),
     };
     let mut inference_responses =
-        write_completed_batch_inference(&clickhouse, &batch_request, response, &config)
+        write_completed_batch_inference(&clickhouse, &batch_request, response, &config, SnapshotHash::new_test())
             .await
             .unwrap();
 
@@ -568,7 +571,7 @@ async fn test_write_read_completed_batch_inference_json() {
         raw_response,
     };
     let inference_responses =
-        write_completed_batch_inference(&clickhouse, &batch_request, response, &config)
+        write_completed_batch_inference(&clickhouse, &batch_request, response, &config, SnapshotHash::new_test())
             .await
             .unwrap();
 

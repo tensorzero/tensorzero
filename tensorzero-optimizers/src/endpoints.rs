@@ -14,7 +14,7 @@ use axum::{
 use rand::seq::SliceRandom;
 
 use tensorzero_core::{
-    config::{snapshot::SnapshotHashHex, Config},
+    config::{snapshot::SnapshotHash, Config},
     db::{
         clickhouse::{
             query_builder::{InferenceFilter, OrderBy},
@@ -81,7 +81,7 @@ pub async fn launch_optimization_workflow_handler(
 pub async fn launch_optimization_workflow(
     http_client: &TensorzeroHttpClient,
     config: Arc<Config>,
-    snapshot_hash: SnapshotHashHex,
+    snapshot_hash: SnapshotHash,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     params: LaunchOptimizationWorkflowParams,
 ) -> Result<OptimizationJobHandle, Error> {
@@ -163,7 +163,7 @@ pub async fn launch_optimization(
     params: LaunchOptimizationParams,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     config: Arc<Config>,
-    snapshot_hash: SnapshotHashHex,
+    snapshot_hash: SnapshotHash,
     // For the TODO above: will need to pass config in here
 ) -> Result<OptimizationJobHandle, Error> {
     let LaunchOptimizationParams {

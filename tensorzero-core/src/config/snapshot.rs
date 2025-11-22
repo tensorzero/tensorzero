@@ -1,3 +1,4 @@
+use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -8,25 +9,27 @@ pub struct ConfigSnapshot {
     pub extra_templates: HashMap<String, String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SnapshotHashHex(Arc<str>);
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct SnapshotHash(Arc<str>);
 
-impl std::fmt::Display for SnapshotHashHex {
+impl std::fmt::Display for SnapshotHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
 #[cfg(any(test, feature = "e2e_tests"))]
-impl SnapshotHashHex {
-    pub fn new_test() -> SnapshotHashHex {
-        SnapshotHashHex(Arc::from(blake3::hash(&[]).to_hex().to_string()))
+impl SnapshotHash {
+    pub fn new_test() -> SnapshotHash {
+        let hash = blake3::hash(&[]);
+        let big_int = BigUint::from_bytes_be(hash.as_bytes());
+        SnapshotHash(Arc::from(big_int.to_string()))
     }
 }
 
 impl ConfigSnapshot {
     /// Compute a blake3 hash of this config snapshot
-    pub fn hash(&self) -> SnapshotHashHex {
+    pub fn hash(&self) -> SnapshotHash {
         let mut hasher = blake3::Hasher::new();
         let ConfigSnapshot {
             config,
@@ -49,7 +52,9 @@ impl ConfigSnapshot {
         }
 
         let hash = hasher.finalize();
-        SnapshotHashHex(Arc::from(hash.to_hex().to_string()))
+        // Convert the 32-byte hash to a decimal string
+        let big_int = BigUint::from_bytes_be(hash.as_bytes());
+        SnapshotHash(Arc::from(big_int.to_string()))
     }
 }
 

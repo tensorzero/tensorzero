@@ -1,6 +1,6 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
-use crate::config::snapshot::SnapshotHashHex;
+use crate::config::snapshot::SnapshotHash;
 use crate::config::ConfigWithHash;
 use crate::config::{unwritten_config::ConfigLoadInfo, ConfigFileGlob};
 use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
@@ -401,7 +401,7 @@ pub enum ClientBuilderMode {
         /// Pre-parsed TensorZero configuration
         config: Arc<Config>,
         /// The snapshot_hash of the config that was already parsed
-        snapshot_hash: SnapshotHashHex,
+        snapshot_hash: SnapshotHash,
         /// Already-initialized ClickHouse connection
         clickhouse_connection_info: ClickHouseConnectionInfo,
         /// Already-initialized Postgres connection
@@ -873,6 +873,7 @@ impl Client {
                 Ok(with_embedded_timeout(*timeout, async {
                     let res = crate::endpoints::inference::inference(
                         gateway.handle.app_state.config.clone(),
+                        gateway.handle.app_state.snapshot_hash.clone(),
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
                         gateway.handle.app_state.postgres_connection_info.clone(),
@@ -1069,7 +1070,7 @@ mod tests {
             .unwrap()
             .dangerous_into_config_without_writing(),
         );
-        let snapshot_hash = SnapshotHashHex::new_test();
+        let snapshot_hash = SnapshotHash::new_test();
 
         // Create mock components
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -1122,7 +1123,7 @@ mod tests {
             .unwrap()
             .dangerous_into_config_without_writing(),
         );
-        let snapshot_hash = SnapshotHashHex::new_test();
+        let snapshot_hash = SnapshotHash::new_test();
 
         // Create mock components
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();

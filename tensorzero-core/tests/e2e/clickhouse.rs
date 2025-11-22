@@ -29,6 +29,7 @@ use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
 use tensorzero_core::db::clickhouse::migration_manager::MigrationTableState;
 use tensorzero_core::db::feedback::FeedbackQueries;
+use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
 
 use tensorzero_core::db::clickhouse::migration_manager::{
@@ -792,6 +793,7 @@ async fn test_clickhouse_migration_manager() {
         ttft_ms: None,
         cached: false,
         finish_reason: None,
+        snapshot_hash: SnapshotHash::new_test(),
     };
     clickhouse
         .write_non_batched(Rows::Unserialized(&[row]), TableName::ModelInference)

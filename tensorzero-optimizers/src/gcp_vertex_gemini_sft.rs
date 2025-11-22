@@ -7,7 +7,7 @@ use url::Url;
 use uuid::Uuid;
 
 use tensorzero_core::{
-    config::{snapshot::SnapshotHashHex, Config},
+    config::{snapshot::SnapshotHash, Config},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
@@ -50,7 +50,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: Arc<Config>,
-        _snapshot_hash: SnapshotHashHex,
+        _snapshot_hash: SnapshotHash,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()

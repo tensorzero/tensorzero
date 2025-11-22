@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::config::snapshot::SnapshotHashHex;
+use crate::config::snapshot::SnapshotHash;
 use crate::config::ConfigWithHash;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
@@ -128,7 +128,7 @@ impl Drop for GatewayHandle {
 #[expect(clippy::manual_non_exhaustive)]
 pub struct AppStateData {
     pub config: Arc<Config>,
-    pub snapshot_hash: SnapshotHashHex,
+    pub snapshot_hash: SnapshotHash,
     pub http_client: TensorzeroHttpClient,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub postgres_connection_info: PostgresConnectionInfo,
@@ -211,7 +211,7 @@ impl GatewayHandle {
         let cancel_token = CancellationToken::new();
         let auth_cache = create_auth_cache_from_config(&config);
         // For testing only
-        let snapshot_hash = SnapshotHashHex::new_test();
+        let snapshot_hash = SnapshotHash::new_test();
         Self {
             app_state: AppStateData {
                 config,
@@ -235,7 +235,7 @@ impl GatewayHandle {
         postgres_connection_info: PostgresConnectionInfo,
         http_client: TensorzeroHttpClient,
         drop_wrapper: Option<DropWrapper>,
-        snapshot_hash: SnapshotHashHex,
+        snapshot_hash: SnapshotHash,
     ) -> Result<Self, Error> {
         // Validate that rate limiting is not configured when Postgres is disabled
         if config.rate_limiting.enabled()
@@ -875,7 +875,7 @@ mod tests {
             rate_limiting: Default::default(),
             ..Default::default()
         });
-        let hash = SnapshotHashHex::new_test();
+        let hash = SnapshotHash::new_test();
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let postgres_connection_info = PostgresConnectionInfo::Disabled;

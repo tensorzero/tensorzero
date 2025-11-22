@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHashHex};
+use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::{write_config_snapshot, Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
@@ -101,7 +101,7 @@ async fn test_from_components_basic() {
         .unwrap()
         .dangerous_into_config_without_writing(),
     );
-    let snapshot_hash = SnapshotHashHex::new_test();
+    let snapshot_hash = SnapshotHash::new_test();
 
     // Create components
     let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -161,7 +161,7 @@ routing = ["test_provider::gpt-4"]
     };
 
     let hash = snapshot.hash();
-    let hash_hex = hash.to_string();
+    let hash_number = hash.to_string();
 
     // Write the config snapshot
     write_config_snapshot(&clickhouse, snapshot).await.unwrap();
@@ -171,13 +171,14 @@ routing = ["test_provider::gpt-4"]
 
     // Query the ConfigSnapshot table to verify the data was written
     let query = format!(
-        "SELECT config, tensorzero_version, tensorzero_hash_to_hex(version_hash) as version_hash_hex, created_at, last_used FROM ConfigSnapshot FINAL WHERE version_hash = tensorzero_hex_to_hash('{hash_hex}') FORMAT JSONEachRow"
+        "SELECT config, tensorzero_version, version_hash, created_at, last_used FROM ConfigSnapshot FINAL WHERE version_hash = toUInt256('{hash_number}') FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query.clone())
         .await
         .unwrap();
 
+    println!("response: {}", &response.response);
     // Parse and verify the result
     let snapshot_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
 
@@ -187,11 +188,11 @@ routing = ["test_provider::gpt-4"]
         .unwrap()
         .is_empty());
     assert_eq!(
-        snapshot_row["version_hash_hex"]
+        snapshot_row["version_hash"]
             .as_str()
             .unwrap()
             .to_lowercase(),
-        hash_hex
+        hash_number
     );
 
     let created_at = snapshot_row["created_at"].as_str().unwrap();
@@ -233,10 +234,10 @@ routing = ["test_provider::gpt-4"]
     // Verify the data is still correct
     assert_eq!(snapshot_row2["config"].as_str().unwrap(), config_toml);
     assert_eq!(
-        snapshot_row2["version_hash_hex"]
+        snapshot_row2["version_hash"]
             .as_str()
             .unwrap()
             .to_lowercase(),
-        hash_hex
+        hash_number
     );
 }

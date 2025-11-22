@@ -19,7 +19,7 @@ use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
-use snapshot::{prepare_table_for_snapshot, SnapshotHashHex};
+use snapshot::{prepare_table_for_snapshot, SnapshotHash};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -1249,7 +1249,7 @@ pub mod unwritten_config {
 #[derive(Debug)]
 pub struct ConfigWithHash {
     pub config: Config,
-    pub hash: SnapshotHashHex,
+    pub hash: SnapshotHash,
 }
 
 /// Writes the config snapshot to the `ConfigSnapshot` table.
@@ -1264,18 +1264,18 @@ pub async fn write_config_snapshot(
     struct ConfigSnapshotRow<'a> {
         config: &'a str,
         extra_templates: &'a HashMap<String, String>,
-        version_hash_hex: SnapshotHashHex,
+        version_hash: SnapshotHash,
         tensorzero_version: &'static str,
     }
 
-    // Compute the hash and convert to hex
-    let version_hash_hex = snapshot.hash();
+    // Compute the hash as a numeric string
+    let version_hash = snapshot.hash();
 
     // Create the row
     let row = ConfigSnapshotRow {
         config: &snapshot.config,
         extra_templates: &snapshot.extra_templates,
-        version_hash_hex: version_hash_hex.clone(),
+        version_hash: version_hash.clone(),
         tensorzero_version: TENSORZERO_VERSION,
     };
 
@@ -1289,7 +1289,7 @@ pub async fn write_config_snapshot(
     // Create the external data info
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
-        structure: "config String, extra_templates Map(String, String), version_hash_hex String, tensorzero_version String".to_string(),
+        structure: "config String, extra_templates Map(String, String), version_hash String, tensorzero_version String".to_string(),
         format: "JSONEachRow".to_string(),
         data: json_data,
     };
@@ -1301,9 +1301,9 @@ pub async fn write_config_snapshot(
 SELECT
     new_data.config,
     new_data.extra_templates,
-    tensorzero_hex_to_hash(new_data.version_hash_hex) as version_hash,
+    toUInt256(new_data.version_hash) as version_hash,
     new_data.tensorzero_version,
-    ifNull((SELECT created_at FROM ConfigSnapshot FINAL WHERE version_hash = tensorzero_hex_to_hash('{version_hash_hex}') LIMIT 1), now64()) as created_at,
+    ifNull((SELECT created_at FROM ConfigSnapshot FINAL WHERE version_hash = toUInt256('{version_hash}') LIMIT 1), now64()) as created_at,
     now64() as last_used
 FROM new_data"
     );

@@ -20,6 +20,7 @@ use super::inference::{
     InferenceIds, InferenceModels, InferenceParams, InferenceResponse, JsonInferenceResponse,
 };
 use crate::cache::{CacheEnabledMode, CacheOptions};
+use crate::config::snapshot::SnapshotHash;
 use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::endpoints::RequestApiKeyExtension;
@@ -491,6 +492,7 @@ pub struct PollPathParams {
 pub async fn poll_batch_inference_handler(
     State(AppStateData {
         config,
+        snapshot_hash,
         http_client,
         clickhouse_connection_info,
         ..
@@ -510,6 +512,7 @@ pub async fn poll_batch_inference_handler(
                 &batch_request,
                 response,
                 &config,
+                snapshot_hash.clone(),
             )
             .await?;
             Ok(Json(response.filter_by_query(path_params)).into_response())
@@ -854,6 +857,7 @@ pub async fn write_poll_batch_inference(
     batch_request: &BatchRequestRow<'_>,
     response: PollBatchInferenceResponse,
     config: &Config,
+    snapshot_hash: SnapshotHash,
 ) -> Result<PollInferenceResponse, Error> {
     match response {
         PollBatchInferenceResponse::Pending {
@@ -878,6 +882,7 @@ pub async fn write_poll_batch_inference(
                 batch_request,
                 response,
                 config,
+                snapshot_hash,
             )
             .await?;
             // NOTE - in older versions of TensorZero, we were missing this call.
@@ -957,6 +962,7 @@ pub async fn write_completed_batch_inference<'a>(
     batch_request: &'a BatchRequestRow<'a>,
     mut response: ProviderBatchInferenceResponse,
     config: &Config,
+    snapshot_hash: SnapshotHash,
 ) -> Result<Vec<InferenceResponse>, Error> {
     let inference_ids: Vec<Uuid> = response.elements.keys().copied().collect();
     let batch_model_inferences = get_batch_inferences(
@@ -1089,9 +1095,10 @@ pub async fn write_completed_batch_inference<'a>(
             // Not currently supported as a batch inference parameter
             extra_body: Default::default(),
             extra_headers: Default::default(),
+            snapshot_hash: snapshot_hash.clone(),
         };
         model_inference_rows_to_write
-            .extend(inference_result.get_serialized_model_inferences().await);
+            .extend(inference_result.get_serialized_model_inferences(snapshot_hash.clone()).await);
         match inference_result {
             InferenceResult::Chat(chat_result) => {
                 let chat_inference = ChatInferenceDatabaseInsert::new(chat_result, input, metadata);

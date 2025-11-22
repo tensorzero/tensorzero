@@ -25,7 +25,7 @@ use url::Url;
 use uuid::Uuid;
 
 use tensorzero_core::{
-    config::{snapshot::SnapshotHashHex, Config, TimeoutsConfig},
+    config::{snapshot::SnapshotHash, Config, TimeoutsConfig},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -63,7 +63,7 @@ impl Optimizer for FireworksSFTConfig {
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: Arc<Config>,
-        _snapshot_hash: SnapshotHashHex,
+        _snapshot_hash: SnapshotHash,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()

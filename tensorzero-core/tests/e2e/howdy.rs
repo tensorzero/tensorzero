@@ -10,7 +10,7 @@ use tensorzero::FeedbackParams;
 use tensorzero::InferenceOutput;
 use tensorzero::Role;
 use tensorzero::{ClientInferenceParams, ClientInput};
-use tensorzero_core::config::{snapshot::SnapshotHashHex, Config, ConfigFileGlob};
+use tensorzero_core::config::{snapshot::SnapshotHash, Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager;
 use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
@@ -42,7 +42,7 @@ async fn get_embedded_client(clickhouse: ClickHouseConnectionInfo) -> tensorzero
         .unwrap()
         .dangerous_into_config_without_writing(),
     );
-    let snapshot_hash = SnapshotHashHex::new_test();
+    let snapshot_hash = SnapshotHash::new_test();
     migration_manager::run(RunMigrationManagerArgs {
         clickhouse: &clickhouse,
         is_manual_run: false,

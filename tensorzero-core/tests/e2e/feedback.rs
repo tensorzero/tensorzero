@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tensorzero_core::{
     config::{
-        snapshot::SnapshotHashHex, Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
+        snapshot::SnapshotHash, Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
         MetricConfigType,
     },
     db::{
@@ -190,7 +190,7 @@ async fn e2e_test_comment_feedback_validation_disabled() {
         .await
         .unwrap()
         .dangerous_into_config_without_writing();
-    let snapshot_hash = SnapshotHashHex::new_test();
+    let snapshot_hash = SnapshotHash::new_test();
     let clickhouse = get_clickhouse().await;
     config.gateway.unstable_disable_feedback_target_validation = true;
     let handle = GatewayHandle::new_with_database_and_http_client(
@@ -1230,7 +1230,7 @@ async fn e2e_test_float_feedback_validation_disabled() {
     config
         .metrics
         .insert("user_score".to_string(), metric_config);
-    let snapshot_hash = SnapshotHashHex::new_test();
+    let snapshot_hash = SnapshotHash::new_test();
     let clickhouse = get_clickhouse().await;
     config.gateway.unstable_disable_feedback_target_validation = true;
     let handle = GatewayHandle::new_with_database_and_http_client(
@@ -1477,7 +1477,7 @@ async fn e2e_test_boolean_feedback_validation_disabled() {
         .insert("task_success".to_string(), metric_config);
     let clickhouse = get_clickhouse().await;
     config.gateway.unstable_disable_feedback_target_validation = true;
-    let snapshot_hash = SnapshotHashHex::new_test();
+    let snapshot_hash = SnapshotHash::new_test();
     let handle = GatewayHandle::new_with_database_and_http_client(
         Arc::new(config),
         clickhouse.clone(),
