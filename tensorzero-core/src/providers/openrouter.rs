@@ -965,6 +965,7 @@ async fn prepare_openrouter_file_content_block(
                     mime_type,
                     url,
                     detail,
+                    filename: _,
                 },
             future: _,
         } if !fetch_and_encode_input_files_before_inference

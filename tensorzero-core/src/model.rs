@@ -47,8 +47,8 @@ use crate::inference::WrappedProvider;
 use crate::model_table::{
     AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
     GoogleAIStudioGeminiKind, GroqKind, HyperbolicKind, MistralKind, OpenAIKind, OpenRouterKind,
-    ProviderTypeDefaultCredentials, SGLangKind, ShorthandModelConfig, TGIKind, TogetherKind,
-    VLLMKind, XAIKind,
+    ProviderTypeDefaultCredentials, SGLangKind, ShorthandModelConfig, TGIKind, TensorZeroRelayKind,
+    TogetherKind, VLLMKind, XAIKind,
 };
 use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
@@ -71,8 +71,8 @@ use crate::providers::{
     deepseek::DeepSeekProvider, fireworks::FireworksProvider,
     gcp_vertex_anthropic::GCPVertexAnthropicProvider, gcp_vertex_gemini::GCPVertexGeminiProvider,
     groq::GroqProvider, mistral::MistralProvider, openai::OpenAIProvider,
-    openrouter::OpenRouterProvider, together::TogetherProvider, vllm::VLLMProvider,
-    xai::XAIProvider,
+    openrouter::OpenRouterProvider, tensorzero_relay::TensorZeroRelayProvider,
+    together::TogetherProvider, vllm::VLLMProvider, xai::XAIProvider,
 };
 
 #[derive(Debug, Serialize, ts_rs::TS)]
@@ -806,6 +806,7 @@ impl ModelProvider {
             ProviderConfig::TGI(_) => "tgi",
             ProviderConfig::SGLang(_) => "sglang",
             ProviderConfig::DeepSeek(_) => "deepseek",
+            ProviderConfig::TensorZeroRelay(_) => "tensorzero_relay",
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(_) => "dummy",
         }
@@ -835,6 +836,7 @@ impl ModelProvider {
             ProviderConfig::TGI(_) => None,
             ProviderConfig::SGLang(provider) => Some(provider.model_name()),
             ProviderConfig::DeepSeek(provider) => Some(provider.model_name()),
+            ProviderConfig::TensorZeroRelay(provider) => provider.model_name(),
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => Some(provider.model_name()),
         }
@@ -892,6 +894,8 @@ pub enum ProviderConfig {
     VLLM(VLLMProvider),
     #[serde(rename = "xai")]
     XAI(XAIProvider),
+    #[serde(rename = "tensorzero_relay")]
+    TensorZeroRelay(TensorZeroRelayProvider),
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy(DummyProvider),
 }
@@ -942,6 +946,9 @@ impl ProviderConfig {
             ProviderConfig::Together(_) => Cow::Borrowed(crate::providers::together::PROVIDER_TYPE),
             ProviderConfig::VLLM(_) => Cow::Borrowed(crate::providers::vllm::PROVIDER_TYPE),
             ProviderConfig::XAI(_) => Cow::Borrowed(crate::providers::xai::PROVIDER_TYPE),
+            ProviderConfig::TensorZeroRelay(_) => {
+                Cow::Borrowed(crate::providers::tensorzero_relay::PROVIDER_TYPE)
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(_) => Cow::Borrowed(crate::providers::dummy::PROVIDER_TYPE),
         }
@@ -1100,6 +1107,15 @@ pub enum UninitializedProviderConfig {
     },
     DeepSeek {
         model_name: String,
+        #[cfg_attr(test, ts(type = "string | null"))]
+        api_key_location: Option<CredentialLocationWithFallback>,
+    },
+    #[serde(rename = "tensorzero_relay")]
+    TensorZeroRelay {
+        gateway_base_url: Url,
+        function_name: Option<String>,
+        model_name: Option<String>,
+        variant_name: Option<String>,
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
@@ -1426,6 +1442,28 @@ impl UninitializedProviderConfig {
                     )
                     .await?,
             )),
+            UninitializedProviderConfig::TensorZeroRelay {
+                gateway_base_url,
+                function_name,
+                model_name,
+                variant_name,
+                api_key_location,
+            } => ProviderConfig::TensorZeroRelay(
+                TensorZeroRelayProvider::new(
+                    gateway_base_url,
+                    function_name,
+                    model_name,
+                    variant_name,
+                    TensorZeroRelayKind
+                        .get_defaulted_credential(
+                            api_key_location.as_ref(),
+                            provider_type_default_credentials,
+                        )
+                        .await?,
+                    http_client,
+                )
+                .await?,
+            ),
             #[cfg(any(test, feature = "e2e_tests"))]
             UninitializedProviderConfig::Dummy {
                 model_name,
@@ -1637,6 +1675,11 @@ impl ModelProvider {
                     .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            ProviderConfig::TensorZeroRelay(provider) => {
+                provider
+                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .await
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider
@@ -1775,6 +1818,11 @@ impl ModelProvider {
                     .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
+            ProviderConfig::TensorZeroRelay(provider) => {
+                provider
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .await
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider
@@ -1896,6 +1944,12 @@ impl ModelProvider {
                     .start_batch_inference(requests, client, api_keys)
                     .await
             }
+            ProviderConfig::TensorZeroRelay(_provider) => {
+                Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+                    provider_type: "tensorzero_relay".to_string(),
+                }
+                .into())
+            }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider
@@ -2006,6 +2060,12 @@ impl ModelProvider {
                 provider
                     .poll_batch_inference(batch_request, http_client, dynamic_api_keys)
                     .await
+            }
+            ProviderConfig::TensorZeroRelay(_provider) => {
+                Err(ErrorDetails::UnsupportedModelProviderForBatchInference {
+                    provider_type: "tensorzero_relay".to_string(),
+                }
+                .into())
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {

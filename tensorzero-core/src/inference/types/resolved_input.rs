@@ -94,6 +94,8 @@ pub struct FileUrl {
     pub mime_type: Option<MediaType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<Detail>,
+    // TODO - should we skip serializing this?
+    pub filename: Option<String>,
 }
 
 /// Holds a lazily-resolved file from a `LazyResolvedInputMessageContent::File`.

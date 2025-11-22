@@ -42,6 +42,8 @@ pub struct ProviderTypesConfig {
     pub vllm: VLLMProviderTypeConfig,
     #[serde(default)]
     pub xai: XAIProviderTypeConfig,
+    #[serde(default)]
+    pub tensorzero_relay: TensorZeroRelayProviderTypeConfig,
 }
 
 // Anthropic
@@ -485,6 +487,33 @@ impl Default for XAIDefaults {
         Self {
             api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
                 "XAI_API_KEY".to_string(),
+            )),
+        }
+    }
+}
+
+// TensorZero Relay provider - this allows forwarding post-template requests
+// to another TensorZero gateway instance
+
+#[derive(Debug, Default, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct TensorZeroRelayProviderTypeConfig {
+    #[serde(default)]
+    pub defaults: TensorZeroRelayDefaults,
+}
+
+#[derive(Debug, Deserialize, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct TensorZeroRelayDefaults {
+    #[ts(type = "string")]
+    pub api_key_location: CredentialLocationWithFallback,
+}
+
+impl Default for TensorZeroRelayDefaults {
+    fn default() -> Self {
+        Self {
+            api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
+                "TENSORZERO_RELAY_API_KEY".to_string(),
             )),
         }
     }

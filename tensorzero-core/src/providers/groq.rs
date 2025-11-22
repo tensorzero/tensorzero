@@ -693,6 +693,7 @@ async fn tensorzero_to_groq_user_messages(
                             mime_type,
                             url,
                             detail,
+                            filename: _,
                         },
                     future: _,
                 } if !fetch_and_encode_input_files_before_inference
@@ -795,6 +796,7 @@ async fn tensorzero_to_groq_assistant_messages(
                             mime_type,
                             url,
                             detail,
+                            filename: _,
                         },
                     future: _,
                 } if !fetch_and_encode_input_files_before_inference

@@ -27,6 +27,7 @@ use crate::{
         openai::OpenAICredentials,
         openrouter::OpenRouterCredentials,
         sglang::SGLangCredentials,
+        tensorzero_relay::TensorZeroRelayCredentials,
         tgi::TGICredentials,
         together::TogetherCredentials,
         vllm::VLLMCredentials,
@@ -95,6 +96,7 @@ pub enum ProviderType {
     OpenAI,
     OpenRouter,
     SGLang,
+    TensorZeroRelay,
     TGI,
     Together,
     VLLM,
@@ -118,6 +120,7 @@ impl Display for ProviderType {
             ProviderType::OpenAI => write!(f, "OpenAI"),
             ProviderType::OpenRouter => write!(f, "OpenRouter"),
             ProviderType::SGLang => write!(f, "SGLang"),
+            ProviderType::TensorZeroRelay => write!(f, "TensorZeroRelay"),
             ProviderType::TGI => write!(f, "TGI"),
             ProviderType::Together => write!(f, "Together"),
             ProviderType::VLLM => write!(f, "VLLM"),
@@ -358,6 +361,7 @@ pub struct ProviderTypeDefaultCredentials {
     openai: LazyCredential<OpenAICredentials>,
     openrouter: LazyCredential<OpenRouterCredentials>,
     sglang: LazyCredential<SGLangCredentials>,
+    tensorzero_relay: LazyCredential<TensorZeroRelayCredentials>,
     tgi: LazyCredential<TGICredentials>,
     together: LazyCredential<TogetherCredentials>,
     vllm: LazyCredential<VLLMCredentials>,
@@ -435,6 +439,11 @@ impl ProviderTypeDefaultCredentials {
             .clone();
         let vllm_location = provider_types_config.vllm.defaults.api_key_location.clone();
         let xai_location = provider_types_config.xai.defaults.api_key_location.clone();
+        let tensorzero_relay_location = provider_types_config
+            .tensorzero_relay
+            .defaults
+            .api_key_location
+            .clone();
 
         ProviderTypeDefaultCredentials {
             anthropic: LazyCredential::new(move || {
@@ -506,6 +515,13 @@ impl ProviderTypeDefaultCredentials {
             }),
             xai: LazyCredential::new(move || {
                 load_credential_with_fallback(&xai_location, ProviderType::XAI)?.try_into()
+            }),
+            tensorzero_relay: LazyCredential::new(move || {
+                load_credential_with_fallback(
+                    &tensorzero_relay_location,
+                    ProviderType::TensorZeroRelay,
+                )?
+                .try_into()
             }),
         }
     }
@@ -981,5 +997,21 @@ impl ProviderKind for XAIKind {
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self::Credential, Error> {
         default_credentials.xai.get_cloned()
+    }
+}
+
+pub struct TensorZeroRelayKind;
+
+impl ProviderKind for TensorZeroRelayKind {
+    type Credential = TensorZeroRelayCredentials;
+    fn get_provider_type(&self) -> ProviderType {
+        ProviderType::TensorZeroRelay
+    }
+
+    async fn get_credential_field(
+        &self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self::Credential, Error> {
+        default_credentials.tensorzero_relay.get_cloned()
     }
 }
