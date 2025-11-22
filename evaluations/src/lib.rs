@@ -5,7 +5,6 @@ use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::{anyhow, bail, Result};
 use clap::Parser;
-use dataset::query_dataset;
 use evaluators::{evaluate_inference, EvaluateInferenceParams};
 use helpers::get_cache_options;
 use serde::{Deserialize, Serialize};
@@ -24,10 +23,11 @@ use tensorzero_core::client::{
 use tensorzero_core::config::{
     ConfigFileGlob, ConfigLoadInfo, MetricConfigOptimize, UninitializedVariantInfo,
 };
+use tensorzero_core::endpoints::datasets::v1::{list_datapoints, types::ListDatapointsRequest};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
-    config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::StoredDatapoint,
+    config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
     function::FunctionConfig,
 };
 use tokio::{
@@ -38,7 +38,6 @@ use tracing::{debug, error, info, instrument};
 use url::Url;
 use uuid::Uuid;
 
-pub mod dataset;
 pub mod evaluators;
 pub mod helpers;
 pub mod stats;
@@ -92,7 +91,7 @@ pub struct Args {
 
     /// Maximum number of datapoints to evaluate from the dataset.
     #[arg(long)]
-    pub max_datapoints: Option<usize>,
+    pub max_datapoints: Option<u32>,
 
     /// Per-evaluator precision targets for adaptive stopping.
     /// Format: evaluator_name=precision_target, comma-separated for multiple evaluators.
@@ -424,7 +423,7 @@ pub async fn run_evaluation(
 #[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant = ?args.variant, concurrency = %args.concurrency))]
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
-    max_datapoints: Option<usize>,
+    max_datapoints: Option<u32>,
     precision_targets: HashMap<String, f32>,
 ) -> Result<EvaluationStreamResult> {
     let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
@@ -447,10 +446,6 @@ pub async fn run_evaluation_core_streaming(
     debug!(evaluation_name = %args.evaluation_name, "Evaluation config found");
 
     let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
-    let function_config = args
-        .config
-        .get_function(&inference_evaluation_config.function_name)?
-        .into_owned();
 
     info!(
         function_name = %inference_evaluation_config.function_name,
@@ -461,14 +456,22 @@ pub async fn run_evaluation_core_streaming(
     let mut join_set = JoinSet::new();
 
     info!("Querying dataset");
-    let dataset = query_dataset(
+    #[expect(deprecated)]
+    let request = ListDatapointsRequest {
+        function_name: Some(inference_evaluation_config.function_name.clone()),
+        limit: max_datapoints.or(Some(u32::MAX)), // Use u32::MAX when no limit specified, since otherwise ListDatapointsRequest defaults to 20
+        page_size: None,                          // deprecated but required
+        offset: Some(0),
+        filter: None,
+    };
+    let dataset = list_datapoints(
         &clients.clickhouse_client,
-        &args.dataset_name,
-        &inference_evaluation_config.function_name,
-        &function_config,
-        max_datapoints, // Apply max_datapoints limit if provided
+        &args.config,
+        args.dataset_name.clone(),
+        request,
     )
-    .await?;
+    .await?
+    .datapoints;
     info!(dataset_size = dataset.len(), "Dataset loaded successfully");
     let dataset_name = Arc::new(args.dataset_name);
     let variant = Arc::new(args.variant);
@@ -554,7 +557,7 @@ pub async fn run_evaluation_core_streaming(
                 .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
             debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
 
-            Ok::<(StoredDatapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
+            Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
                 Arc::into_inner(datapoint).ok_or_else(|| anyhow!("Failed to get datapoint for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
                 Arc::into_inner(inference_response).ok_or_else(|| anyhow!("Failed to get inference response for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
                 evaluation_result,
@@ -677,7 +680,7 @@ struct InferDatapointParams<'a> {
     variant: &'a EvaluationVariant,
     evaluation_run_id: Uuid,
     dataset_name: &'a str,
-    datapoint: &'a StoredDatapoint,
+    datapoint: &'a Datapoint,
     input: &'a ClientInput,
     evaluation_name: &'a str,
     config: &'a Config,
@@ -714,7 +717,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
     let dynamic_tool_params = match datapoint.tool_call_config() {
         Some(tool_params) => {
             debug!("Tool parameters found, processing");
-            tool_params.clone().into()
+            tool_params.clone()
         }
         None => {
             debug!("No tool parameters found");
