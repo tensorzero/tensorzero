@@ -1301,9 +1301,9 @@ pub async fn write_config_snapshot(
 SELECT
     new_data.config,
     new_data.extra_templates,
-    reinterpretAsUInt256(reverse(unhex(new_data.version_hash_hex))) as version_hash,
+    tensorzero_hex_to_hash(new_data.version_hash_hex) as version_hash,
     new_data.tensorzero_version,
-    ifNull((SELECT created_at FROM ConfigSnapshot FINAL WHERE version_hash = reinterpretAsUInt256(reverse(unhex('{version_hash_hex}'))) LIMIT 1), now64()) as created_at,
+    ifNull((SELECT created_at FROM ConfigSnapshot FINAL WHERE version_hash = tensorzero_hex_to_hash('{version_hash_hex}') LIMIT 1), now64()) as created_at,
     now64() as last_used
 FROM new_data"
     );

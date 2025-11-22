@@ -171,7 +171,7 @@ routing = ["test_provider::gpt-4"]
 
     // Query the ConfigSnapshot table to verify the data was written
     let query = format!(
-        "SELECT config, tensorzero_version, hex(version_hash) as version_hash_hex, created_at, last_used FROM ConfigSnapshot FINAL WHERE version_hash = reinterpretAsUInt256(reverse(unhex('{hash_hex}'))) FORMAT JSONEachRow"
+        "SELECT config, tensorzero_version, tensorzero_hash_to_hex(version_hash) as version_hash_hex, created_at, last_used FROM ConfigSnapshot FINAL WHERE version_hash = tensorzero_hex_to_hash('{hash_hex}') FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query.clone())
