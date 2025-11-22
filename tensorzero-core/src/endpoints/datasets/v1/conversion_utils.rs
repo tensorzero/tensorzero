@@ -35,7 +35,7 @@ impl CreateChatDatapointRequest {
         function_config.validate_input(&self.input)?;
         let stored_input = self
             .input
-            .into_lazy_resolved_input(*fetch_context)?
+            .into_lazy_resolved_input(fetch_context)?
             .into_stored_input(fetch_context.object_store_info)
             .await?;
 
@@ -96,7 +96,7 @@ impl CreateJsonDatapointRequest {
         function_config.validate_input(&self.input)?;
         let stored_input = self
             .input
-            .into_lazy_resolved_input(*fetch_context)?
+            .into_lazy_resolved_input(fetch_context)?
             .into_stored_input(fetch_context.object_store_info)
             .await?;
 

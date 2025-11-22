@@ -1545,7 +1545,7 @@ impl TensorZeroGateway {
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
             this.py(),
-            response,
+            &response,
             "tensorzero",
             "GetInferencesResponse",
         )
@@ -1601,9 +1601,14 @@ impl TensorZeroGateway {
         // for JSON schema compilation
         // TODO (#4259): remove the tokio spawn from that function and remove this guard.
         let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
+
         let stored_samples = stored_samples
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
+            .map(|x| {
+                // NOTE(shuyangli): We do not re-fetch any files here, and simply error out if any samples have files.
+                // We may need to rearchitect the optimization pipeline to support this.
+                deserialize_from_stored_sample(this.py(), x, config)
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_samples, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
@@ -2826,7 +2831,11 @@ impl AsyncTensorZeroGateway {
         let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_samples = stored_samples
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
+            .map(|x| {
+                // NOTE(shuyangli): We do not re-fetch any files here, and simply error out if any samples have files.
+                // We may need to rearchitect the optimization pipeline to support this.
+                deserialize_from_stored_sample(this.py(), x, config)
+            })
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client

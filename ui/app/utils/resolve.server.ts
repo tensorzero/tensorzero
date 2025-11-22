@@ -11,13 +11,16 @@ import type {
   ResolvedBase64File,
   Role,
   LegacyTextInput,
+  ResolvedFileContent,
+  ResolvedImageContentError,
 } from "./clickhouse/common";
 import type {
+  File,
   FunctionConfig,
   JsonValue,
-  StoredInput,
-  StoredInputMessage,
-  StoredInputMessageContent,
+  Input as StoredInput,
+  InputMessage as StoredInputMessage,
+  InputMessageContent as StoredInputMessageContent,
 } from "~/types/tensorzero";
 import { getTensorZeroClient } from "./tensorzero.server";
 
@@ -281,8 +284,11 @@ function prepareDisplayText(
   };
 }
 
-// ===== StoredInput =====
-// TODO: These functions should be deprecated as we clean up the types...
+// ===== Input resolution =====
+// TODO: These functions should be deprecated as we support resolving inputs in the backend.
+//
+// NOTE: These types are called "StoredInput" instead of "Input" for legacy reasons - we incorrectly
+// returned the storage types before, and there are also "Input" types from Zod that we need to deprecate.
 
 export async function resolveStoredInput(
   input: StoredInput,
@@ -318,11 +324,80 @@ async function resolveStoredInputMessage(
   };
 }
 
+async function resolveStoredInputMessageContentFile(
+  file: File,
+): Promise<ResolvedFileContent | ResolvedImageContentError> {
+  switch (file.file_type) {
+    // These types should be input-only, and if we need to resolve then on the FE,
+    // it represents an error (because we needed to store them).
+    case "url":
+    case "base64": {
+      throw new Error(
+        "URL and base64 files should not be passed to `resolveStoredInputMessageContentFile`. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
+      );
+    }
+
+    // Pointer can be resolved in the UI.
+    case "object_storage_pointer": {
+      try {
+        const fileContent: FileContent = {
+          type: "file",
+          file: {
+            url: file.source_url,
+            mime_type: file.mime_type,
+          },
+          storage_path: file.storage_path,
+        };
+        const resolvedFile = await resolveFile(fileContent);
+        const resolvedFileContent: ResolvedFileContent = {
+          type: "file",
+          file: resolvedFile,
+          storage_path: file.storage_path,
+        };
+        return resolvedFileContent;
+      } catch (error) {
+        const resolvedFileContentError: ResolvedImageContentError = {
+          type: "file_error",
+          file: file,
+          storage_path: file.storage_path,
+          error: error instanceof Error ? error.message : String(error),
+        };
+        return resolvedFileContentError;
+      }
+    }
+
+    // The following types are already resolved on the backend.
+    case "object_storage": {
+      const resolvedFile: ResolvedFileContent = {
+        type: "file",
+        file: {
+          data: file.data,
+          mime_type: file.mime_type,
+        },
+        storage_path: file.storage_path,
+      };
+      return resolvedFile;
+    }
+
+    case "object_storage_error": {
+      const resolvedFileContentError: ResolvedImageContentError = {
+        type: "file_error",
+        file: {
+          url: file.source_url ?? null,
+          mime_type: file.mime_type,
+        },
+        storage_path: file.storage_path,
+        error: file.error ?? "File cannot be resolved in the backend.",
+      };
+      return resolvedFileContentError;
+    }
+  }
+}
+
 async function resolveStoredInputMessageContent(
   content: StoredInputMessageContent,
 ): Promise<DisplayInputMessageContent> {
   switch (content.type) {
-    case "tool_call":
     case "tool_result":
     case "raw_text":
     case "thought":
@@ -330,36 +405,25 @@ async function resolveStoredInputMessageContent(
     case "template":
     case "text":
       return content;
-    case "file":
-      try {
-        // Convert flattened ObjectStorageFile to nested FileContent structure
-        const fileContent: FileContent = {
-          type: "file",
-          file: {
-            url: content.source_url ?? null,
-            mime_type: content.mime_type,
-          },
-          storage_path: content.storage_path,
-        };
-        const resolvedFile = await resolveFile(fileContent);
+    case "tool_call":
+      // This is a union of ToolCall and InferenceResponseToolCall so we need to narrow the types.
+      if ("raw_arguments" in content) {
+        // This is an InferenceResponseToolCall.
         return {
-          type: "file",
-          file: {
-            data: resolvedFile.data,
-            mime_type: resolvedFile.mime_type,
-          },
-          storage_path: content.storage_path,
+          type: "tool_call",
+          name: content.raw_name,
+          arguments: content.raw_arguments,
+          id: content.id,
         };
-      } catch (error) {
+      } else {
         return {
-          type: "file_error",
-          file: {
-            url: content.source_url ?? null,
-            mime_type: content.mime_type,
-          },
-          storage_path: content.storage_path,
-          error: error instanceof Error ? error.message : String(error),
+          type: "tool_call",
+          name: content.name,
+          arguments: content.arguments,
+          id: content.id,
         };
       }
+    case "file":
+      return await resolveStoredInputMessageContentFile(content);
   }
 }

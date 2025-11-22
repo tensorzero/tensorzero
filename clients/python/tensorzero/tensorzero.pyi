@@ -55,6 +55,7 @@ from .generated_types import (
     GetDatapointsResponse,
     GetInferencesResponse,
     InferenceFilter,
+    Input,
     ListDatapointsRequest,
     ListInferencesRequest,
     StoredInference,
@@ -367,7 +368,7 @@ class LegacyDatapoint:
     @property
     def id(self) -> UUID: ...
     @property
-    def input(self) -> ResolvedInput: ...
+    def input(self) -> Input: ...
     @property
     def output(self) -> Any: ...
     @property

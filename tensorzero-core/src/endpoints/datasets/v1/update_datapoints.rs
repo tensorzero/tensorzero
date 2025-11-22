@@ -373,10 +373,7 @@ async fn convert_input_to_stored_input(
             // Otherwise, if the file needs to be fetched (because it's new), fetch it and convert to StoredInput.
             // This all happens behind the scene in `into_stored_input()`.
             let stored_input = input
-                .into_lazy_resolved_input(FetchContext {
-                    client: fetch_context.client,
-                    object_store_info: fetch_context.object_store_info,
-                })?
+                .into_lazy_resolved_input(fetch_context)?
                 // This call may trigger requests to write newly-provided files to object storage.
                 //
                 // TODO(shuyangli): consider refactoring file writing logic so it's hard to forget making these calls.
