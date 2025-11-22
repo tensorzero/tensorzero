@@ -7,7 +7,7 @@ use crate::db::datasets::{
     AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetDetailRow, DatasetMetadata, DatasetQueries, DatasetQueryParams,
     GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatapointsParams,
-    GetDatasetMetadataParams, GetDatasetRowsParams, MockDatasetQueries, StaleDatapointParams,
+    GetDatasetMetadataParams, GetDatasetRowsParams, MockDatasetQueries,
 };
 use crate::db::inferences::{
     GetInferenceBoundsParams, InferenceBounds, InferenceQueries, ListInferencesParams,
@@ -85,10 +85,6 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
 
     async fn count_datasets(&self) -> Result<u32, Error> {
         self.dataset_queries.count_datasets().await
-    }
-
-    async fn stale_datapoint(&self, params: &StaleDatapointParams) -> Result<(), Error> {
-        self.dataset_queries.stale_datapoint(params).await
     }
 
     async fn insert_datapoints(&self, datapoints: &[DatapointInsert]) -> Result<u64, Error> {

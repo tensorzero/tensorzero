@@ -1,6 +1,10 @@
-import type { ResolvedFileContent } from "~/utils/clickhouse/common";
+import type { ZodResolvedFileContent } from "~/utils/clickhouse/common";
 
-export default function ImageBlock({ image }: { image: ResolvedFileContent }) {
+export default function ImageBlock({
+  image,
+}: {
+  image: ZodResolvedFileContent;
+}) {
   return (
     <div className="w-60 rounded bg-slate-100 p-2 text-xs text-slate-300">
       <div className="mb-2">Image</div>

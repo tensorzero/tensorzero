@@ -788,9 +788,22 @@ pub async fn insert_datapoint(
                 }
 
                 // Convert legacy Value output to JsonDatapointOutputUpdate
-                let output_update = json.output.map(|output| JsonDatapointOutputUpdate {
-                    raw: output.to_string(),
-                });
+                let output_update = match json.output {
+                    Some(output) => {
+                        let raw = match output {
+                            serde_json::Value::Object(_) => Some(output.to_string()),
+                            serde_json::Value::Null => None,
+                            _ => {
+                                return Err(Error::new(ErrorDetails::InvalidRequest {
+                                    message: "The field `output` must be an object or null."
+                                        .to_string(),
+                                }))
+                            }
+                        };
+                        Some(JsonDatapointOutputUpdate { raw })
+                    }
+                    None => None,
+                };
 
                 v1_datapoints.push(CreateDatapointRequest::Json(CreateJsonDatapointRequest {
                     function_name: json.function_name,
@@ -1206,6 +1219,13 @@ impl Datapoint {
             Datapoint::Json(_) => None,
         }
     }
+
+    pub fn output_schema(&self) -> Option<&serde_json::Value> {
+        match self {
+            Datapoint::Chat(_datapoint) => None,
+            Datapoint::Json(datapoint) => Some(&datapoint.output_schema),
+        }
+    }
 }
 
 impl StoredDatapoint {
@@ -1483,7 +1503,7 @@ pub struct JsonDatapointInsert {
 /// This one should be used in all public interfaces.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[export_schema]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
@@ -1495,7 +1515,6 @@ pub struct ChatInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
-    #[cfg_attr(test, ts(optional))]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     // `tool_params` are always flattened to match the convention of LLM APIs
     #[serde(flatten)]
@@ -1503,7 +1522,7 @@ pub struct ChatInferenceDatapoint {
     pub tool_params: DynamicToolParams,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(test, ts(type = "Record<string, string>"), ts(optional))]
+    #[cfg_attr(test, ts(type = "Record<string, string>"))]
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)]
     pub auxiliary: String,
@@ -1512,16 +1531,13 @@ pub struct ChatInferenceDatapoint {
     pub is_custom: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
     pub source_inference_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
     pub staled_at: Option<String>,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
     pub name: Option<String>,
 }
 

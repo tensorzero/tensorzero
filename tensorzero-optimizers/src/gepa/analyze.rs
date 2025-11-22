@@ -416,7 +416,7 @@ mod tests {
     use tensorzero_core::{
         config::{path::ResolvedTomlPathData, SchemaData},
         endpoints::{
-            datasets::{StoredChatInferenceDatapoint, StoredDatapoint},
+            datasets::{Datapoint, StoredChatInferenceDatapoint},
             inference::{ChatInferenceResponse, InferenceResponse},
         },
         evaluations::{EvaluationConfig, InferenceEvaluationConfig},
@@ -552,7 +552,7 @@ mod tests {
         // Convert Input to StoredInput via JSON round-trip
         let stored_input = serde_json::from_value(to_value(&input).unwrap()).unwrap();
 
-        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        let stored_datapoint = StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "test_function".to_string(),
             id: Uuid::now_v7(),
@@ -568,7 +568,11 @@ mod tests {
             staled_at: None,
             updated_at: "2025-01-01T00:00:00Z".to_string(),
             name: None,
-        });
+        };
+
+        // Convert StoredDatapoint to Datapoint
+        let function_config = create_test_function_config();
+        let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint(&function_config));
 
         EvaluationInfo {
             datapoint,

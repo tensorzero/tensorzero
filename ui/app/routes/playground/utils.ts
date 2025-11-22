@@ -1,4 +1,4 @@
-import type { DisplayInput } from "~/utils/clickhouse/common";
+import type { ZodDisplayInput } from "~/utils/clickhouse/common";
 import { z } from "zod";
 import type {
   Datapoint as TensorZeroDatapoint,
@@ -138,7 +138,7 @@ export interface ClientInferenceInputArgs {
   variant: PlaygroundVariantInfo;
   functionName: string;
   datapoint: TensorZeroDatapoint;
-  input: DisplayInput;
+  input: ZodDisplayInput;
   functionConfig: FunctionConfig;
   toolsConfig: { [key in string]?: StaticToolConfig };
 }

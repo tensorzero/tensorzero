@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { DisplayInputMessageContent } from "~/utils/clickhouse/common";
+import type { ZodDisplayInputMessageContent } from "~/utils/clickhouse/common";
 import type { ContentBlockChatOutput } from "~/types/tensorzero";
 import {
   ToolCallMessage,
@@ -16,7 +16,7 @@ import {
  * Union type for all content blocks that can be rendered
  */
 export type RenderableContentBlock =
-  | DisplayInputMessageContent
+  | ZodDisplayInputMessageContent
   | ContentBlockChatOutput;
 
 /**
@@ -150,7 +150,7 @@ export function ContentBlockRenderer({
       } else {
         // Input tool call
         const inputBlock = block as Extract<
-          DisplayInputMessageContent,
+          ZodDisplayInputMessageContent,
           { type: "tool_call" }
         >;
 

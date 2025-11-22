@@ -292,7 +292,7 @@ class FileBase64(Base64File):
 
 @dataclass(kw_only=True)
 class JsonDatapointOutputUpdate:
-    raw: str
+    raw: str | None = None
     """
     The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
     """
