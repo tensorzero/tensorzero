@@ -117,9 +117,9 @@ type = "disabled"
 [functions.describe_image]
 type = "chat"
 
-[functions.describe_image.variants.openai]
+[functions.describe_image.variants.anthropic]
 type = "chat_completion"
-model = "openai::gpt-4o-mini-2024-07-18"
+model = "anthropic::claude-3-7-sonnet-latest"
 "#;
 
 /// Test config with fetch_and_encode_input_files_before_inference = false
@@ -132,9 +132,9 @@ type = "disabled"
 [functions.describe_image]
 type = "chat"
 
-[functions.describe_image.variants.openai]
+[functions.describe_image.variants.anthropic]
 type = "chat_completion"
-model = "openai::gpt-4o-mini-2024-07-18"
+model = "anthropic::claude-3-7-sonnet-latest"
 "#;
 
 /// Base64 encoded 1x1 red pixel PNG (same as Python test)
@@ -154,7 +154,7 @@ async fn test_image_url_with_fetch_true() {
     let response = client
         .inference(ClientInferenceParams {
             function_name: Some("describe_image".to_string()),
-            variant_name: Some("openai".to_string()),
+            variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
             input: ClientInput {
                 system: None,
@@ -224,7 +224,7 @@ async fn test_image_url_with_fetch_false() {
 
     // The '_shutdown_sender' will wake up the receiver on drop
     let (server_addr, _shutdown_sender) = make_temp_image_server().await;
-    let image_url = Url::parse(&format!("http://{server_addr}/ferris.png")).unwrap();
+    let image_url = Url::parse(&format!("https://{server_addr}/ferris.png")).unwrap();
 
     let client =
         tensorzero::test_helpers::make_embedded_gateway_with_config(CONFIG_WITH_FETCH_FALSE).await;
@@ -232,7 +232,7 @@ async fn test_image_url_with_fetch_false() {
     let result = client
         .inference(ClientInferenceParams {
             function_name: Some("describe_image".to_string()),
-            variant_name: Some("openai".to_string()),
+            variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
             input: ClientInput {
                 system: None,
@@ -244,7 +244,7 @@ async fn test_image_url_with_fetch_false() {
                         }),
                         ClientInputMessageContent::File(File::Url(UrlFile {
                             url: image_url.clone(),
-                            mime_type: None,
+                            mime_type: Some(mime::IMAGE_PNG),
                             detail: None,
                             filename: None,
                         })),
@@ -259,25 +259,20 @@ async fn test_image_url_with_fetch_false() {
         })
         .await;
 
-    // When fetch_and_encode_input_files_before_inference = false, OpenAI cannot access localhost URLs
+    // When fetch_and_encode_input_files_before_inference = false, Anthropic cannot access localhost URLs
     // so the inference should fail with an error about downloading the image
-    assert!(
-        result.is_err(),
-        "Expected error when OpenAI cannot access localhost URL"
-    );
-
-    let err = result.unwrap_err();
+    let err = result.expect_err("Expected error when Anthropic cannot access localhost URL");
     let err_msg = format!("{err:?}");
 
-    // The error should indicate that OpenAI couldn't download the image from localhost
+    // The error should indicate that Anthropic couldn't download the image from localhost
     assert!(
-        err_msg.contains("Error while downloading") || err_msg.contains("invalid_image_url"),
+        err_msg.contains("Unable to download the file"),
         "Expected error about downloading localhost URL, got: {err_msg}"
     );
 
     println!(
         "✓ Test passed: Image URL with fetch_and_encode_input_files_before_inference = false \
-         (correctly fails when OpenAI cannot access localhost)"
+         (correctly fails when Anthropic cannot access localhost)"
     );
 }
 
@@ -291,7 +286,7 @@ async fn test_base64_image_with_fetch_true() {
     let response = client
         .inference(ClientInferenceParams {
             function_name: Some("describe_image".to_string()),
-            variant_name: Some("openai".to_string()),
+            variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
             input: ClientInput {
                 system: None,
@@ -371,7 +366,7 @@ async fn test_base64_image_with_fetch_false() {
     let response = client
         .inference(ClientInferenceParams {
             function_name: Some("describe_image".to_string()),
-            variant_name: Some("openai".to_string()),
+            variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
             input: ClientInput {
                 system: None,
@@ -453,7 +448,7 @@ async fn test_wikipedia_image_url_with_fetch_true() {
     let response = client
         .inference(ClientInferenceParams {
             function_name: Some("describe_image".to_string()),
-            variant_name: Some("openai".to_string()),
+            variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
             input: ClientInput {
                 system: None,
@@ -529,7 +524,7 @@ async fn test_wikipedia_image_url_with_fetch_false() {
     let response = client
         .inference(ClientInferenceParams {
             function_name: Some("describe_image".to_string()),
-            variant_name: Some("openai".to_string()),
+            variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
             input: ClientInput {
                 system: None,
@@ -607,7 +602,7 @@ async fn test_image_url_403_error() {
     let result = client
         .inference(ClientInferenceParams {
             function_name: Some("describe_image".to_string()),
-            variant_name: Some("openai".to_string()),
+            variant_name: Some("anthropic".to_string()),
             episode_id: Some(episode_id),
             input: ClientInput {
                 system: None,
