@@ -49,11 +49,16 @@ RUN pnpm install --frozen-lockfile --prod
 
 # ========== tensorzero-node-build-env ==========
 
-FROM rust:1.88.0 AS tensorzero-node-build-env
+FROM chef AS tensorzero-node-build-env
 
 RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm
 
+COPY --from=planner /app/recipe.json /build/recipe.json
+WORKDIR /build
+# This should match the configuration used by 'napi build', so that cargo re-uses
+# the dependencies build in this step.
+RUN cargo chef cook --release -p tensorzero-node --target x86_64-unknown-linux-gnu
 COPY . /build
 WORKDIR /build/internal/tensorzero-node
 
