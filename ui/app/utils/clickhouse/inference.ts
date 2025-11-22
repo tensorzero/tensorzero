@@ -6,7 +6,7 @@ import {
   displayInputSchema,
   displayModelInferenceInputMessageSchema,
   modelInferenceOutputContentBlockSchema,
-  JsonValueSchema,
+  ZodJsonValueSchema,
 } from "./common";
 import type {
   JsonInferenceOutput,
@@ -14,7 +14,6 @@ import type {
   Tool,
 } from "~/types/tensorzero";
 
-// Zod schemas for ToolCallConfigDatabaseInsert
 // Note: This schema handles backward compatibility with old database records that don't have
 // the 'type' field. The transform ensures all parsed tools have type: "function".
 // We use 'as z.ZodType<Tool, z.ZodTypeDef, unknown>' instead of 'satisfies' because:
@@ -27,7 +26,7 @@ export const toolSchema = z
       .union([z.literal("function"), z.literal("client_side_function")])
       .optional(),
     description: z.string(),
-    parameters: JsonValueSchema,
+    parameters: ZodJsonValueSchema,
     name: z.string(),
     strict: z.boolean(),
   })
@@ -53,7 +52,7 @@ export const providerInferenceExtraBodySchema = z
   .object({
     model_provider_name: z.string(),
     pointer: z.string(),
-    value: JsonValueSchema,
+    value: ZodJsonValueSchema,
   })
   .strict();
 export type ProviderInferenceExtraBody = z.infer<
@@ -64,7 +63,7 @@ export const variantInferenceExtraBodySchema = z
   .object({
     variant_name: z.string(),
     pointer: z.string(),
-    value: JsonValueSchema,
+    value: ZodJsonValueSchema,
   })
   .strict();
 export type VariantInferenceExtraBody = z.infer<
@@ -167,7 +166,7 @@ export const parsedJsonInferenceRowSchema = jsonInferenceRowSchema
     input: inputSchema,
     output: jsonInferenceOutputSchema,
     inference_params: z.record(z.string(), z.unknown()),
-    output_schema: JsonValueSchema,
+    output_schema: ZodJsonValueSchema,
     extra_body: z.array(inferenceExtraBodySchema).nullable(),
   });
 

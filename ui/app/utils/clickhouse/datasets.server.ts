@@ -5,7 +5,6 @@ import type {
   DatasetDetailRow,
   GetDatasetMetadataParams,
   GetDatasetRowsParams,
-  GetDatapointParams,
   Datapoint,
   AdjacentDatapointIds,
 } from "~/types/tensorzero";
@@ -77,40 +76,6 @@ export async function getDatasetRows(
 ): Promise<DatasetDetailRow[]> {
   const dbClient = await getNativeDatabaseClient();
   return await dbClient.getDatasetRows(params);
-}
-
-export async function getDatapoint(
-  params: GetDatapointParams,
-): Promise<ParsedDatasetRow | null> {
-  // Swallow the error and return null if the datapoint is not found, to preserve existing behavior.
-  const dbClient = await getNativeDatabaseClient();
-  let datapoint: Datapoint | null = null;
-  try {
-    datapoint = await dbClient.getDatapoint(params);
-    // TODO(shuyangli): Rename ParsedDatasetRow to be more clear.
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes("Datapoint not found")
-    ) {
-      return null;
-    }
-    throw error;
-  }
-  return await datapointToParsedDatasetRow(datapoint);
-}
-
-export async function staleDatapoint(
-  dataset_name: string,
-  datapoint_id: string,
-  function_type: "chat" | "json",
-): Promise<void> {
-  const dbClient = await getNativeDatabaseClient();
-  await dbClient.staleDatapoint({
-    dataset_name,
-    datapoint_id,
-    function_type,
-  });
 }
 
 export async function countDatapointsForDatasetFunction(

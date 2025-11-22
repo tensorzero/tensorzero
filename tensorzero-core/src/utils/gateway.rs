@@ -519,7 +519,7 @@ pub async fn start_openai_compatible_gateway(
         .fallback(endpoints::fallback::handle_404)
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
         .layer(axum::middleware::from_fn(
-            crate::observability::warn_early_drop::warn_on_early_connection_drop,
+            crate::observability::request_logging::request_logging_middleware,
         ))
         .with_state(gateway_handle.app_state.clone());
 

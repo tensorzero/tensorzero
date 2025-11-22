@@ -10,7 +10,6 @@ use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, JsonInferenceDatapointInsert,
 };
-use tensorzero_core::endpoints::datasets::DatapointKind;
 use tensorzero_core::inference::types::{
     Arguments, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, System, Text,
@@ -433,11 +432,7 @@ mod get_datapoints_tests {
 
         // Mark it as stale
         clickhouse
-            .stale_datapoint(&tensorzero::StaleDatapointParams {
-                dataset_name: dataset_name.clone(),
-                datapoint_id,
-                function_type: DatapointKind::Chat,
-            })
+            .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
             .await
             .unwrap();
 
@@ -1206,11 +1201,7 @@ mod list_datapoints_tests {
 
         // Mark it as stale
         clickhouse
-            .stale_datapoint(&tensorzero::StaleDatapointParams {
-                dataset_name: dataset_name.clone(),
-                datapoint_id,
-                function_type: DatapointKind::Chat,
-            })
+            .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
             .await
             .unwrap();
 

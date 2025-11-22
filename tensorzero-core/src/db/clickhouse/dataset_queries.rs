@@ -13,7 +13,6 @@ use crate::db::datasets::{
     DatapointInsert, DatasetDetailRow, DatasetMetadata, DatasetOutputSource, DatasetQueries,
     DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatapointsParams,
     GetDatasetMetadataParams, GetDatasetRowsParams, JsonInferenceDatapointInsert,
-    StaleDatapointParams,
 };
 use crate::endpoints::datasets::{validate_dataset_name, DatapointKind, StoredDatapoint};
 use crate::error::{Error, ErrorDetails};
@@ -314,80 +313,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             })
         })?;
         Ok(count)
-    }
-
-    async fn stale_datapoint(&self, params: &StaleDatapointParams) -> Result<(), Error> {
-        let StaleDatapointParams {
-            dataset_name,
-            datapoint_id,
-            function_type,
-        } = params;
-
-        let table = function_type.table_name();
-
-        let type_specific_fields = match params.function_type {
-            DatapointKind::Chat => {
-                r"tool_params,
-    dynamic_tools,
-    dynamic_provider_tools,
-    parallel_tool_calls,
-    tool_choice,
-    allowed_tools,
-            "
-            }
-            DatapointKind::Json => "output_schema,",
-        };
-
-        let query = format!(
-            r"
-            INSERT INTO {{table:Identifier}}
-            (
-                dataset_name,
-                function_name,
-                id,
-                episode_id,
-                input,
-                output,
-                {type_specific_fields}
-                tags,
-                auxiliary,
-                is_deleted,
-                updated_at,
-                staled_at,
-                source_inference_id,
-                is_custom,
-                name
-            )
-            SELECT
-                dataset_name,
-                function_name,
-                id,
-                episode_id,
-                input,
-                output,
-                {type_specific_fields}
-                tags,
-                auxiliary,
-                is_deleted,
-                now64() as updated_at,
-                now64() as staled_at,
-                source_inference_id,
-                is_custom,
-                name
-            FROM {{table:Identifier}} FINAL
-            WHERE dataset_name = {{dataset_name:String}} AND id = {{datapoint_id:String}}
-            "
-        );
-
-        let datapoint_id_str = datapoint_id.to_string();
-        let mut query_params = HashMap::new();
-        query_params.insert("table", table.as_str());
-        query_params.insert("dataset_name", dataset_name.as_str());
-        query_params.insert("datapoint_id", datapoint_id_str.as_str());
-
-        self.run_query_synchronous(query, &query_params).await?;
-
-        Ok(())
     }
 
     async fn count_datapoints_for_dataset_function(
@@ -711,33 +636,39 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         // NOTE: in the two queries below, we don't alias to staled_at because then we won't select any rows.
         let chat_query = format!(
             r"
+            WITH existing_chat_datapoints AS (
+                SELECT *
+                FROM ChatInferenceDatapoint FINAL
+                WHERE dataset_name = {{dataset_name:String}}
+                {datapoint_ids_filter_clause}
+                AND staled_at IS NULL
+            )
             INSERT INTO ChatInferenceDatapoint
-            SELECT
-                *
-                REPLACE (
-                    now64() AS updated_at,
-                    now64() AS staled_at
-                )
-            FROM ChatInferenceDatapoint FINAL
-            WHERE dataset_name = {{dataset_name:String}}
-            {datapoint_ids_filter_clause}
-            AND staled_at IS NULL
+            SELECT *
+            REPLACE (
+                now64() AS updated_at,
+                now64() AS staled_at
+            )
+            FROM existing_chat_datapoints;
             "
         );
 
         let json_query = format!(
             r"
+            WITH existing_json_datapoints AS (
+                SELECT *
+                FROM JsonInferenceDatapoint FINAL
+                WHERE dataset_name = {{dataset_name:String}}
+                {datapoint_ids_filter_clause}
+                AND staled_at IS NULL
+            )
             INSERT INTO JsonInferenceDatapoint
-            SELECT
-                *
-                REPLACE (
-                    now64() AS updated_at,
-                    now64() AS staled_at
-                )
-            FROM JsonInferenceDatapoint FINAL
-            WHERE dataset_name = {{dataset_name:String}}
-            {datapoint_ids_filter_clause}
-            AND staled_at IS NULL
+            SELECT *
+            REPLACE (
+                now64() AS updated_at,
+                now64() AS staled_at
+            )
+            FROM existing_json_datapoints;
             "
         );
         let query_params = HashMap::from([("dataset_name", dataset_name)]);
@@ -2050,96 +1981,6 @@ mod tests {
         let result = conn.count_datasets().await.unwrap();
 
         assert_eq!(result, 5, "Should return 5 datasets");
-    }
-
-    #[tokio::test]
-    async fn test_stale_datapoint_chat_executes_successfully() {
-        let mut mock_clickhouse_client = MockClickHouseClient::new();
-        mock_clickhouse_client
-            .expect_run_query_synchronous()
-            .withf(|query, parameters| {
-                assert_query_contains(query, "INSERT INTO {table:Identifier}");
-                assert_query_contains(query, "tool_params");
-                assert_query_does_not_contain(query, "output_schema");
-                assert_query_contains(query, "now64() as staled_at");
-                assert_query_contains(query, "now64() as updated_at");
-                assert_query_contains(query, "FROM {table:Identifier} FINAL");
-                assert_query_contains(
-                    query,
-                    "WHERE dataset_name = {dataset_name:String} AND id = {datapoint_id:String}",
-                );
-
-                assert_eq!(parameters.get("table"), Some(&"ChatInferenceDatapoint"));
-                assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
-                assert_eq!(
-                    parameters.get("datapoint_id"),
-                    Some(&"123e4567-e89b-12d3-a456-426614174000")
-                );
-
-                true
-            })
-            .returning(|_, _| {
-                Ok(ClickHouseResponse {
-                    response: String::new(),
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 0,
-                        written_rows: 1,
-                    },
-                })
-            });
-        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
-
-        let params = StaleDatapointParams {
-            dataset_name: "test_dataset".to_string(),
-            datapoint_id: Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap(),
-            function_type: DatapointKind::Chat,
-        };
-        conn.stale_datapoint(&params).await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn test_stale_datapoint_json_executes_successfully() {
-        let mut mock_clickhouse_client = MockClickHouseClient::new();
-        mock_clickhouse_client
-            .expect_run_query_synchronous()
-            .withf(|query, parameters| {
-                assert_query_contains(query, "INSERT INTO {table:Identifier}");
-                assert_query_contains(query, "output_schema");
-                assert_query_does_not_contain(query, "tool_params");
-                assert_query_contains(query, "now64() as staled_at");
-                assert_query_contains(query, "now64() as updated_at");
-                assert_query_contains(query, "FROM {table:Identifier} FINAL");
-                assert_query_contains(
-                    query,
-                    "WHERE dataset_name = {dataset_name:String} AND id = {datapoint_id:String}",
-                );
-
-                assert_eq!(parameters.get("table"), Some(&"JsonInferenceDatapoint"));
-                assert_eq!(parameters.get("dataset_name"), Some(&"my_dataset"));
-                assert_eq!(
-                    parameters.get("datapoint_id"),
-                    Some(&"223e4567-e89b-12d3-a456-426614174000")
-                );
-
-                true
-            })
-            .returning(|_, _| {
-                Ok(ClickHouseResponse {
-                    response: String::new(),
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 0,
-                        written_rows: 1,
-                    },
-                })
-            });
-        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
-
-        let params = StaleDatapointParams {
-            dataset_name: "my_dataset".to_string(),
-            datapoint_id: Uuid::parse_str("223e4567-e89b-12d3-a456-426614174000").unwrap(),
-            function_type: DatapointKind::Json,
-        };
-        conn.stale_datapoint(&params).await.unwrap();
     }
 
     #[tokio::test]
@@ -4088,7 +3929,6 @@ mod tests {
                 );
                 assert_query_contains(query, "WHERE dataset_name = {dataset_name:String}");
                 assert_query_contains(query, &format!("AND id IN ['{id1}','{id2}']"));
-                assert_query_contains(query, "AND staled_at IS NULL");
 
                 assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
 
@@ -4130,7 +3970,6 @@ mod tests {
                     "SELECT * REPLACE ( now64() AS updated_at, now64() AS staled_at )",
                 );
                 assert_query_contains(query, "WHERE dataset_name = {dataset_name:String}");
-                assert_query_contains(query, "AND staled_at IS NULL");
 
                 assert_query_does_not_contain(query, "AND id IN");
 

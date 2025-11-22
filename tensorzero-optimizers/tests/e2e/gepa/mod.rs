@@ -19,6 +19,8 @@ use tensorzero_core::stored_inference::{RenderedSample, StoredOutput};
 use tensorzero_optimizers::gepa::create_evaluation_dataset;
 use uuid::Uuid;
 
+pub mod analyze;
+
 /// Helper function to load the e2e test config
 async fn get_e2e_config() -> Arc<Config> {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));

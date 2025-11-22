@@ -1,6 +1,6 @@
 services:
   clickhouse:
-    image: clickhouse:24.12
+    image: clickhouse:lts
     environment:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1

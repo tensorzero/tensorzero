@@ -1,9 +1,8 @@
 import {
   CountSchema,
   modelInferenceInputMessageSchema,
-  type TableBounds,
-  type TableBoundsWithCount,
-  JsonValueSchema,
+  ZodJsonValueSchema,
+  type ZodTableBounds,
 } from "./common";
 import {
   contentBlockOutputSchema,
@@ -15,6 +14,7 @@ import type {
   FunctionConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
+  TableBoundsWithCount,
 } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
@@ -194,8 +194,7 @@ export async function queryInferenceTableBounds(params?: {
       // TODO: handle undefined values instead of nulls
       first_id: result.earliest_id || null,
       last_id: result.latest_id || null,
-      // Cast bigint to number for backward compatibility with existing UI code
-      count: Number(result.count),
+      count: result.count,
     };
   } catch (error) {
     logger.error("Failed to query inference table bounds:", error);
@@ -220,7 +219,7 @@ export async function queryInferenceTableByEpisodeId(params: {
 
 export async function queryInferenceTableBoundsByEpisodeId(params: {
   episode_id: string;
-}): Promise<TableBounds> {
+}): Promise<ZodTableBounds> {
   return queryInferenceTableBounds({
     episode_id: params.episode_id,
   });
@@ -243,7 +242,7 @@ export async function queryInferenceTableByFunctionName(params: {
 
 export async function queryInferenceTableBoundsByFunctionName(params: {
   function_name: string;
-}): Promise<TableBounds> {
+}): Promise<ZodTableBounds> {
   return queryInferenceTableBounds({
     function_name: params.function_name,
   });
@@ -274,7 +273,7 @@ export async function queryInferenceTableByVariantName(params: {
 export async function queryInferenceTableBoundsByVariantName(params: {
   function_name: string;
   variant_name: string;
-}): Promise<TableBounds> {
+}): Promise<ZodTableBounds> {
   return queryInferenceTableBounds({
     function_name: params.function_name,
     variant_name: params.variant_name,
@@ -359,7 +358,7 @@ async function parseInferenceRow(
       inference_params: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.inference_params)),
-      output_schema: JsonValueSchema.parse(JSON.parse(row.output_schema)),
+      output_schema: ZodJsonValueSchema.parse(JSON.parse(row.output_schema)),
       extra_body,
     };
   }
