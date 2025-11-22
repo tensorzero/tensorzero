@@ -44,10 +44,9 @@ interface DefaultOutputProps extends BaseOutputProps {
 interface EditableOutputProps extends BaseOutputProps {
   isEditing: boolean;
   onOutputChange: (
-    output:
+    output?:
       | ChatInferenceOutputRenderingData
-      | JsonInferenceOutputRenderingData
-      | null,
+      | JsonInferenceOutputRenderingData,
   ) => void;
 }
 
@@ -63,7 +62,7 @@ interface JsonInferenceOutputComponentProps {
   output: JsonInferenceOutputRenderingData;
   maxHeight?: number;
   isEditing?: boolean;
-  onOutputChange?: (output: JsonInferenceOutputRenderingData | null) => void;
+  onOutputChange?: (output?: JsonInferenceOutputRenderingData) => void;
 }
 
 function JsonInferenceOutputComponent({

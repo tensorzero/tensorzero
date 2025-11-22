@@ -19,7 +19,7 @@ import { logger } from "~/utils/logger";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import { useFetcher } from "react-router";
 import { DeleteButton } from "~/components/utils/DeleteButton";
-import { staleDatapoint } from "~/utils/clickhouse/datasets.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { useReadOnly } from "~/context/read-only";
 
@@ -67,7 +67,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (action === "delete_datapoint") {
-    const datapoint_id = formData.get("datapoint_id");
+    const datapoint_id = formData.get("datapoint_id") as string;
     const function_name = formData.get("function_name");
     const function_type = formData.get("function_type");
 
@@ -86,11 +86,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       throw data("Function configuration not found", { status: 404 });
     }
 
-    await staleDatapoint(
-      dataset_name,
-      datapoint_id as string,
-      functionConfig.type,
-    );
+    await getTensorZeroClient().deleteDatapoints(dataset_name, [datapoint_id]);
 
     // Check if this was the last datapoint in the dataset
     const counts = await getDatasetMetadata({});

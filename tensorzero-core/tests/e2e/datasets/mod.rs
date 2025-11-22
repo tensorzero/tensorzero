@@ -10,9 +10,8 @@ use tensorzero_core::{
     db::{
         clickhouse::test_helpers::{
             select_chat_dataset_clickhouse, select_json_dataset_clickhouse,
-            stale_datapoint_clickhouse,
         },
-        datasets::GetDatapointsParams,
+        datasets::{DatasetQueries, GetDatapointsParams},
     },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
     inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
@@ -868,7 +867,10 @@ async fn test_datapoint_insert_synthetic_json() {
     assert_eq!(datapoint.id, new_datapoint_id);
 
     // Let's stale the old datapoint and try again
-    stale_datapoint_clickhouse(&clickhouse, datapoint_id).await;
+    clickhouse
+        .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
+        .await
+        .unwrap();
 
     // Try a new insert with the same source_inference_id but a new datapoint id
     let new_datapoint_id = Uuid::now_v7();
