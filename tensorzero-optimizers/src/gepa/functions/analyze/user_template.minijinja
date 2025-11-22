@@ -1,0 +1,41 @@
+<function_context>
+<function_config>
+{{function_config | tojson(indent=2)}}
+</function_config>
+{% if static_tools is defined -%}
+<tool_schemas>
+{{static_tools | tojson(indent=2)}}
+</tool_schemas>
+{%- endif %}
+<evaluation_config>
+{{evaluation_config | tojson(indent=2)}}
+</evaluation_config>
+</function_context>
+
+<inference_context>
+<message_templates>
+{{templates_map | tojson(indent=2)}}
+</message_templates>
+<datapoint>
+{{datapoint | tojson(indent=2)}}
+</datapoint>
+</inference_context>
+
+<inference_output>
+{{output | tojson(indent=2)}}
+</inference_output>
+
+<evaluation_scores>
+{{evaluation_scores | tojson(indent=2)}}
+</evaluation_scores>
+
+<task>
+Analyze the inference_output given the function_context, inference_context, and evaluation_scores.
+
+Respond with ONE of the following XML formats based on your analysis:
+- `<report_error>` if the inference output contains errors that caused or contributed to failure
+- `<report_improvement>` if the inference output is suboptimal but not erroneous
+- `<report_optimal>` if the inference output demonstrates high quality
+
+Follow the exact XML format specified in your instructions for your chosen response type.
+</task>
