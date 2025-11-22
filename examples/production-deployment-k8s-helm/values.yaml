@@ -22,11 +22,11 @@ gateway:
     - --config-file=/app/config/tensorzero.toml
 
   # Optional service account name for the gateway deployment
-  serviceAccountName: ""
+  serviceAccountName: "" # @schema description: The service account name for the gateway deployment.
 
   image:
     repository: tensorzero/gateway
-    tag: "" # If empty, uses Chart.appVersion
+    tag: "" # @schema description: The tag of the gateway image. If empty, uses Chart.appVersion
     pullPolicy: IfNotPresent
 
   service:

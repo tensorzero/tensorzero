@@ -190,6 +190,18 @@ repos:
           - tiktoken
           - toml
 
+  - repo: https://github.com/losisin/helm-values-schema-json
+    rev: v2.3.0
+    hooks:
+      - id: helm-schema
+        name: helm values schema
+        args:
+          - "--values"
+          - "examples/production-deployment-k8s-helm/values.yaml"
+          - "--output"
+          - "examples/production-deployment-k8s-helm/values.schema.json"
+        files: ^examples/production-deployment-k8s-helm/values\.yaml$
+
   - repo: local
     hooks:
       - id: compile-check-notebooks
