@@ -99,7 +99,7 @@ impl<'a> Migration for Migration0043<'a> {
             CREATE TABLE IF NOT EXISTS ConfigSnapshot{on_cluster_name} (
                 config String,
                 extra_templates Map(String, String),
-                version_hash UInt256,
+                hash UInt256,
                 tensorzero_version String,
                 created_at DateTime64(6) DEFAULT now(),
                 last_used DateTime64(6) DEFAULT now()
@@ -110,21 +110,6 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(create_table_query)
-            .await?;
-
-        // Create hash conversion functions for round-tripping UInt256 hashes with hex strings
-        let query = format!(
-            r"CREATE FUNCTION IF NOT EXISTS tensorzero_hex_to_hash{on_cluster_name} AS (hex_string) -> reinterpretAsUInt256(reverse(unhex(hex_string)))",
-        );
-        self.clickhouse
-            .run_query_synchronous_no_params(query)
-            .await?;
-
-        let query = format!(
-            r"CREATE FUNCTION IF NOT EXISTS tensorzero_hash_to_hex{on_cluster_name} AS (hash) -> lower(hex(reverse(reinterpretAsFixedString(hash))))",
-        );
-        self.clickhouse
-            .run_query_synchronous_no_params(query)
             .await?;
 
         // Add snapshot_hash column to existing tables
