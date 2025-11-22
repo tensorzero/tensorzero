@@ -1,4 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct ConfigSnapshot {
@@ -6,9 +8,25 @@ pub struct ConfigSnapshot {
     pub extra_templates: HashMap<String, String>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SnapshotHashHex(Arc<str>);
+
+impl std::fmt::Display for SnapshotHashHex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[cfg(any(test, feature = "e2e_tests"))]
+impl SnapshotHashHex {
+    pub fn new_test() -> SnapshotHashHex {
+        SnapshotHashHex(Arc::from(blake3::hash(&[]).to_hex().to_string()))
+    }
+}
+
 impl ConfigSnapshot {
     /// Compute a blake3 hash of this config snapshot
-    pub fn hash(&self) -> blake3::Hash {
+    pub fn hash(&self) -> SnapshotHashHex {
         let mut hasher = blake3::Hasher::new();
         let ConfigSnapshot {
             config,
@@ -30,7 +48,8 @@ impl ConfigSnapshot {
             hasher.update(&[0]); // null byte separator
         }
 
-        hasher.finalize()
+        let hash = hasher.finalize();
+        SnapshotHashHex(Arc::from(hash.to_hex().to_string()))
     }
 }
 

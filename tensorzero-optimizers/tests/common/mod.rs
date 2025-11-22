@@ -13,7 +13,9 @@ use tensorzero::{
 };
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob},
+    config::{
+        provider_types::ProviderTypesConfig, snapshot::SnapshotHashHex, Config, ConfigFileGlob,
+    },
     db::{
         clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo},
         postgres::PostgresConnectionInfo,
@@ -113,7 +115,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     .await
     .unwrap();
     let config = load_info.dangerous_into_config_without_writing();
-    let snapshot_hash = blake3::hash(&[]);
+    let snapshot_hash = SnapshotHashHex::new_test();
     let job_handle = optimizer_info
         .launch(
             &client,

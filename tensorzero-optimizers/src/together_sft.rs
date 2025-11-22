@@ -12,7 +12,7 @@ use tokio::try_join;
 use url::Url;
 
 use tensorzero_core::{
-    config::{Config, TimeoutsConfig},
+    config::{snapshot::SnapshotHashHex, Config, TimeoutsConfig},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -29,10 +29,11 @@ use tensorzero_core::{
     },
     providers::{
         helpers::UrlParseErrExt,
-        openai::tensorzero_to_openai_assistant_message,
-        openai::{OpenAIMessagesConfig, OpenAIRequestMessage, OpenAITool},
-        together::prepare_together_messages,
-        together::{TogetherCredentials, PROVIDER_TYPE},
+        openai::{
+            tensorzero_to_openai_assistant_message, OpenAIMessagesConfig, OpenAIRequestMessage,
+            OpenAITool,
+        },
+        together::{prepare_together_messages, TogetherCredentials, PROVIDER_TYPE},
     },
     stored_inference::{LazyRenderedSample, RenderedSample},
 };
@@ -132,7 +133,7 @@ impl Optimizer for TogetherSFTConfig {
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: Arc<Config>,
-        _snapshot_hash: blake3::Hash,
+        _snapshot_hash: SnapshotHashHex,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()

@@ -25,7 +25,7 @@ use url::Url;
 use uuid::Uuid;
 
 use tensorzero_core::{
-    config::{Config, TimeoutsConfig},
+    config::{snapshot::SnapshotHashHex, Config, TimeoutsConfig},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
@@ -38,11 +38,13 @@ use tensorzero_core::{
         OptimizationJobInfo, OptimizerOutput,
     },
     providers::{
-        fireworks::prepare_fireworks_messages,
-        fireworks::{FireworksCredentials, FireworksTool, PROVIDER_TYPE},
+        fireworks::{
+            prepare_fireworks_messages, FireworksCredentials, FireworksTool, PROVIDER_TYPE,
+        },
         helpers::UrlParseErrExt,
-        openai::tensorzero_to_openai_assistant_message,
-        openai::{OpenAIMessagesConfig, OpenAIRequestMessage},
+        openai::{
+            tensorzero_to_openai_assistant_message, OpenAIMessagesConfig, OpenAIRequestMessage,
+        },
     },
     stored_inference::{LazyRenderedSample, RenderedSample},
 };
@@ -61,7 +63,7 @@ impl Optimizer for FireworksSFTConfig {
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
         _config: Arc<Config>,
-        _snapshot_hash: blake3::Hash,
+        _snapshot_hash: SnapshotHashHex,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()

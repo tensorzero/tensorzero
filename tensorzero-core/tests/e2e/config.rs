@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tensorzero_core::config::snapshot::ConfigSnapshot;
+use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHashHex};
 use tensorzero_core::config::{write_config_snapshot, Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
@@ -101,7 +101,7 @@ async fn test_from_components_basic() {
         .unwrap()
         .dangerous_into_config_without_writing(),
     );
-    let snapshot_hash = blake3::hash(&[]);
+    let snapshot_hash = SnapshotHashHex::new_test();
 
     // Create components
     let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -161,7 +161,7 @@ routing = ["test_provider::gpt-4"]
     };
 
     let hash = snapshot.hash();
-    let hash_hex = hash.to_hex().to_string();
+    let hash_hex = hash.to_string();
 
     // Write the config snapshot
     write_config_snapshot(&clickhouse, snapshot).await.unwrap();

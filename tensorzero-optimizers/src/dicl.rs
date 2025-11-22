@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{Config, UninitializedVariantConfig},
+    config::{snapshot::SnapshotHashHex, Config, UninitializedVariantConfig},
     db::{
         clickhouse::{
             clickhouse_client::ClickHouseClientType, ClickHouseConnectionInfo, ExternalDataInfo,
@@ -44,7 +44,7 @@ impl Optimizer for DiclOptimizationConfig {
         credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: Arc<Config>,
-        _snapshot_hash: blake3::Hash,
+        _snapshot_hash: SnapshotHashHex,
     ) -> Result<Self::Handle, Error> {
         // Validate training examples
         validate_train_examples(&train_examples)?;

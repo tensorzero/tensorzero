@@ -1,5 +1,6 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
+use crate::config::snapshot::SnapshotHashHex;
 use crate::config::ConfigWithHash;
 use crate::config::{unwritten_config::ConfigLoadInfo, ConfigFileGlob};
 use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
@@ -400,7 +401,7 @@ pub enum ClientBuilderMode {
         /// Pre-parsed TensorZero configuration
         config: Arc<Config>,
         /// The snapshot_hash of the config that was already parsed
-        snapshot_hash: blake3::Hash,
+        snapshot_hash: SnapshotHashHex,
         /// Already-initialized ClickHouse connection
         clickhouse_connection_info: ClickHouseConnectionInfo,
         /// Already-initialized Postgres connection
@@ -592,7 +593,7 @@ impl ClientBuilder {
                                 postgres_connection_info.clone(),
                                 http_client.clone(),
                                 self.drop_wrapper,
-                                *snapshot_hash,
+                                snapshot_hash.clone(),
                             )
                             .await
                             .map_err(|e| {
@@ -1068,7 +1069,7 @@ mod tests {
             .unwrap()
             .dangerous_into_config_without_writing(),
         );
-        let snapshot_hash = blake3::hash(&[]);
+        let snapshot_hash = SnapshotHashHex::new_test();
 
         // Create mock components
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -1121,7 +1122,7 @@ mod tests {
             .unwrap()
             .dangerous_into_config_without_writing(),
         );
-        let snapshot_hash = blake3::hash(&[]);
+        let snapshot_hash = SnapshotHashHex::new_test();
 
         // Create mock components
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();

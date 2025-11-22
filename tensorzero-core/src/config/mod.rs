@@ -19,7 +19,7 @@ use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
-use snapshot::prepare_table_for_snapshot;
+use snapshot::{prepare_table_for_snapshot, SnapshotHashHex};
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -1249,7 +1249,7 @@ pub mod unwritten_config {
 #[derive(Debug)]
 pub struct ConfigWithHash {
     pub config: Config,
-    pub hash: blake3::Hash,
+    pub hash: SnapshotHashHex,
 }
 
 /// Writes the config snapshot to the `ConfigSnapshot` table.
@@ -1264,12 +1264,12 @@ pub async fn write_config_snapshot(
     struct ConfigSnapshotRow<'a> {
         config: &'a str,
         extra_templates: &'a HashMap<String, String>,
-        version_hash_hex: String,
+        version_hash_hex: SnapshotHashHex,
         tensorzero_version: &'static str,
     }
 
     // Compute the hash and convert to hex
-    let version_hash_hex = snapshot.hash().to_hex().to_string();
+    let version_hash_hex = snapshot.hash();
 
     // Create the row
     let row = ConfigSnapshotRow {

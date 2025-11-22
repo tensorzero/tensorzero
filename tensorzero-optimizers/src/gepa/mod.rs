@@ -8,7 +8,7 @@ use std::{collections::HashMap, time::Duration};
 
 use tensorzero_core::{
     client::{ClientBuilder, ClientBuilderMode},
-    config::{Config, UninitializedVariantConfig},
+    config::{snapshot::SnapshotHashHex, Config, UninitializedVariantConfig},
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -40,7 +40,7 @@ impl Optimizer for GEPAConfig {
         _credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: std::sync::Arc<Config>,
-        snapshot_hash: blake3::Hash,
+        snapshot_hash: SnapshotHashHex,
     ) -> Result<Self::Handle, Error> {
         // Build the gateway client once for the entire optimization run
         let _gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
