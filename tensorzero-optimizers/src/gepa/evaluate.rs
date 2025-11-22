@@ -30,7 +30,7 @@ use evaluations::{
 pub type EvaluatorName = String;
 
 /// Unique identifier for a datapoint/example in a dataset
-pub type DatapointId = String;
+pub type DatapointId = Uuid;
 
 /// Scores for all evaluators on a single datapoint
 pub type DatapointScores = HashMap<EvaluatorName, Option<f32>>;
@@ -107,7 +107,7 @@ impl EvaluationResults {
         let mut score_map = HashMap::new();
 
         for info in &self.evaluation_infos {
-            let datapoint_id = info.datapoint.id().to_string();
+            let datapoint_id = info.datapoint.id();
             let mut datapoint_scores = HashMap::new();
 
             for (evaluator_name, result_opt) in &info.evaluations {

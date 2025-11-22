@@ -300,6 +300,45 @@ async fn test_gepa_evaluate_variant_chat() {
         );
     }
 
+    // Test per_datapoint_scores extraction
+    let per_datapoint_scores = evaluation_results.per_datapoint_scores();
+    assert_eq!(
+        per_datapoint_scores.len(),
+        3,
+        "Expected 3 datapoints in per_datapoint_scores, got {}",
+        per_datapoint_scores.len()
+    );
+
+    // Verify each datapoint has scores for all evaluators
+    for (datapoint_id, scores) in &per_datapoint_scores {
+        assert!(
+            scores.contains_key("happy_bool"),
+            "Datapoint {datapoint_id} missing happy_bool score"
+        );
+        assert!(
+            scores.contains_key("sad_bool"),
+            "Datapoint {datapoint_id} missing sad_bool score"
+        );
+        assert!(
+            scores.contains_key("zero"),
+            "Datapoint {datapoint_id} missing zero score"
+        );
+        assert!(
+            scores.contains_key("one"),
+            "Datapoint {datapoint_id} missing one score"
+        );
+
+        // Verify scores are valid (either None or finite)
+        for (evaluator_name, score_opt) in scores {
+            if let Some(score) = score_opt {
+                assert!(
+                    score.is_finite(),
+                    "Score for evaluator {evaluator_name} on datapoint {datapoint_id} is not finite: {score}"
+                );
+            }
+        }
+    }
+
     // Delete the dataset
     let delete_result = delete_dataset(&clickhouse, &dataset_name).await;
     assert!(
@@ -481,6 +520,45 @@ async fn test_gepa_evaluate_variant_json() {
             evaluator_name,
             stats.mean
         );
+    }
+
+    // Test per_datapoint_scores extraction
+    let per_datapoint_scores = evaluation_results.per_datapoint_scores();
+    assert_eq!(
+        per_datapoint_scores.len(),
+        2,
+        "Expected 2 datapoints in per_datapoint_scores, got {}",
+        per_datapoint_scores.len()
+    );
+
+    // Verify each datapoint has scores for all evaluators
+    for (datapoint_id, scores) in &per_datapoint_scores {
+        assert!(
+            scores.contains_key("happy_bool"),
+            "Datapoint {datapoint_id} missing happy_bool score"
+        );
+        assert!(
+            scores.contains_key("sad_bool"),
+            "Datapoint {datapoint_id} missing sad_bool score"
+        );
+        assert!(
+            scores.contains_key("zero"),
+            "Datapoint {datapoint_id} missing zero score"
+        );
+        assert!(
+            scores.contains_key("one"),
+            "Datapoint {datapoint_id} missing one score"
+        );
+
+        // Verify scores are valid (either None or finite)
+        for (evaluator_name, score_opt) in scores {
+            if let Some(score) = score_opt {
+                assert!(
+                    score.is_finite(),
+                    "Score for evaluator {evaluator_name} on datapoint {datapoint_id} is not finite: {score}"
+                );
+            }
+        }
     }
 
     // Delete the dataset
