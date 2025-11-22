@@ -16,9 +16,9 @@ import {
 } from "~/components/ui/tooltip";
 import { formatDate } from "~/utils/date";
 import { Button } from "~/components/ui/button";
-import { Trash } from "lucide-react";
+import { Pencil, Trash } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useFetcher } from "react-router";
-import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -28,13 +28,16 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
+import { Input } from "~/components/ui/input";
 
 function ApiKeyRow({
   apiKey,
   onDelete,
+  onEdit,
 }: {
   apiKey: KeyInfo;
   onDelete: (publicId: string) => void;
+  onEdit: (apiKey: KeyInfo) => void;
 }) {
   const isDisabled = apiKey.disabled_at !== undefined;
 
@@ -81,7 +84,17 @@ function ApiKeyRow({
         </span>
       </TableCell>
       <TableCell className="w-0">
-        <div className="text-right">
+        <div className="flex items-center justify-end gap-2">
+          <ReadOnlyGuard asChild>
+            <Button
+              onClick={() => onEdit(apiKey)}
+              variant="ghost"
+              size="icon"
+              className="opacity-60 transition-opacity hover:opacity-100"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </ReadOnlyGuard>
           <ReadOnlyGuard asChild>
             <Button
               onClick={() => !isDisabled && onDelete(apiKey.public_id)}
@@ -100,9 +113,14 @@ function ApiKeyRow({
 }
 
 export default function AuthTable({ apiKeys }: { apiKeys: KeyInfo[] }) {
-  const fetcher = useFetcher();
+  const deleteFetcher = useFetcher();
+  const updateFetcher = useFetcher();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [keyToDelete, setKeyToDelete] = useState<string | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [keyToEdit, setKeyToEdit] = useState<KeyInfo | null>(null);
+  const [editDescription, setEditDescription] = useState("");
+  const [shouldCloseAfterSubmit, setShouldCloseAfterSubmit] = useState(false);
 
   const handleDelete = (publicId: string) => {
     setKeyToDelete(publicId);
@@ -111,13 +129,51 @@ export default function AuthTable({ apiKeys }: { apiKeys: KeyInfo[] }) {
 
   const confirmDelete = () => {
     if (keyToDelete) {
-      fetcher.submit(
+      deleteFetcher.submit(
         { action: "delete", publicId: keyToDelete },
         { method: "post" },
       );
     }
     setDeleteDialogOpen(false);
     setKeyToDelete(null);
+  };
+
+  const handleEdit = (apiKey: KeyInfo) => {
+    setKeyToEdit(apiKey);
+    setEditDescription(apiKey.description ?? "");
+    setShouldCloseAfterSubmit(false);
+    setEditDialogOpen(true);
+  };
+
+  useEffect(() => {
+    if (
+      shouldCloseAfterSubmit &&
+      editDialogOpen &&
+      updateFetcher.state === "idle" &&
+      updateFetcher.data?.success
+    ) {
+      setEditDialogOpen(false);
+      setKeyToEdit(null);
+      setShouldCloseAfterSubmit(false);
+    } else if (
+      shouldCloseAfterSubmit &&
+      updateFetcher.state === "idle" &&
+      updateFetcher.data?.error
+    ) {
+      setShouldCloseAfterSubmit(false);
+    }
+  }, [
+    shouldCloseAfterSubmit,
+    editDialogOpen,
+    updateFetcher.state,
+    updateFetcher.data,
+  ]);
+
+  const handleEditDialogChange = (open: boolean) => {
+    setEditDialogOpen(open);
+    if (!open) {
+      setShouldCloseAfterSubmit(false);
+    }
   };
 
   return (
@@ -141,6 +197,7 @@ export default function AuthTable({ apiKeys }: { apiKeys: KeyInfo[] }) {
                   key={apiKey.public_id}
                   apiKey={apiKey}
                   onDelete={handleDelete}
+                  onEdit={handleEdit}
                 />
               ))
             )}
@@ -175,6 +232,57 @@ export default function AuthTable({ apiKeys }: { apiKeys: KeyInfo[] }) {
                 Disable
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={editDialogOpen} onOpenChange={handleEditDialogChange}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit API key description</DialogTitle>
+              <DialogDescription>
+                Update the description for API key{" "}
+                <span className="font-mono font-semibold">
+                  {keyToEdit?.public_id}
+                </span>
+                .
+              </DialogDescription>
+            </DialogHeader>
+            <updateFetcher.Form
+              method="post"
+              className="space-y-4"
+              onSubmit={() => setShouldCloseAfterSubmit(true)}
+            >
+              <input type="hidden" name="action" value="update" />
+              <input
+                type="hidden"
+                name="publicId"
+                value={keyToEdit?.public_id ?? ""}
+              />
+              <Input
+                name="description"
+                value={editDescription}
+                onChange={(event) => setEditDescription(event.target.value)}
+                placeholder="Optional description"
+                autoFocus
+              />
+              {updateFetcher.data?.error ? (
+                <p className="text-sm text-red-500">
+                  {updateFetcher.data.error}
+                </p>
+              ) : null}
+              <DialogFooter className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={updateFetcher.state !== "idle"}>
+                  Save
+                </Button>
+              </DialogFooter>
+            </updateFetcher.Form>
           </DialogContent>
         </Dialog>
       </div>
