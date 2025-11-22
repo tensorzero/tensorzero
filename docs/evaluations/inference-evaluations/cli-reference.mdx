@@ -71,6 +71,19 @@ See [Integrations](/integrations/model-providers) for more information.
 
 ### CLI Flags
 
+#### `--adaptive-stopping-precision EVALUATOR=PRECISION[,...]`
+
+- **Example:** `--adaptive-stopping-precision exact_match=0.13,llm_judge=0.16`
+- **Required:** no (default: none)
+
+This flag enables adaptive stopping for specified evaluators by setting per-evaluator precision thresholds.
+An evaluator stops when both sides of its 95% confidence interval are within the threshold of its mean value.
+
+You can specify multiple evaluators by separating them with commas.
+Each evaluator's precision threshold should be a positive number.
+
+If adaptive stopping is enabled for all evaluators, then the evaluation will stop once all evaluators have met their targets or all datapoints have been evaluated.
+
 #### `--config-file PATH`
 
 - **Example:** `--config-file /path/to/tensorzero.toml`
@@ -79,20 +92,38 @@ See [Integrations](/integrations/model-providers) for more information.
 This flag specifies the path to the TensorZero configuration file.
 You should use the same configuration file for your entire project.
 
-#### `--concurrency N`
+#### `--concurrency N` (`-c`)
 
 - **Example:** `--concurrency 5`
 - **Required:** no (default: `1`)
 
 This flag specifies the maximum number of concurrent TensorZero inference requests during evaluation.
 
+#### `--datapoint-ids ID[,ID,...]`
+
+- **Example:** `--datapoint-ids 01957bbb-44a8-7490-bfe7-32f8ed2fc797,01957bbb-44a8-7490-bfe7-32f8ed2fc798`
+- **Required:** Either `--dataset-name` or `--datapoint-ids` must be provided (but not both)
+
+This flag allows you to specify individual datapoint IDs to evaluate.
+Multiple IDs should be separated by commas.
+
+Use this flag when you want to evaluate a specific subset of datapoints rather than an entire dataset.
+
+<Note>
+This flag is mutually exclusive with `--dataset-name` and `--max-datapoints`. You must provide either `--dataset-name` or `--datapoint-ids`, but not both.
+</Note>
+
 #### `--dataset-name NAME` (`-d`)
 
 - **Example:** `--dataset-name my_dataset`
-- **Required:** yes
+- **Required:** Either `--dataset-name` or `--datapoint-ids` must be provided (but not both)
 
 This flag specifies the dataset to use for evaluation.
 The dataset should be stored in your ClickHouse database.
+
+<Note>
+This flag is mutually exclusive with `--datapoint-ids`. You must provide either `--dataset-name` or `--datapoint-ids`, but not both.
+</Note>
 
 #### `--evaluation-name NAME` (`-e`)
 
@@ -131,7 +162,21 @@ See [Integrations](/integrations/model-providers) for more information.
 This flag specifies the behavior of the inference cache.
 See [Inference Caching](/gateway/guides/inference-caching/) for more information.
 
+#### `--max-datapoints N`
+
+- **Example:** `--max-datapoints 100`
+- **Required:** no
+
+This flag specifies the maximum number of datapoints to evaluate from the dataset.
+
+<Note>
+This flag can only be used with `--dataset-name`. It cannot be used with `--datapoint-ids`.
+</Note>
+
 #### `--variant-name NAME` (`-v`)
+
+- **Example:** `--variant-name gpt_4o`
+- **Required:** yes
 
 This flag specifies the variant to evaluate.
 The variant name should be present in your TensorZero configuration file.
