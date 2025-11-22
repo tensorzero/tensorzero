@@ -636,31 +636,39 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         // NOTE: in the two queries below, we don't alias to staled_at because then we won't select any rows.
         let chat_query = format!(
             r"
+            WITH existing_chat_datapoints AS (
+                SELECT *
+                FROM ChatInferenceDatapoint FINAL
+                WHERE dataset_name = {{dataset_name:String}}
+                {datapoint_ids_filter_clause}
+                AND staled_at IS NULL
+            )
             INSERT INTO ChatInferenceDatapoint
-            SELECT
-                *
-                REPLACE (
-                    now64() AS updated_at,
-                    now64() AS staled_at
-                )
-            FROM ChatInferenceDatapoint FINAL
-            WHERE dataset_name = {{dataset_name:String}}
-            {datapoint_ids_filter_clause}
+            SELECT *
+            REPLACE (
+                now64() AS updated_at,
+                now64() AS staled_at
+            )
+            FROM existing_chat_datapoints;
             "
         );
 
         let json_query = format!(
             r"
+            WITH existing_json_datapoints AS (
+                SELECT *
+                FROM JsonInferenceDatapoint FINAL
+                WHERE dataset_name = {{dataset_name:String}}
+                {datapoint_ids_filter_clause}
+                AND staled_at IS NULL
+            )
             INSERT INTO JsonInferenceDatapoint
-            SELECT
-                *
-                REPLACE (
-                    now64() AS updated_at,
-                    now64() AS staled_at
-                )
-            FROM JsonInferenceDatapoint FINAL
-            WHERE dataset_name = {{dataset_name:String}}
-            {datapoint_ids_filter_clause}
+            SELECT *
+            REPLACE (
+                now64() AS updated_at,
+                now64() AS staled_at
+            )
+            FROM existing_json_datapoints;
             "
         );
         let query_params = HashMap::from([("dataset_name", dataset_name)]);
