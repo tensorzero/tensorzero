@@ -4,7 +4,6 @@
 //! and defines authentication and version header middlewares.
 
 use axum::{
-    body::Body,
     extract::{DefaultBodyLimit, MatchedPath, Request, State},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -19,11 +18,8 @@ use tensorzero_core::{
     error::{Error, ErrorDetails},
     observability::TracerWrapper,
 };
-use tower_http::{
-    metrics::{in_flight_requests::InFlightRequestsCounter, InFlightRequestsLayer},
-    trace::{DefaultOnFailure, TraceLayer},
-};
-use tracing::{Instrument, Level};
+use tower_http::metrics::{in_flight_requests::InFlightRequestsCounter, InFlightRequestsLayer};
+use tracing::Instrument;
 
 use crate::routes::build_api_routes;
 
@@ -60,30 +56,8 @@ pub fn build_axum_router(
         .layer(axum::middleware::from_fn(add_version_header))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .layer(axum::middleware::from_fn(
-            tensorzero_core::observability::warn_early_drop::warn_on_early_connection_drop,
+            tensorzero_core::observability::request_logging::request_logging_middleware,
         ))
-        // We want tracing/status to run for all requests, regardless of whether or not authentication succeeds
-        // Note - this is intentionally *not* used by our OTEL exporter (it creates a span without any `http.` or `otel.` fields)
-        // This is only used to output request/response information to our logs
-        // OTEL exporting is done by the `OtelAxumLayer` above, which is only enabled for certain routes (and includes much more information)
-        // We log failed requests messages at 'DEBUG', since we already have our own error-logging code,
-        .layer(
-            TraceLayer::new_for_http()
-                .on_failure(DefaultOnFailure::new().level(Level::DEBUG))
-                .make_span_with(|request: &Request<Body>| {
-                    // This is a copy of `DefaultMakeSpan` from `tower-http`.
-                    // We invoke the `tracing` macro ourselves, so that the `target` is `gateway`,
-                    // which will cause the span to get emitted even when `debug = false` in the gateway config.
-                    // This ensures that warnings will have proper HTTP request information attached when logged to the console
-                    // Entering and exiting the span itself does not produce any new console logs
-                    tracing::info_span!(
-                        "request",
-                        method = %request.method(),
-                        uri = %request.uri(),
-                        version = ?request.version(),
-                    )
-                }),
-        )
         // This should always be the very last layer in the stack, so that we start counting as soon as we begin processing a request
         .layer(in_flight_requests_layer)
         .with_state(app_state.clone());
