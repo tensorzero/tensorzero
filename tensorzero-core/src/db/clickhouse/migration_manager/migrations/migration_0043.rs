@@ -104,7 +104,7 @@ impl<'a> Migration for Migration0043<'a> {
                 created_at DateTime64(6) DEFAULT now(),
                 last_used DateTime64(6) DEFAULT now()
             ) ENGINE = ReplacingMergeTree(last_used)
-            ORDER BY version_hash
+            ORDER BY hash
             SETTINGS index_granularity = 256
         "
         );
