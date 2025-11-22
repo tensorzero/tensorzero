@@ -44,7 +44,7 @@ You can decompose your templates into smaller, reusable snippets.
 This makes it easier to maintain and reuse code across multiple templates.
 
 Templates can reference other templates using the MiniJinja directives `{% include %}` and `{% import %}`.
-To use these directives, you need to enable template file system access with `gateway.template_filesystem_access` in your configuration file.
+To use these directives, set `gateway.template_filesystem_access.base_path` in your configuration file.
 
 By default, file system access is disabled for security reasons, since template imports are evaluated dynamically and could potentially access sensitive files.
 You should ensure that only trusted templates are allowed access to the file system.
@@ -52,17 +52,9 @@ You should ensure that only trusted templates are allowed access to the file sys
 ```toml
 [gateway]
 # ...
-template_filesystem_access.enabled = true
+template_filesystem_access.base_path = "."
 # ...
 ```
 
-If you split your configuration into multiple files, you must additionally specify the base path for the template imports.
-Template imports will then be resolved relative to this base path.
-If `base_path` itself is relative, it'll be relative to the configuration file in which it's defined.
-
-```toml
-[gateway]
-# ...
-template_filesystem_access = { enabled = true, base_path = "." }
-# ...
-```
+Template imports are resolved relative to `base_path`.
+If `base_path` itself is relative, it's relative to the configuration file in which it's defined.
