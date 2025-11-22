@@ -60,27 +60,6 @@ impl<'a> Migration for Migration0043<'a> {
             return Ok(true);
         }
 
-        // Check if hash conversion functions exist
-        let query =
-            "SELECT 1 FROM system.functions WHERE name = 'tensorzero_hex_to_hash'".to_string();
-        let result = self
-            .clickhouse
-            .run_query_synchronous_no_params(query)
-            .await?;
-        if !result.response.contains("1") {
-            return Ok(true);
-        }
-
-        let query =
-            "SELECT 1 FROM system.functions WHERE name = 'tensorzero_hash_to_hex'".to_string();
-        let result = self
-            .clickhouse
-            .run_query_synchronous_no_params(query)
-            .await?;
-        if !result.response.contains("1") {
-            return Ok(true);
-        }
-
         // Check if any of the tables is missing the snapshot_hash column
         for table in SNAPSHOT_TRACKED_TABLES {
             if !check_column_exists(self.clickhouse, table, "snapshot_hash", MIGRATION_ID).await? {
@@ -452,13 +431,6 @@ impl<'a> Migration for Migration0043<'a> {
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let mut instructions = format!("DROP TABLE ConfigSnapshot{on_cluster_name};\n");
-
-        // NOTE: We do *not* drop the tensorzero_hex_to_hash and tensorzero_hash_to_hex functions here,
-        // as ClickHouse user-defined functions are globally scoped.
-        // Dropping the functions can break other migrations running concurrently in our test suite.
-        // If you need to drop them manually:
-        // DROP FUNCTION IF EXISTS tensorzero_hex_to_hash;
-        // DROP FUNCTION IF EXISTS tensorzero_hash_to_hex;
 
         for table in SNAPSHOT_TRACKED_TABLES {
             instructions.push_str(&format!("ALTER TABLE {table} DROP COLUMN snapshot_hash;\n"));
