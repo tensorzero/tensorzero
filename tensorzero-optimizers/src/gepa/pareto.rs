@@ -59,7 +59,7 @@ pub struct Candidate {
 #[derive(Debug)]
 pub struct ParetoFrontier {
     /// Pareto-optimal variants (non-dominated after GEPA's 3-step filtering)
-    pub variants: HashMap<VariantName, UninitializedChatCompletionConfig>,
+    variants: HashMap<VariantName, UninitializedChatCompletionConfig>,
 
     /// Instance-wise membership frequencies for weighted sampling
     ///
@@ -591,9 +591,19 @@ impl ParetoFrontier {
         &self.frequencies
     }
 
+    /// Access variants for read-only callers (e.g., diagnostics)
+    pub fn variants(&self) -> &HashMap<VariantName, UninitializedChatCompletionConfig> {
+        &self.variants
+    }
+
     #[cfg(test)]
     pub fn frequencies_mut(&mut self) -> &mut HashMap<VariantName, usize> {
         &mut self.frequencies
+    }
+
+    #[cfg(test)]
+    pub fn variants_mut(&mut self) -> &mut HashMap<VariantName, UninitializedChatCompletionConfig> {
+        &mut self.variants
     }
 }
 
@@ -1585,9 +1595,9 @@ mod tests {
             .expect("pareto frontier update should succeed");
 
         // Only variant_a should remain
-        assert_eq!(frontier.variants.len(), 1);
-        assert!(frontier.variants.contains_key("variant_a"));
-        assert!(!frontier.variants.contains_key("variant_b"));
+        assert_eq!(frontier.variants().len(), 1);
+        assert!(frontier.variants().contains_key("variant_a"));
+        assert!(!frontier.variants().contains_key("variant_b"));
 
         // variant_a should be in Pareto set for both datapoints
         assert_eq!(frontier.frequencies().get("variant_a"), Some(&2));
@@ -1623,9 +1633,9 @@ mod tests {
         assert!(result.is_ok());
 
         // Both should remain
-        assert_eq!(frontier.variants.len(), 2);
-        assert!(frontier.variants.contains_key("variant_a"));
-        assert!(frontier.variants.contains_key("variant_b"));
+        assert_eq!(frontier.variants().len(), 2);
+        assert!(frontier.variants().contains_key("variant_a"));
+        assert!(frontier.variants().contains_key("variant_b"));
 
         // Each variant is Pareto-optimal on one datapoint
         assert_eq!(frontier.frequencies().get("variant_a"), Some(&1));
@@ -1706,9 +1716,9 @@ mod tests {
         assert!(result.is_ok());
 
         // C should be filtered out, A and B should remain
-        assert!(!frontier.variants.contains_key("variant_c"));
-        assert!(frontier.variants.contains_key("variant_a"));
-        assert!(frontier.variants.contains_key("variant_b"));
+        assert!(!frontier.variants().contains_key("variant_c"));
+        assert!(frontier.variants().contains_key("variant_a"));
+        assert!(frontier.variants().contains_key("variant_b"));
     }
 
     #[test]
@@ -1747,8 +1757,8 @@ mod tests {
         assert!(result.is_ok());
 
         // Only variant_a should remain
-        assert_eq!(frontier.variants.len(), 1);
-        assert!(frontier.variants.contains_key("variant_a"));
+        assert_eq!(frontier.variants().len(), 1);
+        assert!(frontier.variants().contains_key("variant_a"));
     }
 
     #[test]
@@ -1781,9 +1791,9 @@ mod tests {
         assert!(result.is_ok());
 
         // Both should remain (incomparable due to None values)
-        assert_eq!(frontier.variants.len(), 2);
-        assert!(frontier.variants.contains_key("variant_a"));
-        assert!(frontier.variants.contains_key("variant_b"));
+        assert_eq!(frontier.variants().len(), 2);
+        assert!(frontier.variants().contains_key("variant_a"));
+        assert!(frontier.variants().contains_key("variant_b"));
     }
 
     #[test]
@@ -1866,10 +1876,10 @@ mod tests {
         assert!(result.is_ok());
 
         // All should remain (no one dominates)
-        assert_eq!(frontier.variants.len(), 3);
-        assert!(frontier.variants.contains_key("variant_a"));
-        assert!(frontier.variants.contains_key("variant_b"));
-        assert!(frontier.variants.contains_key("variant_c"));
+        assert_eq!(frontier.variants().len(), 3);
+        assert!(frontier.variants().contains_key("variant_a"));
+        assert!(frontier.variants().contains_key("variant_b"));
+        assert!(frontier.variants().contains_key("variant_c"));
     }
 
     #[test]
