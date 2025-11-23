@@ -26,7 +26,7 @@ use uuid::Uuid;
 /// Variants with more than 30% missing evaluations will trigger a warning.
 /// This threshold helps identify variants that may be unreliable due to
 /// systematic evaluation failures.
-const HIGH_MISSING_RATE_THRESHOLD: f32 = 0.3;
+const HIGH_MISSING_RATE_THRESHOLD: f32 = 0.1;
 
 // Type aliases for cleaner score map signatures (TODO(#4669): move to evaluation module)
 pub type EvaluatorName = String;
@@ -214,33 +214,7 @@ impl ParetoFrontier {
         // Step 1: Build instance-wise Pareto sets P*[i] for each datapoint
         // Original paper: P*[i] = {variants with max score on instance i} (single evaluator)
         // Our extension: P*[i] = {Pareto non-dominated variants on instance i} (multiple evaluators)
-        let mut instance_pareto_sets: HashMap<DatapointId, HashSet<VariantName>> = HashMap::new();
-
-        for datapoint_id in &self.datapoint_ids {
-            // Collect scores for this datapoint across all variants
-            let mut instance_scores: Vec<(VariantName, HashMap<EvaluatorName, Option<f32>>)> =
-                Vec::new();
-
-            for (variant_name, variant_scores) in &all_scores {
-                // Only consider variants that are in the combined candidates
-                if !all_candidates.contains_key(variant_name) {
-                    continue;
-                }
-                if let Some(scores) = variant_scores.get(datapoint_id) {
-                    instance_scores.push((variant_name.clone(), scores.clone()));
-                }
-            }
-
-            if instance_scores.is_empty() {
-                instance_pareto_sets.insert(*datapoint_id, HashSet::new());
-                continue;
-            }
-
-            // Find non-dominated variants for this instance
-            let non_dominated =
-                find_non_dominated_variants(&instance_scores, &self.optimize_directions);
-            instance_pareto_sets.insert(*datapoint_id, non_dominated.into_iter().collect());
-        }
+        let instance_pareto_sets = self.build_instance_pareto_sets(&all_scores, &all_candidates);
 
         // Step 2: Build candidate set C (union of all instance-wise Pareto sets)
         let candidate_set: HashSet<VariantName> = instance_pareto_sets
@@ -261,30 +235,11 @@ impl ParetoFrontier {
 
         // Early exit if no candidates or only one
         if candidate_set.len() <= 1 {
-            let frequencies = calculate_frequencies(&candidate_set, &instance_pareto_sets);
-
-            let filtered_candidates: HashMap<VariantName, UninitializedChatCompletionConfig> =
-                all_candidates
-                    .into_iter()
-                    .filter(|(name, _)| candidate_set.contains(name))
-                    .collect();
-
-            // Prune val_scores to only contain variants in filtered_candidates
-            let filtered_val_scores: VariantScoresMap = all_scores
-                .into_iter()
-                .filter(|(name, _)| filtered_candidates.contains_key(name))
-                .collect();
-
-            // Update self
-            self.variants = filtered_candidates;
-            self.frequencies = frequencies;
-            self.val_scores = filtered_val_scores;
-            self.objective_vector_cache
-                .retain(|name, _| self.variants.contains_key(name));
-
-            tracing::info!(
-                "Early exit: {} candidate(s) after instance-wise filtering",
-                self.variants.len()
+            self.apply_early_exit_update(
+                candidate_set,
+                &instance_pareto_sets,
+                all_candidates,
+                all_scores,
             );
             return Ok(());
         }
@@ -638,6 +593,97 @@ impl ParetoFrontier {
         }
 
         Ok(new_variant_scores)
+    }
+
+    /// Build instance-wise Pareto sets for each datapoint
+    ///
+    /// For each datapoint, finds the non-dominated variants when considering only
+    /// that single instance. This is Step 1 of GEPA's 3-step algorithm.
+    ///
+    /// # Arguments
+    /// * `all_scores` - Scores for all variants (existing + new)
+    /// * `all_candidates` - Variant configs for all variants (existing + new)
+    ///
+    /// # Returns
+    /// Map from datapoint ID to set of variant names that are Pareto-optimal on that datapoint
+    fn build_instance_pareto_sets(
+        &self,
+        all_scores: &VariantScoresMap,
+        all_candidates: &HashMap<VariantName, UninitializedChatCompletionConfig>,
+    ) -> HashMap<DatapointId, HashSet<VariantName>> {
+        let mut instance_pareto_sets: HashMap<DatapointId, HashSet<VariantName>> = HashMap::new();
+
+        for datapoint_id in &self.datapoint_ids {
+            // Collect scores for this datapoint across all variants
+            let mut instance_scores: Vec<(VariantName, HashMap<EvaluatorName, Option<f32>>)> =
+                Vec::new();
+
+            for (variant_name, variant_scores) in all_scores {
+                // Only consider variants that are in the combined candidates
+                if !all_candidates.contains_key(variant_name) {
+                    continue;
+                }
+                if let Some(scores) = variant_scores.get(datapoint_id) {
+                    instance_scores.push((variant_name.clone(), scores.clone()));
+                }
+            }
+
+            if instance_scores.is_empty() {
+                instance_pareto_sets.insert(*datapoint_id, HashSet::new());
+                continue;
+            }
+
+            // Find non-dominated variants for this instance
+            let non_dominated =
+                find_non_dominated_variants(&instance_scores, &self.optimize_directions);
+            instance_pareto_sets.insert(*datapoint_id, non_dominated.into_iter().collect());
+        }
+
+        instance_pareto_sets
+    }
+
+    /// Apply early exit update when candidate set has ≤1 variants
+    ///
+    /// When the candidate set (union of instance-wise Pareto sets) has 0 or 1 variants,
+    /// we can skip expensive global dominance checking and directly update the frontier.
+    ///
+    /// # Arguments
+    /// * `candidate_set` - Set of variant names in the candidate set
+    /// * `instance_pareto_sets` - Instance-wise Pareto sets for frequency calculation
+    /// * `all_candidates` - All variant configs (consumed)
+    /// * `all_scores` - All variant scores (consumed)
+    fn apply_early_exit_update(
+        &mut self,
+        candidate_set: HashSet<VariantName>,
+        instance_pareto_sets: &HashMap<DatapointId, HashSet<VariantName>>,
+        all_candidates: HashMap<VariantName, UninitializedChatCompletionConfig>,
+        all_scores: VariantScoresMap,
+    ) {
+        let frequencies = calculate_frequencies(&candidate_set, instance_pareto_sets);
+
+        let filtered_candidates: HashMap<VariantName, UninitializedChatCompletionConfig> =
+            all_candidates
+                .into_iter()
+                .filter(|(name, _)| candidate_set.contains(name))
+                .collect();
+
+        // Prune val_scores to only contain variants in filtered_candidates
+        let filtered_val_scores: VariantScoresMap = all_scores
+            .into_iter()
+            .filter(|(name, _)| filtered_candidates.contains_key(name))
+            .collect();
+
+        // Update self
+        self.variants = filtered_candidates;
+        self.frequencies = frequencies;
+        self.val_scores = filtered_val_scores;
+        self.objective_vector_cache
+            .retain(|name, _| self.variants.contains_key(name));
+
+        tracing::info!(
+            "Early exit: {} candidate(s) after instance-wise filtering",
+            self.variants.len()
+        );
     }
 
     #[cfg(test)]
