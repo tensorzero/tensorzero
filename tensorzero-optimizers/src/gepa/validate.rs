@@ -29,7 +29,7 @@ pub struct FunctionContext {
 }
 
 /// Validates the GEPA configuration and checks that required resources exist
-/// Returns the FunctionConfig and associated static tools for the function being optimized
+/// Returns the FunctionContext containing the function config, associated static tools, and evaluation config for the function being optimized
 pub fn validate_gepa_config(
     config: &GEPAConfig,
     tensorzero_config: &Config,
