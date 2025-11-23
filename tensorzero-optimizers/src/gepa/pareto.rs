@@ -442,7 +442,8 @@ impl ParetoFrontier {
     /// Sample a single variant using frequency weights and return it as a one-item map
     ///
     /// Frequencies must be non-empty and contain at least one non-zero count. Unknown
-    /// variant names (not present in `self.variants`) are ignored.
+    /// variant names (not present in `self.variants`) are ignored. Uses the frontier's
+    /// internally maintained RNG (seedable via `new`) to allow deterministic sampling in tests.
     pub fn sample_by_frequency(
         &self,
     ) -> Result<HashMap<VariantName, UninitializedChatCompletionConfig>, Error> {
@@ -543,9 +544,11 @@ impl ParetoFrontier {
     /// Extract and validate new scores from candidates
     ///
     /// Performs score extraction, normalization, and validation:
-    /// 1. Normalizes datapoint coverage to match frontier layout
-    /// 2. Drops unknown metrics with warning
-    /// 3. Validates that scores are non-empty and contain valid data
+    /// 1. Normalizes datapoint coverage to match the frontier layout: drops scores for unknown
+    ///    datapoints and inserts empty maps for missing datapoints so they can be imputed later.
+    /// 2. Drops unknown evaluator metrics with a warning so mis-specified candidates cannot
+    ///    pollute the frontier.
+    /// 3. Validates that at least one datapoint is present and at least one concrete score exists.
     ///
     /// # Returns
     /// * `Ok(VariantScoresMap)` - Validated and normalized scores
@@ -893,7 +896,7 @@ fn calculate_frequencies(
 /// * `variant_a_name` - Name of the first variant to compare
 /// * `variant_b_name` - Name of the second variant to compare
 /// * `val_scores_map` - Map of variant names to their per-datapoint scores
-/// * `optimize_directions` - Map of metric names to their optimization directions
+/// * `optimize_directions` - Map of evaluator names to their optimization directions
 ///
 /// # Returns
 /// * `bool` - True if variant A globally dominates variant B
@@ -969,7 +972,7 @@ fn global_dominates(
 /// # Arguments
 /// * `a_scores` - Scores for variant A on this datapoint, mapped by evaluator name
 /// * `b_scores` - Scores for variant B on this datapoint, mapped by evaluator name
-/// * `optimize_directions` - Map of metric names to their optimization directions
+/// * `optimize_directions` - Map of evaluator names to their optimization directions
 ///
 /// # Returns
 /// * `bool` - True if variant A instance-dominates variant B on this datapoint
@@ -1006,7 +1009,7 @@ fn instance_dominates(
 ///
 /// # Arguments
 /// * `instance_scores` - Vector of (variant_name, scores) tuples where scores map evaluator names to optional values
-/// * `optimize_directions` - Map of metric names to their optimization directions
+/// * `optimize_directions` - Map of evaluator names to their optimization directions
 ///
 /// # Returns
 /// Vector of variant names that are not dominated by any other variant on this instance
