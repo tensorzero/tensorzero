@@ -324,7 +324,7 @@ async fn test_gepa_chat() {
         clickhouse_connection_info: clickhouse.clone(),
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         http_client: http_client.clone(),
-        timeout: Some(Duration::from_secs(60)),
+        timeout: Some(Duration::from_secs(gepa_config.timeout)),
     })
     .build()
     .await
