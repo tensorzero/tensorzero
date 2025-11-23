@@ -2371,7 +2371,8 @@ mod tests {
                     is_custom,
                     source_inference_id,
                     updated_at,
-                    staled_at
+                    staled_at,
+                    snapshot_hash
                 )"
                 );
                 assert_query_contains(query,
@@ -2395,7 +2396,8 @@ mod tests {
                     new_data.is_custom,
                     new_data.source_inference_id,
                     now64() as updated_at,
-                    new_data.staled_at
+                    new_data.staled_at,
+                    new_data.snapshot_hash
                 FROM new_data"
                 );
 
@@ -2404,7 +2406,7 @@ mod tests {
                 assert_eq!(external_data.format, "JSONEachRow");
                 assert!(external_data
                     .structure
-                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, dynamic_tools Array(String), dynamic_provider_tools Array(String), allowed_tools Nullable(String), tool_choice Nullable(String), parallel_tool_calls Nullable(bool), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)"));
+                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, dynamic_tools Array(String), dynamic_provider_tools Array(String), allowed_tools Nullable(String), tool_choice Nullable(String), parallel_tool_calls Nullable(bool), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), snapshot_hash Nullable(UInt256)"));
                 assert!(!external_data.structure.contains("updated_at"));
 
                 // Parse the data - should contain 3 datapoints separated by newlines
@@ -2551,7 +2553,8 @@ mod tests {
                         staled_at,
                         source_inference_id,
                         is_custom,
-                        name
+                        name,
+                        snapshot_hash
                     )",
                 );
                 assert_query_contains(
@@ -2571,7 +2574,8 @@ mod tests {
                         new_data.staled_at,
                         new_data.source_inference_id,
                         new_data.is_custom,
-                        new_data.name
+                        new_data.name,
+                        new_data.snapshot_hash
                     FROM new_data",
                 );
 
@@ -2580,7 +2584,7 @@ mod tests {
                 assert_eq!(external_data.format, "JSONEachRow");
                 assert!(external_data
                     .structure
-                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), name Nullable(String)"));
+                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), name Nullable(String), snapshot_hash Nullable(UInt256)"));
 
                 // Parse the data - should contain 2 datapoints separated by newlines
                 let lines: Vec<&str> = external_data.data.lines().collect();
