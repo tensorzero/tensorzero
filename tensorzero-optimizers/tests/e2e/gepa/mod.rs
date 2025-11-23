@@ -619,7 +619,7 @@ async fn test_gepa_evaluate_variant_json() {
         "analyze_inferences should work with JSON functions"
     );
     let analyses = analysis_result.unwrap();
-    assert_eq!(analyses.len(), 2, "Should return 2 analysis");
+    assert_eq!(analyses.len(), 2, "Should return 2 analyses");
 
     // Verify each analysis has content and expected XML tags
     for analysis in &analyses {
