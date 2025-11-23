@@ -18,10 +18,14 @@ use tensorzero_core::inference::types::{
     ResolvedRequestMessage, Role, StoredInput, StoredInputMessage, StoredInputMessageContent,
     System, Template, Text,
 };
+use tensorzero_core::optimization::gepa::GEPAConfig;
 use tensorzero_core::stored_inference::{RenderedSample, StoredOutput};
+
+use tensorzero_core::utils::retries::RetryConfig;
 use tensorzero_core::variant::VariantConfig;
 use tensorzero_optimizers::gepa::{
-    create_evaluation_dataset, evaluate_variant, EvaluateVariantParams,
+    analyze_inferences, create_evaluation_dataset, evaluate_variant, EvaluateVariantParams,
+    FunctionContext,
 };
 use uuid::Uuid;
 
@@ -364,9 +368,54 @@ async fn test_gepa_evaluate_variant_chat() {
 
 #[tokio::test]
 async fn test_gepa_evaluate_variant_json() {
+    let gepa_config = GEPAConfig {
+        function_name: "json_success".to_string(),
+        evaluation_name: "json_evaluation".to_string(),
+        initial_variants: None,
+        variant_prefix: None,
+        batch_size: 5,
+        max_iterations: 1,
+        max_concurrency: 5,
+        analysis_model: "openai::gpt-4.1-nano".to_string(),
+        mutation_model: "openai::gpt-4.1-nano".to_string(),
+        seed: None,
+        timeout: 300,
+        include_inference_for_mutation: false,
+        retries: RetryConfig::default(),
+        max_tokens: Some(16_384),
+    };
+
     let clickhouse = get_clickhouse().await;
     let http_client = TensorzeroHttpClient::new_testing().unwrap();
     let config = get_e2e_config().await;
+
+    // Get the json_evaluation config
+    let evaluation_config = config
+        .evaluations
+        .get(&gepa_config.evaluation_name)
+        .expect("json_evaluation should exist in config");
+
+    // Get the variant from the loaded config
+    let variant_name = "openai";
+    let function_config = config
+        .functions
+        .get(&gepa_config.function_name)
+        .expect("json_success function should exist in config");
+    let variant_info = function_config
+        .variants()
+        .get(variant_name)
+        .expect("openai variant should exist in json_success function");
+    let internal_dynamic_variant_name = "test_variant";
+    let internal_dynamic_variant_config = match &variant_info.inner {
+        VariantConfig::ChatCompletion(chat_config) => chat_config.as_uninitialized(),
+        _ => panic!("Expected ChatCompletion variant"),
+    };
+
+    let function_context = FunctionContext {
+        function_config: Arc::clone(function_config),
+        static_tools: None,
+        evaluation_config: Arc::clone(evaluation_config),
+    };
 
     // Generate unique dataset name to ensure test isolation
     let dataset_name = format!("test_eval_dataset_json_{}", Uuid::now_v7());
@@ -430,44 +479,23 @@ async fn test_gepa_evaluate_variant_json() {
         clickhouse_connection_info: clickhouse.clone(),
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         http_client: http_client.clone(),
-        timeout: Some(Duration::from_secs(60)),
+        timeout: Some(Duration::from_secs(gepa_config.timeout)),
     })
     .build()
     .await
     .expect("Failed to build gateway client");
 
-    // Get the json_evaluation config
-    let evaluation_config = config
-        .evaluations
-        .get("json_evaluation")
-        .expect("json_evaluation should exist in config")
-        .clone();
-
-    // Get the variant from the loaded config
-    let function = config
-        .functions
-        .get("json_success")
-        .expect("json_success function should exist in config");
-    let variant = function
-        .variants()
-        .get("openai")
-        .expect("openai variant should exist in json_success function");
-    let variant_config = match &variant.inner {
-        VariantConfig::ChatCompletion(chat_config) => chat_config.as_uninitialized(),
-        _ => panic!("Expected ChatCompletion variant"),
-    };
-
     // Call evaluate_variant
     let evaluation_params = EvaluateVariantParams {
-        gateway_client,
+        gateway_client: gateway_client.clone(),
         clickhouse_connection_info: clickhouse.clone(),
         tensorzero_config: config.clone(),
-        evaluation_config,
-        evaluation_name: "json_evaluation".to_string(),
-        variant_name: "test_variant".to_string(),
-        variant_config,
+        evaluation_config: Arc::clone(&function_context.evaluation_config),
+        evaluation_name: gepa_config.evaluation_name.clone(),
+        variant_name: internal_dynamic_variant_name.to_string(),
+        variant_config: internal_dynamic_variant_config.clone(),
         dataset_name: dataset_name.clone(),
-        concurrency: 2,
+        concurrency: gepa_config.max_concurrency as usize,
     };
 
     let evaluation_result = evaluate_variant(evaluation_params).await;
@@ -560,6 +588,15 @@ async fn test_gepa_evaluate_variant_json() {
             }
         }
     }
+
+    let _analyses = analyze_inferences(
+        &gateway_client,
+        &evaluation_results.evaluation_infos,
+        &function_context,
+        &internal_dynamic_variant_config,
+        &gepa_config,
+    )
+    .await;
 
     // Delete the dataset
     let delete_result = delete_dataset(&clickhouse, &dataset_name).await;

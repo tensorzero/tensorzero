@@ -55,16 +55,13 @@ pub struct Analysis {
     pub analysis: String,
 }
 
-/// Function and evaluation configuration context.
-///
-/// Groups function configuration, tools, and evaluation settings for analysis.
-pub struct FunctionContext<'a> {
-    /// Configuration of the function being optimized
-    pub function_config: &'a FunctionConfig,
-    /// Static tool configurations available to the function
-    pub static_tools: &'a Option<HashMap<String, Arc<StaticToolConfig>>>,
-    /// Evaluation configuration for scoring
-    pub evaluation_config: &'a EvaluationConfig,
+/// Function configuration with associated static tools for GEPA optimization
+#[derive(Clone, Debug, Serialize)]
+pub struct FunctionContext {
+    pub function_config: Arc<FunctionConfig>,
+    /// Static tools from Config.tools that are referenced by the function
+    pub static_tools: Option<HashMap<String, Arc<StaticToolConfig>>>,
+    pub evaluation_config: Arc<EvaluationConfig>,
 }
 
 /// Creates variant configuration for the analyze function.
@@ -191,7 +188,7 @@ pub fn build_analyze_input(
 async fn analyze_inference(
     semaphore: Arc<Semaphore>,
     gateway_client: &Client,
-    function_context: &FunctionContext<'_>,
+    function_context: &FunctionContext,
     variant_config: &UninitializedChatCompletionConfig,
     gepa_config: &GEPAConfig,
     eval_info: &EvaluationInfo,
@@ -306,7 +303,7 @@ async fn analyze_inference(
 pub async fn analyze_inferences(
     gateway_client: &Client,
     evaluation_infos: &[EvaluationInfo],
-    function_context: &FunctionContext<'_>,
+    function_context: &FunctionContext,
     variant_config: &UninitializedChatCompletionConfig,
     gepa_config: &GEPAConfig,
 ) -> Result<Vec<Analysis>, Error> {
@@ -682,9 +679,9 @@ mod tests {
         let eval_config = create_test_evaluation_config();
 
         let function_context = FunctionContext {
-            function_config: &function_config,
-            static_tools: &static_tools,
-            evaluation_config: &eval_config,
+            function_config: Arc::new(function_config),
+            static_tools: static_tools.clone(),
+            evaluation_config: Arc::new(eval_config),
         };
 
         let result = build_analyze_input(&eval_info, &function_context, &variant_config);
@@ -741,10 +738,11 @@ mod tests {
 
         // Test with schemas
         let function_config_with_schemas = create_test_function_config_with_schemas();
+        let eval_config_schemas = create_test_evaluation_config();
         let function_context_with_schemas = FunctionContext {
-            function_config: &function_config_with_schemas,
-            static_tools: &static_tools,
-            evaluation_config: &eval_config,
+            function_config: Arc::new(function_config_with_schemas),
+            static_tools,
+            evaluation_config: Arc::new(eval_config_schemas),
         };
         let result_with_schemas =
             build_analyze_input(&eval_info, &function_context_with_schemas, &variant_config);
@@ -778,9 +776,9 @@ mod tests {
         let eval_config = create_test_evaluation_config();
 
         let function_context = FunctionContext {
-            function_config: &function_config,
-            static_tools: &static_tools,
-            evaluation_config: &eval_config,
+            function_config: Arc::new(function_config),
+            static_tools,
+            evaluation_config: Arc::new(eval_config),
         };
 
         let result = build_analyze_input(&eval_info, &function_context, &variant_config);
@@ -848,9 +846,9 @@ mod tests {
         let eval_config = create_test_evaluation_config();
 
         let function_context = FunctionContext {
-            function_config: &function_config,
-            static_tools: &static_tools,
-            evaluation_config: &eval_config,
+            function_config: Arc::new(function_config),
+            static_tools,
+            evaluation_config: Arc::new(eval_config),
         };
 
         let result = build_analyze_input(&eval_info, &function_context, &variant_config);
@@ -908,9 +906,9 @@ mod tests {
         let eval_config = create_test_evaluation_config();
 
         let function_context = FunctionContext {
-            function_config: &function_config,
-            static_tools: &Some(static_tools),
-            evaluation_config: &eval_config,
+            function_config: Arc::new(function_config),
+            static_tools: Some(static_tools),
+            evaluation_config: Arc::new(eval_config),
         };
 
         let result = build_analyze_input(&eval_info, &function_context, &variant_config);
