@@ -618,9 +618,9 @@ async fn test_analyze_inferences_with_eval_infos(
     let gepa_config = create_test_gepa_config();
 
     let function_context = FunctionContext {
-        function_config: &function_config,
-        static_tools: &static_tools,
-        evaluation_config: &eval_config,
+        function_config: Arc::new(function_config),
+        static_tools,
+        evaluation_config: Arc::new(eval_config),
     };
 
     let result = analyze_inferences(
@@ -703,9 +703,9 @@ async fn test_analyze_inferences_with_concurrency(num_inferences: usize, max_con
     gepa_config.max_concurrency = max_concurrency;
 
     let function_context = FunctionContext {
-        function_config: &function_config,
-        static_tools: &static_tools,
-        evaluation_config: &eval_config,
+        function_config: Arc::new(function_config),
+        static_tools,
+        evaluation_config: Arc::new(eval_config),
     };
 
     let result = analyze_inferences(
@@ -757,9 +757,9 @@ async fn test_analyze_inferences_invalid_model() {
     gepa_config.analysis_model = "invalid_provider::nonexistent_model".to_string();
 
     let function_context = FunctionContext {
-        function_config: &function_config,
-        static_tools: &static_tools,
-        evaluation_config: &eval_config,
+        function_config: Arc::new(function_config),
+        static_tools,
+        evaluation_config: Arc::new(eval_config),
     };
 
     // Execute: Should fail when all analyses fail
@@ -804,9 +804,9 @@ async fn test_analyze_inferences_with_schemas() {
     let gepa_config = create_test_gepa_config();
 
     let function_context = FunctionContext {
-        function_config: &function_config,
-        static_tools: &static_tools,
-        evaluation_config: &eval_config,
+        function_config: Arc::new(function_config),
+        static_tools,
+        evaluation_config: Arc::new(eval_config),
     };
 
     // Execute: Should handle schemas correctly
@@ -914,9 +914,9 @@ async fn test_analyze_inferences_json_function() {
 
     let eval_config = create_test_evaluation_config();
     let function_context = FunctionContext {
-        function_config: &function_config,
-        static_tools: &static_tools,
-        evaluation_config: &eval_config,
+        function_config: Arc::new(function_config),
+        static_tools,
+        evaluation_config: Arc::new(eval_config),
     };
 
     // Execute: Should handle JSON functions correctly
@@ -984,9 +984,9 @@ async fn test_analyze_inferences_response_structure() {
     gepa_config.include_inference_for_mutation = true; // Enable to verify inference structure
 
     let function_context = FunctionContext {
-        function_config: &function_config,
-        static_tools: &static_tools,
-        evaluation_config: &eval_config,
+        function_config: Arc::new(function_config),
+        static_tools,
+        evaluation_config: Arc::new(eval_config),
     };
 
     // Execute
@@ -1047,9 +1047,9 @@ async fn test_analyze_input_echo_helper(
     let gepa_config = create_test_gepa_config_echo();
 
     let function_context = FunctionContext {
-        function_config: &function_config,
-        static_tools: &static_tools,
-        evaluation_config: &eval_config,
+        function_config: Arc::new(function_config),
+        static_tools,
+        evaluation_config: Arc::new(eval_config),
     };
 
     let result = analyze_inferences(
