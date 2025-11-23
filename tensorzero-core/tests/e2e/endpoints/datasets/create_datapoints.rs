@@ -125,6 +125,21 @@ async fn test_create_chat_datapoint_basic() {
                 .to_string(),
         })]),
     );
+
+    // Assert ChatInferenceDatapoint has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM ChatInferenceDatapoint WHERE id = '{}' FORMAT JSONEachRow",
+        result.ids[0]
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let datapoint_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !datapoint_row["snapshot_hash"].is_null(),
+        "ChatInferenceDatapoint should have snapshot_hash"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -210,6 +225,21 @@ async fn test_create_json_datapoint_basic() {
             raw: Some(r#"{"sentiment":"positive","confidence":0.95}"#.to_string()),
             parsed: Some(json!({"sentiment": "positive", "confidence": 0.95})),
         })
+    );
+
+    // Assert JsonInferenceDatapoint has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM JsonInferenceDatapoint WHERE id = '{}' FORMAT JSONEachRow",
+        result.ids[0]
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let datapoint_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !datapoint_row["snapshot_hash"].is_null(),
+        "JsonInferenceDatapoint should have snapshot_hash"
     );
 }
 

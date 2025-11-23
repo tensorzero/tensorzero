@@ -747,7 +747,8 @@ impl ClickHouseConnectionInfo {
             is_custom,
             source_inference_id,
             updated_at,
-            staled_at
+            staled_at,
+            snapshot_hash
         )
         SELECT
             new_data.dataset_name,
@@ -769,13 +770,14 @@ impl ClickHouseConnectionInfo {
             new_data.is_custom,
             new_data.source_inference_id,
             now64() as updated_at,
-            new_data.staled_at
+            new_data.staled_at,
+            new_data.snapshot_hash
         FROM new_data
         ";
 
         let external_data = ExternalDataInfo {
             external_data_name: "new_data".to_string(),
-            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, dynamic_tools Array(String), dynamic_provider_tools Array(String), allowed_tools Nullable(String), tool_choice Nullable(String), parallel_tool_calls Nullable(bool), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)".to_string(),
+            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, dynamic_tools Array(String), dynamic_provider_tools Array(String), allowed_tools Nullable(String), tool_choice Nullable(String), parallel_tool_calls Nullable(bool), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), snapshot_hash Nullable(UInt256)".to_string(),
             format: "JSONEachRow".to_string(),
             data: serialized_datapoints.join("\n"),
         };
@@ -818,7 +820,8 @@ impl ClickHouseConnectionInfo {
             staled_at,
             source_inference_id,
             is_custom,
-            name
+            name,
+            snapshot_hash
         )
         SELECT
             new_data.dataset_name,
@@ -835,13 +838,14 @@ impl ClickHouseConnectionInfo {
             new_data.staled_at,
             new_data.source_inference_id,
             new_data.is_custom,
-            new_data.name
+            new_data.name,
+            new_data.snapshot_hash
         FROM new_data
         ";
 
         let external_data = ExternalDataInfo {
             external_data_name: "new_data".to_string(),
-            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), name Nullable(String)".to_string(),
+            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String), name Nullable(String), snapshot_hash Nullable(UInt256)".to_string(),
             format: "JSONEachRow".to_string(),
             data: serialized_datapoints.join("\n"),
         };

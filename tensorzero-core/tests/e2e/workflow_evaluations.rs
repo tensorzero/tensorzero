@@ -45,6 +45,36 @@ async fn test_workflow_evaluation() {
         run_row.run_display_name,
         Some("test_display_name".to_string())
     );
+    // Assert DynamicEvaluationRun has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM DynamicEvaluationRun WHERE run_id_uint = toUInt128(toUUID('{}')) FORMAT JSONEachRow",
+        run_id
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let run_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !run_result["snapshot_hash"].is_null(),
+        "DynamicEvaluationRun should have snapshot_hash"
+    );
+
+    // Assert DynamicEvaluationRunByProjectName materialized view has snapshot_hash
+    let query = format!(
+        "SELECT snapshot_hash FROM DynamicEvaluationRunByProjectName WHERE run_id_uint = toUInt128(toUUID('{}')) FORMAT JSONEachRow",
+        run_id
+    );
+    let response = clickhouse
+        .run_query_synchronous_no_params(query)
+        .await
+        .unwrap();
+    let view_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+    assert!(
+        !view_result["snapshot_hash"].is_null(),
+        "DynamicEvaluationRunByProjectName should have snapshot_hash"
+    );
+
     for i in 0..2 {
         // Get the episode_id from the workflow_evaluation_run_episode endpoint
         let episode_id = client
@@ -183,6 +213,21 @@ async fn test_workflow_evaluation() {
                 "Tag {k:?} missing or incorrect"
             );
         }
+        // Assert DynamicEvaluationRunEpisode has snapshot_hash
+        let query = format!(
+            "SELECT snapshot_hash FROM DynamicEvaluationRunEpisode WHERE run_id = '{}' AND episode_id_uint = toUInt128(toUUID('{}')) FORMAT JSONEachRow",
+            run_id, episode_id
+        );
+        let response = clickhouse
+            .run_query_synchronous_no_params(query)
+            .await
+            .unwrap();
+        let episode_result: serde_json::Value = serde_json::from_str(&response.response).unwrap();
+        assert!(
+            !episode_result["snapshot_hash"].is_null(),
+            "DynamicEvaluationRunEpisode should have snapshot_hash"
+        );
+
         // Send feedback for the dynamic evaluation run episode
         let feedback_params = FeedbackParams {
             episode_id: Some(episode_id),
