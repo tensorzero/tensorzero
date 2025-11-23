@@ -401,7 +401,7 @@ async fn test_gepa_evaluate_variant_chat() {
         "analyze_inferences should work with CHAT functions"
     );
     let analyses = analysis_result.unwrap();
-    assert_eq!(analyses.len(), 3, "Should return 2 analysis");
+    assert_eq!(analyses.len(), 3, "Should return 3 analyses");
 
     // Verify each analysis has content and expected XML tags
     for analysis in &analyses {
