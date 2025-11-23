@@ -176,64 +176,19 @@ impl ParetoFrontier {
         // Step 1: Check for name collisions
         self.validate_no_name_collisions(&new_candidates)?;
 
-        // Split candidates into configs and scores
-        let mut new_variants: HashMap<VariantName, UninitializedChatCompletionConfig> =
-            HashMap::with_capacity(new_candidates.len());
-        let mut new_variant_scores: VariantScoresMap = HashMap::with_capacity(new_candidates.len());
-        let expected_datapoints: HashSet<DatapointId> =
-            self.datapoint_ids.iter().copied().collect();
+        // Step 2: Extract variant configurations
+        let new_variants: HashMap<VariantName, UninitializedChatCompletionConfig> = new_candidates
+            .iter()
+            .map(|(name, candidate)| (name.clone(), candidate.variant.clone()))
+            .collect();
 
-        let mut dropped_metrics: HashSet<String> = HashSet::new();
+        // Step 3: Extract and validate scores (performs normalization and validation)
+        let new_variant_scores = self.extract_and_validate_new_scores(new_candidates)?;
 
-        for (name, candidate) in new_candidates {
-            new_variants.insert(name.clone(), candidate.variant);
-            let mut scores = candidate.scores;
-
-            // Normalize datapoint coverage:
-            // - Drop scores for datapoints outside the frontier layout
-            // - Insert empty score maps for missing expected datapoints so imputation applies consistently
-            scores.retain(|dp, _| expected_datapoints.contains(dp));
-            for dp in &self.datapoint_ids {
-                let per_eval = scores.entry(*dp).or_insert_with(HashMap::new);
-                // Retain only known evaluator metrics; drop unknowns
-                per_eval.retain(|metric, _| {
-                    let keep = self.optimize_directions.contains_key(metric);
-                    if !keep {
-                        dropped_metrics.insert(metric.clone());
-                    }
-                    keep
-                });
-            }
-
-            new_variant_scores.insert(name, scores);
-        }
-
-        // Step 2: Merge new variants with existing frontier variants
+        // Step 4: Merge new variants with existing frontier variants
         let mut all_candidates: HashMap<VariantName, UninitializedChatCompletionConfig> =
             self.variants.clone();
         all_candidates.extend(new_variants);
-
-        // Check if we have any valid scores (before merging to avoid unnecessary clone)
-        if new_variant_scores.is_empty() {
-            tracing::warn!("No validation scores provided for any variant");
-            return Err(Error::new(ErrorDetails::InternalError {
-                message: "No validation scores provided for any variant".to_string(),
-            }));
-        }
-
-        if !dropped_metrics.is_empty() {
-            let mut dropped_list: Vec<_> = dropped_metrics.iter().collect();
-            dropped_list.sort();
-            tracing::warn!(
-                "Dropped {} evaluator(s) not in frontier's evaluator set: {}",
-                dropped_list.len(),
-                dropped_list
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
 
         tracing::debug!(
             "Combined candidates: {} total ({} existing + {} new)",
@@ -242,32 +197,9 @@ impl ParetoFrontier {
             new_variant_scores.len()
         );
 
-        // Step 3: Merge new scores with existing scores (consuming new_variant_scores)
+        // Step 5: Merge new scores with existing scores
         let mut all_scores: VariantScoresMap = self.val_scores.clone();
         all_scores.extend(new_variant_scores);
-
-        // Check if there are any datapoints - if yes, ensure at least one valid score exists
-        let has_any_datapoint = all_scores
-            .values()
-            .any(|per_datapoint| !per_datapoint.is_empty());
-
-        if has_any_datapoint {
-            // We have datapoints, check if all scores are None (all evaluations failed)
-            let has_any_score = all_scores
-                .values()
-                .flat_map(|per_datapoint| per_datapoint.values())
-                .flat_map(|scores| scores.values())
-                .any(|score| score.is_some());
-
-            if !has_any_score {
-                tracing::warn!(
-                    "All evaluation scores are None - no variant produced any valid scores"
-                );
-                return Err(Error::new(ErrorDetails::InternalError {
-                    message: "All variants failed to produce valid scores".to_string(),
-                }));
-            }
-        }
 
         // Create sorted metric directions for deterministic objective vector ordering
         let mut sorted_directions: Vec<(&String, &MetricConfigOptimize)> =
@@ -606,6 +538,103 @@ impl ParetoFrontier {
                     New variants cannot have the same names as existing frontier variants."
             ),
         }))
+    }
+
+    /// Extract and validate new scores from candidates
+    ///
+    /// Performs score extraction, normalization, and validation:
+    /// 1. Normalizes datapoint coverage to match frontier layout
+    /// 2. Drops unknown metrics with warning
+    /// 3. Validates that scores are non-empty and contain valid data
+    ///
+    /// # Returns
+    /// * `Ok(VariantScoresMap)` - Validated and normalized scores
+    /// * `Err` - If candidates are empty, have no datapoints, or all scores are None
+    fn extract_and_validate_new_scores(
+        &self,
+        candidates: HashMap<VariantName, Candidate>,
+    ) -> Result<VariantScoresMap, Error> {
+        // Check if we have any new variants
+        if candidates.is_empty() {
+            tracing::warn!("No validation scores provided for any variant");
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "No validation scores provided for any variant".to_string(),
+            }));
+        }
+
+        // Extract and normalize scores
+        let mut new_variant_scores: VariantScoresMap = HashMap::with_capacity(candidates.len());
+        let expected_datapoints: HashSet<DatapointId> =
+            self.datapoint_ids.iter().copied().collect();
+        let mut dropped_metrics: HashSet<String> = HashSet::new();
+
+        for (name, candidate) in candidates {
+            let mut scores = candidate.scores;
+
+            // Normalize datapoint coverage:
+            // - Drop scores for datapoints outside the frontier layout
+            // - Insert empty score maps for missing expected datapoints
+            scores.retain(|dp, _| expected_datapoints.contains(dp));
+            for dp in &self.datapoint_ids {
+                let per_eval = scores.entry(*dp).or_insert_with(HashMap::new);
+                // Retain only known evaluator metrics; drop unknowns
+                per_eval.retain(|metric, _| {
+                    let keep = self.optimize_directions.contains_key(metric);
+                    if !keep {
+                        dropped_metrics.insert(metric.clone());
+                    }
+                    keep
+                });
+            }
+
+            new_variant_scores.insert(name, scores);
+        }
+
+        // Log warning for dropped metrics
+        if !dropped_metrics.is_empty() {
+            let mut dropped_list: Vec<_> = dropped_metrics.iter().collect();
+            dropped_list.sort();
+            tracing::warn!(
+                "Dropped {} evaluator(s) not in frontier's evaluator set: {}",
+                dropped_list.len(),
+                dropped_list
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
+
+        // Validation 1: Check if all new variants have empty datapoint maps
+        let has_any_datapoint = new_variant_scores
+            .values()
+            .any(|per_datapoint| !per_datapoint.is_empty());
+
+        if !has_any_datapoint {
+            tracing::warn!("All new variants have empty datapoint maps");
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "All new variants have empty datapoint maps - no evaluations provided"
+                    .to_string(),
+            }));
+        }
+
+        // Validation 2: Check if all new scores are None (all new evaluations failed)
+        let has_any_score = new_variant_scores
+            .values()
+            .flat_map(|per_datapoint| per_datapoint.values())
+            .flat_map(|scores| scores.values())
+            .any(|score| score.is_some());
+
+        if !has_any_score {
+            tracing::warn!(
+                "All evaluation scores are None - no new variant produced any valid scores"
+            );
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "All new variants failed to produce valid scores".to_string(),
+            }));
+        }
+
+        Ok(new_variant_scores)
     }
 
     #[cfg(test)]
@@ -2196,14 +2225,14 @@ mod tests {
         let error = result.unwrap_err();
         assert!(error
             .to_string()
-            .contains("All variants failed to produce valid scores"));
+            .contains("All new variants failed to produce valid scores"));
     }
 
     #[test]
     fn test_empty_datapoints() {
         let config = create_evaluation_config(&[("accuracy", "max")]);
 
-        // Empty per_datapoint HashMap
+        // Empty per_datapoint HashMap - all variants have no evaluation data
         let variant_scores = HashMap::from([
             ("variant_a".to_string(), HashMap::new()),
             ("variant_b".to_string(), HashMap::new()),
@@ -2214,13 +2243,11 @@ mod tests {
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
         let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
         let result = frontier.update(candidates);
-        assert!(result.is_ok());
 
-        // With no datapoints, no instance-wise Pareto sets can be formed
-        // so candidate_set is empty and all variants are filtered out
-        assert_eq!(frontier.variants.len(), 0);
-        // No variants remain, so frequencies should be empty
-        assert!(frontier.frequencies().is_empty());
+        // Should return error when all variants have empty datapoint maps
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.to_string().contains("empty datapoint maps"));
     }
 
     #[test]
