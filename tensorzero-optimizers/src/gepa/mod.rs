@@ -48,7 +48,7 @@ impl Optimizer for GEPAConfig {
         // Validate configuration and examples, get the FunctionContext (function_config, static_tools, and evaluation_config)
         let function_context = validate_gepa_config(self, &config)?;
 
-        // Require validation examples for GEPA pareto filtering
+        // Require validation examples for GEPA Pareto filtering
         // TODO[#4772]: Random split from train_examples if None
         let val_examples = val_examples.ok_or_else(|| {
             Error::new(ErrorDetails::Config {
