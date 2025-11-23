@@ -27,6 +27,7 @@ const SNAPSHOT_TRACKED_TABLES: &[&str] = &[
     "FeedbackTag",
     "FloatMetricFeedback",
     "FloatMetricFeedbackByTargetId",
+    "FloatMetricFeedbackByVariant",
     "InferenceByEpisodeId",
     "InferenceById",
     "InferenceTag",
