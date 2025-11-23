@@ -1,6 +1,5 @@
 export * from "./AWSBedrockProvider";
 export * from "./AWSSagemakerProvider";
-export * from "./AdjacentDatapointIds";
 export * from "./AllowedTools";
 export * from "./AllowedToolsChoice";
 export * from "./AnthropicDefaults";
@@ -123,7 +122,6 @@ export * from "./GEPAConfig";
 export * from "./GEPAJobHandle";
 export * from "./GatewayAuthCacheConfig";
 export * from "./GatewayConfig";
-export * from "./GetAdjacentDatapointIdsParams";
 export * from "./GetCumulativeFeedbackTimeseriesParams";
 export * from "./GetDatapointParams";
 export * from "./GetDatapointsRequest";

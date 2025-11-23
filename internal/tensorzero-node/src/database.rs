@@ -1,8 +1,8 @@
 use serde::Deserialize;
 use tensorzero::{
     setup_clickhouse_without_config, ClickHouseConnection, CountDatapointsForDatasetFunctionParams,
-    DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams,
-    GetDatasetMetadataParams, GetDatasetRowsParams, TimeWindow,
+    DatasetQueryParams, GetDatapointParams, GetDatasetMetadataParams, GetDatasetRowsParams,
+    TimeWindow,
 };
 use uuid::Uuid;
 
@@ -163,16 +163,6 @@ impl DatabaseClient {
             count_feedback_by_target_id,
             params,
             CountFeedbackByTargetIdParams { target_id }
-        )
-    }
-
-    #[napi]
-    pub async fn get_adjacent_datapoint_ids(&self, params: String) -> Result<String, napi::Error> {
-        napi_call!(
-            &self,
-            get_adjacent_datapoint_ids,
-            params,
-            GetAdjacentDatapointIdsParams
         )
     }
 
