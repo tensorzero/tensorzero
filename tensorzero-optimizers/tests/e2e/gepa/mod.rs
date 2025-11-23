@@ -25,7 +25,7 @@ use tensorzero_core::utils::retries::RetryConfig;
 use tensorzero_core::variant::VariantConfig;
 use tensorzero_optimizers::gepa::{
     analyze_inferences, create_evaluation_dataset, evaluate_variant, EvaluateVariantParams,
-    FunctionContext,
+    EvaluationResults, FunctionContext,
 };
 use uuid::Uuid;
 
@@ -155,6 +155,66 @@ fn contains_expected_xml_tag(analysis: &str) -> bool {
     analysis.contains("<report_error>")
         || analysis.contains("<report_improvement>")
         || analysis.contains("<report_optimal>")
+}
+
+/// Helper function to verify evaluation results have expected structure and valid scores
+fn assert_evaluation_results_valid(evaluation_results: &EvaluationResults, expected_count: usize) {
+    let expected_evaluators = ["happy_bool", "sad_bool", "zero", "one"];
+
+    // Verify we have stats for all 4 evaluators
+    for evaluator_name in &expected_evaluators {
+        assert!(
+            evaluation_results
+                .evaluation_stats
+                .contains_key(*evaluator_name),
+            "Expected {evaluator_name} evaluator stats"
+        );
+    }
+
+    // Verify each evaluator has valid stats
+    for (evaluator_name, stats) in &evaluation_results.evaluation_stats {
+        assert_eq!(
+            stats.count, expected_count,
+            "Expected count of {} for {}, got {}",
+            expected_count, evaluator_name, stats.count
+        );
+        assert!(
+            stats.mean.is_finite(),
+            "Expected mean to be finite for {}, got {}",
+            evaluator_name,
+            stats.mean
+        );
+    }
+
+    // Test per_datapoint_scores extraction
+    let per_datapoint_scores = evaluation_results.per_datapoint_scores();
+    assert_eq!(
+        per_datapoint_scores.len(),
+        expected_count,
+        "Expected {} datapoints in per_datapoint_scores, got {}",
+        expected_count,
+        per_datapoint_scores.len()
+    );
+
+    // Verify each datapoint has scores for all evaluators
+    for (datapoint_id, scores) in &per_datapoint_scores {
+        for evaluator_name in &expected_evaluators {
+            assert!(
+                scores.contains_key(*evaluator_name),
+                "Datapoint {datapoint_id} missing {evaluator_name} score"
+            );
+        }
+
+        // Verify scores are valid (either None or finite)
+        for (evaluator_name, score_opt) in scores {
+            if let Some(score) = score_opt {
+                assert!(
+                    score.is_finite(),
+                    "Score for evaluator {evaluator_name} on datapoint {datapoint_id} is not finite: {score}"
+                );
+            }
+        }
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -300,79 +360,8 @@ async fn test_gepa_evaluate_variant_chat() {
         evaluation_results.evaluation_infos.len()
     );
 
-    // Verify we have stats for all 4 evaluators
-    assert!(
-        evaluation_results
-            .evaluation_stats
-            .contains_key("happy_bool"),
-        "Expected happy_bool evaluator stats"
-    );
-    assert!(
-        evaluation_results.evaluation_stats.contains_key("sad_bool"),
-        "Expected sad_bool evaluator stats"
-    );
-    assert!(
-        evaluation_results.evaluation_stats.contains_key("zero"),
-        "Expected zero evaluator stats"
-    );
-    assert!(
-        evaluation_results.evaluation_stats.contains_key("one"),
-        "Expected one evaluator stats"
-    );
-
-    // Verify each evaluator has valid stats
-    for (evaluator_name, stats) in &evaluation_results.evaluation_stats {
-        assert_eq!(
-            stats.count, 3,
-            "Expected count of 3 for {}, got {}",
-            evaluator_name, stats.count
-        );
-        assert!(
-            stats.mean.is_finite(),
-            "Expected mean to be finite for {}, got {}",
-            evaluator_name,
-            stats.mean
-        );
-    }
-
-    // Test per_datapoint_scores extraction
-    let per_datapoint_scores = evaluation_results.per_datapoint_scores();
-    assert_eq!(
-        per_datapoint_scores.len(),
-        3,
-        "Expected 3 datapoints in per_datapoint_scores, got {}",
-        per_datapoint_scores.len()
-    );
-
-    // Verify each datapoint has scores for all evaluators
-    for (datapoint_id, scores) in &per_datapoint_scores {
-        assert!(
-            scores.contains_key("happy_bool"),
-            "Datapoint {datapoint_id} missing happy_bool score"
-        );
-        assert!(
-            scores.contains_key("sad_bool"),
-            "Datapoint {datapoint_id} missing sad_bool score"
-        );
-        assert!(
-            scores.contains_key("zero"),
-            "Datapoint {datapoint_id} missing zero score"
-        );
-        assert!(
-            scores.contains_key("one"),
-            "Datapoint {datapoint_id} missing one score"
-        );
-
-        // Verify scores are valid (either None or finite)
-        for (evaluator_name, score_opt) in scores {
-            if let Some(score) = score_opt {
-                assert!(
-                    score.is_finite(),
-                    "Score for evaluator {evaluator_name} on datapoint {datapoint_id} is not finite: {score}"
-                );
-            }
-        }
-    }
+    // Verify evaluation results have expected structure and valid scores
+    assert_evaluation_results_valid(&evaluation_results, 3);
 
     // Delete the dataset
     let delete_result = delete_dataset(&clickhouse, &dataset_name).await;
@@ -589,79 +578,8 @@ async fn test_gepa_evaluate_variant_json() {
         evaluation_results.evaluation_infos.len()
     );
 
-    // Verify we have stats for all 4 evaluators
-    assert!(
-        evaluation_results
-            .evaluation_stats
-            .contains_key("happy_bool"),
-        "Expected happy_bool evaluator stats"
-    );
-    assert!(
-        evaluation_results.evaluation_stats.contains_key("sad_bool"),
-        "Expected sad_bool evaluator stats"
-    );
-    assert!(
-        evaluation_results.evaluation_stats.contains_key("zero"),
-        "Expected zero evaluator stats"
-    );
-    assert!(
-        evaluation_results.evaluation_stats.contains_key("one"),
-        "Expected one evaluator stats"
-    );
-
-    // Verify each evaluator has valid stats
-    for (evaluator_name, stats) in &evaluation_results.evaluation_stats {
-        assert_eq!(
-            stats.count, 2,
-            "Expected count of 2 for {}, got {}",
-            evaluator_name, stats.count
-        );
-        assert!(
-            stats.mean.is_finite(),
-            "Expected mean to be finite for {}, got {}",
-            evaluator_name,
-            stats.mean
-        );
-    }
-
-    // Test per_datapoint_scores extraction
-    let per_datapoint_scores = evaluation_results.per_datapoint_scores();
-    assert_eq!(
-        per_datapoint_scores.len(),
-        2,
-        "Expected 2 datapoints in per_datapoint_scores, got {}",
-        per_datapoint_scores.len()
-    );
-
-    // Verify each datapoint has scores for all evaluators
-    for (datapoint_id, scores) in &per_datapoint_scores {
-        assert!(
-            scores.contains_key("happy_bool"),
-            "Datapoint {datapoint_id} missing happy_bool score"
-        );
-        assert!(
-            scores.contains_key("sad_bool"),
-            "Datapoint {datapoint_id} missing sad_bool score"
-        );
-        assert!(
-            scores.contains_key("zero"),
-            "Datapoint {datapoint_id} missing zero score"
-        );
-        assert!(
-            scores.contains_key("one"),
-            "Datapoint {datapoint_id} missing one score"
-        );
-
-        // Verify scores are valid (either None or finite)
-        for (evaluator_name, score_opt) in scores {
-            if let Some(score) = score_opt {
-                assert!(
-                    score.is_finite(),
-                    "Score for evaluator {evaluator_name} on datapoint {datapoint_id} is not finite: {score}"
-                );
-            }
-        }
-    }
+    // Verify evaluation results have expected structure and valid scores
+    assert_evaluation_results_valid(&evaluation_results, 2);
 
     // Delete the dataset
     let delete_result = delete_dataset(&clickhouse, &dataset_name).await;
