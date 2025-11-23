@@ -200,8 +200,7 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
 
     // Assert CommentFeedbackByTargetId materialized view has snapshot_hash
     let query = format!(
-        "SELECT snapshot_hash FROM CommentFeedbackByTargetId WHERE target_id = '{}' AND id = '{}' FORMAT JSONEachRow",
-        inference_id, feedback_id
+        "SELECT snapshot_hash FROM CommentFeedbackByTargetId WHERE target_id = '{inference_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)
@@ -361,8 +360,7 @@ async fn e2e_test_demonstration_feedback_with_payload(inference_payload: serde_j
 
     // Assert DemonstrationFeedbackByInferenceId materialized view has snapshot_hash
     let query = format!(
-        "SELECT snapshot_hash FROM DemonstrationFeedbackByInferenceId WHERE inference_id = '{}' AND id = '{}' FORMAT JSONEachRow",
-        inference_id, feedback_id
+        "SELECT snapshot_hash FROM DemonstrationFeedbackByInferenceId WHERE inference_id = '{inference_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)
@@ -1166,8 +1164,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
 
     // Assert FloatMetricFeedbackByTargetId materialized view has snapshot_hash
     let query = format!(
-        "SELECT snapshot_hash FROM FloatMetricFeedbackByTargetId WHERE target_id = '{}' AND id = '{}' FORMAT JSONEachRow",
-        episode_id, feedback_id
+        "SELECT snapshot_hash FROM FloatMetricFeedbackByTargetId WHERE target_id = '{episode_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)
@@ -1302,8 +1299,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
 
     // Assert FloatMetricFeedbackByVariant materialized view has snapshot_hash
     let query = format!(
-        "SELECT snapshot_hash FROM FloatMetricFeedbackByVariant WHERE target_id_uint = toUInt128(toUUID('{}')) AND id_uint = toUInt128(toUUID('{}')) FORMAT JSONEachRow",
-        inference_id, feedback_id
+        "SELECT snapshot_hash FROM FloatMetricFeedbackByVariant WHERE target_id_uint = toUInt128(toUUID('{inference_id}')) AND id_uint = toUInt128(toUUID('{feedback_id}')) FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)
@@ -1457,8 +1453,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
 
     // Assert BooleanMetricFeedbackByVariant materialized view has snapshot_hash
     let query = format!(
-        "SELECT snapshot_hash FROM BooleanMetricFeedbackByVariant WHERE inference_id = '{}' AND id = '{}' FORMAT JSONEachRow",
-        inference_id, feedback_id
+        "SELECT snapshot_hash FROM BooleanMetricFeedbackByVariant WHERE inference_id = '{inference_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)

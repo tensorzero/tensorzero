@@ -248,8 +248,7 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
 
     // Assert InferenceById materialized view has snapshot_hash
     let query = format!(
-        "SELECT snapshot_hash FROM InferenceById WHERE id_uint = toUInt128(toUUID('{}')) FORMAT JSONEachRow",
-        inference_id
+        "SELECT snapshot_hash FROM InferenceById WHERE id_uint = toUInt128(toUUID('{inference_id}')) FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)
@@ -263,8 +262,7 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
 
     // Assert InferenceByEpisodeId materialized view has snapshot_hash
     let query = format!(
-        "SELECT snapshot_hash FROM InferenceByEpisodeId WHERE episode_id_uint = toUInt128(toUUID('{}')) AND id_uint = toUInt128(toUUID('{}')) FORMAT JSONEachRow",
-        episode_id, inference_id
+        "SELECT snapshot_hash FROM InferenceByEpisodeId WHERE episode_id_uint = toUInt128(toUUID('{episode_id}')) AND id_uint = toUInt128(toUUID('{inference_id}')) FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)
@@ -278,8 +276,7 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
 
     // Assert InferenceTag materialized view has snapshot_hash
     let query = format!(
-        "SELECT snapshot_hash FROM InferenceTag WHERE inference_id = '{}' AND key = 'tensorzero::tag_key' FORMAT JSONEachRow",
-        inference_id
+        "SELECT snapshot_hash FROM InferenceTag WHERE inference_id = '{inference_id}' AND key = 'tensorzero::tag_key' FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)
@@ -293,8 +290,7 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
 
     // Assert TagInference materialized view has snapshot_hash
     let query = format!(
-        "SELECT snapshot_hash FROM TagInference WHERE key = 'tensorzero::tag_key' AND value = 'tensorzero::tag_value' AND inference_id = '{}' FORMAT JSONEachRow",
-        inference_id
+        "SELECT snapshot_hash FROM TagInference WHERE key = 'tensorzero::tag_key' AND value = 'tensorzero::tag_value' AND inference_id = '{inference_id}' FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)

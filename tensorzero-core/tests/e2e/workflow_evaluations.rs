@@ -47,8 +47,7 @@ async fn test_workflow_evaluation() {
     );
     // Assert DynamicEvaluationRun has snapshot_hash
     let query = format!(
-        "SELECT snapshot_hash FROM DynamicEvaluationRun WHERE run_id_uint = toUInt128(toUUID('{}')) FORMAT JSONEachRow",
-        run_id
+        "SELECT snapshot_hash FROM DynamicEvaluationRun WHERE run_id_uint = toUInt128(toUUID('{run_id}')) FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)
@@ -62,8 +61,7 @@ async fn test_workflow_evaluation() {
 
     // Assert DynamicEvaluationRunByProjectName materialized view has snapshot_hash
     let query = format!(
-        "SELECT snapshot_hash FROM DynamicEvaluationRunByProjectName WHERE run_id_uint = toUInt128(toUUID('{}')) FORMAT JSONEachRow",
-        run_id
+        "SELECT snapshot_hash FROM DynamicEvaluationRunByProjectName WHERE run_id_uint = toUInt128(toUUID('{run_id}')) FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)
@@ -215,8 +213,7 @@ async fn test_workflow_evaluation() {
         }
         // Assert DynamicEvaluationRunEpisode has snapshot_hash
         let query = format!(
-            "SELECT snapshot_hash FROM DynamicEvaluationRunEpisode WHERE run_id = '{}' AND episode_id_uint = toUInt128(toUUID('{}')) FORMAT JSONEachRow",
-            run_id, episode_id
+            "SELECT snapshot_hash FROM DynamicEvaluationRunEpisode WHERE run_id = '{run_id}' AND episode_id_uint = toUInt128(toUUID('{episode_id}')) FORMAT JSONEachRow"
         );
         let response = clickhouse
             .run_query_synchronous_no_params(query)

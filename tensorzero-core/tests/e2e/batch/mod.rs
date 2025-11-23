@@ -213,15 +213,13 @@ async fn test_write_poll_batch_inference() {
 
     // Assert BatchRequest has snapshot_hash
     let batch_request_query = format!(
-        "SELECT snapshot_hash FROM BatchRequest WHERE batch_id = '{}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow",
-        batch_id
+        "SELECT snapshot_hash FROM BatchRequest WHERE batch_id = '{batch_id}' ORDER BY timestamp DESC LIMIT 1 FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(batch_request_query)
         .await
         .unwrap();
-    let batch_request_row: serde_json::Value =
-        serde_json::from_str(&response.response).unwrap();
+    let batch_request_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
     assert!(
         !batch_request_row["snapshot_hash"].is_null(),
         "BatchRequest should have snapshot_hash"
@@ -487,8 +485,7 @@ async fn test_write_read_completed_batch_inference_chat() {
 
     // Assert BatchModelInference has snapshot_hash
     let batch_model_inference_query = format!(
-        "SELECT snapshot_hash FROM BatchModelInference WHERE batch_id = '{}' AND inference_id = '{}' FORMAT JSONEachRow",
-        batch_id, inference_id1
+        "SELECT snapshot_hash FROM BatchModelInference WHERE batch_id = '{batch_id}' AND inference_id = '{inference_id1}' FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(batch_model_inference_query)
