@@ -27,8 +27,9 @@ mod analyze;
 mod evaluate;
 mod validate;
 
-pub use analyze::{analyze_inferences, Analysis, FunctionContext};
+pub use analyze::{analyze_inferences, Analysis};
 pub use evaluate::create_evaluation_dataset;
+pub use validate::FunctionContext;
 use validate::{initialize_pareto_frontier, validate_examples, validate_gepa_config};
 
 #[async_trait]
