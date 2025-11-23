@@ -19,15 +19,14 @@ use tensorzero_core::{
     config::{path::ResolvedTomlPathData, UninitializedVariantConfig, UninitializedVariantInfo},
     endpoints::inference::InferenceResponse,
     error::{Error, ErrorDetails},
-    evaluations::EvaluationConfig,
-    function::FunctionConfig,
     inference::types::{Arguments, ContentBlockChatOutput, Role, StoredInput, Template},
     optimization::gepa::GEPAConfig,
-    tool::StaticToolConfig,
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
 
 use evaluations::stats::EvaluationInfo;
+
+use crate::gepa::validate::FunctionContext;
 
 /// Inference input/output pair for GEPA mutation phase.
 ///
@@ -53,15 +52,6 @@ pub struct Analysis {
     /// Analysis feedback text from the analyze function.
     /// Typically XML-formatted reports (error, improvement, or optimal).
     pub analysis: String,
-}
-
-/// Function configuration with associated static tools for GEPA optimization
-#[derive(Clone, Debug, Serialize)]
-pub struct FunctionContext {
-    pub function_config: Arc<FunctionConfig>,
-    /// Static tools from Config.tools that are referenced by the function
-    pub static_tools: Option<HashMap<String, Arc<StaticToolConfig>>>,
-    pub evaluation_config: Arc<EvaluationConfig>,
 }
 
 /// Creates variant configuration for the analyze function.
@@ -680,7 +670,7 @@ mod tests {
 
         let function_context = FunctionContext {
             function_config: Arc::new(function_config),
-            static_tools: static_tools.clone(),
+            static_tools,
             evaluation_config: Arc::new(eval_config),
         };
 
@@ -738,10 +728,11 @@ mod tests {
 
         // Test with schemas
         let function_config_with_schemas = create_test_function_config_with_schemas();
+        let static_tools_schemas = None;
         let eval_config_schemas = create_test_evaluation_config();
         let function_context_with_schemas = FunctionContext {
             function_config: Arc::new(function_config_with_schemas),
-            static_tools,
+            static_tools: static_tools_schemas,
             evaluation_config: Arc::new(eval_config_schemas),
         };
         let result_with_schemas =
