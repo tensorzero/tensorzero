@@ -491,6 +491,7 @@ async fn create_datapoints_internal(
                     &gateway.handle.app_state.config,
                     &gateway.handle.app_state.http_client,
                     &gateway.handle.app_state.clickhouse_connection_info,
+                    Some(gateway.handle.app_state.snapshot_hash.clone()),
                 )
                 .await
                 .map_err(err_to_http)

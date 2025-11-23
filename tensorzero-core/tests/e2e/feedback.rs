@@ -1453,7 +1453,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
 
     // Assert BooleanMetricFeedbackByVariant materialized view has snapshot_hash
     let query = format!(
-        "SELECT snapshot_hash FROM BooleanMetricFeedbackByVariant WHERE inference_id = '{inference_id}' AND id = '{feedback_id}' FORMAT JSONEachRow"
+        "SELECT snapshot_hash FROM BooleanMetricFeedbackByVariant WHERE target_id_uint = toUInt128(toUUID('{inference_id}')) AND id_uint = toUInt128(toUUID('{feedback_id}')) FORMAT JSONEachRow"
     );
     let response = clickhouse
         .run_query_synchronous_no_params(query)

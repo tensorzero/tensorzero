@@ -340,6 +340,7 @@ pub fn create_test_evaluation_info(
         staled_at: None,
         updated_at: "2025-01-01T00:00:00Z".to_string(),
         name: None,
+        snapshot_hash: None,
     };
 
     // Convert StoredDatapoint to Datapoint
@@ -888,6 +889,7 @@ async fn test_analyze_inferences_json_function() {
         staled_at: None,
         updated_at: "2025-01-01T00:00:00Z".to_string(),
         name: None,
+        snapshot_hash: None,
     };
 
     let response = InferenceResponse::Json(JsonInferenceResponse {
@@ -1186,6 +1188,7 @@ async fn test_analyze_input_format_scenarios() {
             staled_at: None,
             updated_at: "2025-01-01T00:00:00Z".to_string(),
             name: None,
+            snapshot_hash: None,
         };
 
         let response = InferenceResponse::Chat(

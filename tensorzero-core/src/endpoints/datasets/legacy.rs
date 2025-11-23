@@ -37,7 +37,7 @@ use crate::jsonschema_util::DynamicJSONSchema;
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
 use crate::tool::{LegacyToolCallConfigDatabaseInsert, Tool};
 use crate::{
-    config::Config,
+    config::{snapshot::SnapshotHash, Config},
     error::{Error, ErrorDetails},
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::{
@@ -200,6 +200,7 @@ async fn insert_from_existing(
     clickhouse: &ClickHouseConnectionInfo,
     path_params: InsertPathParams,
     existing: &ExistingInferenceInfo,
+    snapshot_hash: Option<SnapshotHash>,
 ) -> Result<Uuid, Error> {
     let ExistingInferenceInfo {
         function_name,
@@ -251,6 +252,7 @@ async fn insert_from_existing(
                 is_custom: false,
                 source_inference_id: Some(*inference_id),
                 staled_at: None,
+                snapshot_hash: snapshot_hash.clone(),
 
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
@@ -295,6 +297,7 @@ async fn insert_from_existing(
                 is_custom: false,
                 source_inference_id: Some(*inference_id),
                 staled_at: None,
+                snapshot_hash: snapshot_hash.clone(),
 
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
@@ -335,6 +338,7 @@ pub async fn insert_from_existing_datapoint_handler(
         &app_state.clickhouse_connection_info,
         path_params,
         &existing_inference_info,
+        Some(app_state.snapshot_hash),
     )
     .await?;
     Ok(Json(InsertDatapointResponse { id: datapoint_id }))
@@ -463,6 +467,7 @@ pub async fn update_datapoint_handler(
                 is_custom: chat.is_custom,
                 source_inference_id: chat.source_inference_id,
                 staled_at: chat.staled_at,
+                snapshot_hash: Some(app_state.snapshot_hash.clone()),
 
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
@@ -552,6 +557,7 @@ pub async fn update_datapoint_handler(
                 is_custom: json.is_custom,
                 source_inference_id: json.source_inference_id,
                 staled_at: json.staled_at,
+                snapshot_hash: Some(app_state.snapshot_hash.clone()),
 
                 // Ignored during insert.
                 updated_at: Utc::now().to_string(),
@@ -613,6 +619,7 @@ pub async fn create_datapoints_handler(
         &app_state.config,
         &app_state.http_client,
         &app_state.clickhouse_connection_info,
+        Some(app_state.snapshot_hash),
     )
     .await?;
     Ok(Json(datapoint_ids))
@@ -638,6 +645,7 @@ pub async fn bulk_insert_datapoints_handler(
         &app_state.config,
         &app_state.http_client,
         &app_state.clickhouse_connection_info,
+        Some(app_state.snapshot_hash),
     )
     .await?;
     Ok(Json(datapoint_ids))
@@ -649,6 +657,7 @@ pub async fn insert_datapoint(
     config: &Config,
     http_client: &TensorzeroHttpClient,
     clickhouse: &ClickHouseConnectionInfo,
+    snapshot_hash: Option<SnapshotHash>,
 ) -> Result<Vec<Uuid>, Error> {
     validate_dataset_name(&dataset_name)?;
 
@@ -829,7 +838,7 @@ pub async fn insert_datapoint(
         clickhouse,
         &dataset_name,
         v1_request,
-        None,
+        snapshot_hash,
     )
     .await?;
 
@@ -1275,6 +1284,7 @@ impl ChatInferenceDatapoint {
             staled_at: self.staled_at,
             updated_at: self.updated_at,
             name: self.name,
+            snapshot_hash: None,
         })
     }
 }
@@ -1298,6 +1308,7 @@ impl JsonInferenceDatapoint {
             staled_at: self.staled_at,
             updated_at: self.updated_at,
             name: self.name,
+            snapshot_hash: None,
         }
     }
 }
@@ -1613,6 +1624,9 @@ pub struct StoredChatInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 impl std::fmt::Display for StoredChatInferenceDatapoint {
@@ -1638,7 +1652,7 @@ impl From<StoredChatInferenceDatapoint> for ChatInferenceDatapointInsert {
             staled_at: datapoint.staled_at,
             source_inference_id: datapoint.source_inference_id,
             is_custom: datapoint.is_custom,
-            snapshot_hash: None,
+            snapshot_hash: datapoint.snapshot_hash,
         }
     }
 }
@@ -1752,6 +1766,10 @@ pub struct StoredJsonInferenceDatapoint {
     /// Human-readable name of the datapoint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+
+    /// Config snapshot hash when the datapoint was created.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_hash: Option<SnapshotHash>,
 }
 
 impl From<StoredJsonInferenceDatapoint> for JsonInferenceDatapointInsert {
@@ -1770,7 +1788,7 @@ impl From<StoredJsonInferenceDatapoint> for JsonInferenceDatapointInsert {
             staled_at: datapoint.staled_at,
             source_inference_id: datapoint.source_inference_id,
             is_custom: datapoint.is_custom,
-            snapshot_hash: None,
+            snapshot_hash: datapoint.snapshot_hash,
         }
     }
 }
