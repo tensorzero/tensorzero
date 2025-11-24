@@ -48,7 +48,7 @@ pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.99"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.51", features = ["derive"] }
+clap = { version = "4.5.53", features = ["derive"] }
 futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
 minijinja = { version = "2.12.0", features = [
@@ -61,7 +61,7 @@ minijinja = { version = "2.12.0", features = [
 ] }
 url = "2.5.4"
 # TODO - unpin when https://github.com/EmbarkStudios/cargo-deny/issues/803 is fixed
-google-cloud-auth = "=1.1.0"
+google-cloud-auth = "=1.2.0"
 serde-untagged = "0.1.8"
 object_store = { version = "0.12.2", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
