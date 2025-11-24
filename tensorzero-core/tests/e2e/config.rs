@@ -1,15 +1,23 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tensorzero::test_helpers::make_embedded_gateway_with_config;
+use tensorzero::{
+    ClientBuilder, ClientInferenceParams, ClientInput, ClientInputMessage,
+    ClientInputMessageContent, InferenceOutput, Role,
+};
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::{write_config_snapshot, Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, CLICKHOUSE_URL,
+};
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::ConfigQueries;
 use tensorzero_core::error::ErrorDetails;
 use tensorzero_core::http::TensorzeroHttpClient;
+use tensorzero_core::inference::types::TextKind;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -392,4 +400,129 @@ routing = ["test_provider::gpt-4"]
         retrieved_snapshot.extra_templates.get("assistant_template"),
         Some(&"Assistant responds: {{response}}".to_string())
     );
+}
+
+/// Test that we can:
+/// 1. Build a client from a config
+/// 2. Do an inference
+/// 3. Drop the client
+/// 4. Load the snapshot from ClickHouse
+/// 5. Build a new client from the snapshot
+/// 6. Do another inference
+/// 7. Assert both inferences have the same snapshot hash
+#[tokio::test(flavor = "multi_thread")]
+async fn test_config_snapshot_inference_roundtrip() {
+    // Create a unique config with randomness
+    let random_id = Uuid::now_v7();
+    let config = format!(
+        r#"
+[models.test_model_{random_id}]
+routing = ["good"]
+
+[models.test_model_{random_id}.providers.good]
+type = "dummy"
+model_name = "good"
+
+[functions.basic_test_{random_id}]
+type = "chat"
+
+[functions.basic_test_{random_id}.variants.test_variant]
+type = "chat_completion"
+model = "test_model_{random_id}"
+"#
+    );
+
+    // Build first client using make_embedded_gateway_with_config
+    // This automatically writes the snapshot to ClickHouse
+    let client = make_embedded_gateway_with_config(&config).await;
+
+    // Perform first inference
+    let params = ClientInferenceParams {
+        function_name: Some(format!("basic_test_{random_id}")),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "Hello, world!".to_string(),
+                })],
+            }],
+        },
+        ..Default::default()
+    };
+    let InferenceOutput::NonStreaming(response1) = client.inference(params).await.unwrap() else {
+        panic!("Expected a non-streaming response");
+    };
+    let inference_id_1 = response1.inference_id();
+
+    // Drop the first client
+    drop(client);
+
+    // Wait for the data to be committed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Get snapshot hash from ChatInference table
+    let clickhouse = get_clickhouse().await;
+    let inference_row = select_chat_inference_clickhouse(&clickhouse, inference_id_1)
+        .await
+        .unwrap();
+    let snapshot_hash_str = inference_row
+        .get("snapshot_hash")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let snapshot_hash = SnapshotHash::from_str(snapshot_hash_str);
+
+    // Load snapshot from ClickHouse
+    let retrieved_snapshot = clickhouse
+        .get_config_snapshot(snapshot_hash.clone())
+        .await
+        .unwrap();
+
+    // Build new client from snapshot
+    let new_client = ClientBuilder::from_config_snapshot(
+        retrieved_snapshot,
+        Some(CLICKHOUSE_URL.clone()),
+        None,  // No Postgres
+        false, // Don't verify credentials
+        Some(Duration::from_secs(60)),
+    )
+    .await
+    .unwrap();
+
+    // Perform second inference with new client
+    let params2 = ClientInferenceParams {
+        function_name: Some(format!("basic_test_{random_id}")),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "Hello again!".to_string(),
+                })],
+            }],
+        },
+        ..Default::default()
+    };
+    let InferenceOutput::NonStreaming(response2) = new_client.inference(params2).await.unwrap()
+    else {
+        panic!("Expected a non-streaming response");
+    };
+    let inference_id_2 = response2.inference_id();
+
+    // Wait for the data to be committed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Verify both inferences have the same snapshot hash
+    let inference_row2 = select_chat_inference_clickhouse(&clickhouse, inference_id_2)
+        .await
+        .unwrap();
+    let stored_hash2 = inference_row2
+        .get("snapshot_hash")
+        .unwrap()
+        .as_str()
+        .unwrap();
+
+    // Both inferences should have the same snapshot hash
+    assert_eq!(snapshot_hash_str, stored_hash2);
 }

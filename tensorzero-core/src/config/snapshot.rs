@@ -27,6 +27,10 @@ impl SnapshotHash {
         let big_int = BigUint::from_bytes_be(hash.as_bytes());
         SnapshotHash(Arc::from(big_int.to_string()))
     }
+
+    pub fn from_str(hash: &str) -> SnapshotHash {
+        SnapshotHash(Arc::from(hash.to_string()))
+    }
 }
 
 impl ConfigSnapshot {
