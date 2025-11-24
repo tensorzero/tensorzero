@@ -235,7 +235,7 @@ pub async fn run_evaluation(
     evaluation_run_id: Uuid,
     mut writer: impl Write,
 ) -> Result<()> {
-    // Validate that dataset_name and datapoint_ids are mutually exclusive
+    // Validate that exactly one of dataset_name or datapoint_ids is provided
     if args.dataset_name.is_some() && !args.datapoint_ids.is_empty() {
         bail!(
             "Cannot provide both dataset_name and datapoint_ids. Please specify one or the other."
@@ -485,7 +485,7 @@ pub async fn run_evaluation_core_streaming(
 
     let mut join_set = JoinSet::new();
 
-    // Validate that dataset_name and datapoint_ids are mutually exclusive
+    // Validate that exactly one of dataset_name or datapoint_ids is provided
     if args.dataset_name.is_some() && !args.datapoint_ids.is_empty() {
         bail!(
             "Cannot provide both dataset_name and datapoint_ids. Please specify one or the other."
