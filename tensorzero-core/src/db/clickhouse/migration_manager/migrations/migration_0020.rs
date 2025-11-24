@@ -396,7 +396,7 @@ impl Migration for Migration0020<'_> {
             // Next, insert data into InferenceByEpisodeId from ChatInference
             let query = format!(
                 r"
-                INSERT INTO InferenceByEpisodeId
+                INSERT INTO InferenceByEpisodeId (episode_id_uint, id_uint, function_name, variant_name, function_type)
                 SELECT
                     toUInt128(episode_id) as episode_id_uint,
                     toUInt128(id) as id_uint,
@@ -414,7 +414,7 @@ impl Migration for Migration0020<'_> {
             // Finally, insert data into InferenceByEpisodeId from JsonInference
             let query = format!(
                 r"
-                INSERT INTO InferenceByEpisodeId
+                INSERT INTO InferenceByEpisodeId (episode_id_uint, id_uint, function_name, variant_name, function_type)
                 SELECT
                     toUInt128(episode_id) as episode_id_uint,
                     toUInt128(id) as id_uint,
