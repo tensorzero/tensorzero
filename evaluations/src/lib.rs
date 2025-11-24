@@ -502,6 +502,11 @@ pub async fn run_evaluation_core_streaming(
         bail!("Must provide either dataset_name or datapoint_ids.");
     }
 
+    // Validate that max_datapoints is not used with datapoint_ids
+    if !datapoint_ids.is_empty() && max_datapoints.is_some() {
+        bail!("Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name.");
+    }
+
     info!("Loading datapoints");
     let dataset = if let Some(dataset_name) = &args.dataset_name {
         // Load from dataset

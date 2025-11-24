@@ -401,6 +401,7 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
         .contains("Must provide either"));
 }
 
+/// Test mutual exclusivity of `datapoint_ids` `max_datapoints` in `run_evaluation()`
 #[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive() {
     init_tracing_for_tests();
@@ -433,6 +434,40 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive() {
     );
     assert!(result
         .unwrap_err()
+        .to_string()
+        .contains("Cannot provide both datapoint_ids and max_datapoints"));
+}
+
+/// Test mutual exclusivity of `datapoint_ids` `max_datapoints` in `run_evaluation_core_streaming()`
+#[tokio::test(flavor = "multi_thread")]
+async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive_core_streaming() {
+    init_tracing_for_tests();
+    let config = get_config().await;
+    let clickhouse = get_clickhouse().await;
+    let tensorzero_client = get_tensorzero_client().await;
+    let evaluation_run_id = Uuid::now_v7();
+
+    // Test: Both datapoint_ids and max_datapoints provided should fail
+    let core_args = EvaluationCoreArgs {
+        tensorzero_client,
+        clickhouse_client: clickhouse,
+        config,
+        evaluation_name: "entity_extraction".to_string(),
+        evaluation_run_id,
+        dataset_name: None,
+        datapoint_ids: Some(vec![Uuid::now_v7()]),
+        variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
+        concurrency: 10,
+        inference_cache: CacheEnabledMode::On,
+    };
+
+    let result = run_evaluation_core_streaming(core_args, Some(10), HashMap::new()).await;
+    assert!(
+        result.is_err(),
+        "Should fail when both datapoint_ids and max_datapoints are provided"
+    );
+    let error = result.err().unwrap();
+    assert!(error
         .to_string()
         .contains("Cannot provide both datapoint_ids and max_datapoints"));
 }
