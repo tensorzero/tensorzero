@@ -5,6 +5,7 @@
 
 use async_trait::async_trait;
 use futures::future::join_all;
+use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use tensorzero_core::{
@@ -107,7 +108,7 @@ impl Optimizer for GEPAConfig {
             format!("{}_gepa_val_{}", self.evaluation_name, uuid::Uuid::now_v7());
 
         // Track all temporary datasets for cleanup at the end
-        let temporary_datasets = vec![val_dataset_name.clone()];
+        let mut temporary_datasets = vec![val_dataset_name.clone()];
 
         tracing::info!(
             "Creating validation dataset '{}' with {} examples",
@@ -210,6 +211,131 @@ impl Optimizer for GEPAConfig {
         }
 
         tracing::info!("Initial evaluation complete");
+        tracing::debug!(
+            "Collected validation scores for {} variants",
+            initial_scores.len()
+        );
+
+        // TODO: Initialize Pareto frontier with both variant configs and their validation scores
+
+        // Initialize RNG for sampling variants and minibatches
+        let mut rng = match self.seed {
+            Some(seed) => StdRng::seed_from_u64(seed as u64),
+            None => {
+                let mut thread_rng = rand::rng();
+                StdRng::from_rng(&mut thread_rng)
+            }
+        };
+
+        for iteration in 0..self.max_iterations {
+            let Some(candidate_name) = initial_variants.keys().choose(&mut rng) else {
+                tracing::warn!(
+                    "Skipping iteration {} because no candidates were available (should be validated upstream)",
+                    iteration
+                );
+                continue;
+            };
+
+            let Some(candidate_config) = initial_variants.get(candidate_name) else {
+                tracing::warn!(
+                    "Skipping iteration {} because selected candidate '{}' is missing",
+                    iteration,
+                    candidate_name
+                );
+                continue;
+            };
+
+            let minibatch_size = self.batch_size.min(train_examples.len());
+            let minibatch: Vec<RenderedSample> = train_examples
+                .iter()
+                .choose_multiple(&mut rng, minibatch_size)
+                .into_iter()
+                .cloned()
+                .collect();
+
+            let train_dataset_name = format!(
+                "{}_gepa_train_{}_{}",
+                self.evaluation_name,
+                iteration,
+                uuid::Uuid::now_v7()
+            );
+            temporary_datasets.push(train_dataset_name.clone());
+
+            tracing::info!(
+                "GEPA iteration {}: evaluating candidate '{}' on minibatch of {} examples",
+                iteration,
+                candidate_name,
+                minibatch.len()
+            );
+
+            create_evaluation_dataset(
+                &config,
+                client,
+                clickhouse_connection_info,
+                minibatch,
+                &train_dataset_name,
+            )
+            .await?;
+
+            let candidate_results = match evaluate_variant(EvaluateVariantParams {
+                gateway_client: gateway_client.clone(),
+                clickhouse_connection_info: clickhouse_connection_info.clone(),
+                tensorzero_config: Arc::clone(&config),
+                evaluation_config: Arc::clone(&function_context.evaluation_config),
+                evaluation_name: self.evaluation_name.clone(),
+                variant_name: (*candidate_name).clone(),
+                variant_config: candidate_config.clone(),
+                dataset_name: train_dataset_name,
+                concurrency: self.max_concurrency as usize,
+            })
+            .await
+            {
+                Ok(results) => results,
+                Err(e) => {
+                    tracing::warn!(
+                        "GEPA iteration {}: evaluation failed for candidate '{}': {}",
+                        iteration,
+                        candidate_name,
+                        e
+                    );
+                    continue;
+                }
+            };
+
+            let candidate_analyses = match analyze_inferences(
+                &gateway_client,
+                &candidate_results.evaluation_infos,
+                &function_context,
+                candidate_config,
+                self,
+            )
+            .await
+            {
+                Ok(analyses) => analyses,
+                Err(err) => {
+                    tracing::warn!(
+                        "GEPA iteration {}: analysis failed for candidate '{}': {}",
+                        iteration,
+                        candidate_name,
+                        err
+                    );
+                    continue;
+                }
+            };
+
+            tracing::info!(
+                "GEPA iteration {}: completed analysis for candidate '{}' ({} analyses)",
+                iteration,
+                candidate_name,
+                candidate_analyses.len()
+            );
+
+            // TODO: Generate variant mutation based on analyses
+            // TODO: Evaluate mutated variant on minibatch dataset
+            // TODO: Check for improvement against candidate variant
+            // TODO: Evaluate improved variant on validation dataset
+            // TODO: Update Pareto frontier with new variant and scores
+        }
 
         tracing::warn!("GEPA algorithm is not yet implemented - returning placeholder result");
 
