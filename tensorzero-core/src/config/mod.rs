@@ -766,10 +766,13 @@ impl Config {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
         let config_load_info = if cfg!(feature = "e2e_tests") || !validate_credentials {
             SKIP_CREDENTIAL_VALIDATION
-                .scope((), Self::load_from_toml(globbed_config.table))
+                .scope(
+                    (),
+                    Self::load_from_toml(ConfigInput::Fresh(globbed_config.table)),
+                )
                 .await?
         } else {
-            Self::load_from_toml(globbed_config.table).await?
+            Self::load_from_toml(ConfigInput::Fresh(globbed_config.table)).await?
         };
 
         if validate_credentials {
@@ -781,7 +784,13 @@ impl Config {
         Ok(config_load_info)
     }
 
-    async fn load_from_toml(table: toml::Table) -> Result<ConfigLoadInfo, Error> {
+    async fn load_from_toml(input: ConfigInput) -> Result<ConfigLoadInfo, Error> {
+        let (table, extra_templates) = match input {
+            ConfigInput::Fresh(table) => (table, None),
+            ConfigInput::Snapshot(snapshot) => {
+                (snapshot.as_toml()?, Some(snapshot.extra_templates))
+            }
+        };
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.");
         }
@@ -935,9 +944,10 @@ impl Config {
             .base_path
             .as_ref()
             .map(|x| x.get_real_path());
-        let extra_templates = templates
+        let fresh_extra_templates = templates
             .initialize(template_paths, template_fs_path)
             .await?;
+        let extra_templates = extra_templates.unwrap_or(fresh_extra_templates);
         config.templates = Arc::new(templates.clone());
 
         // Validate the config
@@ -1194,6 +1204,11 @@ impl Config {
             })?
             .clone())
     }
+}
+
+pub enum ConfigInput {
+    Fresh(toml::Table),
+    Snapshot(ConfigSnapshot),
 }
 
 /// This is for privacy of internal types

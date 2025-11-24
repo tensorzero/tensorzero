@@ -3,6 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::error::{Error, ErrorDetails};
+
+use super::Config;
+
 #[derive(Debug)]
 pub struct ConfigSnapshot {
     pub config: String, // serialized as TOML
@@ -55,6 +59,15 @@ impl ConfigSnapshot {
         // Convert the 32-byte hash to a decimal string
         let big_int = BigUint::from_bytes_be(hash.as_bytes());
         SnapshotHash(Arc::from(big_int.to_string()))
+    }
+
+    /// Parse the config into a toml table
+    pub fn as_toml(&self) -> Result<toml::Table, Error> {
+        self.config.parse().map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Failed to parse stored config: {e}"),
+            })
+        })
     }
 }
 
