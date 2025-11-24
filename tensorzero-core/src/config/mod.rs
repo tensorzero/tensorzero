@@ -758,6 +758,28 @@ impl Config {
         .await
     }
 
+    /// Load config from a ConfigSnapshot (historical config stored in ClickHouse)
+    pub async fn load_from_snapshot(
+        snapshot: ConfigSnapshot,
+        validate_credentials: bool,
+    ) -> Result<ConfigLoadInfo, Error> {
+        let config_load_info = if cfg!(feature = "e2e_tests") || !validate_credentials {
+            SKIP_CREDENTIAL_VALIDATION
+                .scope((), Self::load_from_toml(ConfigInput::Snapshot(snapshot)))
+                .await?
+        } else {
+            Self::load_from_toml(ConfigInput::Snapshot(snapshot)).await?
+        };
+
+        if validate_credentials {
+            if let Some(object_store) = &config_load_info.config.object_store_info {
+                object_store.verify().await?;
+            }
+        }
+
+        Ok(config_load_info)
+    }
+
     pub async fn load_from_path_optional_verify_credentials_allow_empty_glob(
         config_glob: &ConfigFileGlob,
         validate_credentials: bool,

@@ -1,6 +1,6 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
-use crate::config::snapshot::SnapshotHash;
+use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::ConfigWithHash;
 use crate::config::{unwritten_config::ConfigLoadInfo, ConfigFileGlob};
 use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
@@ -623,6 +623,77 @@ impl ClientBuilder {
             #[cfg(feature = "e2e_tests")]
             last_body: Default::default(),
         })
+    }
+
+    /// Creates a client from a historical ConfigSnapshot.
+    /// This allows replaying inferences with the exact configuration that was used
+    /// at the time the snapshot was created.
+    ///
+    /// # Parameters
+    /// - `snapshot`: The ConfigSnapshot to load from
+    /// - `clickhouse_url`: Current ClickHouse connection (not from snapshot)
+    /// - `postgres_url`: Current Postgres connection (not from snapshot)
+    /// - `verify_credentials`: Whether to validate model provider credentials
+    /// - `timeout`: Optional timeout for gateway operations
+    ///
+    /// # Returns
+    /// A Client configured with historical settings but current runtime parameters
+    pub async fn from_config_snapshot(
+        snapshot: ConfigSnapshot,
+        clickhouse_url: Option<String>,
+        postgres_url: Option<String>,
+        verify_credentials: bool,
+        timeout: Option<Duration>,
+    ) -> Result<Client, ClientBuilderError> {
+        // Load config from snapshot
+        let config_load_info = Config::load_from_snapshot(snapshot, verify_credentials)
+            .await
+            .map_err(|e| ClientBuilderError::ConfigParsing {
+                error: TensorZeroError::Other { source: e.into() },
+                glob: ConfigFileGlob::new_empty(),
+            })?;
+
+        // Setup ClickHouse with runtime URL
+        let clickhouse_connection_info = setup_clickhouse(&config_load_info, clickhouse_url, true)
+            .await
+            .map_err(|e| {
+                ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        // Convert config_load_info into Config with hash
+        let ConfigWithHash { config, hash } = config_load_info
+            .into_config(&clickhouse_connection_info)
+            .await
+            .map_err(|e| {
+                ClientBuilderError::Clickhouse(TensorZeroError::Other { source: e.into() })
+            })?;
+        let config = Arc::new(config);
+
+        // Validate embedded gateway configuration
+        Self::validate_embedded_gateway_config(&config, false)?;
+
+        // Setup Postgres with runtime URL
+        let postgres_connection_info =
+            setup_postgres(&config, postgres_url).await.map_err(|e| {
+                ClientBuilderError::Postgres(TensorZeroError::Other { source: e.into() })
+            })?;
+
+        // TODO (Viraj, now): overwrite config that is irrelevant from historical data
+
+        // Use HTTP client from config
+        let http_client = config.http_client.clone();
+
+        // Build client using FromComponents pattern
+        let builder = ClientBuilder::new(ClientBuilderMode::FromComponents {
+            config,
+            snapshot_hash: hash,
+            clickhouse_connection_info,
+            postgres_connection_info,
+            http_client,
+            timeout,
+        });
+
+        builder.build().await
     }
 
     /// Validates configuration for embedded gateway mode.
