@@ -28,6 +28,7 @@ use evaluations::{
 
 /// Name of an evaluator/metric (e.g., "accuracy", "latency", "f1_score")
 pub type EvaluatorName = String;
+pub type VariantName = String;
 
 /// Unique identifier for a datapoint/example in a dataset
 pub type DatapointId = Uuid;
@@ -94,7 +95,7 @@ pub struct EvaluationResults {
     /// Aggregated statistics across all datapoints
     /// Key: evaluator_name
     /// Value: EvaluatorStats with mean/stderr/count
-    pub evaluation_stats: HashMap<String, EvaluatorStats>,
+    pub evaluation_stats: HashMap<EvaluatorName, EvaluatorStats>,
 }
 
 impl EvaluationResults {
