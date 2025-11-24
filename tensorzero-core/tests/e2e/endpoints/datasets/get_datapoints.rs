@@ -75,9 +75,7 @@ mod get_datapoints_tests {
 
         // Get the datapoint via the endpoint
         let resp = http_client
-            .post(get_gateway_endpoint(&format!(
-                "/v1/datasets/get_datapoints"
-            )))
+            .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
             .json(&json!({
                 "ids": [datapoint_id.to_string()]
             }))
