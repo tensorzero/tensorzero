@@ -7,7 +7,7 @@
 
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
 };
 
@@ -16,7 +16,7 @@ use rand::{prelude::IndexedRandom, rngs::StdRng, SeedableRng};
 use tensorzero_core::{
     config::MetricConfigOptimize,
     error::{Error, ErrorDetails},
-    evaluations::{EvaluatorConfig, InferenceEvaluationConfig},
+    evaluations::EvaluatorConfig,
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
 use uuid::Uuid;
@@ -59,21 +59,21 @@ pub struct Candidate {
 #[derive(Debug)]
 pub struct ParetoFrontier {
     /// Pareto-optimal variants (non-dominated after GEPA's 3-step filtering)
-    variants: HashMap<VariantName, UninitializedChatCompletionConfig>,
+    variant_configs: HashMap<VariantName, UninitializedChatCompletionConfig>,
+
+    /// Evaluator scores for current variants (pruned after each update)
+    ///
+    /// Maps variant names to their scores on each datapoint/evaluator pair.
+    /// Only contains entries for variants in `self.variants`.
+    /// Private - internal implementation detail.
+    variant_scores_map: VariantScoresMap,
 
     /// Instance-wise membership frequencies for weighted sampling
     ///
     /// Maps each variant to the count of datapoints where it's Pareto-optimal.
     /// Higher values indicate the variant performs well across more instances.
     /// Used for proportional sampling in GEPA's mutation step.
-    frequencies: HashMap<VariantName, usize>,
-
-    /// Validation scores for current variants (pruned after each update)
-    ///
-    /// Maps variant names to their scores on each datapoint/evaluator pair.
-    /// Only contains entries for variants in `self.variants`.
-    /// Private - internal implementation detail.
-    val_scores: VariantScoresMap,
+    variant_frequencis: HashMap<VariantName, usize>,
 
     /// Cached objective vectors for efficient dominance checking
     ///
@@ -91,8 +91,9 @@ pub struct ParetoFrontier {
     /// Optimization directions for each metric (min or max)
     ///
     /// Maps evaluator names to their optimization direction.
+    /// BTreeMap ensures deterministic iteration order (sorted by evaluator name).
     /// Private to enforce validation through update methods.
-    optimize_directions: HashMap<EvaluatorName, MetricConfigOptimize>,
+    optimize_directions: BTreeMap<EvaluatorName, MetricConfigOptimize>,
 
     /// RNG for deterministic frequency sampling (seeded in constructor)
     rng: RefCell<StdRng>,
@@ -102,7 +103,7 @@ impl ParetoFrontier {
     /// Create a new empty Pareto frontier with the specified layout
     ///
     /// # Arguments
-    /// * `datapoint_ids` - Ordered list of datapoint IDs defining the objective space
+    /// * `datapoint_ids` - List of datapoint IDs defining the objective space
     /// * `evaluators` - Borrowed evaluator configurations (optimization directions will be extracted)
     /// * `rng_seed` - Optional seed for deterministic sampling; None uses a random seed
     ///
@@ -122,9 +123,9 @@ impl ParetoFrontier {
             }
         };
         Self {
-            variants: HashMap::new(),
-            frequencies: HashMap::new(),
-            val_scores: HashMap::new(),
+            variant_configs: HashMap::new(),
+            variant_frequencis: HashMap::new(),
+            variant_scores_map: HashMap::new(),
             objective_vector_cache: HashMap::new(),
             datapoint_ids,
             optimize_directions,
@@ -132,33 +133,40 @@ impl ParetoFrontier {
         }
     }
 
-    /// Access frequency map for read-only callers (e.g., diagnostics)
-    pub fn frequencies(&self) -> &HashMap<VariantName, usize> {
-        &self.frequencies
+    /// Access variant configs for read-only callers (e.g., diagnostics)
+    pub fn variant_configs(&self) -> &HashMap<VariantName, UninitializedChatCompletionConfig> {
+        &self.variant_configs
     }
 
-    /// Access variants for read-only callers (e.g., diagnostics)
-    pub fn variants(&self) -> &HashMap<VariantName, UninitializedChatCompletionConfig> {
-        &self.variants
+    /// Access variant scores for read-only callers (e.g., diagnostics)
+    pub fn variant_scores_map(&self) -> &VariantScoresMap {
+        &self.variant_scores_map
+    }
+
+    /// Access frequency map for read-only callers (e.g., diagnostics)
+    pub fn variant_frequencies(&self) -> &HashMap<VariantName, usize> {
+        &self.variant_frequencis
     }
 
     /// Update the Pareto frontier with new candidates (variant config + scores)
     ///
     /// This method incrementally adds new variants to the existing frontier:
-    /// 1. Validates names: rejects any candidate whose name already exists in the frontier
-    /// 2. Merges candidates with current frontier variants/configs
-    /// 3. Runs GEPA's SELECTCANDIDATE algorithm on the combined set:
+    /// 1. Validates new candidates:
+    ///    a. Extract and validate new variant configurations
+    ///    b. Extract and validate new variant scores
+    /// 2. Merge candidate variants and scores with current frontier variants and scores
+    /// 3. Run modified GEPA SELECTCANDIDATE algorithm on the combined set:
     ///    a. For each datapoint, find instance-wise Pareto-optimal variants
     ///    b. Build candidate set C as union of all instance-wise Pareto sets
     ///    c. Filter candidates globally to remove dominated variants
-    /// 4. Updates frontier (variants, frequencies, scores, cache) with filtered results
+    /// 4. Update frontier (variants, frequencies, scores, cache) with filtered results
     ///
     /// Scores are normalized to the frontier layout: datapoints outside the layout are dropped,
     /// missing datapoints are added with empty maps (worst-case imputation), and unknown metrics
     /// are dropped with a warning. Stored scores/cache are pruned to the surviving variants.
     ///
     /// # Arguments
-    /// * `new_candidates` - Map of variant name → `Candidate { variant config, scores }`
+    /// * `candidates` - Map of variant name → `Candidate { variant config, scores }`
     ///
     /// # Returns
     /// * `Result<(), Error>` - Ok if successful, Err if scores are invalid or names collide
@@ -166,230 +174,103 @@ impl ParetoFrontier {
     /// # Errors
     /// * Returns error if any new variant name already exists in the frontier
     /// * Returns error if no validation scores are provided or all scores are None
-    pub fn update(&mut self, new_candidates: HashMap<VariantName, Candidate>) -> Result<(), Error> {
+    pub fn update(&mut self, candidates: HashMap<VariantName, Candidate>) -> Result<(), Error> {
         tracing::info!(
-            "Updating Pareto frontier: merging {} new variants with {} existing variants",
-            new_candidates.len(),
-            self.variants.len()
+            "Updating Pareto frontier: assessing {} new variants with {} existing variants",
+            candidates.len(),
+            self.variant_configs.len()
         );
+        // Step 1: Validate new candidates
+        // 1a: Check for name collisions and extract variant configurations
+        self.validate_no_name_collisions(&candidates)?;
+        let new_variant_configs: HashMap<VariantName, UninitializedChatCompletionConfig> =
+            candidates
+                .iter()
+                .map(|(name, candidate)| (name.clone(), candidate.variant.clone()))
+                .collect();
 
-        // Step 1: Check for name collisions
-        self.validate_no_name_collisions(&new_candidates)?;
+        // 1b: Extract and validate scores (performs normalization and validation)
+        let new_variant_scores = self.extract_and_validate_new_scores(candidates)?;
 
-        // Step 2: Extract variant configurations
-        let new_variants: HashMap<VariantName, UninitializedChatCompletionConfig> = new_candidates
-            .iter()
-            .map(|(name, candidate)| (name.clone(), candidate.variant.clone()))
-            .collect();
+        // Step 2: Merge
+        // Merge new variant configs with existing frontier variant configs
+        let mut all_variant_configs: HashMap<VariantName, UninitializedChatCompletionConfig> =
+            self.variant_configs.clone();
+        all_variant_configs.extend(new_variant_configs.clone());
 
-        // Step 3: Extract and validate scores (performs normalization and validation)
-        let new_variant_scores = self.extract_and_validate_new_scores(new_candidates)?;
-
-        // Step 4: Merge new variants with existing frontier variants
-        let mut all_candidates: HashMap<VariantName, UninitializedChatCompletionConfig> =
-            self.variants.clone();
-        all_candidates.extend(new_variants);
+        // Merge new scores with existing scores
+        let mut all_variant_scores: VariantScoresMap = self.variant_scores_map.clone();
+        all_variant_scores.extend(new_variant_scores);
 
         tracing::debug!(
-            "Combined candidates: {} total ({} existing + {} new)",
-            all_candidates.len(),
-            self.variants.len(),
-            new_variant_scores.len()
+            "Step 2: Combined candidates: {} total ({} existing + {} new)",
+            all_variant_configs.len(),
+            self.variant_configs.len(),
+            new_variant_configs.len()
         );
 
-        // Step 5: Merge new scores with existing scores
-        let mut all_scores: VariantScoresMap = self.val_scores.clone();
-        all_scores.extend(new_variant_scores);
-
-        // Create sorted metric directions for deterministic objective vector ordering
-        let mut sorted_directions: Vec<(&String, &MetricConfigOptimize)> =
-            self.optimize_directions.iter().collect();
-        sorted_directions.sort_by_key(|(name, _)| *name);
-
-        tracing::debug!(
-            "Step 1: Building instance-wise Pareto sets for {} datapoints (union across all variants)",
-            self.datapoint_ids.len()
-        );
-
-        // Step 1: Build instance-wise Pareto sets P*[i] for each datapoint
+        // Step 3: Run modified GEPA SELECTCANDIDATE algorithm
+        // 3a: Build instance-wise Pareto sets P*[i] for each datapoint
         // Original paper: P*[i] = {variants with max score on instance i} (single evaluator)
         // Our extension: P*[i] = {Pareto non-dominated variants on instance i} (multiple evaluators)
-        let instance_pareto_sets = self.build_instance_pareto_sets(&all_scores, &all_candidates);
+        tracing::debug!(
+            "Step 3a: Building instance-wise Pareto sets for {} datapoints (union across all variants)",
+            self.datapoint_ids.len()
+        );
+        let instance_optimal_variant_names =
+            self.build_instance_pareto_sets(&all_variant_scores, &all_variant_configs);
 
-        // Step 2: Build candidate set C (union of all instance-wise Pareto sets)
-        let candidate_set: HashSet<VariantName> = instance_pareto_sets
+        // 3b: Build candidate set C (union of all instance-wise Pareto sets)
+        let candidate_optimal_variant_names: HashSet<VariantName> = instance_optimal_variant_names
             .values()
             .flat_map(|set| set.iter().cloned())
             .collect();
 
-        // Safety check: candidate_set should only contain variants from the combined candidates
-        debug_assert!(
-            candidate_set.iter().all(|v| all_candidates.contains_key(v)),
-            "candidate_set contains variants not in combined candidates"
-        );
-
         tracing::debug!(
-            "Step 2: Candidate set has {} variants (union of instance-wise Pareto sets)",
-            candidate_set.len()
+            "Step 3b: Candidate set has {} variants (union of instance-wise Pareto sets)",
+            candidate_optimal_variant_names.len()
         );
 
         // Early exit if no candidates or only one
-        if candidate_set.len() <= 1 {
-            self.apply_early_exit_update(
-                candidate_set,
-                &instance_pareto_sets,
-                all_candidates,
-                all_scores,
+        if candidate_optimal_variant_names.len() <= 1 {
+            self.update_frontier_variables(
+                candidate_optimal_variant_names.clone(),
+                &instance_optimal_variant_names,
+                all_variant_configs,
+                all_variant_scores,
+            );
+            tracing::info!(
+                "Early exit: {} candidate(s) after instance-wise filtering",
+                candidate_optimal_variant_names.len()
             );
             return Ok(());
         }
 
-        // Step 3: Global filtering - check dominance over all (D×E) objectives
-        tracing::debug!("Step 3: Global Pareto filtering across all objectives");
+        // 3c: Global filtering - check dominance over all objectives
+        tracing::debug!("Step 3c: Global Pareto filtering across all objectives");
 
-        // Pre-compute objective vectors for efficient dominance checking
-        let expected_vector_length = self.expected_vector_length();
-        let mut objective_vectors: HashMap<VariantName, Arc<Vec<f32>>> = HashMap::new();
-        let mut new_variants_count = 0;
-        let mut cached_variants_count = 0;
+        // Pre-compute objective vectors and update cache
+        self.update_objective_vector_cache(&candidate_optimal_variant_names, &all_variant_scores);
 
-        for variant_name in &candidate_set {
-            // Check if we have a cached vector
-            let vec = if let Some(cached_vec) = self.objective_vector_cache.get(variant_name) {
-                // Validate that cached vector has the expected length
-                if cached_vec.len() == expected_vector_length {
-                    cached_variants_count += 1;
-                    Arc::clone(cached_vec)
-                } else {
-                    tracing::warn!(
-                        "Cached vector for '{}' has wrong length (expected {}, got {}). \
-                         Datapoint or evaluator layout may have changed. Recomputing.",
-                        variant_name,
-                        expected_vector_length,
-                        cached_vec.len()
-                    );
-                    new_variants_count += 1;
-                    Arc::new(compute_objective_vector(
-                        variant_name,
-                        &all_scores,
-                        &self.datapoint_ids,
-                        &sorted_directions,
-                    ))
-                }
-            } else {
-                new_variants_count += 1;
-                Arc::new(compute_objective_vector(
-                    variant_name,
-                    &all_scores,
-                    &self.datapoint_ids,
-                    &sorted_directions,
-                ))
-            };
-
-            objective_vectors.insert(variant_name.clone(), vec);
-        }
-
-        // Update cache with newly computed vectors
-        for (variant_name, vec) in &objective_vectors {
-            self.objective_vector_cache
-                .insert(variant_name.clone(), Arc::clone(vec));
-        }
-        tracing::debug!(
-            "Pre-computed vectors: {} cached, {} new (total: {})",
-            cached_variants_count,
-            new_variants_count,
-            candidate_set.len()
-        );
-
-        // Global dominance filtering
-        let mut non_dominated = candidate_set.clone();
-        let num_datapoints = self.datapoint_ids.len();
-
-        for variant_a in &candidate_set {
-            let a_vec = &objective_vectors[variant_a];
-            for variant_b in &candidate_set {
-                if variant_a != variant_b && non_dominated.contains(variant_b) {
-                    let b_vec = &objective_vectors[variant_b];
-                    if vector_dominates(a_vec, b_vec, &sorted_directions, num_datapoints) {
-                        non_dominated.remove(variant_b);
-                    }
-                }
-            }
-        }
-
-        tracing::debug!(
-            "Global filtering: {} → {} variants",
-            candidate_set.len(),
-            non_dominated.len()
-        );
+        // Global dominance filtering (reads vectors from cache)
+        let optimal_variant_names =
+            self.filter_by_global_dominance(candidate_optimal_variant_names);
 
         // Monitor missing data rates for final Pareto frontier variants
-        let total_datapoints = self.datapoint_ids.len();
-        let total_evaluators = self.optimize_directions.len();
+        self.log_missing_data_warnings(&optimal_variant_names, &all_variant_scores);
 
-        for variant_name in &non_dominated {
-            if let Some(per_datapoint) = all_scores.get(variant_name) {
-                let total_possible = total_datapoints * total_evaluators;
-                if total_possible > 0 {
-                    // Count non-None scores across all (datapoint, evaluator) pairs
-                    let non_none_count = self
-                        .datapoint_ids
-                        .iter()
-                        .filter_map(|datapoint_id| per_datapoint.get(datapoint_id))
-                        .flat_map(|scores| {
-                            self.optimize_directions
-                                .keys()
-                                .filter_map(move |evaluator_name| {
-                                    scores.get(evaluator_name).and_then(|s| s.as_ref())
-                                })
-                        })
-                        .count();
-
-                    let missing_rate = 1.0 - (non_none_count as f32 / total_possible as f32);
-
-                    if missing_rate > HIGH_MISSING_RATE_THRESHOLD {
-                        tracing::warn!(
-                            "Variant '{}' has high missing score rate: {:.1}% ({}/{} evaluations succeeded)",
-                            variant_name,
-                            missing_rate * 100.0,
-                            non_none_count,
-                            total_possible
-                        );
-                    }
-                }
-            }
-        }
-
-        // Compute frequency map for sampling (count instance-wise Pareto memberships)
-        let frequencies = calculate_frequencies(&non_dominated, &instance_pareto_sets);
-
-        // Filter out variants not in final non-dominated set
-        let filtered_candidates: HashMap<VariantName, UninitializedChatCompletionConfig> =
-            all_candidates
-                .into_iter()
-                .filter(|(name, _)| non_dominated.contains(name))
-                .collect();
-
-        // Prune val_scores to only contain variants in filtered_candidates
-        let filtered_val_scores: VariantScoresMap = all_scores
-            .into_iter()
-            .filter(|(name, _)| filtered_candidates.contains_key(name))
-            .collect();
+        // Step 4: Update frontier
+        self.update_frontier_variables(
+            optimal_variant_names,
+            &instance_optimal_variant_names,
+            all_variant_configs,
+            all_variant_scores,
+        );
 
         tracing::info!(
             "Pareto frontier updated: {} variants in frontier",
-            filtered_candidates.len()
+            self.variant_configs.len()
         );
-
-        // Update self
-        self.variants = filtered_candidates;
-        self.frequencies = frequencies;
-        self.val_scores = filtered_val_scores;
-
-        // Prune cache to only retain variants in the final frontier
-        // This prevents memory leak from accumulating dominated variants across iterations
-        self.objective_vector_cache
-            .retain(|name, _| self.variants.contains_key(name));
 
         Ok(())
     }
@@ -402,13 +283,13 @@ impl ParetoFrontier {
     pub fn sample_by_frequency(
         &self,
     ) -> Result<HashMap<VariantName, UninitializedChatCompletionConfig>, Error> {
-        if self.frequencies.is_empty() {
+        if self.variant_frequencis.is_empty() {
             return Err(Error::new(ErrorDetails::InternalError {
                 message: "Cannot sample from empty frequency map".to_string(),
             }));
         }
 
-        let total_frequency: usize = self.frequencies.values().sum();
+        let total_frequency: usize = self.variant_frequencis.values().sum();
         if total_frequency == 0 {
             return Err(Error::new(ErrorDetails::InternalError {
                 message: "Cannot sample when all frequencies are zero".to_string(),
@@ -416,9 +297,9 @@ impl ParetoFrontier {
         }
 
         let items: Vec<_> = self
-            .frequencies
+            .variant_frequencis
             .iter()
-            .filter(|(name, _)| self.variants.contains_key(*name))
+            .filter(|(name, _)| self.variant_configs.contains_key(*name))
             .collect();
 
         if items.is_empty() {
@@ -438,32 +319,31 @@ impl ParetoFrontier {
                 })
             })?;
 
-        let variant = self.variants.get(&sampled_name).cloned().ok_or_else(|| {
-            Error::new(ErrorDetails::InternalError {
-                message: format!("Sampled variant '{sampled_name}' not found in Pareto frontier"),
-            })
-        })?;
+        let variant = self
+            .variant_configs
+            .get(&sampled_name)
+            .cloned()
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::InternalError {
+                    message: format!(
+                        "Sampled variant '{sampled_name}' not found in Pareto frontier"
+                    ),
+                })
+            })?;
 
         let mut result = HashMap::new();
         result.insert(sampled_name, variant);
         Ok(result)
     }
 
-    /// Get expected objective vector length for current layout
-    ///
-    /// Used for cache validation
-    fn expected_vector_length(&self) -> usize {
-        self.datapoint_ids.len() * self.optimize_directions.len()
-    }
-
     /// Validate that incoming candidates do not collide with existing frontier variant names
     fn validate_no_name_collisions(
         &self,
-        new_candidates: &HashMap<VariantName, Candidate>,
+        candidates: &HashMap<VariantName, Candidate>,
     ) -> Result<(), Error> {
-        let collisions: Vec<&VariantName> = new_candidates
+        let collisions: Vec<&VariantName> = candidates
             .keys()
-            .filter(|name| self.variants.contains_key(*name))
+            .filter(|name| self.variant_configs.contains_key(*name))
             .collect();
 
         if collisions.is_empty() {
@@ -601,15 +481,15 @@ impl ParetoFrontier {
     /// that single instance. This is Step 1 of GEPA's 3-step algorithm.
     ///
     /// # Arguments
-    /// * `all_scores` - Scores for all variants (existing + new)
-    /// * `all_candidates` - Variant configs for all variants (existing + new)
+    /// * `variants_scores` - Scores for all variants (existing + new)
+    /// * `variant_configs` - Variant configs for all variants (existing + new)
     ///
     /// # Returns
     /// Map from datapoint ID to set of variant names that are Pareto-optimal on that datapoint
     fn build_instance_pareto_sets(
         &self,
-        all_scores: &VariantScoresMap,
-        all_candidates: &HashMap<VariantName, UninitializedChatCompletionConfig>,
+        variants_scores: &VariantScoresMap,
+        variant_configs: &HashMap<VariantName, UninitializedChatCompletionConfig>,
     ) -> HashMap<DatapointId, HashSet<VariantName>> {
         let mut instance_pareto_sets: HashMap<DatapointId, HashSet<VariantName>> = HashMap::new();
 
@@ -618,9 +498,9 @@ impl ParetoFrontier {
             let mut instance_scores: Vec<(VariantName, HashMap<EvaluatorName, Option<f32>>)> =
                 Vec::new();
 
-            for (variant_name, variant_scores) in all_scores {
+            for (variant_name, variant_scores) in variants_scores {
                 // Only consider variants that are in the combined candidates
-                if !all_candidates.contains_key(variant_name) {
+                if !variant_configs.contains_key(variant_name) {
                     continue;
                 }
                 if let Some(scores) = variant_scores.get(datapoint_id) {
@@ -642,58 +522,210 @@ impl ParetoFrontier {
         instance_pareto_sets
     }
 
-    /// Apply early exit update when candidate set has ≤1 variants
+    /// Update frontier internal state with optimal variants
     ///
-    /// When the candidate set (union of instance-wise Pareto sets) has 0 or 1 variants,
-    /// we can skip expensive global dominance checking and directly update the frontier.
+    /// Updates variant frequencies, configs, scores, and prunes the objective vector cache
+    /// to only contain the optimal variants.
     ///
     /// # Arguments
-    /// * `candidate_set` - Set of variant names in the candidate set
-    /// * `instance_pareto_sets` - Instance-wise Pareto sets for frequency calculation
-    /// * `all_candidates` - All variant configs (consumed)
-    /// * `all_scores` - All variant scores (consumed)
-    fn apply_early_exit_update(
+    /// * `optimal_variant_names` - Set of variant names to keep in the frontier
+    /// * `instance_optimal_variant_names` - Instance-wise Pareto sets for frequency calculation
+    /// * `variant_configs` - All variant configs (consumed)
+    /// * `variants_scores` - All variant scores (consumed)
+    fn update_frontier_variables(
         &mut self,
-        candidate_set: HashSet<VariantName>,
-        instance_pareto_sets: &HashMap<DatapointId, HashSet<VariantName>>,
-        all_candidates: HashMap<VariantName, UninitializedChatCompletionConfig>,
-        all_scores: VariantScoresMap,
+        optimal_variant_names: HashSet<VariantName>,
+        instance_optimal_variant_names: &HashMap<DatapointId, HashSet<VariantName>>,
+        variant_configs: HashMap<VariantName, UninitializedChatCompletionConfig>,
+        variants_scores: VariantScoresMap,
     ) {
-        let frequencies = calculate_frequencies(&candidate_set, instance_pareto_sets);
+        // Compute frequency map for sampling (count instance-wise Pareto memberships)
+        self.variant_frequencis =
+            calculate_frequencies(&optimal_variant_names, instance_optimal_variant_names);
 
-        let filtered_candidates: HashMap<VariantName, UninitializedChatCompletionConfig> =
-            all_candidates
-                .into_iter()
-                .filter(|(name, _)| candidate_set.contains(name))
-                .collect();
-
-        // Prune val_scores to only contain variants in filtered_candidates
-        let filtered_val_scores: VariantScoresMap = all_scores
+        // Filter out variants not in final non-dominated set
+        self.variant_configs = variant_configs
             .into_iter()
-            .filter(|(name, _)| filtered_candidates.contains_key(name))
+            .filter(|(name, _)| optimal_variant_names.contains(name))
             .collect();
 
-        // Update self
-        self.variants = filtered_candidates;
-        self.frequencies = frequencies;
-        self.val_scores = filtered_val_scores;
-        self.objective_vector_cache
-            .retain(|name, _| self.variants.contains_key(name));
+        // Prune val_scores to only contain variants in filtered_candidates
+        self.variant_scores_map = variants_scores
+            .into_iter()
+            .filter(|(name, _)| optimal_variant_names.contains(name))
+            .collect();
 
-        tracing::info!(
-            "Early exit: {} candidate(s) after instance-wise filtering",
-            self.variants.len()
+        // Prune cache to only retain variants in the final frontier
+        // This prevents memory leak from accumulating dominated variants across iterations
+        self.objective_vector_cache
+            .retain(|name, _| optimal_variant_names.contains(name));
+    }
+
+    /// Update objective vector cache for candidate variants
+    ///
+    /// For each variant in the candidate set:
+    /// - If already cached: skip (cache hit)
+    /// - If not cached: compute objective vector and insert into cache
+    ///
+    /// Logs cache statistics (hits/misses).
+    ///
+    /// # Arguments
+    /// * `variant_names` - Set of variant names to ensure are cached
+    /// * `variants_scores` - Score map containing all variants (existing + new)
+    fn update_objective_vector_cache(
+        &mut self,
+        variant_names: &HashSet<VariantName>,
+        variants_scores: &VariantScoresMap,
+    ) {
+        // BTreeMap iteration is already sorted by key
+        let sorted_directions: Vec<(&String, &MetricConfigOptimize)> =
+            self.optimize_directions.iter().collect();
+
+        let mut new_variants_count = 0;
+        let mut cached_variants_count = 0;
+
+        for variant_name in variant_names {
+            if self.objective_vector_cache.contains_key(variant_name) {
+                // Already cached
+                cached_variants_count += 1;
+            } else {
+                // Compute and cache
+                new_variants_count += 1;
+                let vec = Arc::new(compute_objective_vector(
+                    variant_name,
+                    variants_scores,
+                    &self.datapoint_ids,
+                    &sorted_directions,
+                ));
+                self.objective_vector_cache
+                    .insert(variant_name.clone(), vec);
+            }
+        }
+
+        tracing::debug!(
+            "Updated vector cache: {} cached, {} new (total: {})",
+            cached_variants_count,
+            new_variants_count,
+            variant_names.len()
         );
     }
 
-    #[cfg(test)]
-    pub fn frequencies_mut(&mut self) -> &mut HashMap<VariantName, usize> {
-        &mut self.frequencies
+    /// Filter candidate variants by global Pareto dominance
+    ///
+    /// Performs pairwise dominance checking across all (datapoint × evaluator) objectives
+    /// to identify and remove globally dominated variants. A variant is dominated if
+    /// another variant is better-or-equal on all objectives and strictly better on at least one.
+    ///
+    /// This implements Step 3c of the GEPA algorithm: global filtering after instance-wise
+    /// filtering has produced the candidate set.
+    ///
+    /// Reads pre-computed objective vectors from the cache (populated by
+    /// `compute_objective_vectors_with_cache`).
+    ///
+    /// # Arguments
+    /// * `variant_names` - Set of candidate variant names to filter (consumed)
+    ///
+    /// # Returns
+    /// Set of non-dominated variant names (the final Pareto frontier)
+    fn filter_by_global_dominance(
+        &self,
+        variant_names: HashSet<VariantName>,
+    ) -> HashSet<VariantName> {
+        // BTreeMap iteration is already sorted by key
+        let sorted_directions: Vec<(&String, &MetricConfigOptimize)> =
+            self.optimize_directions.iter().collect();
+
+        let mut non_dominated = variant_names.clone();
+
+        for variant_a in &variant_names {
+            let a_vec = &self.objective_vector_cache[variant_a];
+            for variant_b in &variant_names {
+                if variant_a != variant_b && non_dominated.contains(variant_b) {
+                    let b_vec = &self.objective_vector_cache[variant_b];
+                    if vector_dominates(a_vec, b_vec, &sorted_directions) {
+                        non_dominated.remove(variant_b);
+                    }
+                }
+            }
+        }
+
+        tracing::debug!(
+            "Global filtering: {} → {} variants",
+            variant_names.len(),
+            non_dominated.len()
+        );
+
+        non_dominated
+    }
+
+    /// Log warnings for variants with high missing evaluation rates
+    ///
+    /// Monitors each variant in the final Pareto frontier and logs warnings when the
+    /// missing score rate exceeds the threshold (defined by HIGH_MISSING_RATE_THRESHOLD).
+    ///
+    /// Missing scores can indicate:
+    /// - Systematic evaluation failures (e.g., variant causes errors)
+    /// - Random failures (e.g., external evaluator unavailable)
+    /// - Incomplete evaluation coverage
+    ///
+    /// This monitoring helps identify potentially unreliable variants that survived
+    /// to the frontier despite having sparse evaluation data.
+    ///
+    /// # Arguments
+    /// * `variant_names` - Set of variant names in the final Pareto frontier
+    /// * `variants_scores` - Score map containing all variants
+    fn log_missing_data_warnings(
+        &self,
+        variant_names: &HashSet<VariantName>,
+        variants_scores: &VariantScoresMap,
+    ) {
+        let total_datapoints = self.datapoint_ids.len();
+        let total_evaluators = self.optimize_directions.len();
+
+        for variant_name in variant_names {
+            if let Some(variant_scores) = variants_scores.get(variant_name) {
+                let total_possible = total_datapoints * total_evaluators;
+                if total_possible > 0 {
+                    // Count non-None scores across all (datapoint, evaluator) pairs
+                    let non_none_count = self
+                        .datapoint_ids
+                        .iter()
+                        .filter_map(|datapoint_id| variant_scores.get(datapoint_id))
+                        .flat_map(|scores| {
+                            self.optimize_directions
+                                .keys()
+                                .filter_map(move |evaluator_name| {
+                                    scores.get(evaluator_name).and_then(|s| s.as_ref())
+                                })
+                        })
+                        .count();
+
+                    let missing_rate = 1.0 - (non_none_count as f32 / total_possible as f32);
+
+                    if missing_rate > HIGH_MISSING_RATE_THRESHOLD {
+                        tracing::warn!(
+                            "Variant '{}' has high missing score rate: {:.1}% ({}/{} evaluations succeeded)",
+                            variant_name,
+                            missing_rate * 100.0,
+                            non_none_count,
+                            total_possible
+                        );
+                    }
+                }
+            }
+        }
     }
 
     #[cfg(test)]
-    pub fn variants_mut(&mut self) -> &mut HashMap<VariantName, UninitializedChatCompletionConfig> {
-        &mut self.variants
+    pub fn variant_frequencies_mut(&mut self) -> &mut HashMap<VariantName, usize> {
+        &mut self.variant_frequencis
+    }
+
+    #[cfg(test)]
+    pub fn variant_configs_mut(
+        &mut self,
+    ) -> &mut HashMap<VariantName, UninitializedChatCompletionConfig> {
+        &mut self.variant_configs
     }
 }
 
@@ -709,18 +741,15 @@ impl ParetoFrontier {
 /// # Arguments
 /// * `parent_stats` - Summary statistics (mean, stderr, count) for parent variant's evaluations
 /// * `child_stats` - Summary statistics (mean, stderr, count) for child variant's evaluations
-/// * `evaluation_config` - Evaluation config with evaluator definitions and optimization directions
+/// * `evaluators` - Evaluator configs with optimization directions (max/min) for each metric
 ///
 /// # Returns
 /// * `bool` - True if child Pareto-dominates parent (better/equal on all, strictly better on ≥1 evaluator summary stats)
 pub fn is_improvement(
     parent_stats: &HashMap<EvaluatorName, EvaluatorStats>,
     child_stats: &HashMap<EvaluatorName, EvaluatorStats>,
-    evaluation_config: &InferenceEvaluationConfig,
+    evaluators: &HashMap<EvaluatorName, EvaluatorConfig>,
 ) -> bool {
-    // Get evaluators from the evaluation config
-    let evaluators = &evaluation_config.evaluators;
-
     // Track whether child is better, worse, or equal on each metric
     let mut strictly_better_on_at_least_one = false;
     let mut worse_on_any = false;
@@ -808,9 +837,11 @@ fn compare_values(a_val: f32, b_val: f32, optimize: MetricConfigOptimize) -> (bo
 }
 
 /// Extract optimization directions from evaluator configs
+///
+/// Returns a BTreeMap to ensure deterministic iteration order (sorted by evaluator name).
 fn extract_optimize_directions(
     evaluators: &HashMap<EvaluatorName, EvaluatorConfig>,
-) -> HashMap<EvaluatorName, MetricConfigOptimize> {
+) -> BTreeMap<EvaluatorName, MetricConfigOptimize> {
     evaluators
         .iter()
         .map(|(name, config)| (name.clone(), config.optimize()))
@@ -824,7 +855,7 @@ fn extract_optimize_directions(
 ///
 /// # Arguments
 /// * `variant_name` - Name of the variant to compute vector for
-/// * `val_scores_map` - Map of variant names to their per-datapoint scores
+/// * `variants_scores` - Map of variant names to their per-datapoint scores
 /// * `datapoint_ids` - Ordered list of datapoint IDs (defines vector structure)
 /// * `sorted_evaluators` - Sorted list of metric optimization directions (defines vector structure and optimization directions)
 ///
@@ -832,15 +863,15 @@ fn extract_optimize_directions(
 /// * `Vec<f32>` - Flattened vector of length D×E where each element is an imputed score
 fn compute_objective_vector(
     variant_name: &str,
-    val_scores_map: &VariantScoresMap,
+    variants_scores: &VariantScoresMap,
     datapoint_ids: &[DatapointId],
-    sorted_evaluators: &[(&String, &MetricConfigOptimize)],
+    sorted_directions: &[(&String, &MetricConfigOptimize)],
 ) -> Vec<f32> {
-    let mut vec = Vec::with_capacity(datapoint_ids.len() * sorted_evaluators.len());
+    let mut vec = Vec::with_capacity(datapoint_ids.len() * sorted_directions.len());
 
     for datapoint_id in datapoint_ids {
-        for (evaluator_name, optimize_direction) in sorted_evaluators {
-            let score = val_scores_map
+        for (evaluator_name, optimize_direction) in sorted_directions {
+            let score = variants_scores
                 .get(variant_name)
                 .and_then(|variant_scores| variant_scores.get(datapoint_id))
                 .and_then(|scores| scores.get(*evaluator_name).and_then(|s| *s));
@@ -855,15 +886,14 @@ fn compute_objective_vector(
 
 /// Check if vector A dominates vector B using pre-computed objective vectors
 ///
-/// More efficient than `global_dominates` because it avoids repeated hash lookups and
-/// imputation. Vectors must be pre-computed using `compute_objective_vector` with the
-/// same datapoint_ids and evaluators ordering.
+/// Efficient dominance checking using pre-computed vectors with flattened layout
+/// to avoid repeated hash lookups and imputation. Vectors must be pre-computed
+/// using `compute_objective_vector` with the same datapoint_ids and evaluators ordering.
 ///
 /// # Arguments
 /// * `a_vec` - Pre-computed objective vector for variant A
 /// * `b_vec` - Pre-computed objective vector for variant B
 /// * `sorted_directions` - Sorted list of metric optimization directions (must match vector structure)
-/// * `num_datapoints` - Number of datapoints (must match vector structure)
 ///
 /// # Returns
 /// * `bool` - True if vector A dominates vector B
@@ -871,13 +901,13 @@ fn vector_dominates(
     a_vec: &[f32],
     b_vec: &[f32],
     sorted_directions: &[(&String, &MetricConfigOptimize)],
-    num_datapoints: usize,
 ) -> bool {
     let mut better_or_equal_on_all = true;
     let mut strictly_better_on_at_least_one = false;
 
     // Vector is structured as: [dp0_eval0, dp0_eval1, ..., dp1_eval0, dp1_eval1, ...]
     let num_evaluators = sorted_directions.len();
+    let num_datapoints = a_vec.len() / num_evaluators;
 
     for idx in 0..(num_datapoints * num_evaluators) {
         let evaluator_idx = idx % num_evaluators;
@@ -908,103 +938,25 @@ fn vector_dominates(
 /// Higher frequency indicates the variant performs well on more instances.
 ///
 /// # Arguments
-/// * `variants` - Set of variant names to calculate frequencies for
-/// * `instance_pareto_sets` - Map from datapoint ID to set of Pareto-optimal variant names for that instance
+/// * `variant_names` - Set of variant names to calculate frequencies for
+/// * `instance_optimal_variant_names` - Map from datapoint ID to set of Pareto-optimal variant names for that instance
 ///
 /// # Returns
 /// HashMap mapping each variant name to its frequency (count of instance-wise Pareto set memberships)
 fn calculate_frequencies(
-    variants: &HashSet<VariantName>,
-    instance_pareto_sets: &HashMap<DatapointId, HashSet<VariantName>>,
+    variant_names: &HashSet<VariantName>,
+    instance_optimal_variant_names: &HashMap<DatapointId, HashSet<VariantName>>,
 ) -> HashMap<VariantName, usize> {
-    variants
+    variant_names
         .iter()
         .map(|v| {
-            let freq = instance_pareto_sets
+            let freq = instance_optimal_variant_names
                 .values()
                 .filter(|s| s.contains(v))
                 .count();
             (v.clone(), freq)
         })
         .collect()
-}
-
-/// Check if variant A globally dominates variant B across all (datapoint, evaluator) objectives
-///
-/// A globally dominates B if:
-/// - A is better than or equal to B on all (datapoint_id, evaluator_name) pairs, AND
-/// - A is strictly better than B on at least one pair
-///
-/// This compares variants across the full (D×E)-dimensional space where D=datapoints, E=evaluators.
-/// Missing scores are imputed as worst-case (-inf for max, +inf for min).
-///
-/// # Arguments
-/// * `variant_a_name` - Name of the first variant to compare
-/// * `variant_b_name` - Name of the second variant to compare
-/// * `val_scores_map` - Map of variant names to their per-datapoint scores
-/// * `optimize_directions` - Map of evaluator names to their optimization directions
-///
-/// # Returns
-/// * `bool` - True if variant A globally dominates variant B
-#[cfg(test)]
-fn global_dominates(
-    variant_a_name: &str,
-    variant_b_name: &str,
-    val_scores_map: &VariantScoresMap,
-    optimize_directions: &HashMap<EvaluatorName, MetricConfigOptimize>,
-) -> bool {
-    let mut better_or_equal_on_all = true;
-    let mut strictly_better_on_at_least_one = false;
-
-    // Get scores for both variants
-    let variant_a_scores = val_scores_map.get(variant_a_name);
-    let variant_b_scores = val_scores_map.get(variant_b_name);
-
-    // Get all (datapoint_id, evaluator_name) pairs from both variants
-    let all_pairs: HashSet<_> = variant_a_scores
-        .into_iter()
-        .flat_map(|scores| scores.keys())
-        .chain(
-            variant_b_scores
-                .into_iter()
-                .flat_map(|scores| scores.keys()),
-        )
-        .flat_map(|datapoint_id| {
-            optimize_directions
-                .keys()
-                .map(move |evaluator_name| (*datapoint_id, evaluator_name.clone()))
-        })
-        .collect();
-
-    for (datapoint_id, evaluator_name) in all_pairs {
-        let Some(optimize) = optimize_directions.get(&evaluator_name) else {
-            continue;
-        };
-
-        // Get scores for this (datapoint, evaluator) pair
-        let score_a = variant_a_scores
-            .and_then(|scores| scores.get(&datapoint_id))
-            .and_then(|scores| scores.get(&evaluator_name).and_then(|s| *s));
-
-        let score_b = variant_b_scores
-            .and_then(|scores| scores.get(&datapoint_id))
-            .and_then(|scores| scores.get(&evaluator_name).and_then(|s| *s));
-
-        // Impute missing values as worst-case
-        let a_val = impute_missing_score(score_a, *optimize);
-        let b_val = impute_missing_score(score_b, *optimize);
-
-        let (is_worse, is_better) = compare_values(a_val, b_val, *optimize);
-        if is_worse {
-            better_or_equal_on_all = false;
-            break;
-        }
-        if is_better {
-            strictly_better_on_at_least_one = true;
-        }
-    }
-
-    better_or_equal_on_all && strictly_better_on_at_least_one
 }
 
 /// Check if variant A instance-dominates variant B on a specific datapoint
@@ -1025,7 +977,7 @@ fn global_dominates(
 fn instance_dominates(
     a_scores: &HashMap<EvaluatorName, Option<f32>>,
     b_scores: &HashMap<EvaluatorName, Option<f32>>,
-    optimize_directions: &HashMap<EvaluatorName, MetricConfigOptimize>,
+    optimize_directions: &BTreeMap<EvaluatorName, MetricConfigOptimize>,
 ) -> bool {
     let mut better_or_equal_on_all = true;
     let mut strictly_better_on_at_least_one = false;
@@ -1061,7 +1013,7 @@ fn instance_dominates(
 /// Vector of variant names that are not dominated by any other variant on this instance
 fn find_non_dominated_variants(
     instance_scores: &[(VariantName, HashMap<EvaluatorName, Option<f32>>)],
-    optimize_directions: &HashMap<EvaluatorName, MetricConfigOptimize>,
+    optimize_directions: &BTreeMap<EvaluatorName, MetricConfigOptimize>,
 ) -> Vec<VariantName> {
     let mut non_dominated = Vec::new();
 
@@ -1206,16 +1158,6 @@ mod tests {
             .collect()
     }
 
-    /// Create an InferenceEvaluationConfig for testing
-    fn create_evaluation_config(evaluators: &[(&str, &str)]) -> InferenceEvaluationConfig {
-        let evaluator_configs = create_test_evaluators(evaluators);
-        InferenceEvaluationConfig {
-            evaluators: evaluator_configs,
-            function_name: "test_function".to_string(),
-            description: Some("test_evaluation".to_string()),
-        }
-    }
-
     // ============================================================================
     // Unit Tests for Helper Functions
     // ============================================================================
@@ -1249,7 +1191,7 @@ mod tests {
     #[test]
     fn test_sample_by_frequency_single_variant() {
         let mut frontier = ParetoFrontier::new(Vec::new(), &HashMap::new(), None);
-        frontier.variants.insert(
+        frontier.variant_configs.insert(
             "variant_a".to_string(),
             UninitializedChatCompletionConfig {
                 model: "test-model".into(),
@@ -1257,7 +1199,7 @@ mod tests {
             },
         );
         frontier
-            .frequencies_mut()
+            .variant_frequencies_mut()
             .insert("variant_a".to_string(), 3);
 
         let sampled = frontier
@@ -1271,9 +1213,9 @@ mod tests {
     fn test_sample_by_frequency_zero_weights_error() {
         let mut frontier = ParetoFrontier::new(Vec::new(), &HashMap::new(), None);
         frontier
-            .frequencies_mut()
+            .variant_frequencies_mut()
             .insert("variant_a".to_string(), 0);
-        frontier.variants.insert(
+        frontier.variant_configs.insert(
             "variant_a".to_string(),
             UninitializedChatCompletionConfig {
                 model: "test-model".into(),
@@ -1414,80 +1356,6 @@ mod tests {
     }
 
     #[test]
-    fn test_global_dominates_basic() {
-        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
-        let optimize_directions = extract_optimize_directions(&evaluators);
-
-        // A dominates B on both datapoints
-        let val_scores_map = HashMap::from([
-            (
-                "a".to_string(),
-                HashMap::from([
-                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.9))])),
-                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.8))])),
-                ]),
-            ),
-            (
-                "b".to_string(),
-                HashMap::from([
-                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.7))])),
-                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.6))])),
-                ]),
-            ),
-        ]);
-
-        assert!(global_dominates(
-            "a",
-            "b",
-            &val_scores_map,
-            &optimize_directions
-        ));
-        assert!(!global_dominates(
-            "b",
-            "a",
-            &val_scores_map,
-            &optimize_directions
-        ));
-    }
-
-    #[test]
-    fn test_global_dominates_no_domination() {
-        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
-        let optimize_directions = extract_optimize_directions(&evaluators);
-
-        // A better on dp1, B better on dp2 - no global dominance
-        let val_scores_map = HashMap::from([
-            (
-                "a".to_string(),
-                HashMap::from([
-                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.9))])),
-                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.6))])),
-                ]),
-            ),
-            (
-                "b".to_string(),
-                HashMap::from([
-                    (dp(1), HashMap::from([("accuracy".to_string(), Some(0.7))])),
-                    (dp(2), HashMap::from([("accuracy".to_string(), Some(0.8))])),
-                ]),
-            ),
-        ]);
-
-        assert!(!global_dominates(
-            "a",
-            "b",
-            &val_scores_map,
-            &optimize_directions
-        ));
-        assert!(!global_dominates(
-            "b",
-            "a",
-            &val_scores_map,
-            &optimize_directions
-        ));
-    }
-
-    #[test]
     fn test_find_non_dominated_variants_single() {
         let evaluators = create_test_evaluators(&[("accuracy", "max")]);
         let optimize_directions = extract_optimize_directions(&evaluators);
@@ -1548,9 +1416,9 @@ mod tests {
         // Child better on single metric (max)
         let parent_stats = create_evaluator_stats(&[("accuracy", 0.7, 0.1, 10)]);
         let child_stats = create_evaluator_stats(&[("accuracy", 0.9, 0.1, 10)]);
-        let eval_config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
-        assert!(is_improvement(&parent_stats, &child_stats, &eval_config)); // Child is better
+        assert!(is_improvement(&parent_stats, &child_stats, &evaluators)); // Child is better
     }
 
     #[test]
@@ -1558,9 +1426,9 @@ mod tests {
         // Child worse on single metric (max)
         let parent_stats = create_evaluator_stats(&[("accuracy", 0.9, 0.1, 10)]);
         let child_stats = create_evaluator_stats(&[("accuracy", 0.7, 0.1, 10)]);
-        let eval_config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
-        assert!(!is_improvement(&parent_stats, &child_stats, &eval_config)); // Child is worse
+        assert!(!is_improvement(&parent_stats, &child_stats, &evaluators)); // Child is worse
     }
 
     #[test]
@@ -1568,9 +1436,9 @@ mod tests {
         // Child equal on all metrics - no strict improvement
         let parent_stats = create_evaluator_stats(&[("accuracy", 0.8, 0.1, 10)]);
         let child_stats = create_evaluator_stats(&[("accuracy", 0.8, 0.1, 10)]);
-        let eval_config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
-        assert!(!is_improvement(&parent_stats, &child_stats, &eval_config)); // Equal is not improvement
+        assert!(!is_improvement(&parent_stats, &child_stats, &evaluators)); // Equal is not improvement
     }
 
     #[test]
@@ -1580,9 +1448,9 @@ mod tests {
             create_evaluator_stats(&[("accuracy", 0.8, 0.1, 10), ("f1", 0.7, 0.1, 10)]);
         let child_stats =
             create_evaluator_stats(&[("accuracy", 0.9, 0.1, 10), ("f1", 0.7, 0.1, 10)]);
-        let eval_config = create_evaluation_config(&[("accuracy", "max"), ("f1", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max"), ("f1", "max")]);
 
-        assert!(is_improvement(&parent_stats, &child_stats, &eval_config)); // Better on one, equal on other = improvement
+        assert!(is_improvement(&parent_stats, &child_stats, &evaluators)); // Better on one, equal on other = improvement
     }
 
     #[test]
@@ -1592,9 +1460,9 @@ mod tests {
             create_evaluator_stats(&[("accuracy", 0.9, 0.1, 10), ("f1", 0.7, 0.1, 10)]);
         let child_stats =
             create_evaluator_stats(&[("accuracy", 0.8, 0.1, 10), ("f1", 0.9, 0.1, 10)]);
-        let eval_config = create_evaluation_config(&[("accuracy", "max"), ("f1", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max"), ("f1", "max")]);
 
-        assert!(!is_improvement(&parent_stats, &child_stats, &eval_config)); // Tradeoff - not an improvement
+        assert!(!is_improvement(&parent_stats, &child_stats, &evaluators)); // Tradeoff - not an improvement
     }
 
     #[test]
@@ -1605,9 +1473,9 @@ mod tests {
             create_evaluator_stats(&[("accuracy", 0.7, 0.1, 10), ("latency", 0.5, 0.1, 10)]);
         let child_stats =
             create_evaluator_stats(&[("accuracy", 0.9, 0.1, 10), ("latency", 0.3, 0.1, 10)]);
-        let eval_config = create_evaluation_config(&[("accuracy", "max"), ("latency", "min")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max"), ("latency", "min")]);
 
-        assert!(is_improvement(&parent_stats, &child_stats, &eval_config)); // Better on both metrics
+        assert!(is_improvement(&parent_stats, &child_stats, &evaluators)); // Better on both metrics
     }
 
     #[test]
@@ -1615,9 +1483,9 @@ mod tests {
         // Child missing stats for one evaluator - should skip that metric
         let parent_stats = create_evaluator_stats(&[("accuracy", 0.8, 0.1, 10)]);
         let child_stats = create_evaluator_stats(&[("accuracy", 0.9, 0.1, 10)]);
-        let eval_config = create_evaluation_config(&[("accuracy", "max"), ("f1", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max"), ("f1", "max")]);
 
-        assert!(is_improvement(&parent_stats, &child_stats, &eval_config)); // Better on accuracy, f1 skipped (missing)
+        assert!(is_improvement(&parent_stats, &child_stats, &evaluators)); // Better on accuracy, f1 skipped (missing)
     }
 
     #[test]
@@ -1633,10 +1501,10 @@ mod tests {
             ("f1", 0.8, 0.1, 10),
             ("precision", 0.8, 0.1, 10),
         ]);
-        let eval_config =
-            create_evaluation_config(&[("accuracy", "max"), ("f1", "max"), ("precision", "max")]);
+        let evaluators =
+            create_test_evaluators(&[("accuracy", "max"), ("f1", "max"), ("precision", "max")]);
 
-        assert!(is_improvement(&parent_stats, &child_stats, &eval_config)); // Better on 2, equal on 1 = improvement
+        assert!(is_improvement(&parent_stats, &child_stats, &evaluators)); // Better on 2, equal on 1 = improvement
     }
 
     #[test]
@@ -1644,9 +1512,9 @@ mod tests {
         // Test with minimize optimization - child has lower value (better)
         let parent_stats = create_evaluator_stats(&[("latency", 0.9, 0.1, 10)]);
         let child_stats = create_evaluator_stats(&[("latency", 0.3, 0.1, 10)]);
-        let eval_config = create_evaluation_config(&[("latency", "min")]);
+        let evaluators = create_test_evaluators(&[("latency", "min")]);
 
-        assert!(is_improvement(&parent_stats, &child_stats, &eval_config)); // Lower latency = better for min
+        assert!(is_improvement(&parent_stats, &child_stats, &evaluators)); // Lower latency = better for min
     }
 
     // ============================================================================
@@ -1655,7 +1523,7 @@ mod tests {
 
     #[test]
     fn test_basic_dominance() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // Variant A dominates B: A has higher scores on all datapoints
         let variant_scores = HashMap::from([
@@ -1679,23 +1547,23 @@ mod tests {
         let candidates = create_test_candidates(&val_scores_map);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&val_scores_map);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         frontier
             .update(candidates)
             .expect("pareto frontier update should succeed");
 
         // Only variant_a should remain
-        assert_eq!(frontier.variants().len(), 1);
-        assert!(frontier.variants().contains_key("variant_a"));
-        assert!(!frontier.variants().contains_key("variant_b"));
+        assert_eq!(frontier.variant_configs().len(), 1);
+        assert!(frontier.variant_configs().contains_key("variant_a"));
+        assert!(!frontier.variant_configs().contains_key("variant_b"));
 
         // variant_a should be in Pareto set for both datapoints
-        assert_eq!(frontier.frequencies().get("variant_a"), Some(&2));
+        assert_eq!(frontier.variant_frequencies().get("variant_a"), Some(&2));
     }
 
     #[test]
-    fn test_pareto_frontier() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+    fn test_no_global_dominance_tradeoff() {
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // A is better on dp1, B is better on dp2 - neither dominates
         let variant_scores = HashMap::from([
@@ -1718,23 +1586,23 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
         // Both should remain
-        assert_eq!(frontier.variants().len(), 2);
-        assert!(frontier.variants().contains_key("variant_a"));
-        assert!(frontier.variants().contains_key("variant_b"));
+        assert_eq!(frontier.variant_configs().len(), 2);
+        assert!(frontier.variant_configs().contains_key("variant_a"));
+        assert!(frontier.variant_configs().contains_key("variant_b"));
 
         // Each variant is Pareto-optimal on one datapoint
-        assert_eq!(frontier.frequencies().get("variant_a"), Some(&1));
-        assert_eq!(frontier.frequencies().get("variant_b"), Some(&1));
+        assert_eq!(frontier.variant_frequencies().get("variant_a"), Some(&1));
+        assert_eq!(frontier.variant_frequencies().get("variant_b"), Some(&1));
     }
 
     #[test]
     fn test_instance_wise_vs_global() {
-        let config = create_evaluation_config(&[("acc", "max"), ("f1", "max")]);
+        let evaluators = create_test_evaluators(&[("acc", "max"), ("f1", "max")]);
 
         // C is never instance-wise Pareto-optimal, so it should be filtered early
         // A and B are each optimal on different instances
@@ -1801,19 +1669,19 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
         // C should be filtered out, A and B should remain
-        assert!(!frontier.variants().contains_key("variant_c"));
-        assert!(frontier.variants().contains_key("variant_a"));
-        assert!(frontier.variants().contains_key("variant_b"));
+        assert!(!frontier.variant_configs().contains_key("variant_c"));
+        assert!(frontier.variant_configs().contains_key("variant_a"));
+        assert!(frontier.variant_configs().contains_key("variant_b"));
     }
 
     #[test]
     fn test_mixed_optimize_directions() {
-        let config = create_evaluation_config(&[("accuracy", "max"), ("latency", "min")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max"), ("latency", "min")]);
 
         // A has higher accuracy (max) and lower latency (min) - dominates B
         let variant_scores = HashMap::from([
@@ -1842,18 +1710,18 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
         // Only variant_a should remain
-        assert_eq!(frontier.variants().len(), 1);
-        assert!(frontier.variants().contains_key("variant_a"));
+        assert_eq!(frontier.variant_configs().len(), 1);
+        assert!(frontier.variant_configs().contains_key("variant_a"));
     }
 
     #[test]
     fn test_none_values() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // A has None on dp1, B has None on dp2 - they're incomparable
         let variant_scores = HashMap::from([
@@ -1876,19 +1744,19 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
         // Both should remain (incomparable due to None values)
-        assert_eq!(frontier.variants().len(), 2);
-        assert!(frontier.variants().contains_key("variant_a"));
-        assert!(frontier.variants().contains_key("variant_b"));
+        assert_eq!(frontier.variant_configs().len(), 2);
+        assert!(frontier.variant_configs().contains_key("variant_a"));
+        assert!(frontier.variant_configs().contains_key("variant_b"));
     }
 
     #[test]
     fn test_single_variant() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         let variant_scores = HashMap::from([(
             "variant_a".to_string(),
@@ -1898,19 +1766,19 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
         // Single variant should be kept
-        assert_eq!(frontier.variants.len(), 1);
-        assert!(frontier.variants.contains_key("variant_a"));
-        assert_eq!(frontier.frequencies().get("variant_a"), Some(&1));
+        assert_eq!(frontier.variant_configs.len(), 1);
+        assert!(frontier.variant_configs.contains_key("variant_a"));
+        assert_eq!(frontier.variant_frequencies().get("variant_a"), Some(&1));
     }
 
     #[test]
     fn test_error_results_ignored() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // B has an error on dp1 (represented as missing datapoint)
         let variant_scores = HashMap::from([
@@ -1930,18 +1798,18 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
         // A dominates B globally: Pareto-optimal on dp1 (only variant) and dp2 (0.8 > 0.6)
-        assert_eq!(frontier.variants.len(), 1);
-        assert!(frontier.variants.contains_key("variant_a"));
+        assert_eq!(frontier.variant_configs.len(), 1);
+        assert!(frontier.variant_configs.contains_key("variant_a"));
     }
 
     #[test]
     fn test_all_equal() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         let variant_scores = HashMap::from([
             (
@@ -1961,20 +1829,20 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
         // All should remain (no one dominates)
-        assert_eq!(frontier.variants().len(), 3);
-        assert!(frontier.variants().contains_key("variant_a"));
-        assert!(frontier.variants().contains_key("variant_b"));
-        assert!(frontier.variants().contains_key("variant_c"));
+        assert_eq!(frontier.variant_configs().len(), 3);
+        assert!(frontier.variant_configs().contains_key("variant_a"));
+        assert!(frontier.variant_configs().contains_key("variant_b"));
+        assert!(frontier.variant_configs().contains_key("variant_c"));
     }
 
     #[test]
     fn test_incomparable_variants_different_datapoints() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // Test scenario: variants evaluated on different datapoints
         // This tests the edge case where GEPA's datapoint collection from first variant matters
@@ -1999,7 +1867,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
@@ -2008,14 +1876,14 @@ mod tests {
         // - On dp2: variant_b (0.7) dominates variant_a (None=-inf), so B is Pareto-optimal
         // - Candidate set = {A, B}
         // - Global filtering: Neither globally dominates the other (A better on dp1, B better on dp2)
-        assert_eq!(frontier.variants.len(), 2);
-        assert!(frontier.variants.contains_key("variant_a"));
-        assert!(frontier.variants.contains_key("variant_b"));
+        assert_eq!(frontier.variant_configs.len(), 2);
+        assert!(frontier.variant_configs.contains_key("variant_a"));
+        assert!(frontier.variant_configs.contains_key("variant_b"));
     }
 
     #[test]
     fn test_boolean_evaluator() {
-        let config = create_evaluation_config(&[("exact_match", "max")]);
+        let evaluators = create_test_evaluators(&[("exact_match", "max")]);
 
         // A has True (1.0), B has False (0.0) for bool evaluator
         let variant_scores = HashMap::from([
@@ -2038,18 +1906,18 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
         // A should dominate B (1.0 > 0.0)
-        assert_eq!(frontier.variants.len(), 1);
-        assert!(frontier.variants.contains_key("variant_a"));
+        assert_eq!(frontier.variant_configs.len(), 1);
+        assert!(frontier.variant_configs.contains_key("variant_a"));
     }
 
     #[test]
     fn test_unknown_metric_rejected() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // Include an unexpected evaluator key ("weird_metric") not present in config
         let variant_scores = HashMap::from([(
@@ -2066,18 +1934,18 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
 
         // Unknown metric should be dropped; update should still succeed using known metrics
         assert!(result.is_ok());
-        assert_eq!(frontier.variants.len(), 1);
-        assert!(frontier.variants.contains_key("variant_a"));
+        assert_eq!(frontier.variant_configs.len(), 1);
+        assert!(frontier.variant_configs.contains_key("variant_a"));
     }
 
     #[test]
     fn test_cache_pruning_removes_dominated_vectors() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // dp1: tie, dp2: variant_a better => candidate_set has {a,b}, global filtering keeps only A
         let variant_scores = HashMap::from([
@@ -2098,15 +1966,15 @@ mod tests {
         ]);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let candidates = create_test_candidates(&variant_scores);
 
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
         // Only variant_a should remain in frontier and cache
-        assert_eq!(frontier.variants.len(), 1);
-        assert!(frontier.variants.contains_key("variant_a"));
+        assert_eq!(frontier.variant_configs.len(), 1);
+        assert!(frontier.variant_configs.contains_key("variant_a"));
         assert_eq!(
             frontier
                 .objective_vector_cache
@@ -2119,7 +1987,7 @@ mod tests {
 
     #[test]
     fn test_three_way_dominance() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         let variant_scores = HashMap::from([
             (
@@ -2139,20 +2007,20 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
         // Only A should remain
-        assert_eq!(frontier.variants.len(), 1);
-        assert!(frontier.variants.contains_key("variant_a"));
+        assert_eq!(frontier.variant_configs.len(), 1);
+        assert!(frontier.variant_configs.contains_key("variant_a"));
     }
 
     #[test]
     fn test_runtime_performance() {
         use std::time::Instant;
 
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         let num_variants = 10;
         let num_datapoints = 100;
@@ -2182,7 +2050,7 @@ mod tests {
         // Measure execution time
         let start = Instant::now();
         let datapoint_ids = extract_sorted_datapoint_ids(&val_scores_map);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
         let elapsed = start.elapsed();
 
@@ -2197,7 +2065,7 @@ mod tests {
 
         // Result should be non-empty
         assert!(
-            !frontier.variants.is_empty(),
+            !frontier.variant_configs.is_empty(),
             "Result should contain at least one non-dominated variant"
         );
     }
@@ -2208,13 +2076,13 @@ mod tests {
 
     #[test]
     fn test_empty_candidates() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         let val_scores_map: VariantScoresMap = HashMap::new();
         let candidates: HashMap<VariantName, Candidate> = HashMap::new();
 
         let datapoint_ids = extract_sorted_datapoint_ids(&val_scores_map);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
 
         // Should return error for empty candidates
@@ -2223,14 +2091,14 @@ mod tests {
 
     #[test]
     fn test_all_evaluations_failed() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // All val_scores entries are None (evaluation failed)
         let val_scores_map: VariantScoresMap = HashMap::new();
         let candidates: HashMap<VariantName, Candidate> = HashMap::new();
 
         let datapoint_ids = extract_sorted_datapoint_ids(&val_scores_map);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
 
         // Should return error when all evaluations failed
@@ -2243,7 +2111,7 @@ mod tests {
 
     #[test]
     fn test_all_scores_none() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // Every per_datapoint score is None
         let variant_scores = HashMap::from([
@@ -2266,7 +2134,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
 
         // Should return error when all scores are None
@@ -2279,7 +2147,7 @@ mod tests {
 
     #[test]
     fn test_empty_datapoints() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // Empty per_datapoint HashMap - all variants have no evaluation data
         let variant_scores = HashMap::from([
@@ -2290,7 +2158,7 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
 
         // Should return error when all variants have empty datapoint maps
@@ -2301,7 +2169,7 @@ mod tests {
 
     #[test]
     fn test_frequency_calculation_detailed() {
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // A wins on dp1 and dp2, B wins on dp3, C never wins
         let variant_scores = HashMap::from([
@@ -2334,27 +2202,27 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
         // C is dominated, A and B remain
-        assert_eq!(frontier.variants.len(), 2);
-        assert!(frontier.variants.contains_key("variant_a"));
-        assert!(frontier.variants.contains_key("variant_b"));
+        assert_eq!(frontier.variant_configs.len(), 2);
+        assert!(frontier.variant_configs.contains_key("variant_a"));
+        assert!(frontier.variant_configs.contains_key("variant_b"));
 
         // A should be in Pareto set for dp1 and dp2 (freq=2)
-        assert_eq!(frontier.frequencies().get("variant_a"), Some(&2));
+        assert_eq!(frontier.variant_frequencies().get("variant_a"), Some(&2));
         // B should be in Pareto set for dp3 (freq=1)
-        assert_eq!(frontier.frequencies().get("variant_b"), Some(&1));
+        assert_eq!(frontier.variant_frequencies().get("variant_b"), Some(&1));
         // C should not be in frequencies (filtered out)
-        assert!(!frontier.frequencies().contains_key("variant_c"));
+        assert!(!frontier.variant_frequencies().contains_key("variant_c"));
     }
 
     #[test]
     fn test_high_missing_rate_warning() {
         // This test verifies that the warning log is triggered for high missing rates
-        let config = create_evaluation_config(&[("accuracy", "max")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max")]);
 
         // variant_a has 60% missing data (3 out of 5 datapoints have scores)
         let variant_scores = HashMap::from([(
@@ -2371,11 +2239,11 @@ mod tests {
         let candidates = create_test_candidates(&variant_scores);
 
         let datapoint_ids = extract_sorted_datapoint_ids(&variant_scores);
-        let mut frontier = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result = frontier.update(candidates);
         assert!(result.is_ok());
 
-        assert_eq!(frontier.variants.len(), 1);
+        assert_eq!(frontier.variant_configs.len(), 1);
 
         // Note: We can't directly assert on log output, but this test documents
         // the behavior and ensures the code path executes without panicking
@@ -2390,7 +2258,7 @@ mod tests {
         // - Iteration 2: Keep some variants from frontier + add new mutations
         // The cache should reuse vectors for persisting variants correctly.
 
-        let config = create_evaluation_config(&[("accuracy", "max"), ("latency", "min")]);
+        let evaluators = create_test_evaluators(&[("accuracy", "max"), ("latency", "min")]);
 
         // Simulate Iteration 1: Initial population [A, B, C]
         let iteration1_scores = HashMap::from([
@@ -2457,20 +2325,25 @@ mod tests {
 
         // Run iteration 1 with cache (frontier instance will be reused for iteration 2)
         let datapoint_ids = extract_sorted_datapoint_ids(&iteration1_scores);
-        let mut frontier1_cached =
-            ParetoFrontier::new(datapoint_ids.clone(), &config.evaluators, None);
+        let mut frontier1_cached = ParetoFrontier::new(datapoint_ids.clone(), &evaluators, None);
         let result1_cached = frontier1_cached.update(candidates1.clone());
         assert!(result1_cached.is_ok());
 
         // Run iteration 1 without cache (for comparison)
-        let mut frontier1_no_cache = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier1_no_cache = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result1_no_cache = frontier1_no_cache.update(candidates1);
         assert!(result1_no_cache.is_ok());
 
         // Iteration 1 results should be identical
         assert_eq!(
-            frontier1_cached.variants.keys().collect::<HashSet<_>>(),
-            frontier1_no_cache.variants.keys().collect::<HashSet<_>>(),
+            frontier1_cached
+                .variant_configs
+                .keys()
+                .collect::<HashSet<_>>(),
+            frontier1_no_cache
+                .variant_configs
+                .keys()
+                .collect::<HashSet<_>>(),
             "Iteration 1: cached and non-cached should produce same variants"
         );
 
@@ -2526,19 +2399,25 @@ mod tests {
 
         // Run iteration 2 WITHOUT cache (create fresh frontier, compute all from scratch)
         let datapoint_ids = extract_sorted_datapoint_ids(&iteration2_all_scores);
-        let mut frontier2_no_cache = ParetoFrontier::new(datapoint_ids, &config.evaluators, None);
+        let mut frontier2_no_cache = ParetoFrontier::new(datapoint_ids, &evaluators, None);
         let result2_no_cache = frontier2_no_cache.update(candidates2_all);
         assert!(result2_no_cache.is_ok());
 
         // Critical assertion: cached and non-cached should produce identical results
         assert_eq!(
-            frontier1_cached.variants.keys().collect::<HashSet<_>>(),
-            frontier2_no_cache.variants.keys().collect::<HashSet<_>>(),
+            frontier1_cached
+                .variant_configs
+                .keys()
+                .collect::<HashSet<_>>(),
+            frontier2_no_cache
+                .variant_configs
+                .keys()
+                .collect::<HashSet<_>>(),
             "Iteration 2: cached and non-cached should produce same variants"
         );
 
         assert_eq!(
-            frontier1_cached.frequencies, frontier2_no_cache.frequencies,
+            frontier1_cached.variant_frequencis, frontier2_no_cache.variant_frequencis,
             "Iteration 2: cached and non-cached should produce same frequencies"
         );
 
