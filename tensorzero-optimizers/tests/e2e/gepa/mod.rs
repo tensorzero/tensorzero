@@ -24,8 +24,11 @@ use tensorzero_core::stored_inference::{RenderedSample, StoredOutput};
 use tensorzero_core::utils::retries::RetryConfig;
 use tensorzero_core::variant::VariantConfig;
 use tensorzero_optimizers::gepa::{
-    analyze_inferences, create_evaluation_dataset, evaluate_variant, EvaluateVariantParams,
-    EvaluationResults, FunctionContext,
+    analyze::analyze_inferences,
+    evaluate::{
+        create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, EvaluationResults,
+    },
+    validate::FunctionContext,
 };
 use uuid::Uuid;
 

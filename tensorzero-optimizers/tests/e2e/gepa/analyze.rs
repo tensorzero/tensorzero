@@ -24,7 +24,7 @@ use tensorzero_core::{
     tool::StaticToolConfig,
     variant::chat_completion::{UninitializedChatCompletionConfig, UninitializedChatTemplate},
 };
-use tensorzero_optimizers::gepa::{analyze_inferences, FunctionContext};
+use tensorzero_optimizers::gepa::{analyze::analyze_inferences, validate::FunctionContext};
 use uuid::Uuid;
 
 // ============================================================================

@@ -25,16 +25,14 @@ use tensorzero_core::{
 
 use crate::{JobHandle, Optimizer};
 
-mod analyze;
-mod evaluate;
-mod validate;
+pub mod analyze;
+pub mod evaluate;
+pub mod validate;
 
-pub use analyze::{analyze_inferences, Analysis};
-pub use evaluate::{
-    create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, EvaluationResults,
-    VariantName, VariantScores,
+use analyze::analyze_inferences;
+use evaluate::{
+    create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, VariantName, VariantScores,
 };
-pub use validate::FunctionContext;
 use validate::{initialize_pareto_frontier, validate_examples, validate_gepa_config};
 
 #[async_trait]
