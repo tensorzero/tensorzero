@@ -25,10 +25,12 @@ use crate::{JobHandle, Optimizer};
 
 mod analyze;
 mod evaluate;
+mod mutate;
 mod validate;
 
 pub use analyze::{analyze_inferences, Analysis};
 pub use evaluate::create_evaluation_dataset;
+pub use mutate::mutate_variant;
 pub use validate::FunctionContext;
 use validate::{initialize_pareto_frontier, validate_examples, validate_gepa_config};
 
