@@ -5,8 +5,6 @@ use std::sync::Arc;
 
 use crate::error::{Error, ErrorDetails};
 
-use super::Config;
-
 #[derive(Debug)]
 pub struct ConfigSnapshot {
     pub config: String, // serialized as TOML
