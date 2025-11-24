@@ -40,7 +40,7 @@ toml = { version = "0.9.8", features = ["preserve_order"] }
 reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 async-trait = "0.1.89"
-http = "1.3.1"
+http = "1.4.0"
 tokio-stream = "0.1.15"
 tokio = { version = "1.48.0", features = ["full"] }
 tracing = { version = "0.1.40", features = ["log"] }
@@ -48,7 +48,7 @@ pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py310"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.99"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.51", features = ["derive"] }
+clap = { version = "4.5.53", features = ["derive"] }
 futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
 minijinja = { version = "2.12.0", features = [
@@ -61,7 +61,7 @@ minijinja = { version = "2.12.0", features = [
 ] }
 url = "2.5.4"
 # TODO - unpin when https://github.com/EmbarkStudios/cargo-deny/issues/803 is fixed
-google-cloud-auth = "=1.1.0"
+google-cloud-auth = "=1.1.1"
 serde-untagged = "0.1.8"
 object_store = { version = "0.12.2", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
@@ -79,7 +79,7 @@ git2 = { version = "0.20.2", default-features = false }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.32.1", features = [
     "tracing_level_info",
 ] }
-tower-http = { version = "0.6.6", features = ["trace"] }
+tower-http = { version = "0.6.7", features = ["trace"] }
 mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a640e4e9ba2a784b7f7d", features = [
     "serde1",
 ] }
