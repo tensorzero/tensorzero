@@ -265,6 +265,9 @@ pub enum ErrorDetails {
     Config {
         message: String,
     },
+    ConfigSnapshotNotFound {
+        snapshot_hash: String,
+    },
     ObjectStoreUnconfigured {
         block_type: String,
     },
@@ -622,6 +625,7 @@ impl ErrorDetails {
             ErrorDetails::ClickHouseQuery { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::Config { .. } => tracing::Level::ERROR,
+            ErrorDetails::ConfigSnapshotNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::DatapointNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::DiclMissingOutput => tracing::Level::ERROR,
             ErrorDetails::DuplicateTool { .. } => tracing::Level::WARN,
@@ -764,6 +768,7 @@ impl ErrorDetails {
             ErrorDetails::ObjectStoreUnconfigured { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DatapointNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::Config { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::ConfigSnapshotNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::DiclMissingOutput => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::DuplicateTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::DuplicateRateLimitingConfigScope { .. } => StatusCode::BAD_REQUEST,
@@ -1044,6 +1049,9 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::Config { message } => {
                 write!(f, "{message}")
+            }
+            ErrorDetails::ConfigSnapshotNotFound { snapshot_hash } => {
+                write!(f, "Config snapshot not found for hash: {snapshot_hash}")
             }
             ErrorDetails::DatapointNotFound {
                 dataset_name,

@@ -9,12 +9,13 @@ use std::fmt::{Debug, Display};
 use std::sync::Arc;
 use url::Url;
 
+use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::BatchWritesConfig;
 use crate::db::clickhouse::batching::BatchWriterHandle;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::clickhouse_client::DisabledClickHouseClient;
 use crate::db::clickhouse::clickhouse_client::ProductionClickHouseClient;
-use crate::db::HealthCheckable;
+use crate::db::{ConfigQueries, HealthCheckable};
 use crate::error::DelayedError;
 use crate::error::{Error, ErrorDetails};
 
@@ -313,6 +314,48 @@ impl Display for ClickHouseConnectionInfo {
 impl HealthCheckable for ClickHouseConnectionInfo {
     async fn health(&self) -> Result<(), Error> {
         self.inner.health().await
+    }
+}
+
+#[async_trait]
+impl ConfigQueries for ClickHouseConnectionInfo {
+    async fn get_config_snapshot(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Result<ConfigSnapshot, Error> {
+        #[derive(Deserialize)]
+        struct ConfigSnapshotRow {
+            config: String,
+            extra_templates: HashMap<String, String>,
+        }
+
+        let hash_str = snapshot_hash.to_string();
+        let query = format!(
+            "SELECT config, extra_templates \
+             FROM ConfigSnapshot FINAL \
+             WHERE hash = toUInt256('{hash_str}') \
+             LIMIT 1 \
+             FORMAT JSONEachRow"
+        );
+
+        let response = self.run_query_synchronous_no_params(query).await?;
+
+        if response.response.is_empty() {
+            return Err(Error::new(ErrorDetails::ConfigSnapshotNotFound {
+                snapshot_hash: hash_str,
+            }));
+        }
+
+        let row: ConfigSnapshotRow = serde_json::from_str(&response.response).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: e.to_string(),
+            })
+        })?;
+
+        Ok(ConfigSnapshot {
+            config: row.config,
+            extra_templates: row.extra_templates,
+        })
     }
 }
 
