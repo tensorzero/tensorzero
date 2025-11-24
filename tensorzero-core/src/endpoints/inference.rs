@@ -1525,10 +1525,10 @@ fn prepare_candidate_variants(
             for path_with_contents in candidate_variant_info.get_all_template_paths() {
                 let template_name = path_with_contents.path.get_template_key();
                 if dynamic_template_config.contains_template(&template_name) {
-                    return Err(ErrorDetails::InvalidDynamicTemplatePath {
-                        name: template_name,
-                    }
-                    .into());
+                    tracing::warn!(
+                        "Dynamic template '{}' is overriding an existing template",
+                        template_name
+                    );
                 }
                 dynamic_template_config
                     .add_template(template_name, path_with_contents.contents.clone())?;

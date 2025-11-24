@@ -235,26 +235,12 @@ pub struct DatasetMetadata {
     pub last_updated: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
-pub struct AdjacentDatapointIds {
-    pub previous_id: Option<Uuid>,
-    pub next_id: Option<Uuid>,
-}
-
 #[derive(Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct CountDatapointsForDatasetFunctionParams {
     pub dataset_name: String,
     pub function_name: String,
     pub function_type: DatapointKind,
-}
-
-#[derive(Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
-pub struct GetAdjacentDatapointIdsParams {
-    pub dataset_name: String,
-    pub datapoint_id: Uuid,
 }
 
 #[derive(Deserialize, ts_rs::TS)]
@@ -334,12 +320,6 @@ pub trait DatasetQueries {
         &self,
         params: &CountDatapointsForDatasetFunctionParams,
     ) -> Result<u32, Error>;
-
-    /// Gets the adjacent (previous and next) datapoint IDs for a given datapoint
-    async fn get_adjacent_datapoint_ids(
-        &self,
-        params: &GetAdjacentDatapointIdsParams,
-    ) -> Result<AdjacentDatapointIds, Error>;
 
     /// Gets a single datapoint by dataset name and ID
     /// TODO(shuyangli): To deprecate in favor of `get_datapoints`

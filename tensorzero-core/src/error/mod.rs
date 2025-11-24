@@ -331,9 +331,6 @@ pub enum ErrorDetails {
         mode: String,
         message: String,
     },
-    InvalidDynamicTemplatePath {
-        name: String,
-    },
     InvalidDynamicEndpoint {
         url: String,
     },
@@ -657,7 +654,6 @@ impl ErrorDetails {
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidDynamicTemplatePath { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidEncodedJobHandle => tracing::Level::WARN,
             ErrorDetails::InvalidJobHandle { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidRenderedStoredInference { .. } => tracing::Level::ERROR,
@@ -807,7 +803,6 @@ impl ErrorDetails {
             ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicEndpoint { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidWorkflowEvaluationRun { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidDynamicTemplatePath { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceOutputSource { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
@@ -1238,9 +1233,6 @@ impl std::fmt::Display for ErrorDetails {
             }
             ErrorDetails::InvalidDynamicEndpoint { url } => {
                 write!(f, "Invalid dynamic endpoint URL: {url}")
-            }
-            ErrorDetails::InvalidDynamicTemplatePath { name } => {
-                write!(f, "Invalid dynamic template path: {name}. There is likely a duplicate template in the config.")
             }
             ErrorDetails::InvalidEncodedJobHandle => {
                 write!(

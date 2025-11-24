@@ -9,10 +9,10 @@ use crate::db::clickhouse::query_builder::QueryParameter;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
 // TODO: move things somewhere sensible
 use crate::db::datasets::{
-    AdjacentDatapointIds, ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams,
-    DatapointInsert, DatasetDetailRow, DatasetMetadata, DatasetOutputSource, DatasetQueries,
-    DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatapointsParams,
-    GetDatasetMetadataParams, GetDatasetRowsParams, JsonInferenceDatapointInsert,
+    ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
+    DatasetDetailRow, DatasetMetadata, DatasetOutputSource, DatasetQueries, DatasetQueryParams,
+    GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams, GetDatasetRowsParams,
+    JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::{validate_dataset_name, DatapointKind, StoredDatapoint};
 use crate::error::{Error, ErrorDetails};
@@ -342,47 +342,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             })
         })?;
         Ok(count)
-    }
-
-    async fn get_adjacent_datapoint_ids(
-        &self,
-        params: &GetAdjacentDatapointIdsParams,
-    ) -> Result<AdjacentDatapointIds, Error> {
-        let query = r"
-            WITH DatasetIds AS (
-                SELECT toUInt128(id) as id_uint FROM ChatInferenceDatapoint WHERE dataset_name = {dataset_name:String}
-                UNION ALL
-                SELECT toUInt128(id) as id_uint FROM JsonInferenceDatapoint WHERE dataset_name = {dataset_name:String}
-            )
-            SELECT
-                NULLIF(
-                    (SELECT uint_to_uuid(min(id_uint)) FROM DatasetIds WHERE id_uint > toUInt128({datapoint_id:UUID})),
-                    toUUID('00000000-0000-0000-0000-000000000000')
-                ) as next_id,
-                NULLIF(
-                    (SELECT uint_to_uuid(max(id_uint)) FROM DatasetIds WHERE id_uint < toUInt128({datapoint_id:UUID})),
-                    toUUID('00000000-0000-0000-0000-000000000000')
-                ) as previous_id
-            FORMAT JSONEachRow
-        ";
-
-        let datapoint_id_str = params.datapoint_id.to_string();
-        let mut query_params = HashMap::new();
-        query_params.insert("dataset_name", params.dataset_name.as_str());
-        query_params.insert("datapoint_id", datapoint_id_str.as_str());
-
-        let response = self
-            .run_query_synchronous(query.to_string(), &query_params)
-            .await?;
-
-        let result: AdjacentDatapointIds =
-            serde_json::from_str(response.response.trim()).map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseDeserialization {
-                    message: format!("Failed to deserialize AdjacentDatapointIds: {e}"),
-                })
-            })?;
-
-        Ok(result)
     }
 
     async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<StoredDatapoint, Error> {
@@ -3032,153 +2991,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(result, 17, "Should return 17 datapoints");
-    }
-
-    #[tokio::test]
-    async fn test_get_adjacent_datapoint_ids_with_both_adjacent() {
-        let mut mock_clickhouse_client = MockClickHouseClient::new();
-        mock_clickhouse_client
-            .expect_run_query_synchronous()
-            .withf(|query, parameters| {
-                assert_query_contains(query, "
-                WITH DatasetIds AS (
-                    SELECT toUInt128(id) as id_uint FROM ChatInferenceDatapoint WHERE dataset_name = {dataset_name:String}
-                    UNION ALL
-                    SELECT toUInt128(id) as id_uint FROM JsonInferenceDatapoint WHERE dataset_name = {dataset_name:String}
-                )
-                SELECT
-                    NULLIF(
-                        (SELECT uint_to_uuid(min(id_uint)) FROM DatasetIds WHERE id_uint > toUInt128({datapoint_id:UUID})),
-                        toUUID('00000000-0000-0000-0000-000000000000')
-                    ) as next_id,
-                    NULLIF(
-                        (SELECT uint_to_uuid(max(id_uint)) FROM DatasetIds WHERE id_uint < toUInt128({datapoint_id:UUID})),
-                        toUUID('00000000-0000-0000-0000-000000000000')
-                    ) as previous_id
-                FORMAT JSONEachRow");
-
-                assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
-                assert_eq!(parameters.get("datapoint_id"), Some(&"223e4567-e89b-12d3-a456-426614174000"));
-
-                true
-            })
-            .returning(|_, _| {
-                Ok(ClickHouseResponse {
-                    response: String::from(r#"{"next_id":"323e4567-e89b-12d3-a456-426614174000","previous_id":"123e4567-e89b-12d3-a456-426614174000"}"#),
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 0,
-                        written_rows: 0,
-                    },
-                })
-            });
-        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
-
-        let params = GetAdjacentDatapointIdsParams {
-            dataset_name: "test_dataset".to_string(),
-            datapoint_id: Uuid::parse_str("223e4567-e89b-12d3-a456-426614174000").unwrap(),
-        };
-
-        let result = conn.get_adjacent_datapoint_ids(&params).await.unwrap();
-
-        assert_eq!(
-            result.previous_id,
-            Some(Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap())
-        );
-        assert_eq!(
-            result.next_id,
-            Some(Uuid::parse_str("323e4567-e89b-12d3-a456-426614174000").unwrap())
-        );
-    }
-
-    #[tokio::test]
-    async fn test_get_adjacent_datapoint_ids_with_only_next() {
-        let mut mock_clickhouse_client = MockClickHouseClient::new();
-        mock_clickhouse_client
-            .expect_run_query_synchronous()
-            .returning(|_, _| {
-                Ok(ClickHouseResponse {
-                    response: String::from(
-                        r#"{"next_id":"323e4567-e89b-12d3-a456-426614174000","previous_id":null}"#,
-                    ),
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 0,
-                        written_rows: 0,
-                    },
-                })
-            });
-        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
-
-        let params = GetAdjacentDatapointIdsParams {
-            dataset_name: "test_dataset".to_string(),
-            datapoint_id: Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap(),
-        };
-
-        let result = conn.get_adjacent_datapoint_ids(&params).await.unwrap();
-
-        assert_eq!(result.previous_id, None);
-        assert_eq!(
-            result.next_id,
-            Some(Uuid::parse_str("323e4567-e89b-12d3-a456-426614174000").unwrap())
-        );
-    }
-
-    #[tokio::test]
-    async fn test_get_adjacent_datapoint_ids_with_only_previous() {
-        let mut mock_clickhouse_client = MockClickHouseClient::new();
-        mock_clickhouse_client
-            .expect_run_query_synchronous()
-            .returning(|_, _| {
-                Ok(ClickHouseResponse {
-                    response: String::from(
-                        r#"{"next_id":null,"previous_id":"123e4567-e89b-12d3-a456-426614174000"}"#,
-                    ),
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 0,
-                        written_rows: 0,
-                    },
-                })
-            });
-        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
-
-        let params = GetAdjacentDatapointIdsParams {
-            dataset_name: "test_dataset".to_string(),
-            datapoint_id: Uuid::parse_str("323e4567-e89b-12d3-a456-426614174000").unwrap(),
-        };
-
-        let result = conn.get_adjacent_datapoint_ids(&params).await.unwrap();
-
-        assert_eq!(
-            result.previous_id,
-            Some(Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap())
-        );
-        assert_eq!(result.next_id, None);
-    }
-
-    #[tokio::test]
-    async fn test_get_adjacent_datapoint_ids_with_none() {
-        let mut mock_clickhouse_client = MockClickHouseClient::new();
-        mock_clickhouse_client
-            .expect_run_query_synchronous()
-            .returning(|_, _| {
-                Ok(ClickHouseResponse {
-                    response: String::from(r#"{"next_id":null,"previous_id":null}"#),
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 0,
-                        written_rows: 0,
-                    },
-                })
-            });
-        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
-
-        let params = GetAdjacentDatapointIdsParams {
-            dataset_name: "test_dataset".to_string(),
-            datapoint_id: Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap(),
-        };
-
-        let result = conn.get_adjacent_datapoint_ids(&params).await.unwrap();
-
-        assert_eq!(result.previous_id, None);
-        assert_eq!(result.next_id, None);
     }
 
     #[tokio::test]
