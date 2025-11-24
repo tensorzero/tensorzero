@@ -3,7 +3,7 @@
 //! This module implements the core Pareto optimality logic for multi-objective optimization:
 //! - Instance-wise Pareto frontier computation
 //! - Global Pareto dominance checking
-//! - Missing data imputation
+//! - Missing data imputation (scores are per-datapoint × per-evaluator as `Option<f32>`)
 
 use std::{
     cell::RefCell,
@@ -23,9 +23,9 @@ use uuid::Uuid;
 
 /// Threshold for warning about high missing score rates
 ///
-/// Variants with more than 30% missing evaluations will trigger a warning.
-/// This threshold helps identify variants that may be unreliable due to
-/// systematic evaluation failures.
+/// Variants with more than 10% missing evaluations will trigger a warning.
+/// Threshold is intentionally strict to flag variants that may be unreliable
+/// due to systematic evaluation failures.
 const HIGH_MISSING_RATE_THRESHOLD: f32 = 0.1;
 
 // Type aliases for cleaner score map signatures (TODO(#4669): move to evaluation module)
@@ -64,7 +64,7 @@ pub struct ParetoFrontier {
     /// Evaluator scores for current variants (pruned after each update)
     ///
     /// Maps variant names to their scores on each datapoint/evaluator pair.
-    /// Only contains entries for variants in `self.variants`.
+    /// Only contains entries for variants in `self.variant_configs`.
     /// Private - internal implementation detail.
     variant_scores_map: VariantScoresMap,
 
@@ -73,7 +73,7 @@ pub struct ParetoFrontier {
     /// Maps each variant to the count of datapoints where it's Pareto-optimal.
     /// Higher values indicate the variant performs well across more instances.
     /// Used for proportional sampling in GEPA's mutation step.
-    variant_frequencis: HashMap<VariantName, usize>,
+    variant_frequencies: HashMap<VariantName, usize>,
 
     /// Cached objective vectors for efficient dominance checking
     ///
@@ -104,7 +104,7 @@ impl ParetoFrontier {
     ///
     /// # Arguments
     /// * `datapoint_ids` - List of datapoint IDs defining the objective space
-    /// * `evaluators` - Borrowed evaluator configurations (optimization directions will be extracted)
+    /// * `evaluators` - Map of evaluator configurations from which optimization directions (min/max) will be extracted
     /// * `rng_seed` - Optional seed for deterministic sampling; None uses a random seed
     ///
     /// # Returns
@@ -124,7 +124,7 @@ impl ParetoFrontier {
         };
         Self {
             variant_configs: HashMap::new(),
-            variant_frequencis: HashMap::new(),
+            variant_frequencies: HashMap::new(),
             variant_scores_map: HashMap::new(),
             objective_vector_cache: HashMap::new(),
             datapoint_ids,
@@ -133,7 +133,7 @@ impl ParetoFrontier {
         }
     }
 
-    /// Access variant configs for read-only callers (e.g., diagnostics)
+    /// Returns a reference to the variant configurations in the current Pareto frontier for read-only access (e.g., diagnostics)
     pub fn variant_configs(&self) -> &HashMap<VariantName, UninitializedChatCompletionConfig> {
         &self.variant_configs
     }
@@ -143,27 +143,19 @@ impl ParetoFrontier {
         &self.variant_scores_map
     }
 
-    /// Access frequency map for read-only callers (e.g., diagnostics)
+    /// Returns a reference to the frequency map (instance-wise Pareto set membership counts) for read-only access (e.g., diagnostics)
     pub fn variant_frequencies(&self) -> &HashMap<VariantName, usize> {
-        &self.variant_frequencis
+        &self.variant_frequencies
     }
 
     /// Update the Pareto frontier with new candidates (variant config + scores)
     ///
-    /// This method incrementally adds new variants to the existing frontier:
-    /// 1. Validates new candidates:
-    ///    a. Extract and validate new variant configurations
-    ///    b. Extract and validate new variant scores
-    /// 2. Merge candidate variants and scores with current frontier variants and scores
-    /// 3. Run modified GEPA SELECTCANDIDATE algorithm on the combined set:
-    ///    a. For each datapoint, find instance-wise Pareto-optimal variants
-    ///    b. Build candidate set C as union of all instance-wise Pareto sets
-    ///    c. Filter candidates globally to remove dominated variants
-    /// 4. Update frontier (variants, frequencies, scores, cache) with filtered results
-    ///
-    /// Scores are normalized to the frontier layout: datapoints outside the layout are dropped,
-    /// missing datapoints are added with empty maps (worst-case imputation), and unknown metrics
-    /// are dropped with a warning. Stored scores/cache are pruned to the surviving variants.
+    /// Flow:
+    /// 1. Validate names/scores and normalize the incoming score maps to the frontier layout
+    ///    (drop unknown datapoints/metrics, add empty maps for missing datapoints).
+    /// 2. Merge new candidates with the existing frontier state.
+    /// 3. Run GEPA SELECTCANDIDATE: instance-wise Pareto sets → union → global Pareto filter.
+    /// 4. Replace configs, scores, frequencies, and cache with the surviving frontier variants.
     ///
     /// # Arguments
     /// * `candidates` - Map of variant name → `Candidate { variant config, scores }`
@@ -278,18 +270,22 @@ impl ParetoFrontier {
     /// Sample a single variant using frequency weights and return it as a one-item map
     ///
     /// Frequencies must be non-empty and contain at least one non-zero count. Unknown
-    /// variant names (not present in `self.variants`) are ignored. Uses the frontier's
-    /// internally maintained RNG (seedable via `new`) to allow deterministic sampling in tests.
+    /// variant names (not present in `self.variant_configs`) are ignored. Errors if:
+    /// - the frequency map is empty,
+    /// - all weights sum to zero, or
+    /// - no weighted entries correspond to existing variants.
+    /// Uses the frontier's internally maintained RNG (seedable via `new`) to allow deterministic
+    /// sampling in tests.
     pub fn sample_by_frequency(
         &self,
     ) -> Result<HashMap<VariantName, UninitializedChatCompletionConfig>, Error> {
-        if self.variant_frequencis.is_empty() {
+        if self.variant_frequencies.is_empty() {
             return Err(Error::new(ErrorDetails::InternalError {
                 message: "Cannot sample from empty frequency map".to_string(),
             }));
         }
 
-        let total_frequency: usize = self.variant_frequencis.values().sum();
+        let total_frequency: usize = self.variant_frequencies.values().sum();
         if total_frequency == 0 {
             return Err(Error::new(ErrorDetails::InternalError {
                 message: "Cannot sample when all frequencies are zero".to_string(),
@@ -297,7 +293,7 @@ impl ParetoFrontier {
         }
 
         let items: Vec<_> = self
-            .variant_frequencis
+            .variant_frequencies
             .iter()
             .filter(|(name, _)| self.variant_configs.contains_key(*name))
             .collect();
@@ -380,10 +376,12 @@ impl ParetoFrontier {
     ///
     /// Performs score extraction, normalization, and validation:
     /// 1. Normalizes datapoint coverage to match the frontier layout: drops scores for unknown
-    ///    datapoints and inserts empty maps for missing datapoints so they can be imputed later.
+    ///    datapoints and inserts empty maps for missing expected datapoints (imputed later as
+    ///    worst case).
     /// 2. Drops unknown evaluator metrics with a warning so mis-specified candidates cannot
     ///    pollute the frontier.
-    /// 3. Validates that at least one datapoint is present and at least one concrete score exists.
+    /// 3. Validates that at least one expected datapoint is present and at least one concrete
+    ///    score (Some) exists across all candidates.
     ///
     /// # Returns
     /// * `Ok(VariantScoresMap)` - Validated and normalized scores
@@ -540,7 +538,7 @@ impl ParetoFrontier {
         variants_scores: VariantScoresMap,
     ) {
         // Compute frequency map for sampling (count instance-wise Pareto memberships)
-        self.variant_frequencis =
+        self.variant_frequencies =
             calculate_frequencies(&optimal_variant_names, instance_optimal_variant_names);
 
         // Filter out variants not in final non-dominated set
@@ -549,7 +547,7 @@ impl ParetoFrontier {
             .filter(|(name, _)| optimal_variant_names.contains(name))
             .collect();
 
-        // Prune val_scores to only contain variants in filtered_candidates
+        // Prune variant_scores_map to only contain variants in optimal_variant_names
         self.variant_scores_map = variants_scores
             .into_iter()
             .filter(|(name, _)| optimal_variant_names.contains(name))
@@ -568,6 +566,7 @@ impl ParetoFrontier {
     /// - If not cached: compute objective vector and insert into cache
     ///
     /// Logs cache statistics (hits/misses).
+    /// Uses the BTreeMap ordering of evaluator directions to keep vector layout stable.
     ///
     /// # Arguments
     /// * `variant_names` - Set of variant names to ensure are cached
@@ -620,7 +619,7 @@ impl ParetoFrontier {
     /// filtering has produced the candidate set.
     ///
     /// Reads pre-computed objective vectors from the cache (populated by
-    /// `compute_objective_vectors_with_cache`).
+    /// `update_objective_vector_cache`).
     ///
     /// # Arguments
     /// * `variant_names` - Set of candidate variant names to filter (consumed)
@@ -668,8 +667,9 @@ impl ParetoFrontier {
     /// - Random failures (e.g., external evaluator unavailable)
     /// - Incomplete evaluation coverage
     ///
-    /// This monitoring helps identify potentially unreliable variants that survived
-    /// to the frontier despite having sparse evaluation data.
+    /// This monitoring uses the frontier layout as the denominator (datapoints × evaluators).
+    /// Missing covers both absent datapoint/evaluator entries and explicit `None` scores.
+    /// It helps surface variants that reached the frontier despite sparse evaluation data.
     ///
     /// # Arguments
     /// * `variant_names` - Set of variant names in the final Pareto frontier
@@ -718,14 +718,7 @@ impl ParetoFrontier {
 
     #[cfg(test)]
     pub fn variant_frequencies_mut(&mut self) -> &mut HashMap<VariantName, usize> {
-        &mut self.variant_frequencis
-    }
-
-    #[cfg(test)]
-    pub fn variant_configs_mut(
-        &mut self,
-    ) -> &mut HashMap<VariantName, UninitializedChatCompletionConfig> {
-        &mut self.variant_configs
+        &mut self.variant_frequencies
     }
 }
 
@@ -741,7 +734,7 @@ impl ParetoFrontier {
 /// # Arguments
 /// * `parent_stats` - Summary statistics (mean, stderr, count) for parent variant's evaluations
 /// * `child_stats` - Summary statistics (mean, stderr, count) for child variant's evaluations
-/// * `evaluators` - Evaluator configs with optimization directions (max/min) for each metric
+/// * `evaluators` - Map of evaluator configs with optimization directions (max/min) for each metric
 ///
 /// # Returns
 /// * `bool` - True if child Pareto-dominates parent (better/equal on all, strictly better on ≥1 evaluator summary stats)
@@ -857,7 +850,7 @@ fn extract_optimize_directions(
 /// * `variant_name` - Name of the variant to compute vector for
 /// * `variants_scores` - Map of variant names to their per-datapoint scores
 /// * `datapoint_ids` - Ordered list of datapoint IDs (defines vector structure)
-/// * `sorted_evaluators` - Sorted list of metric optimization directions (defines vector structure and optimization directions)
+/// * `sorted_directions` - Sorted list of (evaluator_name, optimization_direction) tuples (defines vector structure and optimization directions)
 ///
 /// # Returns
 /// * `Vec<f32>` - Flattened vector of length D×E where each element is an imputed score
@@ -888,7 +881,8 @@ fn compute_objective_vector(
 ///
 /// Efficient dominance checking using pre-computed vectors with flattened layout
 /// to avoid repeated hash lookups and imputation. Vectors must be pre-computed
-/// using `compute_objective_vector` with the same datapoint_ids and evaluators ordering.
+/// using `compute_objective_vector` with the same datapoint_ids and evaluator ordering
+/// (BTreeMap order from `optimize_directions`).
 ///
 /// # Arguments
 /// * `a_vec` - Pre-computed objective vector for variant A
@@ -2417,7 +2411,7 @@ mod tests {
         );
 
         assert_eq!(
-            frontier1_cached.variant_frequencis, frontier2_no_cache.variant_frequencis,
+            frontier1_cached.variant_frequencies, frontier2_no_cache.variant_frequencies,
             "Iteration 2: cached and non-cached should produce same frequencies"
         );
 
