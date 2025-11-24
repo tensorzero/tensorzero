@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
         info!(
             evaluation_run_id = %evaluation_run_id,
             evaluation_name = %args.evaluation_name,
-            num_datapoint_ids = %args.datapoint_ids.len(),
+            num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(),
             variant_name = %args.variant_name,
             concurrency = %args.concurrency,
             "Starting evaluation run"

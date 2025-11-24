@@ -216,7 +216,7 @@ pub async fn run_evaluation_streaming(
         clickhouse_client: clickhouse_client.clone(),
         config: config.clone(),
         dataset_name: params.dataset_name.clone(),
-        datapoint_ids: datapoint_ids.clone(),
+        datapoint_ids: Some(datapoint_ids.clone()),
         variant: EvaluationVariant::Name(params.variant_name.clone()),
         evaluation_name: params.evaluation_name.clone(),
         evaluation_run_id,

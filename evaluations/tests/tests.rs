@@ -82,7 +82,7 @@ async fn run_evaluations_json() {
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -354,7 +354,7 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![Uuid::now_v7()],
+        datapoint_ids: Some(vec![Uuid::now_v7()]),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -380,7 +380,7 @@ async fn test_dataset_name_and_datapoint_ids_mutually_exclusive() {
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: None,
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -416,7 +416,7 @@ async fn test_datapoint_ids_and_max_datapoints_mutually_exclusive() {
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: None,
-        datapoint_ids: vec![Uuid::now_v7()],
+        datapoint_ids: Some(vec![Uuid::now_v7()]),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -490,7 +490,7 @@ async fn run_evaluation_with_specific_datapoint_ids() {
         gateway_url: None,
         evaluation_name: "haiku_with_outputs".to_string(),
         dataset_name: None,
-        datapoint_ids: selected_ids.clone(),
+        datapoint_ids: Some(selected_ids.clone()),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -591,7 +591,7 @@ async fn run_exact_match_evaluation_chat() {
         gateway_url: None,
         evaluation_name: "haiku_with_outputs".to_string(),
         dataset_name: None,
-        datapoint_ids: datapoint_ids.clone(),
+        datapoint_ids: Some(datapoint_ids.clone()),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -738,7 +738,7 @@ async fn run_llm_judge_evaluation_chat() {
         config_file: config_path.clone(),
         gateway_url: None,
         dataset_name: None,
-        datapoint_ids: datapoint_ids.clone(),
+        datapoint_ids: Some(datapoint_ids.clone()),
         evaluation_name: "haiku_without_outputs".to_string(),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
@@ -962,7 +962,7 @@ async fn run_image_evaluation() {
         config_file: config_path,
         gateway_url: None,
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         evaluation_name: "images".to_string(),
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
@@ -1180,7 +1180,7 @@ async fn check_invalid_image_evaluation() {
         config_file: config_path,
         gateway_url: None,
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         evaluation_name: "bad_images".to_string(),
         variant_name: "honest_answer".to_string(),
         concurrency: 10,
@@ -1285,7 +1285,7 @@ async fn run_llm_judge_evaluation_chat_pretty() {
         gateway_url: None,
         evaluation_name: "haiku_without_outputs".to_string(),
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Pretty,
@@ -1331,7 +1331,7 @@ async fn run_llm_judge_evaluation_json_pretty() {
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Pretty,
@@ -1385,7 +1385,7 @@ async fn test_parse_args() {
     assert_eq!(args.evaluation_name, "my-evaluation");
     assert_eq!(args.variant_name, "my-variant");
     assert_eq!(args.dataset_name.unwrap(), "my-dataset".to_string());
-    assert!(args.datapoint_ids.is_empty());
+    assert!(args.datapoint_ids.unwrap_or_default().is_empty());
     assert_eq!(args.config_file, PathBuf::from("./config/tensorzero.toml"));
     assert_eq!(args.concurrency, 1);
     assert_eq!(args.gateway_url, None);
@@ -1403,16 +1403,17 @@ async fn test_parse_args() {
         "018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9e,018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9f",
     ])
     .unwrap();
+    let datapoint_ids: Vec<Uuid> = args.datapoint_ids.unwrap_or_default();
     assert_eq!(args.evaluation_name, "my-evaluation");
     assert_eq!(args.variant_name, "my-variant");
     assert_eq!(args.dataset_name, None);
-    assert_eq!(args.datapoint_ids.len(), 2);
+    assert_eq!(datapoint_ids.len(), 2);
     assert_eq!(
-        args.datapoint_ids[0],
+        datapoint_ids[0],
         Uuid::parse_str("018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9e").unwrap()
     );
     assert_eq!(
-        args.datapoint_ids[1],
+        datapoint_ids[1],
         Uuid::parse_str("018e9e9e-7c1f-7e9e-9e9e-7c1f7e9e9e9f").unwrap()
     );
 
@@ -1443,7 +1444,7 @@ async fn test_parse_args() {
     .unwrap();
     assert_eq!(args.evaluation_name, "my-evaluation");
     assert_eq!(args.dataset_name.unwrap(), "my-dataset".to_string());
-    assert!(args.datapoint_ids.is_empty());
+    assert!(args.datapoint_ids.unwrap_or_default().is_empty());
     assert_eq!(args.variant_name, "my-variant");
     assert_eq!(args.config_file, PathBuf::from("/path/to/config.toml"));
     assert_eq!(
@@ -1531,7 +1532,7 @@ async fn run_evaluations_errors() {
         gateway_url: None,
         evaluation_name: "entity_extraction".to_string(),
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         variant_name: "dummy_error".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -1953,7 +1954,7 @@ async fn run_evaluations_best_of_3() {
         gateway_url: None,
         evaluation_name: "best_of_3".to_string(),
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -2144,7 +2145,7 @@ async fn run_evaluations_mixture_of_3() {
         gateway_url: None,
         evaluation_name: "mixture_of_3".to_string(),
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -2338,7 +2339,7 @@ async fn run_evaluations_dicl() {
         gateway_url: None,
         evaluation_name: "dicl".to_string(),
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -2615,7 +2616,7 @@ async fn test_evaluation_with_dynamic_variant() {
         clickhouse_client: clickhouse,
         config,
         dataset_name: Some(dataset_name),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Info(Box::new(dynamic_variant)),
         evaluation_name: "haiku_with_outputs".to_string(),
         evaluation_run_id,
@@ -2661,7 +2662,7 @@ async fn test_max_datapoints_parameter() {
         clickhouse_client: clickhouse.clone(),
         config: config.clone(),
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
         evaluation_name: "entity_extraction".to_string(),
         evaluation_run_id,
@@ -2730,7 +2731,7 @@ async fn test_precision_targets_parameter() {
         clickhouse_client: clickhouse.clone(),
         config: config.clone(),
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         variant: EvaluationVariant::Name("gpt_4o_mini".to_string()),
         evaluation_name: "haiku_without_outputs".to_string(), // Has both exact_match and topic_starts_with_f
         evaluation_run_id,
@@ -2831,7 +2832,7 @@ async fn test_cli_args_max_datapoints() {
         gateway_url: None,
         evaluation_name: "haiku_with_outputs".to_string(),
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,
@@ -2891,7 +2892,7 @@ async fn test_cli_args_precision_targets() {
         gateway_url: None,
         evaluation_name: "haiku_with_outputs".to_string(),
         dataset_name: Some(dataset_name.clone()),
-        datapoint_ids: vec![],
+        datapoint_ids: Some(vec![]),
         variant_name: "gpt_4o_mini".to_string(),
         concurrency: 10,
         format: OutputFormat::Jsonl,

@@ -1336,8 +1336,8 @@ impl TensorZeroGateway {
     ///                         is <= the precision target.
     #[pyo3(signature = (*,
                         evaluation_name,
-                        dataset_name,
-                        datapoint_ids,
+                        dataset_name=None,
+                        datapoint_ids=None,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
@@ -1345,14 +1345,14 @@ impl TensorZeroGateway {
                         max_datapoints=None,
                         adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation(
         this: PyRef<'_, Self>,
         evaluation_name: String,
         dataset_name: Option<String>,
-        datapoint_ids: Vec<String>,
+        datapoint_ids: Option<Vec<String>>,
         variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
@@ -1402,6 +1402,9 @@ impl TensorZeroGateway {
             HashMap::new()
         };
 
+        // Convert Option<Vec<String>> to Vec<String> (None becomes empty vec)
+        let datapoint_ids = datapoint_ids.unwrap_or_default();
+
         // Parse datapoint_ids from strings to UUIDs
         let datapoint_ids: Vec<Uuid> = datapoint_ids
             .iter()
@@ -1421,7 +1424,7 @@ impl TensorZeroGateway {
             evaluation_name,
             evaluation_run_id,
             dataset_name,
-            datapoint_ids,
+            datapoint_ids: Some(datapoint_ids),
             variant,
             concurrency,
             inference_cache: inference_cache_enum,
@@ -2530,8 +2533,8 @@ impl AsyncTensorZeroGateway {
     ///                         is <= the precision target.
     #[pyo3(signature = (*,
                         evaluation_name,
-                        dataset_name,
-                        datapoint_ids,
+                        dataset_name=None,
+                        datapoint_ids=None,
                         variant_name=None,
                         concurrency=1,
                         inference_cache="on".to_string(),
@@ -2539,14 +2542,14 @@ impl AsyncTensorZeroGateway {
                         max_datapoints=None,
                         adaptive_stopping=None
     ),
-    text_signature = "(self, *, evaluation_name, dataset_name, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
+    text_signature = "(self, *, evaluation_name, dataset_name=None, datapoint_ids=None, variant_name=None, concurrency=1, inference_cache='on', internal_dynamic_variant_config=None, max_datapoints=None, adaptive_stopping=None)"
     )]
     #[expect(clippy::too_many_arguments)]
     fn experimental_run_evaluation<'py>(
         this: PyRef<'py, Self>,
         evaluation_name: String,
         dataset_name: Option<String>,
-        datapoint_ids: Vec<String>,
+        datapoint_ids: Option<Vec<String>>,
         variant_name: Option<String>,
         concurrency: usize,
         inference_cache: String,
@@ -2589,6 +2592,9 @@ impl AsyncTensorZeroGateway {
             HashMap::new()
         };
 
+        // Convert Option<Vec<String>> to Vec<String> (None becomes empty vec)
+        let datapoint_ids = datapoint_ids.unwrap_or_default();
+
         // Parse datapoint_ids from strings to UUIDs
         let datapoint_ids: Vec<Uuid> = datapoint_ids
             .iter()
@@ -2616,7 +2622,7 @@ impl AsyncTensorZeroGateway {
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,
-                datapoint_ids,
+                datapoint_ids: Some(datapoint_ids),
                 variant,
                 concurrency,
                 inference_cache: inference_cache_enum,
