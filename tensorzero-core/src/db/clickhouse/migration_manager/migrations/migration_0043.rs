@@ -541,11 +541,7 @@ impl<'a> Migration for Migration0043<'a> {
 
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
-        let mut instructions = format!("DROP TABLE ConfigSnapshot{on_cluster_name};\n");
-
-        for table in SNAPSHOT_TRACKED_TABLES {
-            instructions.push_str(&format!("ALTER TABLE {table} DROP COLUMN snapshot_hash;\n"));
-        }
+        let mut instructions = String::new();
 
         // Rollback materialized view modifications
         instructions.push_str(&format!(
@@ -797,6 +793,11 @@ FROM FloatMetricFeedback
 ARRAY JOIN mapKeys(tags) as key;
 "
         ));
+        instructions.push_str(&format!("DROP TABLE ConfigSnapshot{on_cluster_name};\n"));
+
+        for table in SNAPSHOT_TRACKED_TABLES {
+            instructions.push_str(&format!("ALTER TABLE {table} DROP COLUMN snapshot_hash;\n"));
+        }
 
         instructions
     }
