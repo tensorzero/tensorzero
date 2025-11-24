@@ -4,7 +4,7 @@
 //! The actual GEPA algorithm will be implemented here.
 
 use async_trait::async_trait;
-use std::{collections::HashMap, time::Duration};
+use std::time::Duration;
 
 use tensorzero_core::{
     client::{ClientBuilder, ClientBuilderMode},
@@ -19,14 +19,18 @@ use tensorzero_core::{
         OptimizationJobInfo, OptimizerOutput,
     },
     stored_inference::RenderedSample,
-    variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
 use crate::{JobHandle, Optimizer};
 
+mod analyze;
 mod evaluate;
+mod validate;
 
+pub use analyze::{analyze_inferences, Analysis};
 pub use evaluate::create_evaluation_dataset;
+pub use validate::FunctionContext;
+use validate::{initialize_pareto_frontier, validate_examples, validate_gepa_config};
 
 #[async_trait]
 impl Optimizer for GEPAConfig {
@@ -35,12 +39,34 @@ impl Optimizer for GEPAConfig {
     async fn launch(
         &self,
         client: &TensorzeroHttpClient,
-        _train_examples: Vec<RenderedSample>,
-        _val_examples: Option<Vec<RenderedSample>>,
+        train_examples: Vec<RenderedSample>,
+        val_examples: Option<Vec<RenderedSample>>,
         _credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: std::sync::Arc<Config>,
     ) -> Result<Self::Handle, Error> {
+        // Validate configuration and examples, get the FunctionContext (function_config, static_tools, and evaluation_config)
+        let function_context = validate_gepa_config(self, &config)?;
+
+        // Require validation examples for GEPA Pareto filtering
+        // TODO[#4772]: Random split from train_examples if None
+        let val_examples = val_examples.ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: "`val_examples` are required for GEPA optimization (used for Pareto frontier filtering)".to_string(),
+            })
+        })?;
+
+        // Validate both train and validation examples (this filters invalid examples)
+        let train_examples = validate_examples(train_examples)?;
+        let val_examples = validate_examples(val_examples)?;
+
+        tracing::info!(
+            "Starting GEPA optimization for function '{}' with {} train examples and {} val examples",
+            self.function_name,
+            train_examples.len(),
+            val_examples.len()
+        );
+
         // Build the gateway client once for the entire optimization run
         let _gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config: config.clone(),
@@ -59,19 +85,29 @@ impl Optimizer for GEPAConfig {
 
         tracing::info!("Gateway client built successfully for GEPA optimization");
 
+        // Initialize the Pareto frontier with baseline or provided variants
+        let pareto_frontier_variants = initialize_pareto_frontier(self, &function_context)?;
+
+        // Track original variant names to filter them out at the end
+        let original_variant_names: std::collections::HashSet<String> =
+            pareto_frontier_variants.keys().cloned().collect();
+
+        tracing::info!(
+            "Initialized with {} baseline variants: {:?}",
+            original_variant_names.len(),
+            original_variant_names
+        );
+
         tracing::warn!("GEPA algorithm is not yet implemented - returning placeholder result");
 
         // TODO: Implement actual GEPA algorithm here
-        // For now, return a placeholder result
-        let mut result = HashMap::new();
-        result.insert(
-            "dummy".to_string(),
-            UninitializedChatCompletionConfig::default(),
-        );
+        // For now, return initial variants
 
         // For synchronous optimizers, we store the result in the handle
         // rather than returning an error from launch()
-        Ok(GEPAJobHandle { result: Ok(result) })
+        Ok(GEPAJobHandle {
+            result: Ok(pareto_frontier_variants),
+        })
     }
 }
 

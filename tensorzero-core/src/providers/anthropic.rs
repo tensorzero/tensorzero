@@ -41,7 +41,7 @@ use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
+use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
 
 use super::helpers::convert_stream_error;
 use super::helpers::{peek_first_chunk, warn_cannot_forward_url_if_missing_mime_type};
@@ -495,7 +495,7 @@ pub(super) struct AnthropicTool<'a> {
 }
 
 impl<'a> AnthropicTool<'a> {
-    pub fn new(tool: &'a ToolConfig, beta_structured_outputs: bool) -> Self {
+    pub fn new(tool: &'a FunctionToolConfig, beta_structured_outputs: bool) -> Self {
         // In case we add more tool types in the future, the compiler will complain here.
         Self {
             name: tool.name(),
@@ -817,17 +817,14 @@ impl<'a> AnthropicRequestBody<'a> {
         // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
         // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
         // request payload to achieve the same effect.
-        let tools = request.tool_config.as_ref().and_then(|c| {
-            if matches!(c.tool_choice, ToolChoice::None) {
-                None
-            } else {
-                Some(
-                    c.strict_tools_available()
-                        .map(|tool| AnthropicTool::new(tool, beta_structured_outputs))
-                        .collect::<Vec<_>>(),
-                )
-            }
-        });
+        let tools = match &request.tool_config {
+            Some(c) if !matches!(c.tool_choice, ToolChoice::None) => Some(
+                c.strict_tools_available()?
+                    .map(|tool| AnthropicTool::new(tool, beta_structured_outputs))
+                    .collect::<Vec<_>>(),
+            ),
+            _ => None,
+        };
 
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
@@ -1595,7 +1592,7 @@ mod tests {
     use crate::inference::types::{ContentBlock, FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
-    use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
+    use crate::tool::{DynamicToolConfig, ToolResult};
     use crate::utils::testing::capture_logs;
 
     #[test]
@@ -1666,7 +1663,7 @@ mod tests {
             },
             "required": ["location", "unit"]
         });
-        let tool = ToolConfig::Dynamic(DynamicToolConfig {
+        let tool = FunctionToolConfig::Dynamic(DynamicToolConfig {
             name: "test".to_string(),
             description: "test".to_string(),
             parameters: DynamicJSONSchema::new(parameters.clone()),
@@ -3440,6 +3437,7 @@ mod tests {
             static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
@@ -3451,6 +3449,7 @@ mod tests {
         // Convert to Anthropic tools
         let tools: Vec<AnthropicTool> = tool_config
             .strict_tools_available()
+            .unwrap()
             .map(|tool| AnthropicTool::new(tool, false))
             .collect();
 

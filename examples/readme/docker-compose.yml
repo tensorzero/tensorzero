@@ -3,7 +3,7 @@
 
 services:
   clickhouse:
-    image: clickhouse:24.12
+    image: clickhouse:lts
     ports:
       - "8123:8123"
     environment:

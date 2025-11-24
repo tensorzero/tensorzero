@@ -691,7 +691,7 @@ impl<'a> AzureRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _) = prepare_chat_completion_tools(request, true);
+        let (tools, tool_choice, _) = prepare_chat_completion_tools(request, true)?;
         let mut azure_request = AzureRequest {
             messages,
             temperature: request.temperature,

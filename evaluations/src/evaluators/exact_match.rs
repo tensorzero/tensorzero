@@ -1,16 +1,16 @@
 use anyhow::{bail, Result};
 use serde_json::Value;
 use tensorzero_core::client::InferenceResponse;
-use tensorzero_core::endpoints::datasets::StoredDatapoint;
+use tensorzero_core::endpoints::datasets::Datapoint;
 use tracing::{debug, instrument, warn};
 
 #[instrument(skip_all, fields(datapoint_id = %datapoint.id()))]
 pub(super) fn run_exact_match_evaluator(
     inference_response: &InferenceResponse,
-    datapoint: &StoredDatapoint,
+    datapoint: &Datapoint,
 ) -> Result<Option<Value>> {
     match (inference_response, datapoint) {
-        (InferenceResponse::Chat(response), StoredDatapoint::Chat(datapoint)) => {
+        (InferenceResponse::Chat(response), Datapoint::Chat(datapoint)) => {
             debug!("Running exact match evaluation for chat response");
             match &datapoint.output {
                 // Right now this is order-sensitive, but we may consider relaxing this in the future
@@ -25,7 +25,7 @@ pub(super) fn run_exact_match_evaluator(
                 }
             }
         }
-        (InferenceResponse::Json(json_completion), StoredDatapoint::Json(json_inference)) => {
+        (InferenceResponse::Json(json_completion), Datapoint::Json(json_inference)) => {
             debug!("Running exact match evaluation for JSON response");
             match &json_inference.output {
                 Some(output) => {
@@ -46,8 +46,8 @@ pub(super) fn run_exact_match_evaluator(
         }
         _ => {
             let datapoint_type = match datapoint {
-                StoredDatapoint::Chat(_) => "Chat",
-                StoredDatapoint::Json(_) => "Json",
+                Datapoint::Chat(_) => "Chat",
+                Datapoint::Json(_) => "Json",
             };
             let response_type = match inference_response {
                 InferenceResponse::Chat(_) => "Chat",
@@ -71,7 +71,7 @@ mod tests {
     use tensorzero_core::client::Role;
     use tensorzero_core::{
         endpoints::{
-            datasets::{StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint},
+            datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint},
             inference::{ChatInferenceResponse, JsonInferenceResponse},
         },
         inference::types::{
@@ -84,7 +84,7 @@ mod tests {
     #[test]
     fn test_exact_match_evaluator_chat() {
         // Test a match
-        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             id: Uuid::now_v7(),
             input: StoredInput {
                 system: None,
@@ -102,7 +102,7 @@ mod tests {
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "hello world".to_string(),
             })]),
-            tool_params: None,
+            tool_params: Default::default(),
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
@@ -147,7 +147,7 @@ mod tests {
         assert_eq!(result, Some(Value::Bool(false)));
 
         // Test with missing output (should be None)
-        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             id: Uuid::now_v7(),
             input: StoredInput {
                 system: None,
@@ -163,7 +163,7 @@ mod tests {
             function_name: "test".to_string(),
             episode_id: Some(Uuid::now_v7()),
             output: None,
-            tool_params: None,
+            tool_params: Default::default(),
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn test_exact_match_evaluator_json() {
         // Test a match
-        let datapoint = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             id: Uuid::now_v7(),
             input: StoredInput {
                 system: None,
@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(result, Some(Value::Bool(false)));
 
         // Test with missing output (should be None)
-        let datapoint = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             id: Uuid::now_v7(),
             input: StoredInput {
                 system: None,
@@ -290,7 +290,7 @@ mod tests {
         assert_eq!(result, None);
 
         // Test with datapoint with malformed output schema (should be None)
-        let datapoint = StoredDatapoint::Json(StoredJsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             id: Uuid::now_v7(),
             input: StoredInput {
                 system: None,

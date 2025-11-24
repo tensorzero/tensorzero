@@ -1,9 +1,8 @@
 import {
   CountSchema,
   modelInferenceInputMessageSchema,
-  type TableBounds,
-  type TableBoundsWithCount,
-  JsonValueSchema,
+  ZodJsonValueSchema,
+  type ZodTableBounds,
 } from "./common";
 import {
   contentBlockOutputSchema,
@@ -15,6 +14,7 @@ import type {
   FunctionConfig,
   JsonInferenceOutput,
   ContentBlockChatOutput,
+  TableBoundsWithCount,
 } from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
 import { resolveInput, resolveModelInferenceMessages } from "../resolve.server";
@@ -23,8 +23,6 @@ import {
   modelInferenceRowSchema,
   parsedModelInferenceRowSchema,
   parseInferenceOutput,
-  adjacentIdsSchema,
-  type AdjacentIds,
   type InferenceByIdRow,
   type InferenceRow,
   type ModelInferenceRow,
@@ -194,8 +192,7 @@ export async function queryInferenceTableBounds(params?: {
       // TODO: handle undefined values instead of nulls
       first_id: result.earliest_id || null,
       last_id: result.latest_id || null,
-      // Cast bigint to number for backward compatibility with existing UI code
-      count: Number(result.count),
+      count: result.count,
     };
   } catch (error) {
     logger.error("Failed to query inference table bounds:", error);
@@ -220,7 +217,7 @@ export async function queryInferenceTableByEpisodeId(params: {
 
 export async function queryInferenceTableBoundsByEpisodeId(params: {
   episode_id: string;
-}): Promise<TableBounds> {
+}): Promise<ZodTableBounds> {
   return queryInferenceTableBounds({
     episode_id: params.episode_id,
   });
@@ -243,7 +240,7 @@ export async function queryInferenceTableByFunctionName(params: {
 
 export async function queryInferenceTableBoundsByFunctionName(params: {
   function_name: string;
-}): Promise<TableBounds> {
+}): Promise<ZodTableBounds> {
   return queryInferenceTableBounds({
     function_name: params.function_name,
   });
@@ -274,7 +271,7 @@ export async function queryInferenceTableByVariantName(params: {
 export async function queryInferenceTableBoundsByVariantName(params: {
   function_name: string;
   variant_name: string;
-}): Promise<TableBounds> {
+}): Promise<ZodTableBounds> {
   return queryInferenceTableBounds({
     function_name: params.function_name,
     variant_name: params.variant_name,
@@ -359,7 +356,7 @@ async function parseInferenceRow(
       inference_params: z
         .record(z.string(), z.unknown())
         .parse(JSON.parse(row.inference_params)),
-      output_schema: JsonValueSchema.parse(JSON.parse(row.output_schema)),
+      output_schema: ZodJsonValueSchema.parse(JSON.parse(row.output_schema)),
       extra_body,
     };
   }
@@ -506,53 +503,4 @@ export async function countInferencesByFunction(): Promise<
   const rows = await resultSet.json<FunctionCountInfo[]>();
   const validatedRows = z.array(functionCountInfoSchema).parse(rows);
   return validatedRows;
-}
-
-export async function getAdjacentInferenceIds(
-  currentInferenceId: string,
-): Promise<AdjacentIds> {
-  // TODO (soon): add the ability to pass filters by some fields
-  const query = `
-    SELECT
-      NULLIF(
-        (SELECT uint_to_uuid(max(id_uint)) FROM InferenceById WHERE id_uint < toUInt128({current_inference_id:UUID})),
-        toUUID('00000000-0000-0000-0000-000000000000')
-      ) as previous_id,
-      NULLIF(
-        (SELECT uint_to_uuid(min(id_uint)) FROM InferenceById WHERE id_uint > toUInt128({current_inference_id:UUID})),
-        toUUID('00000000-0000-0000-0000-000000000000')
-      ) as next_id
-  `;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { current_inference_id: currentInferenceId },
-  });
-  const rows = await resultSet.json<AdjacentIds>();
-  const parsedRows = rows.map((row) => adjacentIdsSchema.parse(row));
-  return parsedRows[0];
-}
-
-export async function getAdjacentEpisodeIds(
-  currentEpisodeId: string,
-): Promise<AdjacentIds> {
-  const query = `
-    SELECT
-      NULLIF(
-        (SELECT DISTINCT uint_to_uuid(max(episode_id_uint)) FROM InferenceByEpisodeId WHERE episode_id_uint < toUInt128({current_episode_id:UUID})),
-        toUUID('00000000-0000-0000-0000-000000000000')
-      ) as previous_id,
-      NULLIF(
-        (SELECT DISTINCT uint_to_uuid(min(episode_id_uint)) FROM InferenceByEpisodeId WHERE episode_id_uint > toUInt128({current_episode_id:UUID})),
-        toUUID('00000000-0000-0000-0000-000000000000')
-      ) as next_id
-  `;
-  const resultSet = await getClickhouseClient().query({
-    query,
-    format: "JSONEachRow",
-    query_params: { current_episode_id: currentEpisodeId },
-  });
-  const rows = await resultSet.json<AdjacentIds>();
-  const parsedRows = rows.map((row) => adjacentIdsSchema.parse(row));
-  return parsedRows[0];
 }

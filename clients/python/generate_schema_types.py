@@ -133,9 +133,9 @@ def preprocess_and_merge_schemas(schema_files: List[Path], output_file: Path) ->
         },
     }
 
-    # Write merged schema
+    # Write merged schema with keys sorted (to preserve ordering of definitions)
     with open(output_file, "w") as f:
-        json.dump(merged, f, indent=2)
+        json.dump(merged, f, indent=2, sort_keys=True)
 
     print(f"✓ Merged schema written to {output_file}")
 
@@ -187,6 +187,8 @@ def generate_dataclasses_from_schema(schema_file: Path, templates_dir: Path, out
                 "--disable-future-imports",
                 # Generate union types as `A | B` instead of `Union[A, B]`
                 "--use-union-operator",
+                # Use schema / class descriptions for docstrings
+                "--use-schema-description",
                 # Use field descriptions for docstrings
                 "--use-field-description",
                 # Explicitly pass extra keys to handle double-optional generation
