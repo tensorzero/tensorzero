@@ -2246,7 +2246,6 @@ mod tests {
     }
 
     #[test]
-    #[expect(clippy::print_stdout)]
     fn test_cache_correctness() {
         // This test validates that the cache produces correct results in a typical GEPA workflow:
         // - Iteration 1: Evaluate initial population
@@ -2414,11 +2413,6 @@ mod tests {
         assert_eq!(
             frontier1_cached.variant_frequencies, frontier2_no_cache.variant_frequencies,
             "Iteration 2: cached and non-cached should produce same frequencies"
-        );
-
-        println!(
-            "\nCache correctness validated: {} cached entries in frontier",
-            frontier1_cached.objective_vector_cache.len()
         );
     }
 }
