@@ -81,13 +81,19 @@ impl<'a> Migration for Migration0043<'a> {
 
     async fn should_apply(&self) -> Result<bool, Error> {
         // Check if ConfigSnapshot table doesn't exist
-        if !check_table_exists(self.clickhouse, "ConfigSnapshot", MIGRATION_ID).await.unwrap() {
+        if !check_table_exists(self.clickhouse, "ConfigSnapshot", MIGRATION_ID)
+            .await
+            .unwrap()
+        {
             return Ok(true);
         }
 
         // Check if any of the tables is missing the snapshot_hash column
         for table in SNAPSHOT_TRACKED_TABLES {
-            if !check_column_exists(self.clickhouse, table, "snapshot_hash", MIGRATION_ID).await.unwrap() {
+            if !check_column_exists(self.clickhouse, table, "snapshot_hash", MIGRATION_ID)
+                .await
+                .unwrap()
+            {
                 return Ok(true);
             }
         }
@@ -98,7 +104,8 @@ impl<'a> Migration for Migration0043<'a> {
             let result = self
                 .clickhouse
                 .run_query_synchronous_no_params(query)
-                .await.unwrap();
+                .await
+                .unwrap();
             if !result.response.contains("snapshot_hash") {
                 return Ok(true);
             }
@@ -127,7 +134,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(create_table_query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         // Add snapshot_hash column to existing tables
         for table in SNAPSHOT_TRACKED_TABLES {
@@ -136,7 +144,8 @@ impl<'a> Migration for Migration0043<'a> {
             );
             self.clickhouse
                 .run_query_synchronous_no_params(query)
-                .await.unwrap();
+                .await
+                .unwrap();
         }
 
         // Make sure ClickHouse is aware of all the new columns before migrating the MVs
@@ -160,7 +169,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let query = format!(
             "
@@ -177,7 +187,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let query = format!(
             "
@@ -194,7 +205,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let query = format!(
             "
@@ -210,7 +222,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         // Group 2: Inference indexing views
         let query = format!(
@@ -228,7 +241,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let query = format!(
             "
@@ -245,7 +259,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let query = format!(
             "
@@ -262,7 +277,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let query = format!(
             "
@@ -279,7 +295,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         // Group 3: Tag extraction views
         let query = format!(
@@ -300,7 +317,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let query = format!(
             "
@@ -320,7 +338,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let query = format!(
             "
@@ -337,7 +356,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let query = format!(
             "
@@ -354,7 +374,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         // Group 4: Feedback by variant views (with JOINs)
         let query = format!(
@@ -410,7 +431,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let query = format!(
             "
@@ -465,7 +487,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         // Group 5: Feedback tag views
         let query = format!(
@@ -483,7 +506,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let query = format!(
             "
@@ -500,7 +524,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let query = format!(
             "
@@ -517,7 +542,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         let query = format!(
             "
@@ -534,7 +560,8 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await.unwrap();
+            .await
+            .unwrap();
 
         Ok(())
     }

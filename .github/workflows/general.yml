@@ -762,6 +762,9 @@ jobs:
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
 
+      - name: Install clickhouse client
+        run: sudo apt-get install -y clickhouse-client
+
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
@@ -848,6 +851,11 @@ jobs:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
         run: cargo test-e2e-no-creds -- concurrent
+
+      - name: Query for errors in ClickHouse query log
+        if: always()
+        run: |
+          clickhouse-client --host localhost --port 9000 --user chuser --password chpassword --query "SELECT event_time, type, query, exception, tables FROM system.query_log WHERE event_time >= now() - INTERVAL 1 HOUR AND (exception != '' OR type LIKE 'Exception%') ORDER BY event_time DESC;"
 
       - name: Test (Rust)
         env:
