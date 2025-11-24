@@ -360,7 +360,7 @@ impl Migration for Migration0020<'_> {
             // First, insert data into InferenceById from ChatInference
             let query = format!(
                 r"
-                INSERT INTO InferenceById
+                INSERT INTO InferenceById (id_uint, function_name, variant_name, episode_id, function_type)
                 SELECT
                     toUInt128(id) as id_uint,
                     function_name,
@@ -378,7 +378,7 @@ impl Migration for Migration0020<'_> {
             // Then, insert data into InferenceById from JsonInference
             let query = format!(
                 r"
-                INSERT INTO InferenceById
+                INSERT INTO InferenceById (id_uint, function_name, variant_name, episode_id, function_type)
                 SELECT
                     toUInt128(id) as id_uint,
                     function_name,
