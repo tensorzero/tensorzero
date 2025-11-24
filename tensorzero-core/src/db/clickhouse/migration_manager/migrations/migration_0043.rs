@@ -26,6 +26,7 @@ const SNAPSHOT_TRACKED_TABLES: &[&str] = &[
     "DynamicEvaluationRun",
     "DynamicEvaluationRunByProjectName",
     "DynamicEvaluationRunEpisode",
+    "DynamicEvaluationRunEpisodeByRunId",
     "FeedbackTag",
     "FloatMetricFeedback",
     "FloatMetricFeedbackByTargetId",
@@ -59,6 +60,10 @@ const SNAPSHOT_MATERIALIZED_VIEWS: &[&str] = &[
     "CommentFeedbackTagView",
     "DemonstrationFeedbackTagView",
     "FloatMetricFeedbackTagView",
+    // These views were created with SELECT * from source tables, so after adding
+    // snapshot_hash to the source tables, we explicitly list columns to include it.
+    "DynamicEvaluationRunByProjectNameView",
+    "DynamicEvaluationRunEpisodeByRunIdView",
 ];
 
 /// This migration sets up the ClickHouse data structures required
@@ -81,19 +86,13 @@ impl<'a> Migration for Migration0043<'a> {
 
     async fn should_apply(&self) -> Result<bool, Error> {
         // Check if ConfigSnapshot table doesn't exist
-        if !check_table_exists(self.clickhouse, "ConfigSnapshot", MIGRATION_ID)
-            .await
-            .unwrap()
-        {
+        if !check_table_exists(self.clickhouse, "ConfigSnapshot", MIGRATION_ID).await? {
             return Ok(true);
         }
 
         // Check if any of the tables is missing the snapshot_hash column
         for table in SNAPSHOT_TRACKED_TABLES {
-            if !check_column_exists(self.clickhouse, table, "snapshot_hash", MIGRATION_ID)
-                .await
-                .unwrap()
-            {
+            if !check_column_exists(self.clickhouse, table, "snapshot_hash", MIGRATION_ID).await? {
                 return Ok(true);
             }
         }
@@ -104,8 +103,7 @@ impl<'a> Migration for Migration0043<'a> {
             let result = self
                 .clickhouse
                 .run_query_synchronous_no_params(query)
-                .await
-                .unwrap();
+                .await?;
             if !result.response.contains("snapshot_hash") {
                 return Ok(true);
             }
@@ -134,8 +132,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(create_table_query)
-            .await
-            .unwrap();
+            .await?;
 
         // Add snapshot_hash column to existing tables
         for table in SNAPSHOT_TRACKED_TABLES {
@@ -144,8 +141,7 @@ impl<'a> Migration for Migration0043<'a> {
             );
             self.clickhouse
                 .run_query_synchronous_no_params(query)
-                .await
-                .unwrap();
+                .await?;
         }
 
         // Make sure ClickHouse is aware of all the new columns before migrating the MVs
@@ -169,8 +165,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         let query = format!(
             "
@@ -187,8 +182,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         let query = format!(
             "
@@ -205,8 +199,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         let query = format!(
             "
@@ -222,8 +215,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         // Group 2: Inference indexing views
         let query = format!(
@@ -241,8 +233,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         let query = format!(
             "
@@ -259,8 +250,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         let query = format!(
             "
@@ -277,8 +267,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         let query = format!(
             "
@@ -295,8 +284,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         // Group 3: Tag extraction views
         let query = format!(
@@ -317,8 +305,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         let query = format!(
             "
@@ -338,8 +325,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         let query = format!(
             "
@@ -356,8 +342,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         let query = format!(
             "
@@ -374,8 +359,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         // Group 4: Feedback by variant views (with JOINs)
         let query = format!(
@@ -431,8 +415,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         let query = format!(
             "
@@ -487,8 +470,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         // Group 5: Feedback tag views
         let query = format!(
@@ -506,8 +488,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         let query = format!(
             "
@@ -524,8 +505,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         let query = format!(
             "
@@ -542,8 +522,7 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
 
         let query = format!(
             "
@@ -560,8 +539,54 @@ impl<'a> Migration for Migration0043<'a> {
         );
         self.clickhouse
             .run_query_synchronous_no_params(query)
-            .await
-            .unwrap();
+            .await?;
+
+        // Update views that use SELECT * from tables we're adding snapshot_hash to.
+        // These views were created with SELECT * which implicitly includes all columns.
+        // After adding snapshot_hash to the source tables, we need to explicitly list
+        // columns in these views to include snapshot_hash, and importantly, to enable
+        // rollback (which requires modifying these views to exclude snapshot_hash
+        // before we can drop the column from the source tables).
+        let query = format!(
+            "
+            ALTER TABLE DynamicEvaluationRunByProjectNameView{on_cluster_name} MODIFY QUERY
+            SELECT
+                run_id_uint,
+                variant_pins,
+                tags,
+                project_name,
+                run_display_name,
+                is_deleted,
+                updated_at,
+                snapshot_hash
+            FROM DynamicEvaluationRun
+            WHERE project_name IS NOT NULL
+            ORDER BY project_name, run_id_uint
+        "
+        );
+        self.clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
+
+        let query = format!(
+            "
+            ALTER TABLE DynamicEvaluationRunEpisodeByRunIdView{on_cluster_name} MODIFY QUERY
+            SELECT
+                toUInt128(run_id) AS run_id_uint,
+                episode_id_uint,
+                variant_pins,
+                tags,
+                datapoint_name,
+                is_deleted,
+                updated_at,
+                snapshot_hash
+            FROM DynamicEvaluationRunEpisode
+            ORDER BY run_id_uint, episode_id_uint
+        "
+        );
+        self.clickhouse
+            .run_query_synchronous_no_params(query)
+            .await?;
 
         Ok(())
     }
@@ -570,256 +595,34 @@ impl<'a> Migration for Migration0043<'a> {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
         let mut instructions = String::new();
 
-        // Rollback materialized view modifications
-        instructions.push_str(&format!(
-            "
--- Rollback Group 1: Feedback indexing views
-ALTER TABLE BooleanMetricFeedbackByTargetIdView{on_cluster_name} MODIFY QUERY
-SELECT
-    id,
-    target_id,
-    metric_name,
-    value,
-    tags
-FROM BooleanMetricFeedback;
+        // Each statement must be on a single line for the test runner
+        instructions.push_str(&format!("ALTER TABLE BooleanMetricFeedbackByTargetIdView{on_cluster_name} MODIFY QUERY SELECT id, target_id, metric_name, value, tags FROM BooleanMetricFeedback;\n"));
+        instructions.push_str(&format!("ALTER TABLE FloatMetricFeedbackByTargetIdView{on_cluster_name} MODIFY QUERY SELECT id, target_id, metric_name, value, tags FROM FloatMetricFeedback;\n"));
+        instructions.push_str(&format!("ALTER TABLE CommentFeedbackByTargetIdView{on_cluster_name} MODIFY QUERY SELECT id, target_id, target_type, value, tags FROM CommentFeedback;\n"));
+        instructions.push_str(&format!("ALTER TABLE DemonstrationFeedbackByInferenceIdView{on_cluster_name} MODIFY QUERY SELECT id, inference_id, value, tags FROM DemonstrationFeedback;\n"));
+        instructions.push_str(&format!("ALTER TABLE ChatInferenceByIdView{on_cluster_name} MODIFY QUERY SELECT toUInt128(id) as id_uint, function_name, variant_name, episode_id, 'chat' AS function_type FROM ChatInference;\n"));
+        instructions.push_str(&format!("ALTER TABLE JsonInferenceByIdView{on_cluster_name} MODIFY QUERY SELECT toUInt128(id) as id_uint, function_name, variant_name, episode_id, 'json' AS function_type FROM JsonInference;\n"));
+        instructions.push_str(&format!("ALTER TABLE ChatInferenceByEpisodeIdView{on_cluster_name} MODIFY QUERY SELECT toUInt128(episode_id) as episode_id_uint, toUInt128(id) as id_uint, function_name, variant_name, 'chat' as function_type FROM ChatInference;\n"));
+        instructions.push_str(&format!("ALTER TABLE JsonInferenceByEpisodeIdView{on_cluster_name} MODIFY QUERY SELECT toUInt128(episode_id) as episode_id_uint, toUInt128(id) as id_uint, function_name, variant_name, 'json' as function_type FROM JsonInference;\n"));
+        instructions.push_str(&format!("ALTER TABLE TagChatInferenceView{on_cluster_name} MODIFY QUERY SELECT function_name, variant_name, episode_id, id as inference_id, 'chat' as function_type, key, tags[key] as value FROM ChatInference ARRAY JOIN mapKeys(tags) as key;\n"));
+        instructions.push_str(&format!("ALTER TABLE TagJsonInferenceView{on_cluster_name} MODIFY QUERY SELECT function_name, variant_name, episode_id, id as inference_id, 'json' as function_type, key, tags[key] as value FROM JsonInference ARRAY JOIN mapKeys(tags) as key;\n"));
+        instructions.push_str(&format!("ALTER TABLE ChatInferenceTagView{on_cluster_name} MODIFY QUERY SELECT function_name, key, tags[key] as value, id as inference_id FROM ChatInference ARRAY JOIN mapKeys(tags) as key;\n"));
+        instructions.push_str(&format!("ALTER TABLE JsonInferenceTagView{on_cluster_name} MODIFY QUERY SELECT function_name, key, tags[key] as value, id as inference_id FROM JsonInference ARRAY JOIN mapKeys(tags) as key;\n"));
+        instructions.push_str(&format!("ALTER TABLE FloatMetricFeedbackByVariantView{on_cluster_name} MODIFY QUERY WITH float_feedback AS (SELECT toUInt128(id) as id_uint, metric_name, target_id, toUInt128(target_id) as target_id_uint, value, tags FROM FloatMetricFeedback), targets AS (SELECT uint_to_uuid(id_uint) as target_id, function_name, variant_name FROM InferenceById WHERE id_uint IN (SELECT target_id_uint FROM float_feedback) UNION ALL SELECT uint_to_uuid(episode_id_uint) as target_id, function_name, unique_variants[1] as variant_name FROM (SELECT episode_id_uint, function_name, groupUniqArray(variant_name) as unique_variants FROM InferenceByEpisodeId WHERE episode_id_uint IN (SELECT target_id_uint FROM float_feedback) GROUP BY (episode_id_uint, function_name)) WHERE length(unique_variants) = 1) SELECT t.function_name as function_name, t.variant_name as variant_name, f.metric_name as metric_name, f.id_uint as id_uint, f.target_id_uint as target_id_uint, f.value as value, f.tags as feedback_tags FROM float_feedback f JOIN targets t ON f.target_id = t.target_id;\n"));
+        instructions.push_str(&format!("ALTER TABLE BooleanMetricFeedbackByVariantView{on_cluster_name} MODIFY QUERY WITH boolean_feedback AS (SELECT toUInt128(id) as id_uint, metric_name, target_id, toUInt128(target_id) as target_id_uint, value, tags FROM BooleanMetricFeedback), targets AS (SELECT uint_to_uuid(id_uint) as target_id, function_name, variant_name FROM InferenceById WHERE id_uint IN (SELECT target_id_uint FROM boolean_feedback) UNION ALL SELECT uint_to_uuid(episode_id_uint) as target_id, function_name, unique_variants[1] as variant_name FROM (SELECT episode_id_uint, function_name, groupUniqArray(variant_name) as unique_variants FROM InferenceByEpisodeId WHERE episode_id_uint IN (SELECT target_id_uint FROM boolean_feedback) GROUP BY (episode_id_uint, function_name)) WHERE length(unique_variants) = 1) SELECT t.function_name as function_name, t.variant_name as variant_name, f.metric_name as metric_name, f.id_uint as id_uint, f.target_id_uint as target_id_uint, f.value as value, f.tags as feedback_tags FROM boolean_feedback f JOIN targets t ON f.target_id = t.target_id;\n"));
+        instructions.push_str(&format!("ALTER TABLE BooleanMetricFeedbackTagView{on_cluster_name} MODIFY QUERY SELECT metric_name, key, tags[key] as value, id as feedback_id FROM BooleanMetricFeedback ARRAY JOIN mapKeys(tags) as key;\n"));
+        instructions.push_str(&format!("ALTER TABLE CommentFeedbackTagView{on_cluster_name} MODIFY QUERY SELECT 'comment' as metric_name, key, tags[key] as value, id as feedback_id FROM CommentFeedback ARRAY JOIN mapKeys(tags) as key;\n"));
+        instructions.push_str(&format!("ALTER TABLE DemonstrationFeedbackTagView{on_cluster_name} MODIFY QUERY SELECT 'demonstration' as metric_name, key, tags[key] as value, id as feedback_id FROM DemonstrationFeedback ARRAY JOIN mapKeys(tags) as key;\n"));
+        instructions.push_str(&format!("ALTER TABLE FloatMetricFeedbackTagView{on_cluster_name} MODIFY QUERY SELECT metric_name, key, tags[key] as value, id as feedback_id FROM FloatMetricFeedback ARRAY JOIN mapKeys(tags) as key;\n"));
 
-ALTER TABLE FloatMetricFeedbackByTargetIdView{on_cluster_name} MODIFY QUERY
-SELECT
-    id,
-    target_id,
-    metric_name,
-    value,
-    tags
-FROM FloatMetricFeedback;
+        // Modify views that were originally created with SELECT * to explicitly list columns
+        // WITHOUT snapshot_hash. This must happen BEFORE dropping snapshot_hash from the source
+        // tables, otherwise ClickHouse will refuse to drop the column because the view references it.
+        // DynamicEvaluationRunByProjectNameView references DynamicEvaluationRun
+        instructions.push_str(&format!("ALTER TABLE DynamicEvaluationRunByProjectNameView{on_cluster_name} MODIFY QUERY SELECT run_id_uint, variant_pins, tags, project_name, run_display_name, is_deleted, updated_at FROM DynamicEvaluationRun WHERE project_name IS NOT NULL ORDER BY project_name, run_id_uint;\n"));
+        // DynamicEvaluationRunEpisodeByRunIdView references DynamicEvaluationRunEpisode
+        instructions.push_str(&format!("ALTER TABLE DynamicEvaluationRunEpisodeByRunIdView{on_cluster_name} MODIFY QUERY SELECT toUInt128(run_id) AS run_id_uint, episode_id_uint, variant_pins, tags, datapoint_name, is_deleted, updated_at FROM DynamicEvaluationRunEpisode ORDER BY run_id_uint, episode_id_uint;\n"));
 
-ALTER TABLE CommentFeedbackByTargetIdView{on_cluster_name} MODIFY QUERY
-SELECT
-    id,
-    target_id,
-    target_type,
-    value,
-    tags
-FROM CommentFeedback;
-
-ALTER TABLE DemonstrationFeedbackByInferenceIdView{on_cluster_name} MODIFY QUERY
-SELECT
-    id,
-    inference_id,
-    value,
-    tags
-FROM DemonstrationFeedback;
-
--- Rollback Group 2: Inference indexing views
-ALTER TABLE ChatInferenceByIdView{on_cluster_name} MODIFY QUERY
-SELECT
-    toUInt128(id) as id_uint,
-    function_name,
-    variant_name,
-    episode_id,
-    'chat' AS function_type
-FROM ChatInference;
-
-ALTER TABLE JsonInferenceByIdView{on_cluster_name} MODIFY QUERY
-SELECT
-    toUInt128(id) as id_uint,
-    function_name,
-    variant_name,
-    episode_id,
-    'json' AS function_type
-FROM JsonInference;
-
-ALTER TABLE ChatInferenceByEpisodeIdView{on_cluster_name} MODIFY QUERY
-SELECT
-    toUInt128(episode_id) as episode_id_uint,
-    toUInt128(id) as id_uint,
-    function_name,
-    variant_name,
-    'chat' as function_type
-FROM ChatInference;
-
-ALTER TABLE JsonInferenceByEpisodeIdView{on_cluster_name} MODIFY QUERY
-SELECT
-    toUInt128(episode_id) as episode_id_uint,
-    toUInt128(id) as id_uint,
-    function_name,
-    variant_name,
-    'json' as function_type
-FROM JsonInference;
-
--- Rollback Group 3: Tag extraction views
-ALTER TABLE TagChatInferenceView{on_cluster_name} MODIFY QUERY
-SELECT
-    function_name,
-    variant_name,
-    episode_id,
-    id as inference_id,
-    'chat' as function_type,
-    key,
-    tags[key] as value
-FROM ChatInference
-ARRAY JOIN mapKeys(tags) as key;
-
-ALTER TABLE TagJsonInferenceView{on_cluster_name} MODIFY QUERY
-SELECT
-    function_name,
-    variant_name,
-    episode_id,
-    id as inference_id,
-    'json' as function_type,
-    key,
-    tags[key] as value
-FROM JsonInference
-ARRAY JOIN mapKeys(tags) as key;
-
-ALTER TABLE ChatInferenceTagView{on_cluster_name} MODIFY QUERY
-SELECT
-    function_name,
-    key,
-    tags[key] as value,
-    id as inference_id
-FROM ChatInference
-ARRAY JOIN mapKeys(tags) as key;
-
-ALTER TABLE JsonInferenceTagView{on_cluster_name} MODIFY QUERY
-SELECT
-    function_name,
-    key,
-    tags[key] as value,
-    id as inference_id
-FROM JsonInference
-ARRAY JOIN mapKeys(tags) as key;
-
--- Rollback Group 4: Feedback by variant views
-ALTER TABLE FloatMetricFeedbackByVariantView{on_cluster_name} MODIFY QUERY
-WITH
-    float_feedback AS (
-        SELECT
-            toUInt128(id) as id_uint,
-            metric_name,
-            target_id,
-            toUInt128(target_id) as target_id_uint,
-            value,
-            tags
-        FROM FloatMetricFeedback
-    ),
-    targets AS (
-        SELECT
-            uint_to_uuid(id_uint) as target_id,
-            function_name,
-            variant_name
-        FROM InferenceById
-        WHERE id_uint IN (SELECT target_id_uint FROM float_feedback)
-        UNION ALL
-        SELECT
-            uint_to_uuid(episode_id_uint) as target_id,
-            function_name,
-            unique_variants[1] as variant_name
-        FROM (
-            SELECT
-                episode_id_uint,
-                function_name,
-                groupUniqArray(variant_name) as unique_variants
-            FROM InferenceByEpisodeId
-            WHERE episode_id_uint IN (SELECT target_id_uint FROM float_feedback)
-            GROUP BY (episode_id_uint, function_name)
-        )
-        WHERE length(unique_variants) = 1
-    )
-SELECT
-    t.function_name as function_name,
-    t.variant_name as variant_name,
-    f.metric_name as metric_name,
-    f.id_uint as id_uint,
-    f.target_id_uint as target_id_uint,
-    f.value as value,
-    f.tags as feedback_tags
-FROM float_feedback f
-JOIN targets t ON f.target_id = t.target_id;
-
-ALTER TABLE BooleanMetricFeedbackByVariantView{on_cluster_name} MODIFY QUERY
-WITH
-    boolean_feedback AS (
-        SELECT
-            toUInt128(id) as id_uint,
-            metric_name,
-            target_id,
-            toUInt128(target_id) as target_id_uint,
-            value,
-            tags
-        FROM BooleanMetricFeedback
-    ),
-    targets AS (
-        SELECT
-            uint_to_uuid(id_uint) as target_id,
-            function_name,
-            variant_name
-        FROM InferenceById
-        WHERE id_uint IN (SELECT target_id_uint FROM boolean_feedback)
-        UNION ALL
-        SELECT
-            uint_to_uuid(episode_id_uint) as target_id,
-            function_name,
-            unique_variants[1] as variant_name
-        FROM (
-            SELECT
-                episode_id_uint,
-                function_name,
-                groupUniqArray(variant_name) as unique_variants
-            FROM InferenceByEpisodeId
-            WHERE episode_id_uint IN (SELECT target_id_uint FROM boolean_feedback)
-            GROUP BY (episode_id_uint, function_name)
-        )
-        WHERE length(unique_variants) = 1
-    )
-SELECT
-    t.function_name as function_name,
-    t.variant_name as variant_name,
-    f.metric_name as metric_name,
-    f.id_uint as id_uint,
-    f.target_id_uint as target_id_uint,
-    f.value as value,
-    f.tags as feedback_tags
-FROM boolean_feedback f
-JOIN targets t ON f.target_id = t.target_id;
-
--- Rollback Group 5: Feedback tag views
-ALTER TABLE BooleanMetricFeedbackTagView{on_cluster_name} MODIFY QUERY
-SELECT
-    metric_name,
-    key,
-    tags[key] as value,
-    id as feedback_id
-FROM BooleanMetricFeedback
-ARRAY JOIN mapKeys(tags) as key;
-
-ALTER TABLE CommentFeedbackTagView{on_cluster_name} MODIFY QUERY
-SELECT
-    'comment' as metric_name,
-    key,
-    tags[key] as value,
-    id as feedback_id
-FROM CommentFeedback
-ARRAY JOIN mapKeys(tags) as key;
-
-ALTER TABLE DemonstrationFeedbackTagView{on_cluster_name} MODIFY QUERY
-SELECT
-    'demonstration' as metric_name,
-    key,
-    tags[key] as value,
-    id as feedback_id
-FROM DemonstrationFeedback
-ARRAY JOIN mapKeys(tags) as key;
-
-ALTER TABLE FloatMetricFeedbackTagView{on_cluster_name} MODIFY QUERY
-SELECT
-    metric_name,
-    key,
-    tags[key] as value,
-    id as feedback_id
-FROM FloatMetricFeedback
-ARRAY JOIN mapKeys(tags) as key;
-"
-        ));
         instructions.push_str(&format!("DROP TABLE ConfigSnapshot{on_cluster_name};\n"));
 
         for table in SNAPSHOT_TRACKED_TABLES {
@@ -830,6 +633,6 @@ ARRAY JOIN mapKeys(tags) as key;
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
-        Ok(!self.should_apply().await.unwrap())
+        Ok(!self.should_apply().await?)
     }
 }

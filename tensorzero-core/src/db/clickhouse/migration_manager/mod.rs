@@ -287,14 +287,9 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
                     manual_run: is_manual_run,
                     is_replicated,
                 })
-                .await
-                .map_err(|e| {
-                    let migration_num = migrations[0].migration_num().unwrap_or(0);
-                    tracing::error!("Migration #{} ({}) failed", migration_num, migrations[0].name());
-                    e
-                })?;
+                .await?;
 
-                for (idx, migration) in migrations[1..].iter().enumerate() {
+                for migration in &migrations[1..] {
                     run_migration(RunMigrationArgs {
                         clickhouse,
                         migration: &**migration,
@@ -302,13 +297,7 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
                         manual_run: is_manual_run,
                         is_replicated,
                     })
-                    .await
-                    .map_err(|e| {
-                        let migration_num = migration.migration_num().unwrap_or(0);
-                        tracing::error!("Migration #{} ({}) failed at position {} in migration sequence",
-                            migration_num, migration.name(), idx + 1);
-                        e
-                    })?;
+                    .await?;
                 }
                 Ok(())
             }
