@@ -367,7 +367,7 @@ impl ParetoFrontier {
         Err(Error::new(ErrorDetails::InternalError {
             message: format!(
                 "Variant name collision(s) detected: {collision_list}. \
-                    New variants cannot have the same names as existing frontier variants."
+                 New variants cannot have the same names as existing frontier variants."
             ),
         }))
     }
@@ -1122,6 +1122,7 @@ mod tests {
             .flat_map(|scores| scores.keys().copied())
             .collect();
         datapoint_ids.sort();
+        datapoint_ids.dedup();
         datapoint_ids
     }
 
