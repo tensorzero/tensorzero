@@ -1,12 +1,8 @@
 #![cfg_attr(test, allow(clippy::expect_used, clippy::unwrap_used))]
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 use tensorzero_core::client::{Client, ClientBuilder, ClientBuilderMode};
-use tensorzero_core::config::{Config, ConfigFileGlob, ConfigLoadInfo};
+use tensorzero_core::config::Config;
 use tensorzero_core::db::clickhouse::{
     test_helpers::{get_clickhouse, CLICKHOUSE_URL},
     TableName,
@@ -15,6 +11,9 @@ use tensorzero_core::endpoints::datasets::{
     StoredChatInferenceDatapoint, StoredJsonInferenceDatapoint,
 };
 use uuid::Uuid;
+
+// Re-export test helpers from tensorzero-core
+pub use tensorzero_core::test_helpers::get_e2e_config_path;
 
 /// Takes a chat fixture as a path to a JSONL file and writes the fixture to the dataset.
 /// To avoid trampling between tests, we use a mapping from the fixture dataset names to the actual dataset names
@@ -69,10 +68,7 @@ pub async fn write_json_fixture_to_dataset(
 
 pub async fn get_tensorzero_client() -> Client {
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
-        config_file: Some(PathBuf::from(&format!(
-            "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-            std::env::var("CARGO_MANIFEST_DIR").unwrap()
-        ))),
+        config_file: Some(get_e2e_config_path()),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),
         postgres_url: None,
         timeout: None,
@@ -84,19 +80,7 @@ pub async fn get_tensorzero_client() -> Client {
     .unwrap()
 }
 
+/// Loads the E2E test configuration wrapped in Arc for use in tests.
 pub async fn get_config() -> Arc<Config> {
-    let ConfigLoadInfo {
-        config,
-        snapshot: _,
-    } = Config::load_from_path_optional_verify_credentials(
-        &ConfigFileGlob::new_from_path(&PathBuf::from(&format!(
-            "{}/../tensorzero-core/tests/e2e/config/tensorzero.*.toml",
-            std::env::var("CARGO_MANIFEST_DIR").unwrap()
-        )))
-        .unwrap(),
-        false,
-    )
-    .await
-    .unwrap();
-    Arc::new(config)
+    Arc::new(tensorzero_core::test_helpers::get_e2e_config().await)
 }

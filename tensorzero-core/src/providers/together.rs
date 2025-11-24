@@ -445,7 +445,7 @@ impl<'a> TogetherRequest<'a> {
 
         let (tools, mut tool_choice, parallel_tool_calls) = match tool_choice {
             Some(&ToolChoice::None) => (None, None, None),
-            _ => prepare_chat_completion_tools(request, false),
+            _ => prepare_chat_completion_tools(request, false)?,
         };
         // Together AI doesn't seem to support `tool_choice="required"`, so we convert it to `tool_choice="auto"`
         if let Some(ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::Required)) =

@@ -742,7 +742,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
             text: "Output".to_string(),
         })]),
         tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-            vec![Tool::ClientSideFunction(FunctionTool {
+            vec![Tool::Function(FunctionTool {
                 name: "test_tool".to_string(),
                 description: "Test tool".to_string(),
                 parameters: json!({}),

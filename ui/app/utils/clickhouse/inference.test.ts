@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { expect, test } from "vitest";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import {
   countInferencesForEpisode,
@@ -14,13 +14,10 @@ import {
   queryInferenceTableBoundsByFunctionName,
   queryInferenceTableBoundsByVariantName,
   queryModelInferencesByInferenceId,
-  getAdjacentInferenceIds,
-  getAdjacentEpisodeIds,
 } from "./inference.server";
 import { countInferencesForFunction } from "./inference.server";
-import type { TextContent } from "./common";
+import type { ZodTextContent } from "./common";
 import { displayModelInferenceInputMessageContentSchema } from "./common";
-import { getClickhouseClient } from "./client.server";
 import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
@@ -38,6 +35,7 @@ test("countInferencesForFunction returns correct counts", async () => {
       static_tools_available: [],
       dynamic_tools_available: [],
       provider_tools: [],
+      openai_custom_tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
       allowed_tools: { tools: [], choice: "function_default" },
@@ -73,6 +71,7 @@ test("countInferencesForVariant returns correct counts", async () => {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
+        openai_custom_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
         allowed_tools: {
@@ -462,7 +461,7 @@ test("queryInferenceById for chat inference", async () => {
   expect(inference?.function_type).toBe("chat");
   expect(inference?.input.messages.length).toBeGreaterThan(0);
   const output = inference?.output as ContentBlockChatOutput[];
-  const firstOutput = output[0] as TextContent;
+  const firstOutput = output[0] as ZodTextContent;
   expect(firstOutput.type).toBe("text");
   expect(firstOutput.text).toBe("Yes.");
 });
@@ -534,56 +533,6 @@ test("queryModelInferencesByInferenceId", async () => {
   expect(!firstInference.cached);
 });
 
-describe("getAdjacentInferenceIds", () => {
-  test("returns adjacent inference ids", async () => {
-    const adjacentInferenceIds = await getAdjacentInferenceIds(
-      "01942e26-910b-7ab1-a645-46bc4463a001",
-    );
-    expect(adjacentInferenceIds.previous_id).toBe(
-      "01942e26-9026-76e0-bf84-27038739ec33",
-    );
-    expect(adjacentInferenceIds.next_id).toBe(
-      "01942e26-9128-71d2-bed6-aee96bb3e181",
-    );
-  });
-
-  test("returns null for previous inference id if current inference is first", async () => {
-    const resultSet = await getClickhouseClient().query({
-      query:
-        "SELECT uint_to_uuid(min(id_uint)) as first_inference_id FROM InferenceById",
-      format: "JSON",
-    });
-    const firstInferenceId = await resultSet.json<{
-      first_inference_id: string;
-    }>();
-    const adjacentInferenceIds = await getAdjacentInferenceIds(
-      firstInferenceId.data[0].first_inference_id,
-    );
-    expect(adjacentInferenceIds.previous_id).toBeNull();
-    expect(adjacentInferenceIds.next_id).toBe(
-      "01934c9a-be70-7d72-a722-744cb572eb49",
-    );
-  });
-
-  test("returns null for next inference id if current inference is last", async () => {
-    const resultSet = await getClickhouseClient().query({
-      query:
-        "SELECT uint_to_uuid(max(id_uint)) as last_inference_id FROM InferenceById",
-      format: "JSON",
-    });
-    const lastInferenceId = await resultSet.json<{
-      last_inference_id: string;
-    }>();
-    const adjacentInferenceIds = await getAdjacentInferenceIds(
-      lastInferenceId.data[0].last_inference_id,
-    );
-    expect(adjacentInferenceIds.previous_id).toBe(
-      "019926fd-1a06-7fe2-b7f4-2318de2f2046",
-    );
-    expect(adjacentInferenceIds.next_id).toBeNull();
-  });
-});
-
 test("displayModelInferenceInputMessageContentSchema accepts thought content blocks", () => {
   // Test thought content block with all fields including summary
   const thoughtContentWithSummary = {
@@ -639,56 +588,4 @@ test("displayModelInferenceInputMessageContentSchema accepts thought content blo
     expect(result3.data.text).toBeUndefined();
     expect(result3.data.summary).toBeUndefined();
   }
-});
-
-describe("getAdjacentEpisodeIds", () => {
-  test("returns adjacent episode ids", async () => {
-    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
-      "01942e26-549f-7153-ac56-dd1d23d30f8c",
-    );
-    expect(adjacentEpisodeIds.previous_id).toBe(
-      "01942e26-5392-7652-ad59-734198888520",
-    );
-    expect(adjacentEpisodeIds.next_id).toBe(
-      "01942e26-54a2-71d1-ad80-3629b6cb18a3",
-    );
-  });
-
-  test("returns null for previous episode id if current episode is first", async () => {
-    const resultSet = await getClickhouseClient().query({
-      query:
-        "SELECT uint_to_uuid(min(episode_id_uint)) as first_episode_id FROM InferenceByEpisodeId",
-      format: "JSON",
-    });
-    const firstEpisodeId = await resultSet.json<{
-      first_episode_id: string;
-    }>();
-
-    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
-      firstEpisodeId.data[0].first_episode_id,
-    );
-    expect(adjacentEpisodeIds.previous_id).toBeNull();
-    expect(adjacentEpisodeIds.next_id).toBe(
-      "0192ced0-9486-7491-9b60-42dd2ef9194e",
-    );
-  });
-
-  test("returns null for next episode id if current episode is last", async () => {
-    const resultSet = await getClickhouseClient().query({
-      query:
-        "SELECT uint_to_uuid(max(episode_id_uint)) as last_episode_id FROM InferenceByEpisodeId",
-      format: "JSON",
-    });
-    const lastEpisodeId = await resultSet.json<{
-      last_episode_id: string;
-    }>();
-
-    const adjacentEpisodeIds = await getAdjacentEpisodeIds(
-      lastEpisodeId.data[0].last_episode_id,
-    );
-    expect(adjacentEpisodeIds.previous_id).toBe(
-      "0aaeef58-3633-7f27-9393-65bd98491026",
-    );
-    expect(adjacentEpisodeIds.next_id).toBeNull();
-  });
 });

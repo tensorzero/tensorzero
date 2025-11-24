@@ -31,14 +31,14 @@ use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::experimentation::ExperimentationConfig;
-use crate::function::FunctionConfig;
-use crate::function::FunctionConfigChat;
+use crate::function::{FunctionConfig, FunctionConfigChat};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::{
     ChatCompletionInferenceParamsV2, ServiceTier,
 };
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
+use crate::inference::types::extra_stuff::validate_inference_filters;
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     collect_chunks, ChatInferenceDatabaseInsert, ChatInferenceResultChunk, CollectChunksArgs,
@@ -295,7 +295,7 @@ pub async fn inference(
         );
     }
 
-    let (function, function_name) = find_function(&params, &config)?;
+    let (function, function_name) = find_function(&params, &config).await?;
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
         function.variants().clone().into_iter().collect();
 
@@ -309,6 +309,15 @@ pub async fn inference(
 
     // Validate the input
     function.validate_inference_params(&params)?;
+
+    // Validate extra_body and extra_headers filters
+    validate_inference_filters(
+        &params.extra_body,
+        &params.extra_headers,
+        Some(&function),
+        &config.models,
+    )
+    .await?;
 
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
@@ -699,7 +708,10 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
 /// invalid combination of parameters is provided.
 /// If `model_name` is specified, then we use the special 'default' function
 /// Returns the function config and the function name
-fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig>, String), Error> {
+async fn find_function(
+    params: &Params,
+    config: &Config,
+) -> Result<(Arc<FunctionConfig>, String), Error> {
     match (
         &params.function_name,
         &params.model_name,
@@ -724,6 +736,15 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                 }
                 .into());
             }
+
+            // Validate extra_body and extra_headers filters
+            validate_inference_filters(
+                &params.extra_body,
+                &params.extra_headers,
+                None,
+                &config.models,
+            )
+            .await?;
 
             Ok((
                 Arc::new(FunctionConfig::Chat(FunctionConfigChat {
@@ -1487,10 +1508,10 @@ fn prepare_candidate_variants(
             for path_with_contents in candidate_variant_info.get_all_template_paths() {
                 let template_name = path_with_contents.path.get_template_key();
                 if dynamic_template_config.contains_template(&template_name) {
-                    return Err(ErrorDetails::InvalidDynamicTemplatePath {
-                        name: template_name,
-                    }
-                    .into());
+                    tracing::warn!(
+                        "Dynamic template '{}' is overriding an existing template",
+                        template_name
+                    );
                 }
                 dynamic_template_config
                     .add_template(template_name, path_with_contents.contents.clone())?;
@@ -1648,8 +1669,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_find_function_no_function_model() {
+    #[tokio::test]
+    async fn test_find_function_no_function_model() {
         let err = find_function(
             &Params {
                 function_name: None,
@@ -1658,6 +1679,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect_err("find_function should fail without either arg");
         assert!(
             err.to_string()
@@ -1666,8 +1688,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_find_function_both_function_model() {
+    #[tokio::test]
+    async fn test_find_function_both_function_model() {
         let err = find_function(
             &Params {
                 function_name: Some("my_function".to_string()),
@@ -1676,6 +1698,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect_err("find_function should fail with both args provided");
         assert!(
             err.to_string()
@@ -1684,8 +1707,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_find_function_model_and_variant() {
+    #[tokio::test]
+    async fn test_find_function_model_and_variant() {
         let err = find_function(
             &Params {
                 function_name: None,
@@ -1695,6 +1718,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect_err("find_function should fail without model_name");
         assert!(
             err.to_string()
@@ -1703,8 +1727,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_find_function_shorthand_model() {
+    #[tokio::test]
+    async fn test_find_function_shorthand_model() {
         let (function_config, function_name) = find_function(
             &Params {
                 function_name: None,
@@ -1713,6 +1737,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect("Failed to find shorthand function");
         assert_eq!(function_name, "tensorzero::default");
         assert_eq!(function_config.variants().len(), 1);
@@ -1722,8 +1747,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_find_function_shorthand_missing_provider() {
+    #[tokio::test]
+    async fn test_find_function_shorthand_missing_provider() {
         let err = find_function(
             &Params {
                 model_name: Some("fake_provider::gpt-9000".to_string()),
@@ -1731,6 +1756,7 @@ mod tests {
             },
             &Config::default(),
         )
+        .await
         .expect_err("find_function should fail with invalid provider");
         assert!(
             err.to_string()

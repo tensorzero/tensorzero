@@ -35,7 +35,7 @@ use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{
-    DynamicToolParams, StaticToolConfig, Tool, ToolCallConfig, ToolCallConfigConstructorArgs,
+    DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolCallConfigConstructorArgs,
     ToolCallConfigDatabaseInsert, ToolChoice,
 };
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
@@ -431,8 +431,7 @@ impl FunctionConfig {
                     function_parallel_tool_calls: params.parallel_tool_calls,
                     static_tools,
                     dynamic_allowed_tools: allowed_tools,
-                    dynamic_additional_tools: additional_tools
-                        .map(|tools| tools.into_iter().map(Tool::ClientSideFunction).collect()),
+                    dynamic_additional_tools: additional_tools,
                     dynamic_tool_choice: tool_choice,
                     dynamic_parallel_tool_calls: parallel_tool_calls,
                     dynamic_provider_tools: provider_tools,

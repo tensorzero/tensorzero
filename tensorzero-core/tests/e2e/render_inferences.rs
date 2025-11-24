@@ -239,7 +239,7 @@ pub async fn test_render_samples_normal() {
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
             tool_params: ToolCallConfigDatabaseInsert::new_for_test(
-                vec![Tool::ClientSideFunction(FunctionTool {
+                vec![Tool::Function(FunctionTool {
                     name: "get_temperature".to_string(),
                     description: "Get the temperature of a location".to_string(),
                     parameters: json!({}), // Don't need to validate the arguments so we can leave blank
@@ -794,7 +794,7 @@ pub async fn test_render_datapoints_normal() {
                 raw_arguments: "{\"location\":\"Tokyo\"}".to_string(),
             })]),
             tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
-                vec![Tool::ClientSideFunction(FunctionTool {
+                vec![Tool::Function(FunctionTool {
                     name: "get_temperature".to_string(),
                     description: "Get the temperature of a location".to_string(),
                     parameters: json!({}), // Don't need to validate the arguments so we can leave blank
