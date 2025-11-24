@@ -30,7 +30,9 @@ use crate::inference::types::{
 use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::inject_extra_request_data;
-use crate::tool::{DynamicToolParams, FunctionTool, ToolCall, ToolCallWrapper};
+use crate::tool::{
+    DynamicToolParams, FunctionTool, Tool, ToolCall, ToolCallWrapper, ToolConfigRef,
+};
 use crate::variant::JsonMode;
 
 const PROVIDER_NAME: &str = "TensorZero Relay";
@@ -296,14 +298,17 @@ impl TensorZeroRelayProvider {
                     .tool_config
                     .as_ref()
                     .map(|config| config.allowed_tools.tools.clone()),
-                additional_tools: request.tool_config.as_ref().map(|config| {
-                    config
-                        .tools_available()
-                        .map(|t| FunctionTool {
-                            description: t.description().to_string(),
-                            parameters: t.parameters().clone(),
-                            name: t.name().to_string(),
-                            strict: t.strict(),
+                additional_tools: request.tool_config.as_ref().map(|tools| {
+                    tools
+                        .tools_available_with_openai_custom()
+                        .map(|t| match t {
+                            ToolConfigRef::Function(f) => Tool::Function(FunctionTool {
+                                description: f.description().to_string(),
+                                parameters: f.parameters().clone(),
+                                name: f.name().to_string(),
+                                strict: f.strict(),
+                            }),
+                            ToolConfigRef::OpenAICustom(o) => Tool::OpenAICustom(o.clone()),
                         })
                         .collect()
                 }),
