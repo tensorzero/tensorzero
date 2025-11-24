@@ -16,7 +16,7 @@ use tensorzero_core::inference::types::{
     System, Template, Text,
 };
 use tensorzero_core::stored_inference::{RenderedSample, StoredOutput};
-use tensorzero_optimizers::gepa::create_evaluation_dataset;
+use tensorzero_optimizers::gepa::evaluate::create_evaluation_dataset;
 use uuid::Uuid;
 
 pub mod analyze;

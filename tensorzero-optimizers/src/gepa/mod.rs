@@ -23,15 +23,13 @@ use tensorzero_core::{
 
 use crate::{JobHandle, Optimizer};
 
-mod analyze;
-mod evaluate;
-mod pareto;
-mod validate;
+pub mod analyze;
+pub mod evaluate;
+pub mod pareto;
+pub mod validate;
 
-pub use analyze::{analyze_inferences, Analysis};
-pub use evaluate::create_evaluation_dataset;
+// TODO: remove public export after #4669 is merged and we can integrate the Pareto functions
 pub use pareto::{is_improvement, ParetoFrontier};
-pub use validate::FunctionContext;
 use validate::{initialize_pareto_frontier, validate_examples, validate_gepa_config};
 
 #[async_trait]
