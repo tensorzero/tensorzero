@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::Parser;
 use evaluations::{helpers::setup_logging, run_evaluation, Args};
 use tracing::{info, instrument};
@@ -10,22 +10,6 @@ async fn main() -> Result<()> {
     let evaluation_run_id = Uuid::now_v7();
     let args = Args::parse();
     let mut writer = std::io::stdout();
-
-    // Validate that exactly one of dataset_name or datapoint_ids is provided
-    match (&args.dataset_name, args.datapoint_ids.is_empty()) {
-        (None, true) => {
-            bail!("Either --dataset-name or --datapoint-ids must be provided");
-        }
-        (Some(_), false) => {
-            bail!("Cannot provide both --dataset-name and --datapoint-ids");
-        }
-        _ => {}
-    }
-
-    // Validate that max_datapoints is not used with datapoint_ids
-    if !args.datapoint_ids.is_empty() && args.max_datapoints.is_some() {
-        bail!("Cannot provide both --datapoint-ids and --max-datapoints. --max-datapoints can only be used with --dataset-name");
-    }
 
     if let Some(dataset_name) = &args.dataset_name {
         info!(
