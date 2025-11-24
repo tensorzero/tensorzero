@@ -5,6 +5,8 @@ use crate::db::clickhouse::migration_manager::migrations::{
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::error::Error;
 use async_trait::async_trait;
+use std::time::Duration;
+use tokio::time::sleep;
 
 const MIGRATION_ID: &str = "0043";
 
@@ -136,6 +138,10 @@ impl<'a> Migration for Migration0043<'a> {
                 .run_query_synchronous_no_params(query)
                 .await?;
         }
+
+        // Make sure ClickHouse is aware of all the new columns before migrating the MVs
+        // This caused issues on CI but never locally
+        sleep(Duration::from_secs(1)).await;
 
         // Update materialized views to propagate snapshot_hash from source tables
         // Group 1: Feedback indexing views
