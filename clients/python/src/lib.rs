@@ -1402,20 +1402,20 @@ impl TensorZeroGateway {
             HashMap::new()
         };
 
-        // Convert Option<Vec<String>> to Vec<String> (None becomes empty vec)
-        let datapoint_ids = datapoint_ids.unwrap_or_default();
-
-        // Parse datapoint_ids from strings to UUIDs
-        let datapoint_ids: Vec<Uuid> = datapoint_ids
-            .iter()
-            .map(|s| {
-                Uuid::parse_str(s).map_err(|e| {
-                    pyo3::exceptions::PyValueError::new_err(format!(
-                        "Invalid UUID in datapoint_ids: {e}"
-                    ))
-                })
+        // Parse datapoint_ids from strings to UUIDs (keeping as Option)
+        let datapoint_ids: Option<Vec<Uuid>> = datapoint_ids
+            .map(|ids| {
+                ids.iter()
+                    .map(|s| {
+                        Uuid::parse_str(s).map_err(|e| {
+                            pyo3::exceptions::PyValueError::new_err(format!(
+                                "Invalid UUID in datapoint_ids: {e}"
+                            ))
+                        })
+                    })
+                    .collect::<PyResult<Vec<Uuid>>>()
             })
-            .collect::<PyResult<Vec<Uuid>>>()?;
+            .transpose()?;
 
         let core_args = EvaluationCoreArgs {
             tensorzero_client: client.clone(),
@@ -1424,7 +1424,7 @@ impl TensorZeroGateway {
             evaluation_name,
             evaluation_run_id,
             dataset_name,
-            datapoint_ids: Some(datapoint_ids),
+            datapoint_ids,
             variant,
             concurrency,
             inference_cache: inference_cache_enum,
@@ -2592,20 +2592,20 @@ impl AsyncTensorZeroGateway {
             HashMap::new()
         };
 
-        // Convert Option<Vec<String>> to Vec<String> (None becomes empty vec)
-        let datapoint_ids = datapoint_ids.unwrap_or_default();
-
         // Parse datapoint_ids from strings to UUIDs
-        let datapoint_ids: Vec<Uuid> = datapoint_ids
-            .iter()
-            .map(|s| {
-                Uuid::parse_str(s).map_err(|e| {
-                    pyo3::exceptions::PyValueError::new_err(format!(
-                        "Invalid UUID in datapoint_ids: {e}"
-                    ))
-                })
+        let datapoint_ids: Option<Vec<Uuid>> = datapoint_ids
+            .map(|ids| {
+                ids.iter()
+                    .map(|s| {
+                        Uuid::parse_str(s).map_err(|e| {
+                            pyo3::exceptions::PyValueError::new_err(format!(
+                                "Invalid UUID in datapoint_ids: {e}"
+                            ))
+                        })
+                    })
+                    .collect::<PyResult<Vec<Uuid>>>()
             })
-            .collect::<PyResult<Vec<Uuid>>>()?;
+            .transpose()?;
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             // Get app state data
@@ -2622,7 +2622,7 @@ impl AsyncTensorZeroGateway {
                 evaluation_name,
                 evaluation_run_id,
                 dataset_name,
-                datapoint_ids: Some(datapoint_ids),
+                datapoint_ids,
                 variant,
                 concurrency,
                 inference_cache: inference_cache_enum,
