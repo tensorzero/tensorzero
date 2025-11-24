@@ -24,6 +24,7 @@ def test_sync_run_evaluation(
     job = embedded_sync_client.experimental_run_evaluation(
         evaluation_name="entity_extraction",
         dataset_name=evaluation_datasets["extract_entities_0.8"],
+        datapoint_ids=[],
         variant_name="gpt_4o_mini",
         concurrency=2,
         inference_cache="on",
@@ -115,6 +116,7 @@ def test_sync_run_evaluation_invalid_cache_mode(
         embedded_sync_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             dataset_name="extract_entities_0.8",
+            datapoint_ids=[],
             variant_name="gpt_4o_mini",
             concurrency=1,
             inference_cache="invalid_mode",
@@ -130,6 +132,7 @@ async def test_async_run_evaluation(
     job = await embedded_async_client.experimental_run_evaluation(
         evaluation_name="haiku_without_outputs",
         dataset_name=evaluation_datasets["good-haikus-no-output"],
+        datapoint_ids=[],
         variant_name="gpt_4o_mini",
         concurrency=2,
         inference_cache="off",
@@ -229,6 +232,7 @@ async def test_async_run_evaluation_invalid_cache_mode(
         await embedded_async_client.experimental_run_evaluation(
             evaluation_name="entity_extraction",
             dataset_name="extract_entities_0.8",
+            datapoint_ids=[],
             variant_name="gpt_4o_mini",
             concurrency=1,
             inference_cache="invalid_mode",
@@ -266,6 +270,7 @@ def test_sync_run_evaluation_with_dynamic_variant(
     job = embedded_sync_client.experimental_run_evaluation(
         evaluation_name="haiku_without_outputs",
         dataset_name=evaluation_datasets["good-haikus-no-output"],
+        datapoint_ids=[],
         internal_dynamic_variant_config=dynamic_variant,
         concurrency=10,
         inference_cache="off",
@@ -336,6 +341,7 @@ async def test_async_run_evaluation_with_dynamic_variant(
     job = await embedded_async_client.experimental_run_evaluation(
         evaluation_name="entity_extraction",
         dataset_name=evaluation_datasets["extract_entities_0.8"],
+        datapoint_ids=[],
         internal_dynamic_variant_config=dynamic_variant,
         concurrency=10,
         inference_cache="off",
@@ -405,6 +411,7 @@ def test_sync_run_evaluation_both_variant_params_error(
         embedded_sync_client.experimental_run_evaluation(
             evaluation_name="haiku_without_outputs",
             dataset_name=evaluation_datasets["good-haikus-no-output"],
+            datapoint_ids=[],
             variant_name="gpt_4o_mini",
             internal_dynamic_variant_config=dynamic_variant,
             concurrency=1,
@@ -432,6 +439,7 @@ async def test_async_run_evaluation_both_variant_params_error(
         await embedded_async_client.experimental_run_evaluation(
             evaluation_name="haiku_without_outputs",
             dataset_name=evaluation_datasets["good-haikus-no-output"],
+            datapoint_ids=[],
             variant_name="gpt_4o_mini",
             internal_dynamic_variant_config=dynamic_variant,
             concurrency=1,
@@ -447,6 +455,7 @@ def test_sync_run_evaluation_with_adaptive_stopping(
     job = embedded_sync_client.experimental_run_evaluation(
         evaluation_name="entity_extraction",
         dataset_name=evaluation_datasets["extract_entities_0.8"],
+        datapoint_ids=[],
         variant_name="gpt_4o_mini",
         concurrency=2,
         inference_cache="on",
@@ -491,6 +500,7 @@ async def test_async_run_evaluation_with_adaptive_stopping(
     job = await embedded_async_client.experimental_run_evaluation(
         evaluation_name="haiku_without_outputs",
         dataset_name=evaluation_datasets["good-haikus-no-output"],
+        datapoint_ids=[],
         variant_name="gpt_4o_mini",
         concurrency=2,
         inference_cache="off",
