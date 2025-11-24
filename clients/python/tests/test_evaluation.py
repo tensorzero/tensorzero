@@ -551,7 +551,7 @@ def test_sync_run_evaluation_with_datapoint_ids(
     )
 
     # Collect all datapoint IDs from the first run
-    all_datapoint_ids = []
+    all_datapoint_ids: list[str] = []
     for result in first_job.results():
         if result["type"] == "success":
             datapoint_id = result["datapoint"]["id"]
@@ -580,7 +580,7 @@ def test_sync_run_evaluation_with_datapoint_ids(
     )
 
     # Collect results and verify they match selected IDs
-    evaluated_ids = []
+    evaluated_ids: list[str] = []
     for result in second_job.results():
         assert result["type"] == "success", "All evaluations should succeed"
         datapoint_id = result["datapoint"]["id"]
@@ -618,7 +618,7 @@ async def test_async_run_evaluation_with_datapoint_ids(
     )
 
     # Collect all datapoint IDs from the first run
-    all_datapoint_ids = []
+    all_datapoint_ids: list[str] = []
     async for result in first_job.results():
         if result["type"] == "success":
             datapoint_id = result["datapoint"]["id"]
@@ -647,7 +647,7 @@ async def test_async_run_evaluation_with_datapoint_ids(
     )
 
     # Collect results and verify they match selected IDs
-    evaluated_ids = []
+    evaluated_ids: list[str] = []
     async for result in second_job.results():
         assert result["type"] == "success", "All evaluations should succeed"
         datapoint_id = result["datapoint"]["id"]
