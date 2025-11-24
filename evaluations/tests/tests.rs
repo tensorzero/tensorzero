@@ -2528,13 +2528,10 @@ async fn test_query_skips_staled_datapoints() {
 
     let config = get_config().await;
 
-    #[expect(deprecated)]
     let request = ListDatapointsRequest {
         function_name: Some("extract_entities".to_string()),
         limit: Some(u32::MAX), // Get all datapoints
-        page_size: None,       // deprecated but required
-        offset: Some(0),
-        filter: None,
+        ..Default::default()
     };
     let dataset = list_datapoints(&clickhouse, &config, dataset_name.clone(), request)
         .await

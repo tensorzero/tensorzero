@@ -81,6 +81,7 @@ pub struct Args {
 
     /// Specific datapoint IDs to evaluate (comma-separated).
     /// Either dataset_name or datapoint_ids must be provided, but not both.
+    /// Example: --datapoint-ids 01957bbb-44a8-7490-bfe7-32f8ed2fc797,01957bbb-44a8-7490-bfe7-32f8ed2fc798
     #[arg(long, value_delimiter = ',')]
     pub datapoint_ids: Vec<Uuid>,
 
@@ -498,13 +499,11 @@ pub async fn run_evaluation_core_streaming(
     info!("Loading datapoints");
     let dataset = if let Some(dataset_name) = &args.dataset_name {
         // Load from dataset
-        #[expect(deprecated)]
         let request = ListDatapointsRequest {
             function_name: Some(inference_evaluation_config.function_name.clone()),
             limit: max_datapoints.or(Some(u32::MAX)), // Use u32::MAX when no limit specified, since otherwise ListDatapointsRequest defaults to 20
-            page_size: None,                          // deprecated but required
             offset: Some(0),
-            filter: None,
+            ..Default::default()
         };
         list_datapoints(
             &clients.clickhouse_client,
