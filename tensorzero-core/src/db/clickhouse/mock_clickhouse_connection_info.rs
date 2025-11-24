@@ -2,6 +2,7 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
+use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::config::Config;
 use crate::db::datasets::{
     CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetDetailRow, DatasetMetadata,
@@ -12,6 +13,7 @@ use crate::db::inferences::{
     GetInferenceBoundsParams, InferenceBounds, InferenceQueries, ListInferencesParams,
     MockInferenceQueries,
 };
+use crate::db::{ConfigQueries, MockConfigQueries};
 use crate::endpoints::datasets::StoredDatapoint;
 use crate::error::Error;
 use crate::stored_inference::StoredInferenceDatabase;
@@ -29,6 +31,7 @@ use crate::stored_inference::StoredInferenceDatabase;
 pub(crate) struct MockClickHouseConnectionInfo {
     pub(crate) inference_queries: MockInferenceQueries,
     pub(crate) dataset_queries: MockDatasetQueries,
+    pub(crate) config_queries: MockConfigQueries,
 }
 
 impl MockClickHouseConnectionInfo {
@@ -36,6 +39,7 @@ impl MockClickHouseConnectionInfo {
         Self {
             inference_queries: MockInferenceQueries::new(),
             dataset_queries: MockDatasetQueries::new(),
+            config_queries: MockConfigQueries::new(),
         }
     }
 }
@@ -118,5 +122,15 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
         self.dataset_queries
             .delete_datapoints(dataset_name, datapoint_ids)
             .await
+    }
+}
+
+#[async_trait]
+impl ConfigQueries for MockClickHouseConnectionInfo {
+    async fn get_config_snapshot(
+        &self,
+        snapshot_hash: SnapshotHash,
+    ) -> Result<ConfigSnapshot, Error> {
+        self.config_queries.get_config_snapshot(snapshot_hash).await
     }
 }

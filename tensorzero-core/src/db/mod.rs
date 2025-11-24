@@ -5,6 +5,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::types::PgInterval;
 use uuid::Uuid;
 
+#[cfg(test)]
+use mockall::automock;
+
 use crate::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use crate::db::datasets::DatasetQueries;
 use crate::error::Error;
@@ -193,6 +196,7 @@ pub trait ExperimentationQueries {
 }
 
 #[async_trait]
+#[cfg_attr(test, automock)]
 pub trait ConfigQueries {
     async fn get_config_snapshot(
         &self,

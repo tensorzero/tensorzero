@@ -7,6 +7,8 @@ use tensorzero_core::db::clickhouse::migration_manager::{self, RunMigrationManag
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::ConfigQueries;
+use tensorzero_core::error::ErrorDetails;
 use tensorzero_core::http::TensorzeroHttpClient;
 use uuid::Uuid;
 
@@ -233,5 +235,161 @@ routing = ["test_provider::gpt-4"]
     assert_eq!(
         snapshot_row2["hash"].as_str().unwrap().to_lowercase(),
         hash_number
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_config_snapshot_success() {
+    // Get a clean ClickHouse instance
+    let clickhouse = get_clickhouse().await;
+
+    // Run migrations to set up the ConfigSnapshot table
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: true,
+        disable_automatic_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    let random_id = Uuid::now_v7();
+
+    // Create a test config snapshot
+    let config_toml = format!(
+        r#"
+[gateway]
+bind = "0.0.0.0:3000"
+
+[models.test_model_{random_id}]
+routing = ["test_provider::gpt-4"]
+"#
+    );
+
+    let mut extra_templates = HashMap::new();
+    extra_templates.insert("test_template".to_string(), "Hello {{name}}!".to_string());
+
+    let snapshot = ConfigSnapshot {
+        config: config_toml.clone(),
+        extra_templates: extra_templates.clone(),
+    };
+
+    let hash = snapshot.hash();
+
+    // Write the config snapshot
+    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+
+    // Wait for the data to be committed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Read the config snapshot using get_config_snapshot
+    let retrieved_snapshot = clickhouse.get_config_snapshot(hash).await.unwrap();
+
+    // Verify the retrieved snapshot matches what we wrote
+    assert_eq!(retrieved_snapshot.config, config_toml);
+    assert_eq!(retrieved_snapshot.extra_templates, extra_templates);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_config_snapshot_not_found() {
+    // Get a clean ClickHouse instance
+    let clickhouse = get_clickhouse().await;
+
+    // Run migrations to set up the ConfigSnapshot table
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: true,
+        disable_automatic_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    // Create a test hash that doesn't exist in the database
+    let nonexistent_hash = SnapshotHash::new_test();
+
+    // Try to get a config snapshot that doesn't exist
+    let result = clickhouse.get_config_snapshot(nonexistent_hash).await;
+
+    // Verify we get a ConfigSnapshotNotFound error
+    let err = result.unwrap_err();
+    assert!(
+        matches!(
+            err.get_details(),
+            ErrorDetails::ConfigSnapshotNotFound { .. }
+        ),
+        "Expected ConfigSnapshotNotFound error, got: {err:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_config_snapshot_with_extra_templates() {
+    // Get a clean ClickHouse instance
+    let clickhouse = get_clickhouse().await;
+
+    // Run migrations to set up the ConfigSnapshot table
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: true,
+        disable_automatic_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    let random_id = Uuid::now_v7();
+
+    // Create a config snapshot with multiple extra templates
+    let config_toml = format!(
+        r#"
+[gateway]
+bind = "0.0.0.0:3000"
+
+[models.test_model_{random_id}]
+routing = ["test_provider::gpt-4"]
+"#
+    );
+
+    let mut extra_templates = HashMap::new();
+    extra_templates.insert(
+        "system_template".to_string(),
+        "You are a helpful assistant.".to_string(),
+    );
+    extra_templates.insert(
+        "user_template".to_string(),
+        "User said: {{message}}".to_string(),
+    );
+    extra_templates.insert(
+        "assistant_template".to_string(),
+        "Assistant responds: {{response}}".to_string(),
+    );
+
+    let snapshot = ConfigSnapshot {
+        config: config_toml.clone(),
+        extra_templates: extra_templates.clone(),
+    };
+
+    let hash = snapshot.hash();
+
+    // Write the config snapshot
+    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+
+    // Wait for the data to be committed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Read the config snapshot
+    let retrieved_snapshot = clickhouse.get_config_snapshot(hash).await.unwrap();
+
+    // Verify all extra templates are correctly stored and retrieved
+    assert_eq!(retrieved_snapshot.config, config_toml);
+    assert_eq!(retrieved_snapshot.extra_templates.len(), 3);
+    assert_eq!(
+        retrieved_snapshot.extra_templates.get("system_template"),
+        Some(&"You are a helpful assistant.".to_string())
+    );
+    assert_eq!(
+        retrieved_snapshot.extra_templates.get("user_template"),
+        Some(&"User said: {{message}}".to_string())
+    );
+    assert_eq!(
+        retrieved_snapshot.extra_templates.get("assistant_template"),
+        Some(&"Assistant responds: {{response}}".to_string())
     );
 }
