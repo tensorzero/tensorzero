@@ -7,7 +7,7 @@ use tensorzero_core::client::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     DynamicToolParams, File, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
-use tensorzero_core::endpoints::datasets::StoredDatapoint;
+use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{
     get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
     LLMJudgeOutputType,
@@ -43,7 +43,7 @@ impl LLMJudgeEvaluationResult {
 
 pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub inference_response: &'a InferenceResponse,
-    pub datapoint: &'a StoredDatapoint,
+    pub datapoint: &'a Datapoint,
     pub clients: &'a Clients,
     pub llm_judge_config: &'a LLMJudgeConfig,
     pub evaluation_name: &'a str,
@@ -179,7 +179,7 @@ fn prepare_llm_judge_input(
     llm_judge_config: &LLMJudgeConfig,
     input: &ClientInput,
     inference_response: &InferenceResponse,
-    datapoint: &StoredDatapoint,
+    datapoint: &Datapoint,
 ) -> Result<Option<ClientInput>> {
     let generated_output = match &inference_response {
         InferenceResponse::Chat(chat_response) => {
@@ -403,17 +403,17 @@ fn prepare_serialized_json_output(output: &JsonInferenceOutput) -> Result<String
 /// If the reference output is needed but not present, we throw an error. (this could be mapped to None above this call)
 fn handle_reference_output(
     llm_judge_config: &LLMJudgeConfig,
-    datapoint: &StoredDatapoint,
+    datapoint: &Datapoint,
 ) -> Result<Option<String>> {
     if !llm_judge_config.include.reference_output {
         return Ok(None);
     }
     match datapoint {
-        StoredDatapoint::Chat(chat_datapoint) => match &chat_datapoint.output {
+        Datapoint::Chat(chat_datapoint) => match &chat_datapoint.output {
             Some(output) => prepare_serialized_chat_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
-        StoredDatapoint::Json(json_datapoint) => match &json_datapoint.output {
+        Datapoint::Json(json_datapoint) => match &json_datapoint.output {
             Some(output) => prepare_serialized_json_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
@@ -426,13 +426,13 @@ mod tests {
 
     use serde_json::json;
     use tensorzero_core::client::{File, Role, UrlFile};
+    use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
     use tensorzero_core::endpoints::datasets::JsonInferenceDatapoint;
-    use tensorzero_core::endpoints::datasets::StoredChatInferenceDatapoint;
     use tensorzero_core::endpoints::inference::ChatInferenceResponse;
     use tensorzero_core::endpoints::inference::JsonInferenceResponse;
     use tensorzero_core::evaluations::LLMJudgeIncludeConfig;
     use tensorzero_core::evaluations::LLMJudgeOptimize;
-    use tensorzero_core::inference::types::StoredInput;
+    use tensorzero_core::inference::types::Input;
     use tensorzero_core::inference::types::Usage;
     use tensorzero_core::tool::{ToolCall, ToolCallWrapper};
     use tensorzero_core::{
@@ -555,6 +555,7 @@ mod tests {
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig::default(),
+            description: None,
         };
         let input = ClientInput {
             system: Some(System::Text("You are a helpful assistant".to_string())),
@@ -580,13 +581,13 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
+                input: Input {
                     // This shouldn't get used
                     system: None,
                     messages: Vec::new(),
@@ -594,7 +595,7 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "Hello, world!".to_string(),
                 })]),
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: None,
                 auxiliary: String::new(),
                 is_deleted: false,
@@ -632,6 +633,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: true,
             },
+            description: None,
         };
         let input = prepare_llm_judge_input(
             &llm_judge_config,
@@ -647,13 +649,13 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
+                input: Input {
                     // This shouldn't get used
                     system: None,
                     messages: Vec::new(),
@@ -661,7 +663,7 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "Hello, world!".to_string(),
                 })]),
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: None,
                 auxiliary: String::new(),
                 is_deleted: false,
@@ -839,19 +841,20 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: false,
             },
+            description: None,
         };
-        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: StoredInput {
+            input: Input {
                 system: None,
                 messages: Vec::new(),
             },
             output: None,
-            tool_params: None,
+            tool_params: Default::default(),
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
@@ -872,19 +875,20 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: true,
             },
+            description: None,
         };
-        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: StoredInput {
+            input: Input {
                 system: None,
                 messages: Vec::new(),
             },
             output: None,
-            tool_params: None,
+            tool_params: Default::default(),
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
@@ -900,20 +904,20 @@ mod tests {
         );
 
         // Test with reference output enabled and present (chat)
-        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: StoredInput {
+            input: Input {
                 system: None,
                 messages: Vec::new(),
             },
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "Reference text".to_string(),
             })]),
-            tool_params: None,
+            tool_params: Default::default(),
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
@@ -928,13 +932,13 @@ mod tests {
         assert_eq!(result, r#"[{"type":"text","text":"Reference text"}]"#);
 
         // Test with reference output enabled and present (json)
-        let datapoint = StoredDatapoint::Json(JsonInferenceDatapoint {
+        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: StoredInput {
+            input: Input {
                 system: None,
                 messages: Vec::new(),
             },
@@ -968,6 +972,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: true,
             },
+            description: None,
         };
         let result = prepare_final_message_messages_input(&config, "Generated", None);
         assert_eq!(result, None);
@@ -990,6 +995,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: false,
             },
+            description: None,
         };
         let message = prepare_final_message_messages_input(&config, "Generated", None).unwrap();
         let expected = format!(
@@ -1010,6 +1016,7 @@ mod tests {
             include: LLMJudgeIncludeConfig {
                 reference_output: false,
             },
+            description: None,
         };
         let input = ClientInput {
             system: Some(System::Text("System instruction".to_string())),
@@ -1034,20 +1041,20 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &StoredDatapoint::Chat(StoredChatInferenceDatapoint {
+            &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
+                input: Input {
                     system: None,
                     messages: Vec::new(),
                 },
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "Reference output".to_string(),
                 })]),
-                tool_params: None,
+                tool_params: Default::default(),
                 tags: None,
                 auxiliary: String::new(),
                 is_deleted: false,
@@ -1124,6 +1131,7 @@ mod tests {
             cutoff: None,
             optimize: LLMJudgeOptimize::Max,
             include: LLMJudgeIncludeConfig::default(),
+            description: None,
         };
         let input = ClientInput {
             system: None,
@@ -1149,13 +1157,13 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &StoredDatapoint::Json(JsonInferenceDatapoint {
+            &Datapoint::Json(JsonInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
+                input: Input {
                     system: None,
                     messages: Vec::new(),
                 },

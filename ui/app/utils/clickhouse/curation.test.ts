@@ -37,10 +37,11 @@ test("countCuratedInferences for boolean metrics", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
+        openai_custom_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
         allowed_tools: { tools: [], choice: "function_default" },
@@ -103,10 +104,11 @@ test("countCuratedInferences for float metrics", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
+        openai_custom_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
         allowed_tools: { tools: [], choice: "function_default" },
@@ -128,10 +130,11 @@ test("countCuratedInferences for float metrics", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
+        openai_custom_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
         allowed_tools: { tools: [], choice: "function_default" },
@@ -192,10 +195,11 @@ test("countCuratedInferences for demonstration metrics", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
+        openai_custom_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
         allowed_tools: { tools: [], choice: "function_default" },
@@ -238,10 +242,11 @@ test("getCuratedInferences retrieves correct data", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
+        openai_custom_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
         allowed_tools: { tools: [], choice: "function_default" },
@@ -284,10 +289,11 @@ test("getCuratedInferences retrieves correct data", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
+        openai_custom_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
         allowed_tools: { tools: [], choice: "function_default" },
@@ -310,10 +316,11 @@ test("getCuratedInferences retrieves correct data", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
+        openai_custom_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
         allowed_tools: { tools: [], choice: "function_default" },
@@ -326,7 +333,7 @@ test("getCuratedInferences retrieves correct data", async () => {
     undefined,
   );
   expect(allResults.length).toBe(604);
-});
+}, 10000);
 
 // Test countFeedbacksForMetric
 test("countFeedbacksForMetric returns correct counts", async () => {
@@ -339,10 +346,11 @@ test("countFeedbacksForMetric returns correct counts", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
+        openai_custom_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
         allowed_tools: { tools: [], choice: "function_default" },
@@ -381,10 +389,11 @@ test("countFeedbacksForMetric returns correct counts", async () => {
       schemas: {},
       description: "",
       output_schema: { value: {} },
-      implicit_tool_call_config: {
+      json_mode_tool_call_config: {
         static_tools_available: [],
         dynamic_tools_available: [],
         provider_tools: [],
+        openai_custom_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
         allowed_tools: { tools: [], choice: "function_default" },

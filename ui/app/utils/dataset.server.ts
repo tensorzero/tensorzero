@@ -30,14 +30,15 @@ export async function handleAddToDatasetAction(formData: FormData) {
   }
 
   try {
-    const datapoint = await getTensorZeroClient().createDatapoint(
-      dataset.toString(),
-      inferenceId.toString(),
-      output.toString() as "inherit" | "demonstration" | "none",
-      functionName.toString(),
-      variantName.toString(),
-      episodeId.toString(),
-    );
+    const datapoint =
+      await getTensorZeroClient().createDatapointFromInferenceLegacy(
+        dataset.toString(),
+        inferenceId.toString(),
+        output.toString() as "inherit" | "demonstration" | "none",
+        functionName.toString(),
+        variantName.toString(),
+        episodeId.toString(),
+      );
     return data<ActionData>({
       redirectTo: toDatapointUrl(dataset.toString(), datapoint.id),
     });

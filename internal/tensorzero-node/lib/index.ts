@@ -1,7 +1,6 @@
 import { createRequire } from "module";
 import type {
   CacheEnabledMode,
-  AdjacentDatapointIds,
   ClientInferenceParams,
   Config,
   CountDatapointsForDatasetFunctionParams,
@@ -12,7 +11,6 @@ import type {
   EvaluationRunEvent,
   CumulativeFeedbackTimeSeriesPoint,
   FeedbackByVariant,
-  GetAdjacentDatapointIdsParams,
   GetDatasetMetadataParams,
   GetDatasetRowsParams,
   GetFeedbackByVariantParams,
@@ -22,7 +20,6 @@ import type {
   ModelUsageTimePoint,
   OptimizationJobHandle,
   OptimizationJobInfo,
-  StaleDatapointParams,
   StaleDatasetResponse,
   TableBoundsWithCount,
   FeedbackRow,
@@ -387,11 +384,6 @@ export class DatabaseClient {
     return this.nativeDatabaseClient.countDatasets();
   }
 
-  async staleDatapoint(params: StaleDatapointParams): Promise<void> {
-    const paramsString = safeStringify(params);
-    await this.nativeDatabaseClient.staleDatapoint(paramsString);
-  }
-
   async countDatapointsForDatasetFunction(
     params: CountDatapointsForDatasetFunctionParams,
   ): Promise<number> {
@@ -399,15 +391,6 @@ export class DatabaseClient {
     return this.nativeDatabaseClient.countDatapointsForDatasetFunction(
       paramsString,
     );
-  }
-
-  async getAdjacentDatapointIds(
-    params: GetAdjacentDatapointIdsParams,
-  ): Promise<AdjacentDatapointIds> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.getAdjacentDatapointIds(paramsString);
-    return JSON.parse(result) as AdjacentDatapointIds;
   }
 
   async getFeedbackByVariant(

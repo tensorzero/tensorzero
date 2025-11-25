@@ -9,7 +9,6 @@ import { Loader2, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
-import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import { Output } from "~/components/inference/Output";
 import type { InferenceResponse } from "~/utils/tensorzero";
@@ -17,6 +16,7 @@ import { Card, CardContent } from "~/components/ui/card";
 import type { VariantResponseInfo } from "~/routes/api/tensorzero/inference.utils";
 import { Link } from "react-router";
 import { toInferenceUrl } from "~/utils/urls";
+import type { Datapoint } from "~/types/tensorzero";
 
 interface ResponseColumnProps {
   title: string;
@@ -103,7 +103,7 @@ interface VariantResponseModalProps {
   isLoading: boolean;
   onClose: () => void;
   // Use a union type to accept either inference or datapoint
-  item: ParsedInferenceRow | ParsedDatasetRow;
+  item: ParsedInferenceRow | Datapoint;
   // Make inferenceUsage optional since datasets don't have it by default
   inferenceUsage?: InferenceUsage;
   selectedVariant: string;

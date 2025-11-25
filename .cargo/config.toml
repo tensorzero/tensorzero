@@ -5,20 +5,45 @@ rustflags = [
 ]
 
 [target.x86_64-apple-darwin]
-rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"]  # for NAPI
+rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"] # for NAPI
 
 [target.aarch64-apple-darwin]
-rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"]  # for NAPI
+rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup"] # for NAPI
 
 [alias]
 test-unit = "nextest run --lib --bins"
+test-unit-fast = "nextest run --lib --bins --retries 0 --no-fail-fast"
 test-all = "nextest run --features e2e_tests"
-# Note - 'test-batch', 'test-e2e', and 'test-e2e-no-creds' must be kept in sync
+# Note - 'test-batch', 'test-e2e', and 'test-clickhouse' must be kept in sync
 # Running all of them should cover all of our tests, and not miss any
-test-live-batch = ["nextest", "run", "--features", "e2e_tests", "--profile", "live-batch"]
-test-mock-batch = ["nextest", "run", "--features", "e2e_tests", "--profile", "mock-batch"]
+test-live-batch = [
+    "nextest",
+    "run",
+    "--features",
+    "e2e_tests",
+    "--profile",
+    "live-batch",
+]
+test-mock-batch = [
+    "nextest",
+    "run",
+    "--features",
+    "e2e_tests",
+    "--profile",
+    "mock-batch",
+]
 test-e2e = ["nextest", "run", "--features", "e2e_tests", "--profile", "e2e"]
-test-e2e-fast = ["nextest", "run", "--features", "e2e_tests", "--profile", "e2e", "--retries", "0", "--no-fail-fast"]
+test-e2e-fast = [
+    "nextest",
+    "run",
+    "--features",
+    "e2e_tests",
+    "--profile",
+    "e2e",
+    "--retries",
+    "0",
+    "--no-fail-fast",
+]
 test-optimization = [
     "nextest",
     "run",
@@ -39,17 +64,17 @@ test-optimization-mock = [
     "--profile",
     "optimization-mock",
 ]
-# Runs e2e tests that don't require any credentials available.
+# Runs Clickhouse-related e2e tests that don't require any inference credentials available.
 # This is useful for both running on PR CI (where we don't have creds at all),
 # and for testing against several different ClickHouse versions (to avoid spending lots of money on inference).
-test-e2e-no-creds = [
+test-clickhouse = [
     "nextest",
     "run",
     "--features",
     "e2e_tests",
     "--profile",
     "clickhouse",
-    ]
+]
 test-rate-limit-load = [
     "run",
     "--release",

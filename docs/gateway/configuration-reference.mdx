@@ -256,28 +256,15 @@ If `true`, then the migrations are not applied upon launch and must instead be a
 by running `docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-clickhouse-migrations` or `docker compose run --rm gateway --run-clickhouse-migrations`.
 If `false`, then the migrations are run automatically upon launch.
 
-### `template_filesystem_access`
+### `template_filesystem_access.base_path`
 
-- **Type:** object
+- **Type:** string
 - **Required:** no (default disabled)
 
-Enabling this setting will allow MiniJinja templates to load sub-templates from the file system using the `include` directive.
+Set `template_filesystem_access.base_path` to allow MiniJinja templates to load sub-templates using the `{% include %}` and `{% import %}` directives.
 
-The object has two fields:
-
-- `enabled` (boolean): Determines whether to enable file system access for templates.
-- `base_path` (string, optional): Determines the base path for template file system access.
-
-If you use a single configuration file, the `base_path` will be the directory containing the configuration file.
-If you split your configuration into multiple files, you must specify `gateway.template_filesystem_access.base_path` (see [Organize your configuration](/operations/organize-your-configuration) for details).
-The `include` paths must be relative to `base_path`, and can only access files in that directory or its sub-directories.
-
-<Warning>
-
-Make sure to sanitize all user-provided template data before using this setting.
-Otherwise, a malicious input could read unintended files in the file system.
-
-</Warning>
+The directives will be relative to `base_path` and can only access files within that directory or its subdirectories.
+The `base_path` can be absolute or relative to the configuration file's location.
 
 ## `[models.model_name]`
 
@@ -589,6 +576,26 @@ Overrides the base URL used for Anthropic Messages API requests. The value shoul
 type = "anthropic"
 api_base = "https://example.com/v1/messages"
 # ...
+```
+
+##### `beta_structured_outputs`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Enables Anthropic's beta structured outputs feature, which provides native support for strict JSON schema validation and strict tool parameter validation.
+
+When enabled:
+
+- Adds the `anthropic-beta: structured-outputs-2025-11-13` header to requests
+- For JSON functions with `json_mode = "strict"`, forwards the output schema in the `output_format` field
+- For tools with `strict = true`, forwards the `strict` parameter to enable strict validation
+
+```toml title="tensorzero.toml"
+[models.claude_structured.providers.anthropic]
+type = "anthropic"
+model_name = "claude-sonnet-4-5-20250929"
+beta_structured_outputs = true
 ```
 
 </Accordion>
@@ -2639,7 +2646,7 @@ The supported modes are:
 - `off`: Make a chat completion request without any special JSON handling (not recommended).
 - `on`: Make a chat completion request with JSON mode (if supported by the provider).
 - `strict`: Make a chat completion request with strict JSON mode (if supported by the provider). For example, the TensorZero Gateway uses Structured Outputs for OpenAI.
-- `implicit_tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
+- `tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
@@ -3372,7 +3379,7 @@ The supported modes are:
 - `off`: Make a chat completion request without any special JSON handling (not recommended).
 - `on`: Make a chat completion request with JSON mode (if supported by the provider).
 - `strict`: Make a chat completion request with strict JSON mode (if supported by the provider). For example, the TensorZero Gateway uses Structured Outputs for OpenAI.
-- `implicit_tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
+- `tool`: Make a special-purpose tool use request under the hood, and convert the tool call into a JSON response.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]

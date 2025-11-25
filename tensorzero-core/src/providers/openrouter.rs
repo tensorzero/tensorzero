@@ -45,7 +45,7 @@ use crate::inference::types::{
 };
 use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
-use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
+use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolChoice};
 
 use crate::providers::chat_completions::prepare_chat_completion_tools;
 use crate::providers::helpers::{
@@ -60,7 +60,7 @@ use super::chat_completions::{
 // Import unified OpenAI types for allowed_tools support
 use super::openai::{
     AllowedToolsChoice as OpenAIAllowedToolsChoice,
-    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode, OpenAIToolType,
+    AllowedToolsConstraint as OpenAIAllowedToolsConstraint, AllowedToolsMode,
     SpecificToolFunction as OpenAISpecificToolFunction, ToolReference,
 };
 
@@ -889,8 +889,8 @@ pub(super) async fn prepare_openrouter_messages<'a>(
 /// Otherwise convert the tool choice and tools to OpenRouter format
 pub(super) fn prepare_openrouter_tools<'a>(
     request: &'a ModelInferenceRequest,
-) -> PreparedOpenRouterToolsResult<'a> {
-    let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(request, true);
+) -> Result<PreparedOpenRouterToolsResult<'a>, Error> {
+    let (tools, tool_choice, parallel_tool_calls) = prepare_chat_completion_tools(request, true)?;
 
     // Convert from ChatCompletionTool to OpenRouterTool
     let openrouter_tools = tools.map(|t| t.into_iter().map(OpenRouterTool::from).collect());
@@ -898,11 +898,11 @@ pub(super) fn prepare_openrouter_tools<'a>(
     // Convert from ChatCompletionToolChoice to OpenRouterToolChoice
     let openrouter_tool_choice = tool_choice.map(OpenRouterToolChoice::from);
 
-    (
+    Ok((
         openrouter_tools,
         openrouter_tool_choice,
         parallel_tool_calls,
-    )
+    ))
 }
 
 /// This function is complicated only by the fact that OpenRouter and Azure require
@@ -1256,8 +1256,8 @@ pub(super) struct OpenRouterTool<'a> {
     pub(super) strict: bool,
 }
 
-impl<'a> From<&'a ToolConfig> for OpenRouterTool<'a> {
-    fn from(tool: &'a ToolConfig) -> Self {
+impl<'a> From<&'a FunctionToolConfig> for OpenRouterTool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
         OpenRouterTool {
             r#type: OpenRouterToolType::Function,
             function: OpenRouterFunction {
@@ -1368,8 +1368,7 @@ impl<'a> From<ChatCompletionToolChoice<'a>> for OpenRouterToolChoice<'a> {
                             .allowed_tools
                             .tools
                             .into_iter()
-                            .map(|tool_ref| ToolReference {
-                                r#type: OpenAIToolType::Function,
+                            .map(|tool_ref| ToolReference::Function {
                                 function: OpenAISpecificToolFunction {
                                     name: tool_ref.function.name,
                                 },
@@ -1476,7 +1475,7 @@ impl<'a> OpenRouterRequest<'a> {
         };
         let mut messages = prepare_openrouter_messages(request).await?;
 
-        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openrouter_tools(request);
+        let (tools, tool_choice, mut parallel_tool_calls) = prepare_openrouter_tools(request)?;
         if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
@@ -2555,7 +2554,7 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) =
-            prepare_openrouter_tools(&request_with_tools);
+            prepare_openrouter_tools(&request_with_tools).unwrap();
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
         assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
@@ -2598,7 +2597,7 @@ mod tests {
             ..Default::default()
         };
         let (tools, tool_choice, parallel_tool_calls) =
-            prepare_openrouter_tools(&request_without_tools);
+            prepare_openrouter_tools(&request_without_tools).unwrap();
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel_tool_calls.is_none());

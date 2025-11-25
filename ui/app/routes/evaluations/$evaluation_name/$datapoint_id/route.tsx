@@ -14,6 +14,7 @@ import {
 } from "~/components/layout/PageLayout";
 import { PageLayout } from "~/components/layout/PageLayout";
 import Input from "~/components/inference/Input";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 import {
   data,
@@ -91,6 +92,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     : [];
   if (selectedRunIds.length === 0) {
     return redirect(toEvaluationUrl(evaluation_name));
+  }
+
+  // Validate datapoint exists using v1 API
+  const tensorZeroDatapoint =
+    await getTensorZeroClient().getDatapoint(datapoint_id);
+  if (!tensorZeroDatapoint) {
+    throw data(`No datapoint found for ID \`${datapoint_id}\`.`, {
+      status: 404,
+    });
   }
 
   // Define all promises

@@ -1,20 +1,11 @@
+# Global build args
+ARG DEBUG_BUILD=0
+
 # ========== base ==========
 
 FROM node:24.11.0-bookworm-slim AS base
 
-COPY --from=ghcr.io/astral-sh/uv:0.6.6 /uv /uvx /bin/
-
 RUN npm install -g pnpm
-
-# ========== cargo-chef-planner ==========
-
-FROM lukemathwalker/cargo-chef:latest-rust-1.90-bookworm AS chef
-WORKDIR /app
-
-FROM chef AS planner
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
-
 # ========== package-jsons-layer ==========
 
 FROM base AS package-jsons-layer
@@ -52,6 +43,7 @@ RUN pnpm install --frozen-lockfile --prod
 # ========== tensorzero-node-build-env ==========
 
 FROM rust:1.88.0 AS tensorzero-node-build-env
+ARG DEBUG_BUILD
 
 RUN apt-get update && apt-get install -y nodejs npm && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm
@@ -59,7 +51,7 @@ RUN npm install -g pnpm
 COPY . /build
 WORKDIR /build/internal/tensorzero-node
 
-RUN pnpm install --frozen-lockfile && pnpm run build
+RUN pnpm install --frozen-lockfile && if [ "$DEBUG_BUILD" = "1" ]; then pnpm run build:debug; else pnpm run build; fi
 
 # ========== build-env ==========
 
@@ -85,7 +77,7 @@ FROM base AS ui
 
 RUN useradd -m -s /bin/sh ui
 
-RUN apt-get update && apt-get install -y curl wget python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

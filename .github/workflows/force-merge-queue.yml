@@ -2,6 +2,7 @@ name: Force add to merge queue
 permissions:
   contents: read
   actions: write
+  statuses: write
 
 # This workflow allows us to add PRs to the merge queue without waiting on PR checks to pass.
 # It's activated by adding the special 'force-add-to-merge-queue' label to a PR.
@@ -13,30 +14,31 @@ permissions:
 # that actually merging a PR requires the real 'check-all-general-jobs-passed' job to pass.
 
 on:
-  pull_request:
+  # We need to use 'pull_request_target' so that we have proper permissions to add statuses to the PR,
+  # even when the PR is from a fork.
+  pull_request_target:
     types: [labeled, unlabeled]
 
 jobs:
-  # Unfortunately, Github branch protection rules treated skipped checks as passing:
-  # https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-status-checks-before-merging
-  # As a result, we need a two-step process:
-  # 1. This file (force-merge-queue.yml) runs when a label is adjusted on a PR.
-  # 2. If the 'force-add-to-merge-queue' was added, we invoke a helper workflow, which defines a job named 'check-all-general-jobs-passed' that always succeeds.
-  #
-  # This means that if this workflow fires when 'force-add-to-merge-queue' does not exist, we will not create *any* status for 'check-all-general-jobs-passed'
-  # (since the workflow containing the 'check-all-general-jobs-passed' job will not run at all)
-  # If we defined the job in the same workflow, then we would still add a 'skipped' status for 'check-all-general-jobs-passed',
-  # which would incorrectly cause the branch protection rule to succeed, allowing all PRs to be added to the merge queue without running
-  # the real 'check-all-general-jobs-passed' job.
-  trigger-force-merge-queue-helper:
-    name: Invoke helper workflow
+  attach-successful-status:
+    name: Attach a 'check-all-general-jobs-passed' status to the PR
     # Only run this job if the force-add-to-merge-queue label is present
-    if: contains(github.event.pull_request.labels.*.name, 'force-add-to-merge-queue') && github.event.action == 'labeled'
+    if: contains(github.event.pull_request.labels.*.name, 'force-add-to-merge-queue')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Invoke helper workflow via GitHub CLI
+      -
+        name: Attach a 'check-all-general-jobs-passed' status to the PR
+        # Note that GitHub doesn't let you remove a commit status, so we don't do anything if the label is removed.
+        # Pushing a new commit to the PR will trigger a new 'general.yml' run, which will become the latest status
+        # for the PR.
+        # This only controls when a PR can be added to the merge queue, **NOT** whether or not it will pass in the merge queue,
+        # so this behavior is fine.
+        if: github.event.action == 'labeled'
+        run: |
+          gh api repos/${{ github.repository }}/statuses/${{ github.event.pull_request.head.sha }} \
+            -f context=check-all-general-jobs-passed \
+            -f state=success \
+            -f target_url=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh workflow run force-merge-queue-helper.yml --ref "${{ github.head_ref }}"

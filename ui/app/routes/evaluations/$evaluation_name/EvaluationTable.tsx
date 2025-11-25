@@ -24,14 +24,17 @@ import type {
   EvaluationStatistics,
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
-import type { DisplayInput } from "~/utils/clickhouse/common";
+import type { ZodDisplayInput } from "~/utils/clickhouse/common";
 import { Output } from "~/components/inference/Output";
 
 // Import the custom tooltip styles
 import "./tooltip-styles.css";
 import { useConfig } from "~/context/config";
 import { getEvaluatorMetricName } from "~/utils/clickhouse/evaluations";
-import { formatMetricSummaryValue } from "~/utils/config/feedback";
+import {
+  formatMetricSummaryValue,
+  formatConfidenceInterval,
+} from "~/utils/config/feedback";
 import type {
   EvaluatorConfig,
   MetricConfig,
@@ -56,7 +59,7 @@ type TruncatedContentProps = (
     }
   | {
       type: "input";
-      content: DisplayInput;
+      content: ZodDisplayInput;
     }
   | {
       type: "output";
@@ -121,7 +124,7 @@ const TruncatedContentTooltip: React.FC<
 );
 
 // Helper function to generate a summary of an Input object
-function getInputSummary(input: DisplayInput): string {
+function getInputSummary(input: ZodDisplayInput): string {
   if (!input || !input.messages || input.messages.length === 0) {
     return "Empty input";
   }
@@ -261,7 +264,7 @@ export function EvaluationTable({
       {
         id: string;
         name: string | null;
-        input: DisplayInput;
+        input: ZodDisplayInput;
         reference_output: JsonInferenceOutput | ContentBlockChatOutput[] | null;
       }
     >();
@@ -790,12 +793,12 @@ const EvaluatorProperties = ({
                 ></div>
                 <span>
                   {formatMetricSummaryValue(stat.mean_metric, metricConfig)}
-                  {stat.stderr_metric ? (
+                  {stat.ci_lower != null && stat.ci_upper != null ? (
                     <>
                       {" "}
-                      ±{" "}
-                      {formatMetricSummaryValue(
-                        stat.stderr_metric,
+                      {formatConfidenceInterval(
+                        stat.ci_lower,
+                        stat.ci_upper,
                         metricConfig,
                       )}
                     </>

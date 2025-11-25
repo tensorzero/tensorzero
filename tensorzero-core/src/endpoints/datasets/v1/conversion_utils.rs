@@ -35,7 +35,7 @@ impl CreateChatDatapointRequest {
         function_config.validate_input(&self.input)?;
         let stored_input = self
             .input
-            .into_lazy_resolved_input(*fetch_context)?
+            .into_lazy_resolved_input(fetch_context)?
             .into_stored_input(fetch_context.object_store_info)
             .await?;
 
@@ -96,7 +96,7 @@ impl CreateJsonDatapointRequest {
         function_config.validate_input(&self.input)?;
         let stored_input = self
             .input
-            .into_lazy_resolved_input(*fetch_context)?
+            .into_lazy_resolved_input(fetch_context)?
             .into_stored_input(fetch_context.object_store_info)
             .await?;
 
@@ -162,12 +162,16 @@ impl JsonDatapointOutputUpdate {
         self,
         output_schema: JsonSchemaRef<'_>,
     ) -> JsonInferenceOutput {
-        let parse_result = serde_json::from_str(self.raw.as_str());
-
         let mut output = JsonInferenceOutput {
-            raw: Some(self.raw),
+            raw: self.raw,
             parsed: None,
         };
+
+        let Some(raw) = output.raw.as_ref() else {
+            return output;
+        };
+
+        let parse_result = serde_json::from_str(raw.as_str());
 
         let Ok(parsed_unvalidated_value) = parse_result else {
             return output;
@@ -207,6 +211,7 @@ mod tests {
         )
         .await
         .unwrap()
+        .config
     }
 
     fn create_test_input() -> Input {
@@ -425,10 +430,12 @@ mod tests {
             function_name: "extract_entities".to_string(),
             input: simple_input,
             output: Some(JsonDatapointOutputUpdate {
-                raw: serde_json::to_string(&json!({
-                    "invalid_field": "this doesn't match the schema"
-                }))
-                .unwrap(),
+                raw: Some(
+                    serde_json::to_string(&json!({
+                        "invalid_field": "this doesn't match the schema"
+                    }))
+                    .unwrap(),
+                ),
             }),
             output_schema: None,
             episode_id: None,
@@ -475,7 +482,7 @@ mod tests {
             function_name: "extract_entities".to_string(),
             input: simple_input,
             output: Some(JsonDatapointOutputUpdate {
-                raw: "intentionally \" nonconformant json".to_string(),
+                raw: Some("intentionally \" nonconformant json".to_string()),
             }),
             output_schema: None,
             episode_id: None,
@@ -548,13 +555,15 @@ mod tests {
             function_name: "extract_entities".to_string(),
             input: simple_input,
             output: Some(JsonDatapointOutputUpdate {
-                raw: serde_json::to_string(&json!({
-                    "person": ["Alice", "Bob"],
-                    "organization": ["ACME Corp"],
-                    "location": ["New York"],
-                    "miscellaneous": []
-                }))
-                .unwrap(),
+                raw: Some(
+                    serde_json::to_string(&json!({
+                        "person": ["Alice", "Bob"],
+                        "organization": ["ACME Corp"],
+                        "location": ["New York"],
+                        "miscellaneous": []
+                    }))
+                    .unwrap(),
+                ),
             }),
             output_schema: None,
             episode_id: None,
@@ -609,7 +618,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_datapoint_output_update_into_json_inference_output_valid() {
         let update = JsonDatapointOutputUpdate {
-            raw: r#"{"key": "value"}"#.to_string(),
+            raw: Some(r#"{"key": "value"}"#.to_string()),
         };
         let schema_value = json!({"type": "object", "properties": {"key": {"type": "string"}}, });
         let schema = DynamicJSONSchema::new(schema_value);
@@ -631,7 +640,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_datapoint_output_update_into_json_inference_output_nonconformant() {
         let update = JsonDatapointOutputUpdate {
-            raw: r#"{"key": "nonconformant value"}"#.to_string(),
+            raw: Some(r#"{"key": "nonconformant value"}"#.to_string()),
         };
         let schema_value = json!({"type": "object", "properties": {"key": {"type": "number"}}, });
         let schema = DynamicJSONSchema::new(schema_value);
@@ -653,7 +662,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_datapoint_output_update_into_json_inference_output_invalid_json() {
         let update = JsonDatapointOutputUpdate {
-            raw: "intentionally invalid \" json".to_string(),
+            raw: Some("intentionally invalid \" json".to_string()),
         };
 
         let schema_value = json!({"type": "object", "properties": {"value": {"type": "string"}}, });

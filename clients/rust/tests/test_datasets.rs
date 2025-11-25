@@ -312,10 +312,14 @@ async fn test_update_datapoints(client: Client) {
     let chat_update = UpdateDatapointRequest::Chat(UpdateChatDatapointRequest {
         id: datapoint_ids[0],
         input: None,
-        output: Some(updated_output),
-        tool_params: Default::default(),
+        output: Some(Some(updated_output)),
+        #[expect(deprecated)]
+        deprecated_do_not_use_tool_params: Default::default(),
         tags: None,
+        #[expect(deprecated)]
+        deprecated_do_not_use_metadata: Default::default(),
         metadata: Default::default(),
+        tool_params: Default::default(),
     });
 
     let response = client
