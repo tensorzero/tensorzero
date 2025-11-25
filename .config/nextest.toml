@@ -162,6 +162,6 @@ retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max
 # E2E GEPA tests - integration tests with API calls and evaluation
 # These tests run a full GEPA step including ClickHouse operations,
 # variant evaluations, and analysis, which legitimately take longer
-filter = 'test(e2e_gepa::)'
+filter = 'test(=e2e_gepa) and (test(test_gepa_step_chat) | test(test_gepa_step_chat))'
 retries = 0
 slow-timeout = { period = "30s", terminate-after = 1 }
