@@ -811,34 +811,35 @@ impl Config {
     ///    - Optimizers
     ///    - Templates (load from filesystem, compile with MiniJinja)
     ///
-    /// 4. **Validate**: Run comprehensive validation checks:
+    /// 4. **Create Snapshot**: Create a `ConfigSnapshot` with the sorted TOML and extra templates
+    ///    for database storage. The snapshot includes a Blake3 hash for version tracking.
+    ///    This happens before validation so the hash is available on the Config struct.
+    ///
+    /// 5. **Validate**: Run comprehensive validation checks:
     ///    - Function validation (schemas, templates, tools exist)
     ///    - Model validation (timeout settings)
     ///    - Metric name restrictions
     ///    - Name prefix restrictions (tensorzero:: reserved)
     ///
-    /// 5. **Load Evaluations**: Add evaluation-specific functions and metrics to the config.
+    /// 6. **Load Evaluations**: Add evaluation-specific functions and metrics to the config.
     ///    This happens after validation since evaluations write tensorzero:: prefixed items.
     ///
-    /// 6. **Create Snapshot**: Create a `ConfigSnapshot` with the sorted TOML and extra templates
-    ///    for database storage. The snapshot includes a Blake3 hash for version tracking.
-    ///
-    /// 7. **Return ConfigLoadInfo**: Pair the config and snapshot in a `ConfigLoadInfo`.
+    /// 7. **Return UnwrittenConfig**: Pair the config and snapshot in an `UnwrittenConfig`.
     ///    This happens **before** database connections exist, so the snapshot is written later.
     ///
-    /// # Why ConfigLoadInfo?
+    /// # Why UnwrittenConfig?
     ///
-    /// This function returns `ConfigLoadInfo` (not just `Config`) because:
+    /// This function returns `UnwrittenConfig` (not just `Config`) because:
     /// - Config loading happens **before** database connection setup
     /// - The database connection settings come from the config itself
     /// - We need to write the config snapshot to ClickHouse, but can't do it yet
-    /// - `ConfigLoadInfo` holds both the ready-to-use config and the snapshot for later DB write
+    /// - `UnwrittenConfig` holds both the ready-to-use config and the snapshot for later DB write
     ///
     /// The caller pattern is:
     /// ```ignore
-    /// let config_load_info = Config::load_from_toml(table).await?;
-    /// let clickhouse = setup_clickhouse(&config_load_info.config).await?;
-    /// let config_with_hash = config_load_info.into_config(&clickhouse).await?;
+    /// let unwritten_config = Config::load_from_toml(table).await?;
+    /// let clickhouse = setup_clickhouse(&unwritten_config).await?;
+    /// let config = unwritten_config.into_config(&clickhouse).await?;
     /// ```
     async fn load_from_toml(table: toml::Table) -> Result<UnwrittenConfig, Error> {
         if table.is_empty() {
