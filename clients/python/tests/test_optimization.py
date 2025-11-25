@@ -193,9 +193,10 @@ def test_sync_gepa_chat(
 ):
     optimization_config = GEPAConfig(
         function_name="basic_test",
-        evaluation_name="test_eval",
+        evaluation_name="test_evaluation",
         analysis_model="openai::gpt-4o-mini",
         mutation_model="openai::gpt-4o-mini",
+        initial_variants=["anthropic"],
     )
 
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
@@ -389,9 +390,10 @@ async def test_async_gepa_json(
 ):
     optimization_config = GEPAConfig(
         function_name="json_success",
-        evaluation_name="test_eval",
+        evaluation_name="test_evaluation",
         analysis_model="openai::gpt-4o-mini",
         mutation_model="openai::gpt-4o-mini",
+        initial_variants=["anthropic", "openai"],
     )
 
     optimization_job_handle = await embedded_async_client.experimental_launch_optimization(

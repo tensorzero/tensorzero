@@ -335,7 +335,7 @@ class GEPAConfig:
         max_concurrency: Optional[int] = None,
         seed: Optional[int] = None,
         timeout: Optional[int] = None,
-        include_inference_input_for_mutation: Optional[bool] = None,
+        include_inference_for_mutation: Optional[bool] = None,
         retries: Optional[Dict[str, Any]] = None,
         max_tokens: Optional[int] = None,
     ) -> None: ...
