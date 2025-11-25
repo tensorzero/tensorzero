@@ -123,6 +123,11 @@ fn build_datasets_routes() -> Router<AppStateData> {
             "/datasets/{dataset_name}/datapoints/{datapoint_id}",
             get(endpoints::datasets::get_datapoint_handler),
         )
+        // V1 endpoints for datasets below
+        .route(
+            "/v1/datasets",
+            get(endpoints::datasets::v1::list_datasets_handler),
+        )
         .route(
             "/v1/datasets/{dataset_name}/datapoints",
             post(endpoints::datasets::v1::create_datapoints_handler)
