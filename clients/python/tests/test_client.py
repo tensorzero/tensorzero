@@ -1469,6 +1469,7 @@ def test_image_inference_url_wrong_mime_type(sync_client: TensorZeroGateway):
                 "file_url": {
                     "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                     "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "filename": None
                 }
             }
         }
@@ -1512,6 +1513,7 @@ def test_image_inference_url(sync_client: TensorZeroGateway):
                 "file_url": {
                     "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                     "mime_type": None,
+                    "filename": None
                 }
             },
         }
@@ -1555,6 +1557,7 @@ def test_file_inference_url(sync_client: TensorZeroGateway):
                 "file_url": {
                     "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
                     "mime_type": None,
+                    "filename": None
                 }
             }
         }
