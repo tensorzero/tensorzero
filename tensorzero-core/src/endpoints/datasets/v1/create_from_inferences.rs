@@ -4,6 +4,7 @@ use axum::extract::{Path, State};
 use axum::Json;
 use tracing::instrument;
 
+use crate::config::snapshot::SnapshotHash;
 use crate::config::Config;
 use crate::db::datasets::DatasetQueries;
 use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};
@@ -32,7 +33,7 @@ pub async fn create_from_inferences_handler(
         &app_state.clickhouse_connection_info,
         dataset_name,
         request,
-        Some(app_state.snapshot_hash.clone()),
+        app_state.snapshot_hash.clone(),
     )
     .await?;
 
@@ -48,7 +49,7 @@ pub async fn create_from_inferences(
     clickhouse: &(impl InferenceQueries + DatasetQueries),
     dataset_name: String,
     request: CreateDatapointsFromInferenceRequest,
-    snapshot_hash: Option<crate::config::snapshot::SnapshotHash>,
+    snapshot_hash: SnapshotHash,
 ) -> Result<CreateDatapointsResponse, Error> {
     validate_dataset_name(&dataset_name)?;
 
@@ -267,7 +268,7 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
+            SnapshotHash::new_test(),
         )
         .await
         .unwrap();
@@ -314,7 +315,7 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
+            SnapshotHash::new_test(),
         )
         .await
         .unwrap();
@@ -357,7 +358,7 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
+            SnapshotHash::new_test(),
         )
         .await
         .unwrap();
@@ -409,7 +410,7 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
+            SnapshotHash::new_test(),
         )
         .await
         .unwrap();
@@ -451,7 +452,7 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
+            SnapshotHash::new_test(),
         )
         .await;
 
@@ -491,7 +492,7 @@ mod tests {
             &mock_clickhouse,
             "builder".to_string(),
             request,
-            None,
+            SnapshotHash::new_test(),
         )
         .await;
 
@@ -545,7 +546,7 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
+            SnapshotHash::new_test(),
         )
         .await
         .unwrap();
@@ -601,7 +602,7 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
+            SnapshotHash::new_test(),
         )
         .await
         .unwrap();
@@ -677,7 +678,7 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
+            SnapshotHash::new_test(),
         )
         .await
         .unwrap();

@@ -1041,7 +1041,7 @@ impl ClientExt for Client {
                         &gateway.handle.app_state.clickhouse_connection_info,
                         dataset_name,
                         request,
-                        Some(gateway.handle.app_state.snapshot_hash.clone()),
+                        gateway.handle.app_state.snapshot_hash.clone(),
                     )
                     .await
                     .map_err(err_to_http)
