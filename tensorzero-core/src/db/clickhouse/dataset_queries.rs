@@ -167,11 +167,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
 
         let query = format!(
             r"
-            SELECT
-                dataset_name,
-                toUInt32(sum(count)) AS count,
-                formatDateTime(max(last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
-            FROM (
+            WITH unioned_datasets AS (
                 SELECT
                     dataset_name,
                     toUInt32(count()) AS count,
@@ -192,8 +188,13 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 {function_where_clause}
                 GROUP BY dataset_name
             )
+            SELECT
+                dataset_name,
+                toUInt32(sum(count)) AS count,
+                formatDateTime(max(unioned_datasets.last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
+            FROM unioned_datasets
             GROUP BY dataset_name
-            ORDER BY last_updated DESC
+            ORDER BY max(unioned_datasets.last_updated) DESC, unioned_datasets.dataset_name ASC
             {limit_clause}
             {offset_clause}
             FORMAT JSONEachRow
@@ -1736,33 +1737,30 @@ mod tests {
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
                 assert_query_contains(query, "
+                WITH unioned_datasets AS (
                     SELECT
+                        dataset_name,
+                        toUInt32(count()) AS count,
+                        max(updated_at) AS last_updated
+                    FROM ChatInferenceDatapoint FINAL
+                    WHERE staled_at IS NULL AND function_name = {function_name:String}
+                    GROUP BY dataset_name
+                    UNION ALL
+                    SELECT
+                        dataset_name,
+                        toUInt32(count()) AS count,
+                        max(updated_at) AS last_updated
+                    FROM JsonInferenceDatapoint FINAL
+                    WHERE staled_at IS NULL AND function_name = {function_name:String}
+                    GROUP BY dataset_name
+                )
+                SELECT
                     dataset_name,
                     toUInt32(sum(count)) AS count,
-                    formatDateTime(max(last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
-                    FROM (
-                        SELECT
-                            dataset_name,
-                            toUInt32(count()) AS count,
-                            max(updated_at) AS last_updated
-                        FROM ChatInferenceDatapoint
-                        FINAL
-                        WHERE staled_at IS NULL
-                        AND function_name = {function_name:String}
-                        GROUP BY dataset_name
-                        UNION ALL
-                        SELECT
-                            dataset_name,
-                            toUInt32(count()) AS count,
-                            max(updated_at) AS last_updated
-                        FROM JsonInferenceDatapoint
-                        FINAL
-                        WHERE staled_at IS NULL
-                        AND function_name = {function_name:String}
-                        GROUP BY dataset_name
-                )
+                    formatDateTime(max(unioned_datasets.last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
+                FROM unioned_datasets
                 GROUP BY dataset_name
-                ORDER BY last_updated DESC
+                ORDER BY max(unioned_datasets.last_updated) DESC, unioned_datasets.dataset_name ASC
                 LIMIT {limit:UInt32}
                 OFFSET {offset:UInt32}
                 FORMAT JSONEachRow");

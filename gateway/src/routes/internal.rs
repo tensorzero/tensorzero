@@ -44,4 +44,8 @@ pub fn build_internal_routes() -> Router<AppStateData> {
             "/internal/inferences",
             get(endpoints::stored_inferences::v1::list_inferences_by_id_handler),
         )
+        .route(
+            "/internal/datasets",
+            get(endpoints::datasets::v1::list_datasets_handler),
+        )
 }
