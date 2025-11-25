@@ -561,9 +561,7 @@ mod tests {
             name: None,
         };
 
-        // Convert StoredDatapoint to Datapoint
-        let function_config = create_test_function_config();
-        let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint(&function_config));
+        let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint());
 
         EvaluationInfo {
             datapoint,
