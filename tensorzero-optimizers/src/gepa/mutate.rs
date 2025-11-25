@@ -168,7 +168,7 @@ pub async fn mutate_variant(
     // Build input Arguments for the mutate function
     let arguments = build_mutate_input(analyses, function_context, parent_config)?;
 
-    // Create ClientInferenceParams for the analyze function
+    // Create ClientInferenceParams for the mutate function
     let params = ClientInferenceParams {
         function_name: Some("tensorzero::optimization::gepa::mutate".to_string()),
         input: ClientInput {

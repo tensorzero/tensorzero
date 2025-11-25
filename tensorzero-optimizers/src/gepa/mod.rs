@@ -220,7 +220,7 @@ impl Optimizer for GEPAConfig {
             }
         };
 
-        for iteration in 0..self.max_iterations {
+        for iteration in 0..(self.max_iterations as usize) {
             // TODO[#4739]: sample from Pareto frontier
             let Some(parent_name) = initial_variants.keys().choose(&mut rng) else {
                 tracing::warn!(
@@ -352,7 +352,7 @@ impl Optimizer for GEPAConfig {
                 &function_context,
                 parent,
                 self,
-                iteration as usize,
+                iteration,
             )
             .await
             {
