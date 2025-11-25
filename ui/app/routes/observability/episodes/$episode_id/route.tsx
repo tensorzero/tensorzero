@@ -2,6 +2,7 @@ import {
   countInferencesForEpisode,
   queryInferenceTableBoundsByEpisodeId,
   queryInferenceTableByEpisodeId,
+  queryInferenceById,
 } from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
@@ -35,6 +36,8 @@ import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
+import { useInferenceClick } from "~/hooks/use-inference-click";
+import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.episode_id!, isIdentifier: true }],
@@ -154,30 +157,68 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 type ActionData =
-  | { redirectTo: string; error?: never }
-  | { error: string; redirectTo?: never };
+  | { redirectTo: string; error?: never; inference?: never; inferenceId?: never }
+  | { error: string; redirectTo?: never; inference?: never; inferenceId?: string }
+  | { inference: ParsedInferenceRow; error?: never; redirectTo?: never; inferenceId: string };
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
+  const _action = formData.get("_action");
 
-  try {
-    const response = await addHumanFeedback(formData);
-    const url = new URL(request.url);
-    url.searchParams.delete("beforeFeedback");
-    url.searchParams.delete("afterFeedback");
-    url.searchParams.set("newFeedbackId", response.feedback_id);
-    return data<ActionData>({ redirectTo: url.pathname + url.search });
-  } catch (error) {
-    if (isTensorZeroServerError(error)) {
-      return data<ActionData>(
-        { error: error.message },
-        { status: error.status },
-      );
+  switch (_action) {
+    case "fetchInference": {
+      const inferenceId = formData.get("inferenceId") as string;
+      if (!inferenceId) {
+        return data<ActionData>({ error: "Inference ID is required" }, { status: 400 });
+      }
+
+      try {
+        const inference = await queryInferenceById(inferenceId);
+        if (!inference) {
+          return data<ActionData>({ error: `Inference ${inferenceId} not found`, inferenceId }, { status: 404 });
+        }
+        return data<ActionData>({ inference, inferenceId });
+      } catch (error) {
+        logger.error('Failed to fetch inference:', error);
+        return data<ActionData>({ error: "Failed to fetch inference details", inferenceId }, { status: 500 });
+      }
     }
-    return data<ActionData>(
-      { error: "Unknown server error. Try again." },
-      { status: 500 },
-    );
+
+    case "addFeedback": {
+      try {
+        const response = await addHumanFeedback(formData);
+        const url = new URL(request.url);
+        url.searchParams.delete("beforeFeedback");
+        url.searchParams.delete("afterFeedback");
+        url.searchParams.set("newFeedbackId", response.feedback_id);
+        return data<ActionData>({ redirectTo: url.pathname + url.search });
+      } catch (error) {
+        if (isTensorZeroServerError(error)) {
+          return data<ActionData>(
+            { error: error.message },
+            { status: error.status },
+          );
+        }
+        return data<ActionData>(
+          { error: "Unknown server error. Try again." },
+          { status: 500 },
+        );
+      }
+    }
+
+    case null:
+      logger.error("No action provided");
+      return data<ActionData>(
+        { error: "No action provided" },
+        { status: 400 }
+      );
+
+    default:
+      logger.error(`Unknown action: ${_action}`);
+      return data<ActionData>(
+        { error: `Unknown action: ${_action}` },
+        { status: 400 }
+      );
   }
 }
 
@@ -195,6 +236,16 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { 
+    handleOpenSheet,
+    handleCloseSheet,
+    getInferenceData, 
+    isLoading,
+    getError,
+    openSheetInferenceId,
+  } = useInferenceClick(
+    `/observability/episodes/${episode_id}`
+  );
 
   const topInference = inferences[0];
   const bottomInference = inferences[inferences.length - 1];
@@ -306,7 +357,15 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Inferences" count={num_inferences} />
-          <EpisodeInferenceTable inferences={inferences} />
+          <EpisodeInferenceTable 
+            inferences={inferences} 
+            onOpenSheet={handleOpenSheet}
+            onCloseSheet={handleCloseSheet}
+            getInferenceData={getInferenceData}
+            isInferenceLoading={isLoading}
+            getError={getError}
+            openSheetInferenceId={openSheetInferenceId}
+          />
           <PageButtons
             onPreviousPage={handlePreviousInferencePage}
             onNextPage={handleNextInferencePage}
