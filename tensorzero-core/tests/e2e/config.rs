@@ -141,14 +141,14 @@ async fn test_write_config_snapshot() {
     .unwrap();
     let random_id = Uuid::now_v7();
 
-    // Create a test config snapshot
+    // Create a test config snapshot with minimal valid config
+    // Using a unique metric name to avoid conflicts between test runs
     let config_toml = format!(
         r#"
-[gateway]
-bind = "0.0.0.0:3000"
-
-[models.test_model{random_id}]
-routing = ["test_provider::gpt-4"]
+[metrics.test_metric_{random_id}]
+type = "boolean"
+level = "inference"
+optimize = "max"
 "#
     );
 
@@ -180,7 +180,13 @@ routing = ["test_provider::gpt-4"]
     // Parse and verify the result
     let snapshot_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
 
-    assert_eq!(snapshot_row["config"].as_str().unwrap(), config_toml);
+    // Config is serialized from StoredConfig, so format may differ from original.
+    // Just verify it contains our metric definition.
+    let stored_config = snapshot_row["config"].as_str().unwrap();
+    assert!(
+        stored_config.contains(&format!("test_metric_{random_id}")),
+        "Config should contain our test metric"
+    );
     assert!(!snapshot_row["tensorzero_version"]
         .as_str()
         .unwrap()
@@ -224,8 +230,12 @@ routing = ["test_provider::gpt-4"]
         "last_used should be updated on upsert"
     );
 
-    // Verify the data is still correct
-    assert_eq!(snapshot_row2["config"].as_str().unwrap(), config_toml);
+    // Verify the data is still correct (config contains our metric)
+    let stored_config2 = snapshot_row2["config"].as_str().unwrap();
+    assert!(
+        stored_config2.contains(&format!("test_metric_{random_id}")),
+        "Config should still contain our test metric after upsert"
+    );
     assert_eq!(
         snapshot_row2["hash"].as_str().unwrap().to_lowercase(),
         hash_number
