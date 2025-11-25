@@ -24,10 +24,10 @@ export type UpdateChatDatapointRequest = {
    */
   input?: Input;
   /**
-   * Chat datapoint output. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
-   * it will overwrite the existing output.
+   * Chat datapoint output. If omitted, it will be left unchanged. If specified as `null`, it will be set to
+   * `null`. Otherwise, it will overwrite the existing output (and can be an empty array).
    */
-  output?: Array<ContentBlockChatOutput>;
+  output?: Array<ContentBlockChatOutput> | null;
   /**
    * Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
    * it will be overwrite the existing tags.

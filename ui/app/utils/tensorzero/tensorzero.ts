@@ -23,6 +23,7 @@ import type {
   UpdateDatapointRequest,
   UpdateDatapointsResponse,
   GetInferenceBoundsResponse,
+  InternalListInferencesByIdResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -592,6 +593,50 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return (await response.json()) as GetInferenceBoundsResponse;
+  }
+
+  /**
+   * Internal: List inferences by ID with pagination.
+   * @param params - Query parameters for listing inferences
+   * @returns A promise that resolves with the list of inferences
+   * @throws Error if the request fails
+   */
+  async internalListInferencesById(params: {
+    limit: number;
+    before?: string;
+    after?: string;
+    function_name?: string;
+    variant_name?: string;
+    episode_id?: string;
+  }): Promise<InternalListInferencesByIdResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("limit", params.limit.toString());
+
+    if (params.before) {
+      searchParams.append("before", params.before);
+    }
+    if (params.after) {
+      searchParams.append("after", params.after);
+    }
+    if (params.function_name) {
+      searchParams.append("function_name", params.function_name);
+    }
+    if (params.variant_name) {
+      searchParams.append("variant_name", params.variant_name);
+    }
+    if (params.episode_id) {
+      searchParams.append("episode_id", params.episode_id);
+    }
+
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/inferences${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as InternalListInferencesByIdResponse;
   }
 
   private async fetch(

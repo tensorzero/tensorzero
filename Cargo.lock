@@ -1833,7 +1833,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.11.5"
+version = "2025.11.6"
 dependencies = [
  "anyhow",
  "clap",
@@ -1935,7 +1935,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2025.11.5"
+version = "2025.11.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2181,7 +2181,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.11.5"
+version = "2025.11.6"
 dependencies = [
  "axum",
  "clap",
@@ -2935,9 +2935,9 @@ dependencies = [
 
 [[package]]
 name = "init-tracing-opentelemetry"
-version = "0.33.0"
+version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c887848a40ed9a4cbba1f187f4d7352c2d0a32d8397fc49c4bd42f2028c0283c"
+checksum = "317b92661b729d90cce708de8a43cc7963fafe0710399f84299f9198a114fd4a"
 dependencies = [
  "opentelemetry",
  "opentelemetry_sdk",
@@ -3385,7 +3385,7 @@ dependencies = [
 
 [[package]]
 name = "minijinja-utils"
-version = "2025.11.5"
+version = "2025.11.6"
 dependencies = [
  "minijinja",
  "serde",
@@ -4559,7 +4559,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2025.11.5"
+version = "2025.11.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6077,7 +6077,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2025.11.5"
+version = "2025.11.6"
 dependencies = [
  "chrono",
  "futures",
@@ -6093,7 +6093,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.11.5"
+version = "2025.11.6"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -6204,7 +6204,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.11.5"
+version = "2025.11.6"
 dependencies = [
  "evaluations",
  "napi",
@@ -6223,7 +6223,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-optimizers"
-version = "2025.11.5"
+version = "2025.11.6"
 dependencies = [
  "async-trait",
  "axum",
@@ -6255,7 +6255,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.11.5"
+version = "2025.11.6"
 dependencies = [
  "evaluations",
  "futures",
