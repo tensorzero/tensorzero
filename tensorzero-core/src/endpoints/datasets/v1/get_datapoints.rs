@@ -107,6 +107,8 @@ pub async fn list_datapoints(
         offset: request.offset.unwrap_or(DEFAULT_OFFSET),
         allow_stale: DEFAULT_ALLOW_STALE,
         filter: request.filter,
+        order_by: request.order_by,
+        search_query_experimental: request.search_query_experimental,
     };
 
     let datapoints = clickhouse.get_datapoints(&params).await?;
@@ -139,6 +141,8 @@ pub async fn get_datapoints(
         // Get Datapoints by ID should return stale datapoints.
         allow_stale: true,
         filter: None,
+        order_by: None,
+        search_query_experimental: None,
     };
 
     let datapoints = clickhouse.get_datapoints(&params).await?;
