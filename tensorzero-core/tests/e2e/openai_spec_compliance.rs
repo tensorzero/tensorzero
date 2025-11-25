@@ -1,9 +1,9 @@
 #![expect(clippy::print_stdout)]
-use jsonschema::Validator;
 use jsonschema::draft202012;
+use jsonschema::Validator;
 use reqwest::Client;
-use serde_json::Value;
 use serde_json::json;
+use serde_json::Value;
 use std::borrow::Cow;
 use tokio::sync::OnceCell;
 
@@ -36,8 +36,8 @@ async fn download_openapi_spec() -> Value {
     serde_json::to_value(yaml_value).expect("Failed to convert YAML to JSON")
 }
 
-/// Spec yaml publishes `seed.minimum` with a value smaller than i128::MIN.
-/// We clamp the literal so serde_yml can parse the document.
+/// Spec yaml publishes `seed.minimum` with a value smaller than i64::MIN.
+/// We clamp the literal so serde_yml can parse the document
 fn fix_yaml_parse_issues(raw: &str) -> Cow<'_, str> {
     const OPENAI_SEED_MIN: &str = "-9223372036854776000";
     if raw.contains(OPENAI_SEED_MIN) {
@@ -47,39 +47,77 @@ fn fix_yaml_parse_issues(raw: &str) -> Cow<'_, str> {
     }
 }
 
-
-/// OpenAI's schema sets `$recursiveAnchor: true` but Draft202012 requires a string literal.
-/// Also removes duplicate entries in `required` arrays which violate uniqueItems constraint.
-/// Also removes old Draft4-style boolean exclusiveMinimum/exclusiveMaximum.
-/// TODO: These are temporary fixes; ideally the OpenAI spec would be corrected.
+// OpenAI's schema uses Draft 4 boolean exclusiveMinimum/exclusiveMaximum, which need conversion to Draft 2020-12 numeric form.
+// Also removes `$recursiveAnchor` (Draft 2019-09 keyword not recognized in Draft 2020-12).
+// Removes duplicate entries in `required` arrays which violate uniqueItems constraint.
+// TODO: These are temporary fixes; ideally we'd contact the OpenAI spec maintainers to have these issues corrected.
+// Theseb were corrected for now to enable schema validation.
 fn sanitize_openapi_spec(value: &mut serde_yml::Value) {
     use serde_yml::Value::*;
 
     match value {
         Mapping(map) => {
-            // Remove old Draft4-style exclusiveMinimum/exclusiveMaximum booleans
+            // Convert Draft 4 boolean exclusiveMinimum/exclusiveMaximum to Draft 2020-12 numeric form
+            let mut exclusive_min_value = None;
+            let mut exclusive_max_value = None;
+
+            // First pass: detect Draft 4 boolean pattern and get the min/max values
+            if let Some(true) = map
+                .get(&String("exclusiveMinimum".into()))
+                .and_then(|v| match v {
+                    Bool(b) => Some(*b),
+                    _ => None,
+                })
+            {
+                if let Some(min_val) = map.get(&String("minimum".into())).cloned() {
+                    if matches!(min_val, Number(_)) {
+                        exclusive_min_value = Some(min_val);
+                    }
+                }
+            }
+
+            if let Some(true) = map
+                .get(&String("exclusiveMaximum".into()))
+                .and_then(|v| match v {
+                    Bool(b) => Some(*b),
+                    _ => None,
+                })
+            {
+                if let Some(max_val) = map.get(&String("maximum".into())).cloned() {
+                    if matches!(max_val, Number(_)) {
+                        exclusive_max_value = Some(max_val);
+                    }
+                }
+            }
+
+            // Second pass: apply conversions
+            if let Some(val) = exclusive_min_value {
+                map.remove(&String("minimum".into()));
+                map.insert(String("exclusiveMinimum".into()), val);
+            }
+
+            if let Some(val) = exclusive_max_value {
+                map.remove(&String("maximum".into()));
+                map.insert(String("exclusiveMaximum".into()), val);
+            }
+
+            // Remove $recursiveAnchor (Draft 2019-09 keyword, not recognized in Draft 2020-12)
             let keys_to_remove: Vec<_> = map
                 .iter()
-                .filter_map(|(key, val)| {
-                    if matches!(key, String(s) if s == "exclusiveMinimum" || s == "exclusiveMaximum")
-                        && matches!(val, Bool(_))
-                    {
+                .filter_map(|(key, _val)| {
+                    if matches!(key, String(s) if s == "$recursiveAnchor") {
                         Some(key.clone())
                     } else {
                         None
                     }
                 })
                 .collect();
-            
+
             for key in keys_to_remove {
                 map.remove(&key);
             }
 
             for (key, val) in map.iter_mut() {
-                if matches!(key, String(s) if s == "$recursiveAnchor") && matches!(val, Bool(true))
-                {
-                    *val = String("true".into());
-                }
                 // Todo: Make a PR to OpenAI OpenAPI spec to fix duplicate in required for ContainerResource
                 if matches!(key, String(s) if s == "required") {
                     if let Sequence(items) = val {
@@ -117,7 +155,7 @@ async fn get_component_schema(component_name: &str) -> Option<Value> {
 
     let components = components.clone();
     Some(json!({
-        "$defs": components.clone(),
+        "$defs": components,
         "components": { "schemas": components },
         "$ref": format!("#/components/schemas/{}", component_name)
     }))
@@ -250,184 +288,169 @@ async fn test_spec_error_response_404_not_found() {
 #[tokio::test]
 #[ignore]
 async fn test_spec_chat_completion_request() {
-   let client = Client::new();
-   let response = client
-       .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-       .json(&json!({
-           "model": "tensorzero::model_name::openai::gpt-4o-mini",
-           "messages": [{"role": "user", "content": "Say hello world!"}]
-       }))
-       .send()
-       .await
-       .unwrap();
-   assert_eq!(response.status(), 200, "Expected 200 OK");
+    let client = Client::new();
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&json!({
+            "model": "tensorzero::model_name::openai::gpt-4o-mini",
+            "messages": [{"role": "user", "content": "Say hello world!"}]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200, "Expected 200 OK");
 
-
-   let response_json: Value = response.json().await.unwrap();
-   println!("Chat completion response: {response_json:?}");
-   if let Some(schema) = get_chat_completion_response_schema().await {
-       assert_valid_schema(
-           &schema,
-           &response_json,
-           "Chat completion minimal request response",
-       );
-   } else {
-       eprintln!(
-           "⚠️  Warning: ChatCompletion response schema not found in spec, skipping validation"
-       );
-   }
+    let response_json: Value = response.json().await.unwrap();
+    println!("Chat completion response: {response_json:?}");
+    if let Some(schema) = get_chat_completion_response_schema().await {
+        assert_valid_schema(
+            &schema,
+            &response_json,
+            "Chat completion minimal request response",
+        );
+    } else {
+        eprintln!(
+            "⚠️  Warning: ChatCompletion response schema not found in spec, skipping validation"
+        );
+    }
 }
 
 #[tokio::test]
-#[ignore] 
+#[ignore]
 async fn test_spec_chat_completion_with_tool_calls() {
-   let client = Client::new();
+    let client = Client::new();
 
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&json!({
+            "model": "tensorzero::model_name::openai::gpt-4o-mini",
+            "messages": [{"role": "user", "content": "What's the weather in Boston?"}],
+            "tools": [{
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "description": "Get current weather",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "location": {"type": "string"}
+                        },
+                        "required": ["location"]
+                    }
+                }
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
 
-   let response = client
-       .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-       .json(&json!({
-           "model": "tensorzero::model_name::openai::gpt-4o-mini",
-           "messages": [{"role": "user", "content": "What's the weather in Boston?"}],
-           "tools": [{
-               "type": "function",
-               "function": {
-                   "name": "get_weather",
-                   "description": "Get current weather",
-                   "parameters": {
-                       "type": "object",
-                       "properties": {
-                           "location": {"type": "string"}
-                       },
-                       "required": ["location"]
-                   }
-               }
-           }]
-       }))
-       .send()
-       .await
-       .unwrap();
+    assert_eq!(response.status(), 200, "Expected 200 OK");
 
+    let response_json: Value = response.json().await.unwrap();
 
-   assert_eq!(response.status(), 200, "Expected 200 OK");
-
-
-   let response_json: Value = response.json().await.unwrap();
-
-
-   if let Some(schema) = get_chat_completion_response_schema().await {
-       assert_valid_schema(
-           &schema,
-           &response_json,
-           "Chat completion with tool calls response",
-       );
-   }
+    if let Some(schema) = get_chat_completion_response_schema().await {
+        assert_valid_schema(
+            &schema,
+            &response_json,
+            "Chat completion with tool calls response",
+        );
+    }
 }
 
-
 #[tokio::test]
-#[ignore] 
+#[ignore]
 async fn test_spec_chat_completion_finish_reasons() {
-   // Test different finish_reason values are valid per spec
-   let test_cases = vec![
-       ("stop", json!({"max_tokens": 1000})),
-       ("length", json!({"max_tokens": 1})),
-   ];
+    // Test different finish_reason values are valid per spec
+    let test_cases = vec![
+        ("stop", json!({"max_tokens": 1000})),
+        ("length", json!({"max_tokens": 1})),
+    ];
 
-   for (finish_type, params) in test_cases {
-       let client = Client::new();
+    for (finish_type, params) in test_cases {
+        let client = Client::new();
 
-       let mut request = json!({
-           "model": "tensorzero::model_name::openai::gpt-4o-mini",
-           "messages": [{"role": "user", "content": "Say hello"}]
-       });
+        let mut request = json!({
+            "model": "tensorzero::model_name::openai::gpt-4o-mini",
+            "messages": [{"role": "user", "content": "Say hello"}]
+        });
 
-       // Merge additional params
-       if let Some(obj) = request.as_object_mut() {
-           if let Some(params_obj) = params.as_object() {
-               obj.extend(params_obj.clone());
-           }
-       }
+        // Merge additional params
+        if let Some(obj) = request.as_object_mut() {
+            if let Some(params_obj) = params.as_object() {
+                obj.extend(params_obj.clone());
+            }
+        }
 
-       let response = client
-           .post(get_gateway_endpoint("/openai/v1/chat/completions"))
-           .json(&request)
-           .send()
-           .await
-           .unwrap();
+        let response = client
+            .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+            .json(&request)
+            .send()
+            .await
+            .unwrap();
 
-       let response_json: Value = response.json().await.unwrap();
-       if let Some(schema) = get_chat_completion_response_schema().await {
-           assert_valid_schema(
-               &schema,
-               &response_json,
-               &format!("Chat completion with finish_reason={}", finish_type),
-           );
-       }
-   }
+        let response_json: Value = response.json().await.unwrap();
+        if let Some(schema) = get_chat_completion_response_schema().await {
+            assert_valid_schema(
+                &schema,
+                &response_json,
+                &format!("Chat completion with finish_reason={}", finish_type),
+            );
+        }
+    }
 }
 
-
 #[tokio::test]
-#[ignore] 
+#[ignore]
 async fn test_spec_embeddings_request() {
-   let client = Client::new();
+    let client = Client::new();
 
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&json!({
+            "model": "tensorzero::model_name::openai::text-embedding-3-small",
+            "input": "hello world"
+        }))
+        .send()
+        .await
+        .unwrap();
 
-   let response = client
-       .post(get_gateway_endpoint("/openai/v1/embeddings"))
-       .json(&json!({
-           "model": "tensorzero::model_name::openai::text-embedding-3-small",
-           "input": "hello world"
-       }))
-       .send()
-       .await
-       .unwrap();
-  
-   assert_eq!(response.status(), 200, "Expected 200 OK");
+    assert_eq!(response.status(), 200, "Expected 200 OK");
 
+    let response_json: Value = response.json().await.unwrap();
 
-   let response_json: Value = response.json().await.unwrap();
-
-
-   if let Some(schema) = get_embeddings_response_schema().await {
-       assert_valid_schema(
-           &schema,
-           &response_json,
-           "Embeddings minimal request response",
-       );
-   } else {
-       eprintln!("⚠️  Warning: Embeddings response schema not found in spec, skipping validation");
-   }
+    if let Some(schema) = get_embeddings_response_schema().await {
+        assert_valid_schema(
+            &schema,
+            &response_json,
+            "Embeddings minimal request response",
+        );
+    } else {
+        eprintln!("⚠️  Warning: Embeddings response schema not found in spec, skipping validation");
+    }
 }
 
-
 #[tokio::test]
-#[ignore] 
+#[ignore]
 async fn test_spec_embeddings_array_input() {
-   let client = Client::new();
+    let client = Client::new();
 
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&json!({
+            "model": "tensorzero::model_name::openai::text-embedding-3-small",
+            "input": ["hello", "world", "test"]
+        }))
+        .send()
+        .await
+        .unwrap();
 
-   let response = client
-       .post(get_gateway_endpoint("/openai/v1/embeddings"))
-       .json(&json!({
-           "model": "tensorzero::model_name::openai::text-embedding-3-small",
-           "input": ["hello", "world", "test"]
-       }))
-       .send()
-       .await
-       .unwrap();
+    assert_eq!(response.status(), 200, "Expected 200 OK");
 
+    let response_json: Value = response.json().await.unwrap();
 
-   assert_eq!(response.status(), 200, "Expected 200 OK");
-
-
-   let response_json: Value = response.json().await.unwrap();
-
-
-   if let Some(schema) = get_embeddings_response_schema().await {
-       assert_valid_schema(&schema, &response_json, "Embeddings array input response");
-   }
+    if let Some(schema) = get_embeddings_response_schema().await {
+        assert_valid_schema(&schema, &response_json, "Embeddings array input response");
+    }
 }
 
 // // ============================================================================
@@ -482,7 +505,7 @@ async fn test_spec_embeddings_array_input() {
 //        for (i, chunk_str) in chunks.iter().enumerate() {
 //            let chunk: Value = serde_json::from_str(chunk_str)
 //                .unwrap_or_else(|e| panic!("Failed to parse chunk {}: {}", i, e));
-           
+
 //            assert_valid_schema(
 //                &schema,
 //                &chunk,
