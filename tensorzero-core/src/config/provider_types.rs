@@ -512,9 +512,7 @@ pub struct TensorZeroRelayDefaults {
 impl Default for TensorZeroRelayDefaults {
     fn default() -> Self {
         Self {
-            api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
-                "TENSORZERO_RELAY_API_KEY".to_string(),
-            )),
+            api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::None),
         }
     }
 }
