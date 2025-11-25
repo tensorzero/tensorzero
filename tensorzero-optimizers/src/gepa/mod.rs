@@ -10,7 +10,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use tensorzero_core::{
     client::{ClientBuilder, ClientBuilderMode},
-    config::{snapshot::SnapshotHash, Config, UninitializedVariantConfig},
+    config::{Config, UninitializedVariantConfig},
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     endpoints::{datasets::v1::delete_dataset, inference::InferenceCredentials},
     error::{Error, ErrorDetails},
@@ -47,7 +47,6 @@ impl Optimizer for GEPAConfig {
         _credentials: &InferenceCredentials,
         clickhouse_connection_info: &ClickHouseConnectionInfo,
         config: std::sync::Arc<Config>,
-        snapshot_hash: SnapshotHash,
     ) -> Result<Self::Handle, Error> {
         // Validate configuration and examples, get the FunctionContext (function_config, static_tools, and evaluation_config)
         let function_context = validate_gepa_config(self, &config)?;
@@ -74,7 +73,6 @@ impl Optimizer for GEPAConfig {
         // Build the gateway client once for the entire optimization run
         let gateway_client = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config: config.clone(),
-            snapshot_hash,
             clickhouse_connection_info: clickhouse_connection_info.clone(),
             postgres_connection_info: PostgresConnectionInfo::Disabled,
             http_client: client.clone(),

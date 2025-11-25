@@ -1615,11 +1615,6 @@ impl TensorZeroGateway {
                 "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
             )
         })?;
-        let snapshot_hash = client.snapshot_hash().ok_or_else(|| {
-                PyValueError::new_err(
-                    "Snapshot hash not available in HTTP gateway mode. Use embedded mode for render_samples.",
-                )
-            })?;
         // Enter the Tokio runtime context while still holding the GIL
         // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
         // for JSON schema compilation
@@ -1631,7 +1626,7 @@ impl TensorZeroGateway {
             .map(|x| {
                 // NOTE(shuyangli): We do not re-fetch any files here, and simply error out if any samples have files.
                 // We may need to rearchitect the optimization pipeline to support this.
-                deserialize_from_stored_sample(this.py(), x, config, snapshot_hash)
+                deserialize_from_stored_sample(this.py(), x, config)
             })
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_samples, variants);
@@ -2866,11 +2861,7 @@ impl AsyncTensorZeroGateway {
                 "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
             )
         })?;
-        let snapshot_hash = client.snapshot_hash().ok_or_else(|| {
-            PyValueError::new_err(
-                "Snapshot hash not available in HTTP gateway mode. Use embedded mode for render_samples.",
-            )
-        })?;
+
         // Enter the Tokio runtime context while still holding the GIL
         // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
         // for JSON schema compilation
@@ -2881,7 +2872,7 @@ impl AsyncTensorZeroGateway {
             .map(|x| {
                 // NOTE(shuyangli): We do not re-fetch any files here, and simply error out if any samples have files.
                 // We may need to rearchitect the optimization pipeline to support this.
-                deserialize_from_stored_sample(this.py(), x, config, snapshot_hash)
+                deserialize_from_stored_sample(this.py(), x, config)
             })
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {

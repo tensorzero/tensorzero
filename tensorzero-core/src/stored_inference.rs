@@ -96,7 +96,6 @@ impl StoredInference {
         dataset_name: &str,
         output_source: &CreateDatapointsFromInferenceOutputSource,
         config: &Config,
-        snapshot_hash: SnapshotHash,
     ) -> Result<DatapointInsert, Error> {
         let datapoint_id = Uuid::now_v7();
 
@@ -124,7 +123,7 @@ impl StoredInference {
                     staled_at: None,
                     source_inference_id: Some(inference.inference_id),
                     is_custom: false,
-                    snapshot_hash: Some(snapshot_hash),
+                    snapshot_hash: Some(config.hash.clone()),
                 };
 
                 Ok(DatapointInsert::Json(datapoint))
@@ -158,7 +157,7 @@ impl StoredInference {
                     staled_at: None,
                     source_inference_id: Some(inference.inference_id),
                     is_custom: false,
-                    snapshot_hash: Some(snapshot_hash),
+                    snapshot_hash: Some(config.hash.clone()),
                 };
 
                 Ok(DatapointInsert::Chat(datapoint))

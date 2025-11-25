@@ -141,7 +141,7 @@ pub async fn run_evaluation_streaming(
             ))
         })?;
 
-    let config_load_info = Config::load_from_path_optional_verify_credentials(&config_glob, false)
+    let unwritten_config = Config::load_from_path_optional_verify_credentials(&config_glob, false)
         .await
         .map_err(|e| {
             napi::Error::from_reason(format!(
@@ -151,21 +151,11 @@ pub async fn run_evaluation_streaming(
         })?;
     let clickhouse_client = ClickHouseConnectionInfo::new(
         &params.clickhouse_url,
-        config_load_info
-            .config
-            .gateway
-            .observability
-            .batch_writes
-            .clone(),
+        unwritten_config.gateway.observability.batch_writes.clone(),
     )
     .await
     .map_err(|e| napi::Error::from_reason(format!("Failed to connect to ClickHouse: {e}")))?;
-    let ConfigWithHash {
-        config,
-        // Since the evaluation actually runs all inferences and feedback through the gateway,
-        // there is no use for this hash in the Node.js process
-        hash: _,
-    } = config_load_info
+    let config = unwritten_config
         .into_config(&clickhouse_client)
         .await
         .map_err(|e| napi::Error::from_reason(e.to_string()))?;

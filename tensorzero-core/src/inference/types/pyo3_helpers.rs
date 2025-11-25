@@ -364,7 +364,6 @@ pub fn deserialize_from_stored_sample<'a>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,
     config: &Config,
-    snapshot_hash: &SnapshotHash,
 ) -> PyResult<StoredSampleItem> {
     // Try deserializing into named types first
     let generated_types_module = py.import("tensorzero.generated_types")?;
@@ -391,7 +390,7 @@ pub fn deserialize_from_stored_sample<'a>(
                 let datapoint = match chat_wire.into_storage_without_file_handling(
                     &function_config,
                     &config.tools,
-                    snapshot_hash,
+                    &config.hash,
                 ) {
                     Ok(d) => d,
                     Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),

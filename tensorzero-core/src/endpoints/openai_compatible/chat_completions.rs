@@ -25,7 +25,6 @@ use super::types::streaming::prepare_serialized_openai_compatible_events;
 pub async fn chat_completions_handler(
     State(AppStateData {
         config,
-        snapshot_hash,
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
@@ -89,7 +88,6 @@ pub async fn chat_completions_handler(
 
     let response = inference(
         config,
-        snapshot_hash,
         &http_client,
         clickhouse_connection_info,
         postgres_connection_info,

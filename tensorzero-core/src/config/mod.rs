@@ -28,7 +28,7 @@ use tensorzero_derive::TensorZeroDeserialize;
 use tracing::instrument;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use unwritten_config::{ConfigLoadInfo, UnwrittenConfig};
+use unwritten_config::UnwrittenConfig;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
@@ -110,6 +110,8 @@ pub struct Config {
     pub rate_limiting: RateLimitingConfig,
     #[serde(skip)]
     pub http_client: TensorzeroHttpClient,
+    #[serde(skip)]
+    pub hash: SnapshotHash,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -731,7 +733,7 @@ impl Config {
     ///
     /// In test code, a `Default` impl is available, but the config it produces might
     /// be completely broken (e.g. no builtin functions will be available).
-    pub async fn new_empty() -> Result<ConfigLoadInfo, Error> {
+    pub async fn new_empty() -> Result<UnwrittenConfig, Error> {
         // Use an empty glob, and validate credentials
         Self::load_from_path_optional_verify_credentials_allow_empty_glob(
             &ConfigFileGlob::new_empty(),
@@ -743,14 +745,14 @@ impl Config {
 
     pub async fn load_and_verify_from_path(
         config_glob: &ConfigFileGlob,
-    ) -> Result<ConfigLoadInfo, Error> {
+    ) -> Result<UnwrittenConfig, Error> {
         Self::load_from_path_optional_verify_credentials(config_glob, true).await
     }
 
     pub async fn load_from_path_optional_verify_credentials(
         config_glob: &ConfigFileGlob,
         validate_credentials: bool,
-    ) -> Result<ConfigLoadInfo, Error> {
+    ) -> Result<UnwrittenConfig, Error> {
         Self::load_from_path_optional_verify_credentials_allow_empty_glob(
             config_glob,
             validate_credentials,
@@ -763,9 +765,9 @@ impl Config {
         config_glob: &ConfigFileGlob,
         validate_credentials: bool,
         allow_empty_glob: bool,
-    ) -> Result<ConfigLoadInfo, Error> {
+    ) -> Result<UnwrittenConfig, Error> {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
-        let config_load_info = if cfg!(feature = "e2e_tests") || !validate_credentials {
+        let unwritten_config = if cfg!(feature = "e2e_tests") || !validate_credentials {
             SKIP_CREDENTIAL_VALIDATION
                 .scope((), Self::load_from_toml(globbed_config.table))
                 .await?
@@ -774,12 +776,12 @@ impl Config {
         };
 
         if validate_credentials {
-            if let Some(object_store) = &config_load_info.config.object_store_info {
+            if let Some(object_store) = &unwritten_config.object_store_info {
                 object_store.verify().await?;
             }
         }
 
-        Ok(config_load_info)
+        Ok(unwritten_config)
     }
 
     /// Loads and initializes a config from a parsed TOML table.
@@ -838,7 +840,7 @@ impl Config {
     /// let clickhouse = setup_clickhouse(&config_load_info.config).await?;
     /// let config_with_hash = config_load_info.into_config(&clickhouse).await?;
     /// ```
-    async fn load_from_toml(table: toml::Table) -> Result<ConfigLoadInfo, Error> {
+    async fn load_from_toml(table: toml::Table) -> Result<UnwrittenConfig, Error> {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.");
         }
@@ -963,6 +965,20 @@ impl Config {
             })
         })?;
 
+        // Initialize the templates
+        let template_paths = Config::get_templates(&functions);
+        if gateway_config.template_filesystem_access.enabled {
+            deprecation_warning("The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.");
+        }
+        let template_fs_path = gateway_config
+            .template_filesystem_access
+            .base_path
+            .as_ref()
+            .map(|x| x.get_real_path());
+        let extra_templates = templates
+            .initialize(template_paths, template_fs_path)
+            .await?;
+        let snapshot = ConfigSnapshot::new(table_for_snapshot, extra_templates)?;
         let mut config = Config {
             gateway: gateway_config,
             models: Arc::new(models),
@@ -978,22 +994,9 @@ impl Config {
             postgres: uninitialized_config.postgres,
             rate_limiting: uninitialized_config.rate_limiting.try_into()?,
             http_client,
+            hash: snapshot.hash.clone(),
         };
 
-        // Initialize the templates
-        let template_paths = config.get_templates();
-        if config.gateway.template_filesystem_access.enabled {
-            deprecation_warning("The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.");
-        }
-        let template_fs_path = config
-            .gateway
-            .template_filesystem_access
-            .base_path
-            .as_ref()
-            .map(|x| x.get_real_path());
-        let extra_templates = templates
-            .initialize(template_paths, template_fs_path)
-            .await?;
         config.templates = Arc::new(templates.clone());
 
         // Validate the config
@@ -1057,10 +1060,7 @@ impl Config {
         config.evaluations = evaluations;
         config.templates = Arc::new(templates);
 
-        Ok(ConfigLoadInfo::new(
-            UnwrittenConfig::new(config),
-            snapshot::ConfigSnapshot::new(table_for_snapshot, extra_templates)?,
-        ))
+        Ok(UnwrittenConfig::new(config, snapshot))
     }
 
     /// Validate the config
@@ -1222,10 +1222,12 @@ impl Config {
     /// The HashMap returned is a mapping from the path as given in the TOML file
     /// (relative to the directory containing the TOML file) to the file contents.
     /// The former path is used as the name of the template for retrieval by variants later.
-    pub fn get_templates(&self) -> HashMap<String, String> {
+    pub fn get_templates(
+        functions: &HashMap<String, Arc<FunctionConfig>>,
+    ) -> HashMap<String, String> {
         let mut templates = HashMap::new();
 
-        for function in self.functions.values() {
+        for function in functions.values() {
             for variant in function.variants().values() {
                 let variant_template_paths = variant.get_all_template_paths();
                 for path in variant_template_paths {
@@ -1274,66 +1276,13 @@ pub mod unwritten_config {
     /// - Call `ConfigLoadInfo::into_config()` to write the snapshot to the database
     /// - Call `ConfigLoadInfo::dangerous_into_config_without_writing()` (test/special cases only)
     #[derive(Debug)]
-    pub struct UnwrittenConfig(Config);
-
-    impl UnwrittenConfig {
-        pub fn new(config: Config) -> Self {
-            Self(config)
-        }
-    }
-
-    impl std::ops::Deref for UnwrittenConfig {
-        type Target = Config;
-
-        fn deref(&self) -> &Self::Target {
-            &self.0
-        }
-    }
-
-    /// Holds both the loaded config and its database snapshot representation.
-    ///
-    /// This is the return type of the main config loading functions (`Config::load_and_verify_from_path()`).
-    /// It pairs together:
-    /// - `UnwrittenConfig`: The fully loaded, validated, and initialized config (ready to use)
-    /// - `ConfigSnapshot`: The serialized representation for database storage (TOML + templates + hash)
-    ///
-    /// # Why This Exists
-    /// Config loading happens in two phases with a database connection in between:
-    ///
-    /// **Phase 1 (Before Database Connection):**
-    /// - Load and parse TOML files
-    /// - Validate all config settings
-    /// - Initialize models, functions, templates, etc.
-    /// - Create serializable snapshot
-    /// → Returns `ConfigLoadInfo`
-    ///
-    /// **Phase 2 (After Database Connection):**
-    /// - Write snapshot to ClickHouse
-    /// - Get config hash for tracking
-    /// → Returns `ConfigWithHash`
-    ///
-    /// This separation is necessary because the database connection settings are read from
-    /// the config itself, so we must fully load the config before we can connect to the database.
-    ///
-    /// # Usage
-    /// ```ignore
-    /// // Phase 1: Load config (no database connection needed)
-    /// let config_load_info = Config::load_and_verify_from_path(&config_glob).await?;
-    ///
-    /// // Use the config to get database connection settings
-    /// let clickhouse = create_clickhouse_connection(&config_load_info.config).await?;
-    ///
-    /// // Phase 2: Write snapshot to database
-    /// let config_with_hash = config_load_info.into_config(&clickhouse).await?;
-    /// ```
-    #[derive(Debug)]
-    pub struct ConfigLoadInfo {
-        pub config: UnwrittenConfig,
+    pub struct UnwrittenConfig {
+        config: Config,
         snapshot: ConfigSnapshot,
     }
 
-    impl ConfigLoadInfo {
-        pub fn new(config: UnwrittenConfig, snapshot: ConfigSnapshot) -> Self {
+    impl UnwrittenConfig {
+        pub fn new(config: Config, snapshot: ConfigSnapshot) -> Self {
             Self { config, snapshot }
         }
 
@@ -1347,22 +1296,22 @@ pub mod unwritten_config {
         pub async fn into_config(
             self,
             clickhouse: &ClickHouseConnectionInfo,
-        ) -> Result<ConfigWithHash, Error> {
-            let ConfigLoadInfo { config, snapshot } = self;
-            let hash = snapshot.hash.clone();
+        ) -> Result<Config, Error> {
+            let UnwrittenConfig { config, snapshot } = self;
             write_config_snapshot(clickhouse, snapshot).await?;
-            Ok(ConfigWithHash {
-                config: config.0,
-                hash,
-            })
+            Ok(config)
         }
 
-        /// Extracts the config without writing to the database.
-        ///
-        /// **WARNING:** This should only be used in tests or special cases where database
-        /// writes are not possible or desired. In production, use `into_config()` instead.
         pub fn dangerous_into_config_without_writing(self) -> Config {
-            self.config.0
+            self.config
+        }
+    }
+
+    impl std::ops::Deref for UnwrittenConfig {
+        type Target = Config;
+
+        fn deref(&self) -> &Self::Target {
+            &self.config
         }
     }
 }

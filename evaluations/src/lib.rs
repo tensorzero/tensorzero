@@ -268,27 +268,17 @@ pub async fn run_evaluation(
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
     info!(config_file = ?args.config_file, "Loading configuration");
-    let config_load_info = Config::load_from_path_optional_verify_credentials(
+    let unwritten_config = Config::load_from_path_optional_verify_credentials(
         &ConfigFileGlob::new_from_path(&args.config_file)?,
         false,
     )
     .await?;
     let clickhouse_client = ClickHouseConnectionInfo::new(
         &clickhouse_url,
-        config_load_info
-            .config
-            .gateway
-            .observability
-            .batch_writes
-            .clone(),
+        unwritten_config.gateway.observability.batch_writes.clone(),
     )
     .await?;
-    let ConfigWithHash {
-        config,
-        // NOTE: since we reload the config for the actual client that does all the operations,
-        // we don't need to carry this hash around here too (it will be carried around inside the client)
-        hash: _,
-    } = config_load_info.into_config(&clickhouse_client).await?;
+    let config = unwritten_config.into_config(&clickhouse_client).await?;
     let config = Arc::new(config);
     debug!("Configuration loaded successfully");
     let tensorzero_client = match args.gateway_url {

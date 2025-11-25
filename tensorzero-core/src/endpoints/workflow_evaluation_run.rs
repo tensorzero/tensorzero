@@ -9,14 +9,16 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    config::Config,
+    config::{snapshot::SnapshotHash, Config},
     db::clickhouse::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo},
     endpoints::validate_tags,
     error::{Error, ErrorDetails},
-    utils::gateway::{AppState, AppStateData, StructuredJson},
-    utils::uuid::{
-        compare_timestamps, generate_workflow_evaluation_run_episode_id, validate_tensorzero_uuid,
-        WORKFLOW_EVALUATION_THRESHOLD,
+    utils::{
+        gateway::{AppState, AppStateData, StructuredJson},
+        uuid::{
+            compare_timestamps, generate_workflow_evaluation_run_episode_id,
+            validate_tensorzero_uuid, WORKFLOW_EVALUATION_THRESHOLD,
+        },
     },
 };
 
@@ -57,7 +59,6 @@ pub async fn workflow_evaluation_run(
     AppStateData {
         config,
         clickhouse_connection_info,
-        snapshot_hash,
         ..
     }: AppStateData,
     params: WorkflowEvaluationRunParams,
@@ -72,7 +73,7 @@ pub async fn workflow_evaluation_run(
         params.tags,
         params.project_name,
         params.display_name,
-        snapshot_hash,
+        &config.hash,
     )
     .await?;
     Ok(WorkflowEvaluationRunResponse { run_id })
@@ -110,7 +111,7 @@ pub async fn workflow_evaluation_run_episode_handler(
 pub async fn workflow_evaluation_run_episode(
     AppStateData {
         clickhouse_connection_info,
-        snapshot_hash,
+        config,
         ..
     }: AppStateData,
     run_id: Uuid,
@@ -146,7 +147,7 @@ pub async fn workflow_evaluation_run_episode(
         tags,
         run_id,
         episode_id,
-        snapshot_hash,
+        &config.hash,
     )
     .await?;
     Ok(WorkflowEvaluationRunEpisodeResponse { episode_id })
@@ -210,7 +211,7 @@ async fn write_workflow_evaluation_run(
     tags: HashMap<String, String>,
     project_name: Option<String>,
     run_display_name: Option<String>,
-    snapshot_hash: crate::config::snapshot::SnapshotHash,
+    snapshot_hash: &SnapshotHash,
 ) -> Result<(), Error> {
     let query = r"
     INSERT INTO DynamicEvaluationRun (
@@ -268,7 +269,7 @@ async fn write_workflow_evaluation_run_episode(
     tags: HashMap<String, String>,
     run_id: Uuid,
     episode_id: Uuid,
-    snapshot_hash: crate::config::snapshot::SnapshotHash,
+    snapshot_hash: &SnapshotHash,
 ) -> Result<(), Error> {
     let query = r"
     INSERT INTO DynamicEvaluationRunEpisode

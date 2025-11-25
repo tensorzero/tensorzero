@@ -460,8 +460,6 @@ pub trait ClientExt {
     // ================================================================
     fn config(&self) -> Option<&Config>;
 
-    fn snapshot_hash(&self) -> Option<&SnapshotHash>;
-
     fn get_config(&self) -> Result<Arc<Config>, TensorZeroError>;
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
@@ -494,7 +492,6 @@ async fn create_datapoints_internal(
                     &gateway.handle.app_state.config,
                     &gateway.handle.app_state.http_client,
                     &gateway.handle.app_state.clickhouse_connection_info,
-                    Some(gateway.handle.app_state.snapshot_hash.clone()),
                 )
                 .await
                 .map_err(err_to_http)
@@ -530,15 +527,6 @@ impl ClientExt for Client {
         match self.mode() {
             ClientMode::HTTPGateway(_) => None,
             ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.handle.app_state.config),
-        }
-    }
-
-    fn snapshot_hash(&self) -> Option<&SnapshotHash> {
-        match self.mode() {
-            ClientMode::EmbeddedGateway { gateway, .. } => {
-                Some(&gateway.handle.app_state.snapshot_hash)
-            }
-            ClientMode::HTTPGateway(_) => None,
         }
     }
 
@@ -815,7 +803,6 @@ impl ClientExt for Client {
                         &gateway.handle.app_state.clickhouse_connection_info,
                         &dataset_name,
                         request,
-                        Some(gateway.handle.app_state.snapshot_hash.clone()),
                     )
                     .await
                     .map_err(err_to_http)
@@ -1041,7 +1028,6 @@ impl ClientExt for Client {
                         &gateway.handle.app_state.clickhouse_connection_info,
                         dataset_name,
                         request,
-                        gateway.handle.app_state.snapshot_hash.clone(),
                     )
                     .await
                     .map_err(err_to_http)
@@ -1206,7 +1192,6 @@ impl ClientExt for Client {
                         params,
                         &gateway.handle.app_state.clickhouse_connection_info,
                         gateway.handle.app_state.config.clone(),
-                        gateway.handle.app_state.snapshot_hash.clone(),
                     )
                     .await
                     .map_err(err_to_http)
@@ -1235,7 +1220,6 @@ impl ClientExt for Client {
                     launch_optimization_workflow(
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.config.clone(),
-                        gateway.handle.app_state.snapshot_hash.clone(),
                         &gateway.handle.app_state.clickhouse_connection_info,
                         params,
                     )

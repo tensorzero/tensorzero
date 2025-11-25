@@ -56,19 +56,13 @@ pub async fn launch_optimization_workflow_handler(
         config,
         http_client,
         clickhouse_connection_info,
-        snapshot_hash,
         ..
     }): AppState,
     StructuredJson(params): StructuredJson<LaunchOptimizationWorkflowParams>,
 ) -> Result<Response<Body>, Error> {
-    let job_handle = launch_optimization_workflow(
-        &http_client,
-        config,
-        snapshot_hash,
-        &clickhouse_connection_info,
-        params,
-    )
-    .await?;
+    let job_handle =
+        launch_optimization_workflow(&http_client, config, &clickhouse_connection_info, params)
+            .await?;
     let encoded_job_handle = job_handle.to_base64_urlencoded()?;
     Ok(encoded_job_handle.into_response())
 }
@@ -81,7 +75,6 @@ pub async fn launch_optimization_workflow_handler(
 pub async fn launch_optimization_workflow(
     http_client: &TensorzeroHttpClient,
     config: Arc<Config>,
-    snapshot_hash: SnapshotHash,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     params: LaunchOptimizationWorkflowParams,
 ) -> Result<OptimizationJobHandle, Error> {
@@ -140,7 +133,6 @@ pub async fn launch_optimization_workflow(
             &InferenceCredentials::default(),
             clickhouse_connection_info,
             config.clone(),
-            snapshot_hash,
         )
         .await
 }
@@ -163,7 +155,6 @@ pub async fn launch_optimization(
     params: LaunchOptimizationParams,
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     config: Arc<Config>,
-    snapshot_hash: SnapshotHash,
     // For the TODO above: will need to pass config in here
 ) -> Result<OptimizationJobHandle, Error> {
     let LaunchOptimizationParams {
@@ -182,7 +173,6 @@ pub async fn launch_optimization(
             &InferenceCredentials::default(),
             clickhouse_connection_info,
             config.clone(),
-            snapshot_hash,
         )
         .await
 }

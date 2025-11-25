@@ -1,8 +1,8 @@
 use std::{env, fmt::Display, future::Future, path::PathBuf, sync::Arc, time::Duration};
 
 use crate::config::snapshot::SnapshotHash;
-use crate::config::ConfigWithHash;
-use crate::config::{unwritten_config::ConfigLoadInfo, ConfigFileGlob};
+use crate::config::unwritten_config::UnwrittenConfig;
+use crate::config::ConfigFileGlob;
 use crate::http::{TensorzeroHttpClient, TensorzeroRequestBuilder, DEFAULT_HTTP_CLIENT_TIMEOUT};
 use crate::inference::types::stored_input::StoragePathResolver;
 use crate::utils::gateway::DropWrapper;
@@ -400,8 +400,6 @@ pub enum ClientBuilderMode {
     FromComponents {
         /// Pre-parsed TensorZero configuration
         config: Arc<Config>,
-        /// The snapshot_hash of the config that was already parsed
-        snapshot_hash: SnapshotHash,
         /// Already-initialized ClickHouse connection
         clickhouse_connection_info: ClickHouseConnectionInfo,
         /// Already-initialized Postgres connection
@@ -518,7 +516,7 @@ impl ClientBuilder {
                                 source: e.into(),
                             })
                         })?;
-                let ConfigWithHash { config, hash } = config_load_info
+                let config = config_load_info
                     .into_config(&clickhouse_connection_info)
                     .await
                     .map_err(|e| {
@@ -553,7 +551,6 @@ impl ClientBuilder {
                                 postgres_connection_info,
                                 http_client,
                                 self.drop_wrapper,
-                                hash,
                             )
                             .await
                             .map_err(|e| {
@@ -571,7 +568,6 @@ impl ClientBuilder {
             }
             ClientBuilderMode::FromComponents {
                 config,
-                snapshot_hash,
                 clickhouse_connection_info,
                 postgres_connection_info,
                 http_client,
@@ -593,7 +589,6 @@ impl ClientBuilder {
                                 postgres_connection_info.clone(),
                                 http_client.clone(),
                                 self.drop_wrapper,
-                                snapshot_hash.clone(),
                             )
                             .await
                             .map_err(|e| {
@@ -873,7 +868,6 @@ impl Client {
                 Ok(with_embedded_timeout(*timeout, async {
                     let res = crate::endpoints::inference::inference(
                         gateway.handle.app_state.config.clone(),
-                        gateway.handle.app_state.snapshot_hash.clone(),
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
                         gateway.handle.app_state.postgres_connection_info.clone(),
@@ -967,7 +961,7 @@ pub async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroErr
 /// If the path is None, it returns the default config.
 pub async fn get_config_no_verify_credentials(
     path: Option<PathBuf>,
-) -> Result<ConfigLoadInfo, TensorZeroError> {
+) -> Result<UnwrittenConfig, TensorZeroError> {
     match path {
         Some(path) => Config::load_from_path_optional_verify_credentials(
             &ConfigFileGlob::new(path.to_string_lossy().to_string())
@@ -1070,7 +1064,6 @@ mod tests {
             .unwrap()
             .dangerous_into_config_without_writing(),
         );
-        let snapshot_hash = SnapshotHash::new_test();
 
         // Create mock components
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -1080,7 +1073,6 @@ mod tests {
         // Attempt to build client with FromComponents mode
         let err = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config,
-            snapshot_hash,
             clickhouse_connection_info,
             postgres_connection_info,
             http_client,
@@ -1133,7 +1125,6 @@ mod tests {
         // Attempt to build client with FromComponents mode
         let err = ClientBuilder::new(ClientBuilderMode::FromComponents {
             config,
-            snapshot_hash,
             clickhouse_connection_info,
             postgres_connection_info,
             http_client,

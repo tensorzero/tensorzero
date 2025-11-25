@@ -19,7 +19,6 @@ impl CreateChatDatapointRequest {
         config: &Config,
         fetch_context: &FetchContext<'_>,
         dataset_name: &str,
-        snapshot_hash: Option<crate::config::snapshot::SnapshotHash>,
     ) -> Result<ChatInferenceDatapointInsert, Error> {
         // Validate function exists and is a chat function
         let function_config = config.get_function(&self.function_name)?;
@@ -68,7 +67,7 @@ impl CreateChatDatapointRequest {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
-            snapshot_hash,
+            snapshot_hash: Some(config.hash.clone()),
         };
 
         Ok(insert)
@@ -82,7 +81,6 @@ impl CreateJsonDatapointRequest {
         config: &Config,
         fetch_context: &FetchContext<'_>,
         dataset_name: &str,
-        snapshot_hash: Option<crate::config::snapshot::SnapshotHash>,
     ) -> Result<JsonInferenceDatapointInsert, Error> {
         // Validate function exists and is a JSON function
         let function_config = config.get_function(&self.function_name)?;
@@ -150,7 +148,7 @@ impl CreateJsonDatapointRequest {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
-            snapshot_hash,
+            snapshot_hash: Some(config.hash.clone()),
         };
 
         Ok(insert)
@@ -266,7 +264,7 @@ mod tests {
         };
 
         let insert = request
-            .into_database_insert(&config, &fetch_context, "test_dataset", None)
+            .into_database_insert(&config, &fetch_context, "test_dataset")
             .await
             .unwrap();
 
@@ -316,7 +314,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset", None)
+            .into_database_insert(&config, &fetch_context, "test_dataset")
             .await;
 
         assert!(result.is_err());
@@ -343,7 +341,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset", None)
+            .into_database_insert(&config, &fetch_context, "test_dataset")
             .await;
 
         assert!(result.is_err());
@@ -391,7 +389,7 @@ mod tests {
         };
 
         let insert = request
-            .into_database_insert(&config, &fetch_context, "test_dataset", None)
+            .into_database_insert(&config, &fetch_context, "test_dataset")
             .await
             .unwrap();
 
