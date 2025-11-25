@@ -23,7 +23,10 @@ use tensorzero_core::client::{
 use tensorzero_core::config::{
     ConfigFileGlob, ConfigLoadInfo, MetricConfigOptimize, UninitializedVariantInfo,
 };
-use tensorzero_core::endpoints::datasets::v1::{list_datapoints, types::ListDatapointsRequest};
+use tensorzero_core::endpoints::datasets::v1::{
+    get_datapoints, list_datapoints,
+    types::{GetDatapointsRequest, ListDatapointsRequest},
+};
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::utils::spawn_ignoring_shutdown;
 use tensorzero_core::{
@@ -72,8 +75,15 @@ pub struct Args {
     pub evaluation_name: String,
 
     /// Name of the dataset to run on.
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
     #[arg(short, long)]
-    pub dataset_name: String,
+    pub dataset_name: Option<String>,
+
+    /// Specific datapoint IDs to evaluate (comma-separated).
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
+    /// Example: --datapoint-ids 01957bbb-44a8-7490-bfe7-32f8ed2fc797,01957bbb-44a8-7490-bfe7-32f8ed2fc798
+    #[arg(long, value_delimiter = ',')]
+    pub datapoint_ids: Option<Vec<Uuid>>,
 
     /// Name of the variant to run.
     #[arg(short, long)]
@@ -164,7 +174,12 @@ pub struct EvaluationCoreArgs {
     pub evaluation_run_id: Uuid,
 
     /// Name of the dataset to run on.
-    pub dataset_name: String,
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
+    pub dataset_name: Option<String>,
+
+    /// Specific datapoint IDs to evaluate.
+    /// Either dataset_name or datapoint_ids must be provided, but not both.
+    pub datapoint_ids: Option<Vec<Uuid>>,
 
     /// Variant to use for evaluation.
     /// Either a variant name from the config file, or a dynamic variant configuration.
@@ -215,12 +230,30 @@ pub struct EvaluationCoreArgs {
 ///
 /// - `Ok(())` if the evaluation completes successfully and meets all cutoffs
 /// - `Err` if setup fails, evaluation fails, or results don't meet cutoffs
-#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant_name = %args.variant_name, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), variant_name = %args.variant_name, concurrency = %args.concurrency))]
 pub async fn run_evaluation(
     args: Args,
     evaluation_run_id: Uuid,
     mut writer: impl Write,
 ) -> Result<()> {
+    // Convert Option<Vec<Uuid>> to Vec<Uuid> (None becomes empty vec)
+    let datapoint_ids = args.datapoint_ids.unwrap_or_default();
+
+    // Validate that exactly one of dataset_name or datapoint_ids is provided
+    if args.dataset_name.is_some() && !datapoint_ids.is_empty() {
+        bail!(
+            "Cannot provide both dataset_name and datapoint_ids. Please specify one or the other."
+        );
+    }
+    if args.dataset_name.is_none() && datapoint_ids.is_empty() {
+        bail!("Must provide either dataset_name or datapoint_ids.");
+    }
+
+    // Validate that max_datapoints is not used with datapoint_ids
+    if !datapoint_ids.is_empty() && args.max_datapoints.is_some() {
+        bail!("Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name.");
+    }
+
     info!("Initializing evaluation environment");
     let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL")
         .map_err(|_| anyhow!("Missing ClickHouse URL at TENSORZERO_CLICKHOUSE_URL"))?;
@@ -273,6 +306,7 @@ pub async fn run_evaluation(
         clickhouse_client: clickhouse_client.clone(),
         config,
         dataset_name: args.dataset_name,
+        datapoint_ids: Some(datapoint_ids),
         variant: EvaluationVariant::Name(args.variant_name),
         evaluation_name: args.evaluation_name,
         evaluation_run_id,
@@ -420,12 +454,15 @@ pub async fn run_evaluation(
 /// rather than failing the entire evaluation. Error messages include context:
 /// - Inference errors: Include the datapoint_id
 /// - Evaluation errors: Include both the inference_id and datapoint_id
-#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = %args.dataset_name, variant = ?args.variant, concurrency = %args.concurrency))]
+#[instrument(skip_all, fields(evaluation_run_id = %args.evaluation_run_id, evaluation_name = %args.evaluation_name, dataset_name = ?args.dataset_name, num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(), variant = ?args.variant, concurrency = %args.concurrency))]
 pub async fn run_evaluation_core_streaming(
     args: EvaluationCoreArgs,
     max_datapoints: Option<u32>,
     precision_targets: HashMap<String, f32>,
 ) -> Result<EvaluationStreamResult> {
+    // Convert Option<Vec<Uuid>> to Vec<Uuid> (None becomes empty vec)
+    let datapoint_ids = args.datapoint_ids.unwrap_or_default();
+
     let (sender, receiver) = mpsc::channel(EVALUATION_CHANNEL_BUFFER_SIZE);
 
     // Build the semaphore and clients
@@ -455,25 +492,56 @@ pub async fn run_evaluation_core_streaming(
 
     let mut join_set = JoinSet::new();
 
-    info!("Querying dataset");
-    #[expect(deprecated)]
-    let request = ListDatapointsRequest {
-        function_name: Some(inference_evaluation_config.function_name.clone()),
-        limit: max_datapoints.or(Some(u32::MAX)), // Use u32::MAX when no limit specified, since otherwise ListDatapointsRequest defaults to 20
-        page_size: None,                          // deprecated but required
-        offset: Some(0),
-        filter: None,
+    // Validate that exactly one of dataset_name or datapoint_ids is provided
+    if args.dataset_name.is_some() && !datapoint_ids.is_empty() {
+        bail!(
+            "Cannot provide both dataset_name and datapoint_ids. Please specify one or the other."
+        );
+    }
+    if args.dataset_name.is_none() && datapoint_ids.is_empty() {
+        bail!("Must provide either dataset_name or datapoint_ids.");
+    }
+
+    // Validate that max_datapoints is not used with datapoint_ids
+    if !datapoint_ids.is_empty() && max_datapoints.is_some() {
+        bail!("Cannot provide both datapoint_ids and max_datapoints. max_datapoints can only be used with dataset_name.");
+    }
+
+    info!("Loading datapoints");
+    let dataset = if let Some(dataset_name) = &args.dataset_name {
+        // Load from dataset
+        let request = ListDatapointsRequest {
+            function_name: Some(inference_evaluation_config.function_name.clone()),
+            limit: max_datapoints.or(Some(u32::MAX)), // Use u32::MAX when no limit specified, since otherwise ListDatapointsRequest defaults to 20
+            offset: Some(0),
+            ..Default::default()
+        };
+        list_datapoints(
+            &clients.clickhouse_client,
+            &args.config,
+            dataset_name.clone(),
+            request,
+        )
+        .await?
+        .datapoints
+    } else {
+        // Load by IDs
+        let request = GetDatapointsRequest {
+            ids: datapoint_ids.clone(),
+        };
+        get_datapoints(&clients.clickhouse_client, &args.config, request)
+            .await?
+            .datapoints
     };
-    let dataset = list_datapoints(
-        &clients.clickhouse_client,
-        &args.config,
-        args.dataset_name.clone(),
-        request,
-    )
-    .await?
-    .datapoints;
-    info!(dataset_size = dataset.len(), "Dataset loaded successfully");
-    let dataset_name = Arc::new(args.dataset_name);
+    info!(
+        dataset_size = dataset.len(),
+        "Datapoints loaded successfully"
+    );
+    let dataset_name = Arc::new(
+        args.dataset_name
+            .clone()
+            .unwrap_or_else(|| format!("datapoint_ids[{}]", datapoint_ids.len())),
+    );
     let variant = Arc::new(args.variant);
     let evaluation_name = Arc::new(args.evaluation_name);
     let dataset_len = dataset.len();
