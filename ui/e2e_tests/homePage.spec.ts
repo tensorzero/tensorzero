@@ -21,7 +21,7 @@ test("should show 20 functions in the functions badge", async ({ page }) => {
   // Find the functions card specifically by looking for the card that contains both "Functions" title and description
   const functionsCard = page.locator(".block").filter({
     has: page.locator('h3:has-text("Functions")'),
-    hasText: "19 functions",
+    hasText: "20 functions",
   });
 
   await expect(functionsCard).toBeVisible();

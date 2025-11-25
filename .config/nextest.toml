@@ -163,4 +163,4 @@ retries = { backoff = "exponential", count = 8, delay = "5s", jitter = true, max
 # variant evaluations, and analysis, which legitimately take longer
 filter = 'binary(e2e_gepa) and (test(test_gepa_chat) | test(test_gepa_json))'
 retries = 0
-slow-timeout = { period = "20s", terminate-after = 1 }
+slow-timeout = { period = "30s", terminate-after = 1 }

@@ -325,7 +325,7 @@ impl Optimizer for GEPAConfig {
                 Ok(analyses) => analyses,
                 Err(err) => {
                     tracing::warn!(
-                        "GEPA iteration {}: analysis failed for candidate '{}': {}",
+                        "GEPA iteration {}: analysis failed for parent '{}': {}",
                         iteration,
                         parent_name,
                         err

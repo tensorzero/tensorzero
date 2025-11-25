@@ -221,7 +221,7 @@ fn assert_evaluation_results_valid(evaluation_results: &EvaluationResults, expec
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_gepa_chat() {
+async fn test_gepa_step_chat() {
     let gepa_config = GEPAConfig {
         function_name: "basic_test".to_string(),
         evaluation_name: "test_evaluation".to_string(),
@@ -503,7 +503,7 @@ async fn test_gepa_chat() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_gepa_json() {
+async fn test_gepa_step_json() {
     let gepa_config = GEPAConfig {
         function_name: "json_success".to_string(),
         evaluation_name: "json_evaluation".to_string(),

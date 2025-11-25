@@ -80,7 +80,7 @@ fn create_mutate_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatCo
 /// Passes high-level objects to the template for serialization.
 ///
 /// Returns Arguments with template variables: function_config, static_tools, evaluation_config,
-/// and analyses.
+/// templates_map, and analyses.
 ///
 /// Returns error if serialization fails.
 pub fn build_mutate_input(
