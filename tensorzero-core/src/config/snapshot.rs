@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-#[cfg(any(test, feature = "e2e_tests"))]
 use crate::error::{Error, ErrorDetails};
 
 use super::stored::StoredConfig;
