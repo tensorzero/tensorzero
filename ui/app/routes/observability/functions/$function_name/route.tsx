@@ -1,7 +1,7 @@
 import {
   countInferencesForFunction,
-  queryInferenceTableBoundsByFunctionName,
-  queryInferenceTableByFunctionName,
+  queryInferenceTableBounds,
+  queryInferenceTable,
 } from "~/utils/clickhouse/inference.server";
 import type { Route } from "./+types/route";
 import {
@@ -70,13 +70,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!function_config) {
     throw data(`Function ${function_name} not found`, { status: 404 });
   }
-  const inferencePromise = queryInferenceTableByFunctionName({
+  const inferencePromise = queryInferenceTable({
     function_name,
     before: beforeInference || undefined,
     after: afterInference || undefined,
     limit,
   });
-  const tableBoundsPromise = queryInferenceTableBoundsByFunctionName({
+  const tableBoundsPromise = queryInferenceTableBounds({
     function_name,
   });
   const numInferencesPromise = countInferencesForFunction(

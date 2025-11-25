@@ -1,7 +1,7 @@
 import {
   countInferencesForEpisode,
-  queryInferenceTableBoundsByEpisodeId,
-  queryInferenceTableByEpisodeId,
+  queryInferenceTableBounds,
+  queryInferenceTable,
 } from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
@@ -82,13 +82,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     // feedbackBounds and latestFeedbackByMetric to ensure ClickHouse materialized views are updated
     [inferences, inference_bounds, feedbacks, num_inferences, num_feedbacks] =
       await Promise.all([
-        queryInferenceTableByEpisodeId({
+        queryInferenceTable({
           episode_id,
           before: beforeInference ?? undefined,
           after: afterInference ?? undefined,
           limit,
         }),
-        queryInferenceTableBoundsByEpisodeId({
+        queryInferenceTableBounds({
           episode_id,
         }),
         feedbackDataPromise,
@@ -114,13 +114,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       num_feedbacks,
       latestFeedbackByMetric,
     ] = await Promise.all([
-      queryInferenceTableByEpisodeId({
+      queryInferenceTable({
         episode_id,
         before: beforeInference ?? undefined,
         after: afterInference ?? undefined,
         limit,
       }),
-      queryInferenceTableBoundsByEpisodeId({
+      queryInferenceTableBounds({
         episode_id,
       }),
       feedbackDataPromise,

@@ -139,15 +139,18 @@ pub use usage::Usage;
  * Most of them are defined below.
  */
 
-/// A request is made that contains an Input
+/// API representation of an input to a model.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, ts_rs::TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, optional_fields)]
 #[export_schema]
 pub struct Input {
+    /// System prompt of the input.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub system: Option<System>,
+
+    /// Messages in the input.
     #[serde(default)]
     pub messages: Vec<InputMessage>,
 }
@@ -161,7 +164,7 @@ pub struct FetchContext<'a> {
 impl Input {
     pub fn into_lazy_resolved_input(
         self,
-        context: FetchContext<'_>,
+        context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInput, Error> {
         Ok(LazyResolvedInput {
             system: self.system,
@@ -170,6 +173,19 @@ impl Input {
                 .into_iter()
                 .map(|message| message.into_lazy_resolved_input_message(context))
                 .collect::<Result<Vec<LazyResolvedInputMessage>, Error>>()?,
+        })
+    }
+
+    /// Turns the input into a StoredInput, without resolving network resources for files.
+    /// Returns an error if any files are present.
+    pub fn into_stored_input_without_file_handling(self) -> Result<StoredInput, Error> {
+        Ok(StoredInput {
+            system: self.system,
+            messages: self
+                .messages
+                .into_iter()
+                .map(InputMessage::into_stored_input_message_without_file_handling)
+                .try_collect()?,
         })
     }
 }
@@ -212,7 +228,7 @@ impl LazyResolvedInput {
 impl InputMessage {
     pub fn into_lazy_resolved_input_message(
         self,
-        context: FetchContext<'_>,
+        context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessage, Error> {
         Ok(LazyResolvedInputMessage {
             role: self.role,
@@ -221,6 +237,21 @@ impl InputMessage {
                 .into_iter()
                 .map(|content| content.into_lazy_resolved_input_message(context))
                 .collect::<Result<Vec<LazyResolvedInputMessageContent>, Error>>()?,
+        })
+    }
+
+    /// Turns the input message into a StoredInputMessage, without resolving network resources for files.
+    /// Returns an error if the message contains any files that require storage (e.g. external URLs, Base64).
+    pub fn into_stored_input_message_without_file_handling(
+        self,
+    ) -> Result<StoredInputMessage, Error> {
+        Ok(StoredInputMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(InputMessageContent::into_stored_input_message_content_without_file_handling)
+                .try_collect()?,
         })
     }
 }
@@ -275,7 +306,7 @@ impl InputMessageContent {
     /// we can remove the `role` parameter.
     pub fn into_lazy_resolved_input_message(
         self,
-        context: FetchContext<'_>,
+        context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessageContent, Error> {
         Ok(match self {
             InputMessageContent::Text(Text { text }) => {
@@ -315,7 +346,7 @@ impl InputMessageContent {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
                         // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
-                        let storage_kind = get_storage_kind(&context)?;
+                        let storage_kind = get_storage_kind(context)?;
                         let client = context.client.clone();
                         // Construct a future that will actually fetch the file URL from the network.
                         // Important: we do *not* use `tokio::spawn` here. As a result, the future
@@ -367,7 +398,7 @@ impl InputMessageContent {
                         let detail = &base64_file.detail;
                         let filename = &base64_file.filename;
 
-                        let storage_kind = get_storage_kind(&context)?;
+                        let storage_kind = get_storage_kind(context)?;
                         let base64_file_for_path = Base64File::new(
                             source_url.clone(),
                             mime_type.clone(),
@@ -460,6 +491,45 @@ impl InputMessageContent {
             InputMessageContent::Unknown(unknown) => {
                 LazyResolvedInputMessageContent::Unknown(unknown)
             }
+        })
+    }
+
+    /// Convert the input message content into a StoredInputMessageContent, but without loading or storing any files.
+    pub fn into_stored_input_message_content_without_file_handling(
+        self,
+    ) -> Result<StoredInputMessageContent, Error> {
+        Ok(match self {
+            InputMessageContent::Text(Text { text }) => {
+                StoredInputMessageContent::Text(Text { text })
+            }
+            InputMessageContent::RawText(raw_text) => StoredInputMessageContent::RawText(raw_text),
+            InputMessageContent::Thought(thought) => StoredInputMessageContent::Thought(thought),
+            InputMessageContent::Template(template) => {
+                StoredInputMessageContent::Template(template)
+            }
+            InputMessageContent::ToolCall(tool_call) => {
+                StoredInputMessageContent::ToolCall(tool_call.try_into()?)
+            }
+            InputMessageContent::ToolResult(tool_result) => {
+                StoredInputMessageContent::ToolResult(tool_result)
+            }
+            InputMessageContent::File(file) => {
+                match file {
+                    // If `file` is external, we cannot convert it directly to a StoredFile.
+                    File::Url(_) | File::Base64(_) => {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: "Cannot resolve file input without a fetch context. Please provide a fetch context when creating the input.".to_string()
+                        }));
+                    }
+                    // If `file` is present in our object storage, even if it's an error, we can represent it as a StoredFile.
+                    File::ObjectStorage(ObjectStorageFile { file, .. })
+                    | File::ObjectStoragePointer(file)
+                    | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
+                        StoredInputMessageContent::File(Box::new(StoredFile(file)))
+                    }
+                }
+            }
+            InputMessageContent::Unknown(unknown) => StoredInputMessageContent::Unknown(unknown),
         })
     }
 }

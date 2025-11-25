@@ -18,7 +18,7 @@ import {
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
 import { listDatapoints } from "~/utils/tensorzero.server";
-import { tensorZeroStoredInputToInput } from "~/routes/api/tensorzero/inference.utils";
+import { datapointInputToZodInput } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
 import type { Datapoint as TensorZeroDatapoint } from "~/types/tensorzero";
@@ -176,7 +176,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     inputs = datapoints
       ? await Promise.all(
           datapoints.map(async (datapoint) => {
-            const inputData = tensorZeroStoredInputToInput(datapoint.input);
+            const inputData = datapointInputToZodInput(datapoint.input);
             return await resolveInput(inputData, functionConfig ?? null);
           }),
         )
