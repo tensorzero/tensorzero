@@ -19,7 +19,8 @@ use tensorzero_core::{
     evaluations::EvaluatorConfig,
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
-use uuid::Uuid;
+
+use crate::gepa::evaluate::{DatapointId, EvaluatorName, VariantName, VariantScores};
 
 /// Threshold for warning about high missing score rates
 ///
@@ -27,19 +28,6 @@ use uuid::Uuid;
 /// Threshold is intentionally strict to flag variants that may be unreliable
 /// due to systematic evaluation failures.
 const HIGH_MISSING_RATE_THRESHOLD: f32 = 0.1;
-
-// Type aliases for cleaner score map signatures (TODO(#4669): move to evaluation module)
-pub type EvaluatorName = String;
-pub type VariantName = String;
-
-/// Unique identifier for a datapoint/example in a dataset
-pub type DatapointId = Uuid;
-
-/// Scores for all evaluators on a single datapoint
-pub type DatapointScores = HashMap<EvaluatorName, Option<f32>>;
-
-/// Scores for all datapoints for a single variant
-pub type VariantScores = HashMap<DatapointId, DatapointScores>;
 
 /// Scores map keyed by variant name
 pub type VariantScoresMap = HashMap<VariantName, VariantScores>;
