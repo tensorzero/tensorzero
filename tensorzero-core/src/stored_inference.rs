@@ -478,7 +478,9 @@ impl RenderedSample {
         match self.stored_output {
             Some(StoredOutput::Json(json_output)) => {
                 // JSON function datapoint
-                let output = json_output.raw.map(|raw| JsonDatapointOutputUpdate { raw });
+                let output = json_output
+                    .raw
+                    .map(|raw| JsonDatapointOutputUpdate { raw: Some(raw) });
 
                 Ok(CreateDatapointRequest::Json(CreateJsonDatapointRequest {
                     function_name: self.function_name,
@@ -779,7 +781,7 @@ mod tests {
                 variants: Default::default(),
                 schemas: SchemaData::default(),
                 output_schema: StaticJSONSchema::default(),
-                implicit_tool_call_config: ToolCallConfig::default(),
+                json_mode_tool_call_config: ToolCallConfig::default(),
                 description: None,
                 experimentation: ExperimentationConfig::default(),
                 all_explicit_template_names: Default::default(),
@@ -1286,7 +1288,7 @@ mod tests {
                 // Verify output was extracted correctly
                 assert!(req.output.is_some());
                 let output = req.output.unwrap();
-                assert_eq!(output.raw, r#"{"result": "test"}"#);
+                assert_eq!(output.raw.unwrap(), r#"{"result": "test"}"#);
 
                 // Verify input conversion worked
                 match &req.input.system {

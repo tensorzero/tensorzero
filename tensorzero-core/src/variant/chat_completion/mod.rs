@@ -157,6 +157,69 @@ impl ChatCompletionConfig {
     pub fn extra_headers(&self) -> Option<&ExtraHeadersConfig> {
         self.extra_headers.as_ref()
     }
+
+    /// Converts this initialized config back to its uninitialized form.
+    /// Note: Schema associations and original file paths are not preserved.
+    pub fn as_uninitialized(&self) -> UninitializedChatCompletionConfig {
+        let mut system_template = None;
+        let mut user_template = None;
+        let mut assistant_template = None;
+        let mut templates_map = HashMap::new();
+
+        // Extract templates from ChatTemplates
+        for (name, template_with_schema) in self.templates.iter_templates() {
+            let path = template_with_schema.template.path.clone();
+
+            // If this is a legacy template with a known name, put it in the legacy field
+            if template_with_schema.legacy_definition {
+                match name.as_str() {
+                    "system" => {
+                        system_template = Some(path);
+                        continue;
+                    }
+                    "user" => {
+                        user_template = Some(path);
+                        continue;
+                    }
+                    "assistant" => {
+                        assistant_template = Some(path);
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+
+            // Otherwise, put it in the new-style templates map
+            templates_map.insert(name.clone(), UninitializedChatTemplate { path });
+        }
+
+        UninitializedChatCompletionConfig {
+            weight: self.weight,
+            model: Arc::clone(&self.model),
+            system_template,
+            user_template,
+            assistant_template,
+            input_wrappers: None, // input_wrappers are deprecated and converted to templates
+            templates: UninitializedChatTemplates {
+                inner: templates_map,
+            },
+            temperature: self.temperature,
+            top_p: self.top_p,
+            max_tokens: self.max_tokens,
+            presence_penalty: self.presence_penalty,
+            frequency_penalty: self.frequency_penalty,
+            seed: self.seed,
+            stop_sequences: self.stop_sequences.clone(),
+            reasoning_effort: self.inference_params_v2.reasoning_effort.clone(),
+            service_tier: self.inference_params_v2.service_tier.clone(),
+            thinking_budget_tokens: self.inference_params_v2.thinking_budget_tokens,
+            verbosity: self.inference_params_v2.verbosity.clone(),
+            json_mode: self.json_mode,
+            retries: self.retries,
+            extra_body: self.extra_body.clone(),
+            extra_headers: self.extra_headers.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
@@ -179,7 +242,9 @@ pub struct UninitializedChatTemplate {
 #[ts(export)]
 pub struct UninitializedChatTemplates {
     #[serde(flatten)]
-    inner: HashMap<String, UninitializedChatTemplate>,
+    /// Internal map of chat templates, made public for GEPA optimizer integration.
+    /// External users should use provided methods rather than accessing directly.
+    pub inner: HashMap<String, UninitializedChatTemplate>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
@@ -666,6 +731,19 @@ impl Variant for ChatCompletionConfig {
                 ),
             })
         })?;
+
+        // Validate that json_mode = "tool" is not used with chat functions that have tools configured
+        if let Some(JsonMode::Tool) = self.json_mode {
+            if function.tools().next().is_some() {
+                return Err(ErrorDetails::Config {
+                    message: format!(
+                        "`functions.{function_name}.variants.{variant_name}`: Cannot use `json_mode = \"tool\"` with chat functions that have tools configured. Please remove tools from the function or use a JSON function instead."
+                    ),
+                }
+                .into());
+            }
+        }
+
         Ok(())
     }
 
@@ -1767,7 +1845,7 @@ mod tests {
             "required": ["answer"],
             "additionalProperties": false
         });
-        let implicit_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
+        let json_mode_tool_call_config = ToolCallConfig::implicit_from_value(&output_schema);
         let output_schema = StaticJSONSchema::from_value(output_schema).unwrap();
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
         let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
@@ -1781,7 +1859,7 @@ mod tests {
             )
             .unwrap(),
             output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -1955,7 +2033,7 @@ mod tests {
             "required": ["response"],
             "additionalProperties": false
         });
-        let implicit_tool_call_config =
+        let json_mode_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
             StaticJSONSchema::from_value(hardcoded_output_schema).unwrap();
@@ -1971,7 +2049,7 @@ mod tests {
             )
             .unwrap(),
             output_schema: hardcoded_output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -2088,7 +2166,7 @@ mod tests {
             "required": ["answer"],
             "additionalProperties": false
         });
-        let implicit_tool_call_config =
+        let json_mode_tool_call_config =
             ToolCallConfig::implicit_from_value(&hardcoded_output_schema);
         let hardcoded_output_schema =
             StaticJSONSchema::from_value(hardcoded_output_schema).unwrap();
@@ -2104,7 +2182,7 @@ mod tests {
             )
             .unwrap(),
             output_schema: hardcoded_output_schema,
-            implicit_tool_call_config,
+            json_mode_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
@@ -2893,5 +2971,130 @@ mod tests {
         } else {
             panic!("Expected Error::Config");
         }
+    }
+
+    #[test]
+    fn test_as_uninitialized_preserves_basic_fields() {
+        let uninitialized = UninitializedChatCompletionConfig {
+            model: "gpt-4".into(),
+            weight: Some(0.8),
+            temperature: Some(0.7),
+            top_p: Some(0.9),
+            max_tokens: Some(150),
+            presence_penalty: Some(0.1),
+            frequency_penalty: Some(0.2),
+            seed: Some(42),
+            stop_sequences: Some(vec!["STOP".to_string(), "END".to_string()]),
+            ..Default::default()
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.model, "gpt-4".into());
+        assert_eq!(exported.weight, Some(0.8));
+        assert_eq!(exported.temperature, Some(0.7));
+        assert_eq!(exported.top_p, Some(0.9));
+        assert_eq!(exported.max_tokens, Some(150));
+        assert_eq!(exported.presence_penalty, Some(0.1));
+        assert_eq!(exported.frequency_penalty, Some(0.2));
+        assert_eq!(exported.seed, Some(42));
+        assert_eq!(
+            exported.stop_sequences,
+            Some(vec!["STOP".to_string(), "END".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_as_uninitialized_preserves_inference_params_v2() {
+        let uninitialized = UninitializedChatCompletionConfig {
+            model: "gpt-4".into(),
+            reasoning_effort: Some("high".to_string()),
+            service_tier: Some(ServiceTier::Auto),
+            thinking_budget_tokens: Some(1000),
+            verbosity: Some("verbose".to_string()),
+            ..Default::default()
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.reasoning_effort, Some("high".to_string()));
+        assert_eq!(exported.service_tier, Some(ServiceTier::Auto));
+        assert_eq!(exported.thinking_budget_tokens, Some(1000));
+        assert_eq!(exported.verbosity, Some("verbose".to_string()));
+    }
+
+    #[test]
+    fn test_as_uninitialized_preserves_none_values() {
+        let uninitialized = UninitializedChatCompletionConfig {
+            model: "gpt-4".into(),
+            weight: None,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            stop_sequences: None,
+            reasoning_effort: None,
+            service_tier: None,
+            thinking_budget_tokens: None,
+            verbosity: None,
+            ..Default::default()
+        };
+
+        let config = uninitialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        assert_eq!(exported.weight, None);
+        assert_eq!(exported.temperature, None);
+        assert_eq!(exported.top_p, None);
+        assert_eq!(exported.max_tokens, None);
+        assert_eq!(exported.stop_sequences, None);
+        assert_eq!(exported.reasoning_effort, None);
+        assert_eq!(exported.service_tier, None);
+        assert_eq!(exported.thinking_budget_tokens, None);
+        assert_eq!(exported.verbosity, None);
+    }
+
+    #[test]
+    fn test_as_uninitialized_serialization_round_trip() {
+        let original = UninitializedChatCompletionConfig {
+            model: "gpt-4".into(),
+            weight: Some(0.5),
+            temperature: Some(0.9),
+            max_tokens: Some(100),
+            seed: Some(123),
+            ..Default::default()
+        };
+
+        let config = original
+            .clone()
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        let exported = config.as_uninitialized();
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&exported).unwrap();
+        let deserialized: UninitializedChatCompletionConfig = serde_json::from_str(&json).unwrap();
+
+        // Should be able to load again
+        let reloaded = deserialized
+            .load(&SchemaData::default(), &ErrorContext::new_test())
+            .unwrap();
+
+        assert_eq!(reloaded.model(), &Arc::from("gpt-4"));
+        assert_eq!(reloaded.weight(), Some(0.5));
+        assert_eq!(reloaded.temperature(), Some(0.9));
+        assert_eq!(reloaded.max_tokens(), Some(100));
+        assert_eq!(reloaded.seed(), Some(123));
     }
 }

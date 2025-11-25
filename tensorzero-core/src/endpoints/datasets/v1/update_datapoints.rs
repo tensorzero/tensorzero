@@ -232,7 +232,7 @@ async fn prepare_chat_update(
     }
 
     if let Some(new_output) = update.output {
-        updated_datapoint.output = Some(new_output);
+        updated_datapoint.output = new_output;
     }
 
     // Apply the dynamic tool params update to the tool call config.
@@ -373,10 +373,7 @@ async fn convert_input_to_stored_input(
             // Otherwise, if the file needs to be fetched (because it's new), fetch it and convert to StoredInput.
             // This all happens behind the scene in `into_stored_input()`.
             let stored_input = input
-                .into_lazy_resolved_input(FetchContext {
-                    client: fetch_context.client,
-                    object_store_info: fetch_context.object_store_info,
-                })?
+                .into_lazy_resolved_input(fetch_context)?
                 // This call may trigger requests to write newly-provided files to object storage.
                 //
                 // TODO(shuyangli): consider refactoring file writing logic so it's hard to forget making these calls.
@@ -790,7 +787,7 @@ mod tests {
     mod prepare_update_tests {
         use crate::{
             endpoints::datasets::v1::types::UpdateDynamicToolParamsRequest,
-            tool::{FunctionTool, Tool},
+            tool::{FunctionTool, Tool, ToolChoice},
         };
 
         use super::*;
@@ -830,7 +827,7 @@ mod tests {
                         "additionalProperties": false
                     }))
                     .unwrap(),
-                    implicit_tool_call_config: crate::tool::ToolCallConfig::default(),
+                    json_mode_tool_call_config: crate::tool::ToolCallConfig::default(),
                     description: None,
                     experimentation: ExperimentationConfig::default(),
                     all_explicit_template_names: HashSet::new(),
@@ -1068,7 +1065,7 @@ mod tests {
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
                 input: None,
-                output: Some(new_output.clone()),
+                output: Some(Some(new_output.clone())),
                 tool_params: UpdateDynamicToolParamsRequest::default(),
                 #[expect(deprecated)]
                 deprecated_do_not_use_tool_params: None,
@@ -1095,6 +1092,45 @@ mod tests {
 
             // Output should be updated
             assert_eq!(updated.output, Some(new_output));
+        }
+
+        #[tokio::test]
+        async fn test_prepare_chat_update_output_set_to_null() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_chat_datapoint(dataset_name);
+
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(None),
+                tool_params: Default::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
+                tags: None,
+                metadata: Default::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
+            };
+
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing.clone(),
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+
+            // Output should be cleared
+            assert_eq!(updated.output, None);
         }
 
         #[tokio::test]
@@ -1146,7 +1182,7 @@ mod tests {
             // Create DynamicToolParams directly instead of round-tripping through database_insert_to_dynamic_tool_params
             // This represents a user setting allowed_tools to an empty list with tool_choice None
             // When there are no tools available, the result should be None (tools disabled)
-            let new_client_side_function_tool = FunctionTool {
+            let new_function_tool = FunctionTool {
                 name: "test_tool".to_string(),
                 description: "Test tool".to_string(),
                 parameters: json!({}),
@@ -1158,7 +1194,7 @@ mod tests {
                 output: None,
                 tool_params: UpdateDynamicToolParamsRequest {
                     allowed_tools: Some(Some(vec!["test_tool".to_string()])),
-                    additional_tools: Some(vec![new_client_side_function_tool.clone()]),
+                    additional_tools: Some(vec![Tool::Function(new_function_tool.clone())]),
                     tool_choice: Some(Some(ToolChoice::None)),
                     parallel_tool_calls: Some(Some(false)),
                     provider_tools: Some(vec![]),
@@ -1192,7 +1228,7 @@ mod tests {
             // Verify that tool params are transformed correctly into database type
             assert_eq!(
                 tool_params.dynamic_tools,
-                vec![Tool::ClientSideFunction(new_client_side_function_tool)],
+                vec![Tool::Function(new_function_tool)],
                 "Dynamic tools should be transformed correctly"
             );
             assert_eq!(
@@ -1441,7 +1477,7 @@ mod tests {
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
                 input: Some(new_input),
-                output: Some(new_output.clone()),
+                output: Some(Some(new_output.clone())),
                 tool_params: UpdateDynamicToolParamsRequest {
                     allowed_tools: Some(Some(vec![])),
                     additional_tools: None,
@@ -1620,7 +1656,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&new_output_value).unwrap(),
+                    raw: Some(serde_json::to_string(&new_output_value).unwrap()),
                 })),
                 output_schema: None,
                 tags: None,
@@ -1709,7 +1745,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&new_output).unwrap(),
+                    raw: Some(serde_json::to_string(&new_output).unwrap()),
                 })),
                 output_schema: Some(new_schema.clone()),
                 tags: None,
@@ -1751,7 +1787,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&bad_output).unwrap(),
+                    raw: Some(serde_json::to_string(&bad_output).unwrap()),
                 })),
                 output_schema: None, // Will use existing schema which expects {value: string}
                 tags: None,
@@ -1884,7 +1920,7 @@ mod tests {
                 id: existing.id,
                 input: Some(new_input),
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&new_output).unwrap(),
+                    raw: Some(serde_json::to_string(&new_output).unwrap()),
                 })),
                 output_schema: Some(new_schema.clone()),
                 tags: Some(new_tags.clone()),
@@ -1931,9 +1967,9 @@ mod tests {
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
                 input: None,
-                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                output: Some(Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "edited output".to_string(),
-                })]),
+                })])),
                 tool_params: UpdateDynamicToolParamsRequest::default(),
                 #[expect(deprecated)]
                 deprecated_do_not_use_tool_params: None,
@@ -1978,9 +2014,9 @@ mod tests {
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
                 input: None,
-                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                output: Some(Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "edited output".to_string(),
-                })]),
+                })])),
                 tool_params: UpdateDynamicToolParamsRequest::default(),
                 #[expect(deprecated)]
                 deprecated_do_not_use_tool_params: None,
@@ -2028,7 +2064,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&new_output).unwrap(),
+                    raw: Some(serde_json::to_string(&new_output).unwrap()),
                 })),
                 output_schema: None,
                 tags: None,
@@ -2074,7 +2110,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&new_output).unwrap(),
+                    raw: Some(serde_json::to_string(&new_output).unwrap()),
                 })),
                 output_schema: None,
                 tags: None,

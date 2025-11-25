@@ -331,9 +331,6 @@ pub enum ErrorDetails {
         mode: String,
         message: String,
     },
-    InvalidDynamicTemplatePath {
-        name: String,
-    },
     InvalidDynamicEndpoint {
         url: String,
     },
@@ -537,6 +534,9 @@ pub enum ErrorDetails {
     ToolNotLoaded {
         name: String,
     },
+    IncompatibleTool {
+        message: String,
+    },
     TypeConversion {
         message: String,
     },
@@ -654,7 +654,6 @@ impl ErrorDetails {
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidVariantForOptimization { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidDynamicTemplatePath { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidEncodedJobHandle => tracing::Level::WARN,
             ErrorDetails::InvalidJobHandle { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidRenderedStoredInference { .. } => tracing::Level::ERROR,
@@ -700,6 +699,7 @@ impl ErrorDetails {
             ErrorDetails::StreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::ToolNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::ToolNotLoaded { .. } => tracing::Level::ERROR,
+            ErrorDetails::IncompatibleTool { .. } => tracing::Level::WARN,
             ErrorDetails::TypeConversion { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownCandidate { .. } => tracing::Level::ERROR,
             ErrorDetails::UnknownFunction { .. } => tracing::Level::WARN,
@@ -803,7 +803,6 @@ impl ErrorDetails {
             ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicEndpoint { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidWorkflowEvaluationRun { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidDynamicTemplatePath { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceOutputSource { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidMessage { .. } => StatusCode::BAD_REQUEST,
@@ -849,6 +848,7 @@ impl ErrorDetails {
             ErrorDetails::StreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ToolNotFound { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::ToolNotLoaded { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::IncompatibleTool { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::TypeConversion { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownCandidate { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::UnknownFunction { .. } => StatusCode::NOT_FOUND,
@@ -1234,9 +1234,6 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidDynamicEndpoint { url } => {
                 write!(f, "Invalid dynamic endpoint URL: {url}")
             }
-            ErrorDetails::InvalidDynamicTemplatePath { name } => {
-                write!(f, "Invalid dynamic template path: {name}. There is likely a duplicate template in the config.")
-            }
             ErrorDetails::InvalidEncodedJobHandle => {
                 write!(
                     f,
@@ -1485,6 +1482,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::TypeConversion { message } => write!(f, "{message}"),
             ErrorDetails::ToolNotFound { name } => write!(f, "Tool not found: {name}"),
             ErrorDetails::ToolNotLoaded { name } => write!(f, "Tool not loaded: {name}"),
+            ErrorDetails::IncompatibleTool { message } => write!(f, "{message}"),
             ErrorDetails::UnknownCandidate { name } => {
                 write!(f, "Unknown candidate variant: {name}")
             }

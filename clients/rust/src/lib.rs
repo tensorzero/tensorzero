@@ -45,10 +45,9 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
     TimeFilter,
 };
 pub use tensorzero_core::db::datasets::{
-    AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
-    DatasetDetailRow, DatasetQueries, DatasetQueryParams, GetAdjacentDatapointIdsParams,
-    GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams, GetDatasetRowsParams,
-    StaleDatapointParams,
+    CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetDetailRow, DatasetQueries,
+    DatasetQueryParams, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
+    GetDatasetRowsParams,
 };
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
 pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};
@@ -90,7 +89,7 @@ pub use tensorzero_core::stored_inference::{
     RenderedSample, StoredChatInference, StoredChatInferenceDatabase, StoredInference,
     StoredInferenceDatabase, StoredJsonInference,
 };
-pub use tensorzero_core::tool::{DynamicToolParams, FunctionTool, ToolCallWrapper};
+pub use tensorzero_core::tool::{DynamicToolParams, FunctionTool, Tool, ToolCallWrapper};
 pub use tensorzero_core::utils::gateway::setup_clickhouse_without_config;
 
 // Export quantile array from migration_0037
