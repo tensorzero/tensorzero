@@ -7,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
+import type { InternalInferenceMetadata } from "~/types/tensorzero";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import { toInferenceUrl, toEpisodeUrl } from "~/utils/urls";
@@ -15,7 +15,7 @@ import { toInferenceUrl, toEpisodeUrl } from "~/utils/urls";
 export default function FunctionInferenceTable({
   inferences,
 }: {
-  inferences: InferenceByIdRow[];
+  inferences: InternalInferenceMetadata[];
 }) {
   return (
     <Table>

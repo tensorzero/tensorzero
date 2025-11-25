@@ -154,6 +154,8 @@ export * from "./InferenceResponseToolCall";
 export * from "./Input";
 export * from "./InputMessage";
 export * from "./InputMessageContent";
+export * from "./InternalInferenceMetadata";
+export * from "./InternalListInferencesByIdResponse";
 export * from "./JsonDatapointOutputUpdate";
 export * from "./JsonInferenceDatapoint";
 export * from "./JsonInferenceOutput";
