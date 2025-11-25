@@ -558,8 +558,6 @@ mod tests {
         gateway::GatewayConfig, snapshot::ConfigSnapshot, unwritten_config::UnwrittenConfig,
         ObservabilityConfig, PostgresConfig,
     };
-    use std::collections::HashMap;
-
     #[tokio::test]
     async fn test_setup_clickhouse() {
         let logs_contain = crate::utils::testing::capture_logs();
@@ -590,10 +588,7 @@ mod tests {
         };
         let config_load_info = ConfigLoadInfo::new(
             UnwrittenConfig::new(config),
-            ConfigSnapshot {
-                config: String::new(),
-                extra_templates: HashMap::new(),
-            },
+            ConfigSnapshot::new_empty_for_test(),
         );
 
         let clickhouse_connection_info = setup_clickhouse(&config_load_info, None, false)
@@ -625,10 +620,7 @@ mod tests {
         };
         let config_load_info = ConfigLoadInfo::new(
             UnwrittenConfig::new(config),
-            ConfigSnapshot {
-                config: String::new(),
-                extra_templates: HashMap::new(),
-            },
+            ConfigSnapshot::new_empty_for_test(),
         );
         let clickhouse_connection_info = setup_clickhouse(&config_load_info, None, false)
             .await
@@ -672,10 +664,7 @@ mod tests {
         };
         let config_load_info = ConfigLoadInfo::new(
             UnwrittenConfig::new(config),
-            ConfigSnapshot {
-                config: String::new(),
-                extra_templates: HashMap::new(),
-            },
+            ConfigSnapshot::new_empty_for_test(),
         );
 
         let err = setup_clickhouse(&config_load_info, None, false)
@@ -711,10 +700,7 @@ mod tests {
         };
         let config_load_info = ConfigLoadInfo::new(
             UnwrittenConfig::new(config),
-            ConfigSnapshot {
-                config: String::new(),
-                extra_templates: HashMap::new(),
-            },
+            ConfigSnapshot::new_empty_for_test(),
         );
         setup_clickhouse(&config_load_info, Some("bad_url".to_string()), false)
             .await
@@ -751,10 +737,7 @@ mod tests {
         };
         let config_load_info = ConfigLoadInfo::new(
             UnwrittenConfig::new(config),
-            ConfigSnapshot {
-                config: String::new(),
-                extra_templates: HashMap::new(),
-            },
+            ConfigSnapshot::new_empty_for_test(),
         );
         setup_clickhouse(
             &config_load_info,

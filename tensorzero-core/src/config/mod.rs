@@ -66,6 +66,7 @@ pub mod provider_types;
 pub mod rate_limiting;
 pub mod snapshot;
 mod span_map;
+pub mod stored;
 #[cfg(test)]
 mod tests;
 
@@ -790,12 +791,8 @@ impl Config {
         // Serialize to a string, use that for ConfigSnapshot
         // Continue parsing the table afterwards.
         let table = prepare_table_for_snapshot(table);
-        // Write the prepared table back to a string so that we can hash + store it in the snapshot
-        let serialized_table = toml::to_string(&table).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Failed to serialize TOML config for snapshot: {e}"),
-            })
-        })?;
+        // Clone table before consuming - needed for ConfigSnapshot
+        let table_for_snapshot = table.clone();
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
         let mut templates = TemplateConfig::new();
@@ -1003,10 +1000,7 @@ impl Config {
 
         Ok(ConfigLoadInfo::new(
             UnwrittenConfig::new(config),
-            snapshot::ConfigSnapshot {
-                config: serialized_table,
-                extra_templates,
-            },
+            snapshot::ConfigSnapshot::new(table_for_snapshot, extra_templates)?,
         ))
     }
 
@@ -1232,7 +1226,7 @@ pub mod unwritten_config {
             clickhouse: &ClickHouseConnectionInfo,
         ) -> Result<ConfigWithHash, Error> {
             let ConfigLoadInfo { config, snapshot } = self;
-            let hash = snapshot.hash();
+            let hash = snapshot.hash.clone();
             write_config_snapshot(clickhouse, snapshot).await?;
             Ok(ConfigWithHash {
                 config: config.0,
@@ -1268,12 +1262,19 @@ pub async fn write_config_snapshot(
         tensorzero_version: &'static str,
     }
 
-    // Compute the hash as a numeric string
-    let version_hash = snapshot.hash();
+    // Get the pre-computed hash
+    let version_hash = snapshot.hash.clone();
+
+    // Serialize StoredConfig to TOML for storage
+    let config_string = toml::to_string(&snapshot.config).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize config snapshot: {e}"),
+        })
+    })?;
 
     // Create the row
     let row = ConfigSnapshotRow {
-        config: &snapshot.config,
+        config: &config_string,
         extra_templates: &snapshot.extra_templates,
         hash: version_hash.clone(),
         tensorzero_version: TENSORZERO_VERSION,
@@ -1450,7 +1451,7 @@ impl TryFrom<toml::Table> for UninitializedConfig {
     }
 }
 
-#[derive(Debug, TensorZeroDeserialize)]
+#[derive(Debug, TensorZeroDeserialize, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
@@ -1459,20 +1460,20 @@ pub enum UninitializedFunctionConfig {
     Json(UninitializedFunctionConfigJson),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct UninitializedSchema {
     path: ResolvedTomlPathData,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[serde(transparent)]
 pub struct UninitializedSchemas {
     inner: HashMap<String, UninitializedSchema>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigChat {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
@@ -1492,7 +1493,7 @@ pub struct UninitializedFunctionConfigChat {
     experimentation: Option<UninitializedExperimentationConfig>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedFunctionConfigJson {
     variants: HashMap<String, UninitializedVariantInfo>, // variant name => variant config
@@ -1829,7 +1830,7 @@ impl UninitializedVariantInfo {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedToolConfig {
     pub description: String,

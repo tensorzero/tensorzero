@@ -3,10 +3,17 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::error::{Error, ErrorDetails};
+
+use super::stored::StoredConfig;
+use super::UninitializedConfig;
+
 #[derive(Debug)]
 pub struct ConfigSnapshot {
-    pub config: String, // serialized as TOML
+    pub config: StoredConfig, // serialized as TOML
+    pub hash: SnapshotHash,
     pub extra_templates: HashMap<String, String>,
+    __private: (),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -28,16 +35,62 @@ impl SnapshotHash {
 }
 
 impl ConfigSnapshot {
-    /// Compute a blake3 hash of this config snapshot
-    pub fn hash(&self) -> SnapshotHash {
-        let mut hasher = blake3::Hasher::new();
-        let ConfigSnapshot {
-            config,
+    pub fn new(
+        sorted_config_toml: toml::Table,
+        extra_templates: HashMap<String, String>,
+    ) -> Result<Self, Error> {
+        let config = UninitializedConfig::try_from(sorted_config_toml.clone())?;
+        let hash = ConfigSnapshot::hash(&sorted_config_toml, &extra_templates)?;
+        Ok(Self {
+            config: config.into(),
+            hash,
             extra_templates,
-        } = self;
+            __private: (),
+        })
+    }
 
-        // Hash the config string
-        hasher.update(config.as_bytes());
+    /// Create a ConfigSnapshot from a TOML string for testing.
+    /// Parses the string, computes the hash, and stores the config.
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub fn new_from_toml_string(
+        config_toml: &str,
+        extra_templates: HashMap<String, String>,
+    ) -> Result<Self, Error> {
+        use super::snapshot::prepare_table_for_snapshot;
+        let table: toml::Table = config_toml.parse().map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to parse TOML: {e}"),
+            })
+        })?;
+        let sorted_table = prepare_table_for_snapshot(table);
+        Self::new(sorted_table, extra_templates)
+    }
+
+    /// Create an empty ConfigSnapshot for testing when the actual config doesn't matter.
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub fn new_empty_for_test() -> Self {
+        Self {
+            config: StoredConfig::default(),
+            hash: SnapshotHash::new_test(),
+            extra_templates: HashMap::new(),
+            __private: (),
+        }
+    }
+
+    /// Compute a blake3 hash of this config snapshot
+    fn hash(
+        sorted_config_toml: &toml::Table,
+        extra_templates: &HashMap<String, String>,
+    ) -> Result<SnapshotHash, Error> {
+        let mut hasher = blake3::Hasher::new();
+
+        // Serialize and hash the TOML config
+        let serialized_config = toml::to_string(sorted_config_toml).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize config for hashing: {e}"),
+            })
+        })?;
+        hasher.update(serialized_config.as_bytes());
         hasher.update(&[0]); // null byte separator
 
         // Hash the extra templates in a deterministic order
@@ -54,7 +107,7 @@ impl ConfigSnapshot {
         let hash = hasher.finalize();
         // Convert the 32-byte hash to a decimal string
         let big_int = BigUint::from_bytes_be(hash.as_bytes());
-        SnapshotHash(Arc::from(big_int.to_string()))
+        Ok(SnapshotHash(Arc::from(big_int.to_string())))
     }
 }
 

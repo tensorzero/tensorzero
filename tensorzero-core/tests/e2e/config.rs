@@ -155,12 +155,10 @@ routing = ["test_provider::gpt-4"]
     let mut extra_templates = HashMap::new();
     extra_templates.insert("test_template".to_string(), "Hello {{name}}!".to_string());
 
-    let snapshot = ConfigSnapshot {
-        config: config_toml.to_string(),
-        extra_templates: extra_templates.clone(),
-    };
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
-    let hash = snapshot.hash();
+    let hash = snapshot.hash.clone();
     let hash_number = hash.to_string();
 
     // Write the config snapshot
@@ -196,10 +194,8 @@ routing = ["test_provider::gpt-4"]
     let last_used_1 = snapshot_row["last_used"].as_str().unwrap();
 
     // Test upsert behavior: write the same config again
-    let snapshot2 = ConfigSnapshot {
-        config: config_toml.to_string(),
-        extra_templates: extra_templates.clone(),
-    };
+    let snapshot2 =
+        ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
     write_config_snapshot(&clickhouse, snapshot2).await.unwrap();
 
