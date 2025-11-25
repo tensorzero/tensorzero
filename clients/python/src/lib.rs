@@ -1329,6 +1329,36 @@ impl TensorZeroGateway {
         )
     }
 
+    /// Lists all datasets with optional filtering and pagination.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - Optional function name to filter datasets by.
+    /// * `limit` - Optional maximum number of datasets to return.
+    /// * `offset` - Optional number of datasets to skip before starting to return results.
+    ///
+    /// # Returns
+    ///
+    /// :return: A `ListDatasetsResponse` object.
+    #[pyo3(signature = (*, function_name=None, limit=None, offset=None))]
+    fn list_datasets(
+        this: PyRef<'_, Self>,
+        function_name: Option<String>,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> PyResult<Py<PyAny>> {
+        let client = this.as_super().client.clone();
+        let res = client.list_datasets(function_name, limit, offset);
+        let response =
+            tokio_block_on_without_gil(this.py(), res).map_err(|e| convert_error(this.py(), e))?;
+        convert_response_to_python_dataclass(
+            this.py(),
+            response,
+            "tensorzero",
+            "ListDatasetsResponse",
+        )
+    }
+
     /// Run a tensorzero Evaluation
     ///
     /// This function is only available in EmbeddedGateway mode.
@@ -2537,6 +2567,40 @@ impl AsyncTensorZeroGateway {
                     response,
                     "tensorzero",
                     "GetDatapointsResponse",
+                ),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// Lists all datasets with optional filtering and pagination.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - Optional function name to filter datasets by.
+    /// * `limit` - Optional maximum number of datasets to return.
+    /// * `offset` - Optional number of datasets to skip before starting to return results.
+    ///
+    /// # Returns
+    ///
+    /// :return: A `ListDatasetsResponse` object.
+    #[pyo3(signature = (*, function_name=None, limit=None, offset=None))]
+    fn list_datasets<'a>(
+        this: PyRef<'a, Self>,
+        function_name: Option<String>,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.list_datasets(function_name, limit, offset).await;
+            Python::attach(|py| match res {
+                Ok(response) => convert_response_to_python_dataclass(
+                    py,
+                    response,
+                    "tensorzero",
+                    "ListDatasetsResponse",
                 ),
                 Err(e) => Err(convert_error(py, e)),
             })

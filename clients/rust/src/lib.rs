@@ -53,11 +53,12 @@ pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWin
 pub use tensorzero_core::endpoints::datasets::v1::types::{
     CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsFromInferenceOutputSource,
     CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsRequest, CreateDatapointsResponse, CreateJsonDatapointRequest,
+    CreateDatapointsRequest, CreateDatapointsResponse, CreateJsonDatapointRequest, DatasetMetadata,
     DeleteDatapointsRequest, DeleteDatapointsResponse, GetDatapointsRequest, GetDatapointsResponse,
-    JsonDatapointOutputUpdate, ListDatapointsRequest, UpdateChatDatapointRequest,
-    UpdateDatapointMetadataRequest, UpdateDatapointRequest, UpdateDatapointsMetadataRequest,
-    UpdateDatapointsRequest, UpdateDatapointsResponse, UpdateJsonDatapointRequest,
+    JsonDatapointOutputUpdate, ListDatapointsRequest, ListDatasetsResponse,
+    UpdateChatDatapointRequest, UpdateDatapointMetadataRequest, UpdateDatapointRequest,
+    UpdateDatapointsMetadataRequest, UpdateDatapointsRequest, UpdateDatapointsResponse,
+    UpdateJsonDatapointRequest,
 };
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
@@ -230,6 +231,28 @@ pub trait ClientExt {
         dataset_name: String,
         request: ListDatapointsRequest,
     ) -> Result<GetDatapointsResponse, TensorZeroError>;
+
+    /// Lists all datasets with optional filtering and pagination.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - Optional function name to filter datasets by.
+    /// * `limit` - Optional maximum number of datasets to return.
+    /// * `offset` - Optional number of datasets to skip before starting to return results.
+    ///
+    /// # Returns
+    ///
+    /// A `ListDatasetsResponse` containing the list of datasets.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
+    async fn list_datasets(
+        &self,
+        function_name: Option<String>,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<ListDatasetsResponse, TensorZeroError>;
 
     /// Updates datapoints in the dataset.
     ///
@@ -919,6 +942,75 @@ impl ClientExt for Client {
                     )
                     .await
                     .map_err(err_to_http)
+                })
+                .await
+            }
+        }
+    }
+
+    async fn list_datasets(
+        &self,
+        function_name: Option<String>,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<ListDatasetsResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let mut url =
+                    client
+                        .base_url
+                        .join("v1/datasets")
+                        .map_err(|e| TensorZeroError::Other {
+                            source: Error::new(ErrorDetails::InvalidBaseUrl {
+                                message: format!(
+                                    "Failed to join base URL with /v1/datasets endpoint: {e}"
+                                ),
+                            })
+                            .into(),
+                        })?;
+
+                // Add query parameters
+                {
+                    let mut query_params = url.query_pairs_mut();
+                    if let Some(function_name) = &function_name {
+                        query_params.append_pair("function_name", function_name);
+                    }
+                    if let Some(limit) = limit {
+                        query_params.append_pair("limit", &limit.to_string());
+                    }
+                    if let Some(offset) = offset {
+                        query_params.append_pair("offset", &offset.to_string());
+                    }
+                }
+
+                let builder = client.http_client.get(url);
+                client.send_and_parse_http_response(builder).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    let db_datasets = gateway
+                        .handle
+                        .app_state
+                        .clickhouse_connection_info
+                        .get_dataset_metadata(&GetDatasetMetadataParams {
+                            function_name,
+                            limit,
+                            offset,
+                        })
+                        .await
+                        .map_err(err_to_http)?;
+
+                    // Convert from DB type to API type
+                    let datasets = db_datasets
+                        .into_iter()
+                        .map(|db_meta| DatasetMetadata {
+                            dataset_name: db_meta.dataset_name,
+                            count: db_meta.count,
+                            last_updated: db_meta.last_updated,
+                        })
+                        .collect();
+
+                    Ok(ListDatasetsResponse { datasets })
                 })
                 .await
             }
