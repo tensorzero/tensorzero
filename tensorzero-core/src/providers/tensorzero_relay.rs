@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use futures::future::try_join_all;
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
 use secrecy::SecretString;
 use serde::Serialize;
 use url::Url;
@@ -362,6 +362,7 @@ impl InferenceProvider for TensorZeroRelayProvider {
         let http_data = self
             .client
             .http_inference(client_inference_params)
+            .boxed()
             .await
             .map_err(|e| {
                 Error::new(ErrorDetails::InferenceServer {
