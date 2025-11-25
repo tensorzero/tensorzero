@@ -8,6 +8,7 @@ use mockall::automock;
 
 use crate::config::{MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOperator};
+use crate::endpoints::datasets::v1::types::DatapointOrderBy;
 use crate::endpoints::datasets::{DatapointKind, StoredDatapoint};
 use crate::error::Error;
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
@@ -275,6 +276,14 @@ pub struct GetDatapointsParams {
     /// Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
     #[serde(default)]
     pub filter: Option<DatapointFilter>,
+
+    /// Optional ordering criteria for the results.
+    #[serde(default)]
+    pub order_by: Option<Vec<DatapointOrderBy>>,
+
+    /// Text query to filter. Case-insensitive substring search.
+    #[serde(default)]
+    pub search_query_experimental: Option<String>,
 }
 
 #[async_trait]
