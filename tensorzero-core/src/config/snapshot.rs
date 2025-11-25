@@ -27,9 +27,14 @@ impl SnapshotHash {
         let big_int = BigUint::from_bytes_be(hash.as_bytes());
         SnapshotHash(Arc::from(big_int.to_string()))
     }
+}
 
-    pub fn from_str(hash: &str) -> SnapshotHash {
-        SnapshotHash(Arc::from(hash.to_string()))
+#[cfg(any(test, feature = "e2e_tests"))]
+impl std::str::FromStr for SnapshotHash {
+    type Err = std::convert::Infallible;
+
+    fn from_str(hash: &str) -> Result<Self, Self::Err> {
+        Ok(SnapshotHash(Arc::from(hash.to_string())))
     }
 }
 

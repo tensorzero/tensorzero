@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
@@ -471,7 +472,7 @@ model = "test_model_{random_id}"
         .unwrap()
         .as_str()
         .unwrap();
-    let snapshot_hash = SnapshotHash::from_str(snapshot_hash_str);
+    let snapshot_hash = SnapshotHash::from_str(snapshot_hash_str).unwrap();
 
     // Load snapshot from ClickHouse
     let retrieved_snapshot = clickhouse
@@ -525,4 +526,187 @@ model = "test_model_{random_id}"
 
     // Both inferences should have the same snapshot hash
     assert_eq!(snapshot_hash_str, stored_hash2);
+}
+
+/// Test that fresh configs REJECT the deprecated timeouts field for embedding models.
+/// This ensures users are forced to migrate to the new `timeout_ms` field.
+#[tokio::test]
+async fn test_fresh_config_rejects_deprecated_embedding_timeouts() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    // Config with deprecated `timeouts` field
+    std::fs::write(
+        &config_path,
+        r#"
+[embedding_models.test_model]
+routing = ["provider"]
+timeouts.non_streaming.total_ms = 5000
+
+[embedding_models.test_model.providers.provider]
+type = "dummy"
+model_name = "test"
+"#,
+    )
+    .unwrap();
+
+    let result = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new(config_path.to_string_lossy().to_string()).unwrap(),
+        false,
+    )
+    .await;
+
+    // Should fail with "unknown field" error for the deprecated timeouts field
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string().contains("unknown field"),
+        "Expected 'unknown field' error for deprecated timeouts, got: {err}"
+    );
+}
+
+/// Test that fresh configs REJECT the deprecated timeouts field for embedding providers.
+#[tokio::test]
+async fn test_fresh_config_rejects_deprecated_embedding_provider_timeouts() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config_path = temp_dir.path().join("config.toml");
+
+    // Config with deprecated `timeouts` field on provider
+    std::fs::write(
+        &config_path,
+        r#"
+[embedding_models.test_model]
+routing = ["provider"]
+
+[embedding_models.test_model.providers.provider]
+type = "dummy"
+model_name = "test"
+timeouts.non_streaming.total_ms = 5000
+"#,
+    )
+    .unwrap();
+
+    let result = Config::load_from_path_optional_verify_credentials(
+        &ConfigFileGlob::new(config_path.to_string_lossy().to_string()).unwrap(),
+        false,
+    )
+    .await;
+
+    // Should fail with "unknown field" error
+    let err = result.unwrap_err();
+    assert!(
+        err.to_string().contains("unknown field"),
+        "Expected 'unknown field' error for deprecated provider timeouts, got: {err}"
+    );
+}
+
+/// Test that snapshot loading ACCEPTS the deprecated timeouts field for embedding models
+/// and correctly migrates it to timeout_ms.
+#[tokio::test]
+async fn test_snapshot_accepts_deprecated_embedding_timeouts() {
+    let config_toml = r#"
+[embedding_models.test_model]
+routing = ["provider"]
+timeouts.non_streaming.total_ms = 5000
+
+[embedding_models.test_model.providers.provider]
+type = "dummy"
+model_name = "test"
+"#;
+
+    let snapshot = ConfigSnapshot {
+        config: config_toml.to_string(),
+        extra_templates: HashMap::new(),
+    };
+
+    // Loading from snapshot should succeed and migrate the timeout
+    let config_load_info = Config::load_from_snapshot(snapshot, false).await.unwrap();
+    let config = config_load_info.dangerous_into_config_without_writing();
+
+    // Verify the timeout was migrated correctly
+    let embedding_model = config
+        .embedding_models
+        .get("test_model")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        embedding_model.timeout_ms,
+        Some(5000),
+        "Deprecated timeouts.non_streaming.total_ms should be migrated to timeout_ms"
+    );
+}
+
+/// Test that snapshot loading ACCEPTS the deprecated timeouts field for embedding providers.
+#[tokio::test]
+async fn test_snapshot_accepts_deprecated_embedding_provider_timeouts() {
+    let config_toml = r#"
+[embedding_models.test_model]
+routing = ["provider"]
+
+[embedding_models.test_model.providers.provider]
+type = "dummy"
+model_name = "test"
+timeouts.non_streaming.total_ms = 3000
+"#;
+
+    let snapshot = ConfigSnapshot {
+        config: config_toml.to_string(),
+        extra_templates: HashMap::new(),
+    };
+
+    // Loading from snapshot should succeed and migrate the timeout
+    let config_load_info = Config::load_from_snapshot(snapshot, false).await.unwrap();
+    let config = config_load_info.dangerous_into_config_without_writing();
+
+    // Verify the provider timeout was migrated correctly
+    let embedding_model = config
+        .embedding_models
+        .get("test_model")
+        .await
+        .unwrap()
+        .unwrap();
+    let provider = embedding_model.providers.get("provider").unwrap();
+    assert_eq!(
+        provider.timeout_ms,
+        Some(3000),
+        "Deprecated timeouts.non_streaming.total_ms should be migrated to timeout_ms on provider"
+    );
+}
+
+/// Test that new timeout_ms field takes precedence over deprecated timeouts field
+/// when both are present in a snapshot (edge case for backward compatibility).
+#[tokio::test]
+async fn test_snapshot_timeout_ms_takes_precedence() {
+    let config_toml = r#"
+[embedding_models.test_model]
+routing = ["provider"]
+timeout_ms = 10000
+timeouts.non_streaming.total_ms = 5000
+
+[embedding_models.test_model.providers.provider]
+type = "dummy"
+model_name = "test"
+"#;
+
+    let snapshot = ConfigSnapshot {
+        config: config_toml.to_string(),
+        extra_templates: HashMap::new(),
+    };
+
+    // Loading from snapshot should succeed
+    let config_load_info = Config::load_from_snapshot(snapshot, false).await.unwrap();
+    let config = config_load_info.dangerous_into_config_without_writing();
+
+    // New timeout_ms field should take precedence
+    let embedding_model = config
+        .embedding_models
+        .get("test_model")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        embedding_model.timeout_ms,
+        Some(10000),
+        "timeout_ms should take precedence over deprecated timeouts"
+    );
 }

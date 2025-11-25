@@ -66,6 +66,7 @@ pub mod provider_types;
 pub mod rate_limiting;
 pub mod snapshot;
 mod span_map;
+pub mod stored;
 #[cfg(test)]
 mod tests;
 
@@ -807,10 +808,10 @@ impl Config {
     }
 
     async fn load_from_toml(input: ConfigInput) -> Result<ConfigLoadInfo, Error> {
-        let (table, extra_templates) = match input {
-            ConfigInput::Fresh(table) => (table, None),
+        let (table, extra_templates, is_snapshot) = match input {
+            ConfigInput::Fresh(table) => (table, None, false),
             ConfigInput::Snapshot(snapshot) => {
-                (snapshot.as_toml()?, Some(snapshot.extra_templates))
+                (snapshot.as_toml()?, Some(snapshot.extra_templates), true)
             }
         };
         if table.is_empty() {
@@ -827,7 +828,22 @@ impl Config {
                 message: format!("Failed to serialize TOML config for snapshot: {e}"),
             })
         })?;
-        let uninitialized_config = UninitializedConfig::try_from(table)?;
+
+        // Branch based on input source:
+        // - Fresh configs use strict types that reject deprecated fields
+        // - Snapshots use permissive stored types that accept deprecated fields
+        let uninitialized_config = if is_snapshot {
+            let stored_config: stored::StoredConfig = serde_path_to_error::deserialize(table)
+                .map_err(|e| {
+                    let path = e.path().clone();
+                    Error::new(ErrorDetails::Config {
+                        message: format!("{}: {}", path, e.into_inner().message()),
+                    })
+                })?;
+            UninitializedConfig::from(stored_config)
+        } else {
+            UninitializedConfig::try_from(table)?
+        };
 
         let mut templates = TemplateConfig::new();
 
