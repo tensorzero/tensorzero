@@ -95,7 +95,7 @@ opentelemetry-otlp = { version = "0.31.0", features = [
     "tls-roots",
 ] }
 opentelemetry-semantic-conventions = "0.31.0"
-init-tracing-opentelemetry = "0.33.0"
+init-tracing-opentelemetry = "0.34.0"
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
     "http",
