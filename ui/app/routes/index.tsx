@@ -21,7 +21,6 @@ import {
 } from "~/components/icons/Icons";
 import { countInferencesByFunction } from "~/utils/clickhouse/inference.server";
 import { getConfig, getAllFunctionConfigs } from "~/utils/config/index.server";
-import { getDatasetMetadata } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/index";
 import {
@@ -29,6 +28,7 @@ import {
   countWorkflowEvaluationRuns,
 } from "~/utils/clickhouse/workflow_evaluations.server";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
 
 export const handle: RouteHandle = {
   hideBreadcrumbs: true,
@@ -109,7 +109,7 @@ export async function loader() {
   // Create the promises
   const countsInfoPromise = countInferencesByFunction();
   const episodesPromise = nativeDatabaseClient.queryEpisodeTableBounds();
-  const datasetMetadata = getDatasetMetadata({});
+  const datasetMetadataPromise = getTensorZeroClient().listDatasets({});
   const numEvaluationRunsPromise = countTotalEvaluationRuns();
   const numWorkflowEvaluationRunsPromise = countWorkflowEvaluationRuns();
   const numWorkflowEvaluationRunProjectsPromise =
@@ -145,8 +145,8 @@ export async function loader() {
     (result) => `${result.count.toLocaleString()} episodes`,
   );
 
-  const numDatasetsDesc = datasetMetadata.then(
-    (datasetCounts) => `${datasetCounts.length} datasets`,
+  const numDatasetsDesc = datasetMetadataPromise.then(
+    (datasets) => `${datasets.datasets.length} datasets`,
   );
 
   const numEvaluationRunsDesc = numEvaluationRunsPromise.then(

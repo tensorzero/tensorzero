@@ -4,13 +4,11 @@ import type {
   ClientInferenceParams,
   Config,
   CountDatapointsForDatasetFunctionParams,
-  DatasetMetadata,
   DatasetQueryParams,
   EpisodeByIdRow,
   EvaluationRunEvent,
   CumulativeFeedbackTimeSeriesPoint,
   FeedbackByVariant,
-  GetDatasetMetadataParams,
   GetFeedbackByVariantParams,
   InferenceResponse,
   LaunchOptimizationWorkflowParams,
@@ -351,15 +349,6 @@ export class DatabaseClient {
     const result =
       await this.nativeDatabaseClient.insertRowsForDataset(paramsString);
     return result;
-  }
-
-  async getDatasetMetadata(
-    params: GetDatasetMetadataParams,
-  ): Promise<DatasetMetadata[]> {
-    const paramsString = safeStringify(params);
-    const result =
-      await this.nativeDatabaseClient.getDatasetMetadata(paramsString);
-    return JSON.parse(result) as DatasetMetadata[];
   }
 
   async countDatasets(): Promise<number> {
