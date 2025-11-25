@@ -467,20 +467,6 @@ async fn test_gepa_step_chat() {
         "Child variant should have non-empty templates"
     );
 
-    // Verify child has the same template keys as parent
-    let parent_template_keys: std::collections::HashSet<_> = internal_dynamic_variant_config
-        .templates
-        .inner
-        .keys()
-        .collect();
-    let child_template_keys: std::collections::HashSet<_> =
-        child_config.templates.inner.keys().collect();
-    assert_eq!(
-        parent_template_keys,
-        child_template_keys,
-        "Child variant should have the same template keys as parent. Parent keys: {parent_template_keys:?}, Child keys: {child_template_keys:?}"
-    );
-
     // Verify all templates have non-empty content
     for (template_name, template_config) in &child_config.templates.inner {
         let content = template_config.path.data();
@@ -763,20 +749,6 @@ async fn test_gepa_step_json() {
     assert!(
         !child_config.templates.inner.is_empty(),
         "Child variant should have non-empty templates"
-    );
-
-    // Verify child has the same template keys as parent
-    let parent_template_keys: std::collections::HashSet<_> = internal_dynamic_variant_config
-        .templates
-        .inner
-        .keys()
-        .collect();
-    let child_template_keys: std::collections::HashSet<_> =
-        child_config.templates.inner.keys().collect();
-    assert_eq!(
-        parent_template_keys,
-        child_template_keys,
-        "Child variant should have the same template keys as parent. Parent keys: {parent_template_keys:?}, Child keys: {child_template_keys:?}"
     );
 
     // Verify all templates have non-empty content

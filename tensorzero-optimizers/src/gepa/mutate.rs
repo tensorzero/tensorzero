@@ -241,6 +241,28 @@ pub async fn mutate_variant(
         .map(|entry| (entry.name, entry.content))
         .collect();
 
+    // Validate that all parent templates are present
+    for parent_template_name in parent_config.templates.inner.keys() {
+        if !templates.contains_key(parent_template_name) {
+            return Err(Error::new(ErrorDetails::Inference {
+                message: format!(
+                    "Mutate function did not return template '{parent_template_name}' present in parent"
+                ),
+            }));
+        }
+    }
+
+    // Validate that no extra templates were added
+    for template_name in templates.keys() {
+        if !parent_config.templates.inner.contains_key(template_name) {
+            return Err(Error::new(ErrorDetails::Inference {
+                message: format!(
+                    "Mutate function returned unexpected template '{template_name}' not present in parent"
+                ),
+            }));
+        }
+    }
+
     // Generate variant name: {prefix}-iter-{iteration}-{parent_name}
     let mutated_variant_name = format!(
         "{}-iter-{}-{}",
