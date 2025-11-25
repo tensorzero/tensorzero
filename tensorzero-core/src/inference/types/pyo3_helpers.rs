@@ -7,7 +7,6 @@ use pyo3::{sync::PyOnceLock, types::PyModule, Bound, Py, PyAny, PyErr, PyResult,
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::config::snapshot::SnapshotHash;
 use crate::config::Config;
 use crate::endpoints::datasets::{Datapoint, StoredDatapoint};
 use crate::inference::types::stored_input::{StoredInput, StoredInputMessageContent};

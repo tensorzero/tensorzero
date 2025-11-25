@@ -12,7 +12,7 @@ use tokio::try_join;
 use url::Url;
 
 use tensorzero_core::{
-    config::{snapshot::SnapshotHash, Config, TimeoutsConfig},
+    config::{Config, TimeoutsConfig},
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},

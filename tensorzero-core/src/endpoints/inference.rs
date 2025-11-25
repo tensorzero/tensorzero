@@ -230,7 +230,6 @@ pub struct InferenceIds {
         otel.name = "function_inference"
     )
 )]
-#[expect(clippy::too_many_arguments)]
 pub async fn inference(
     config: Arc<Config>,
     http_client: &TensorzeroHttpClient,

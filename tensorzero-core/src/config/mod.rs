@@ -1316,12 +1316,6 @@ pub mod unwritten_config {
     }
 }
 
-#[derive(Debug)]
-pub struct ConfigWithHash {
-    pub config: Config,
-    pub hash: SnapshotHash,
-}
-
 /// Writes the config snapshot to the `ConfigSnapshot` table.
 /// Takes special care to retain the created_at if there was already a row
 /// that had the same hash.

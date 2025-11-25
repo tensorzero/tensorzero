@@ -1,5 +1,4 @@
 use std::{collections::HashMap, sync::Arc};
-use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};

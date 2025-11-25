@@ -11,7 +11,7 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use tensorzero_core::{
-    config::{snapshot::SnapshotHash, Config},
+    config::Config,
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::Error,
@@ -96,7 +96,6 @@ pub trait JobHandle {
 pub trait Optimizer {
     type Handle: JobHandle;
 
-    #[expect(clippy::too_many_arguments)]
     async fn launch(
         &self,
         client: &TensorzeroHttpClient,

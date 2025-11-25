@@ -335,7 +335,6 @@ async fn write_comment(
     Ok(())
 }
 
-#[expect(clippy::too_many_arguments)]
 async fn write_demonstration(
     connection_info: ClickHouseConnectionInfo,
     deferred_tasks: &TaskTracker,

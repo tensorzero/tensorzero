@@ -3,8 +3,6 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::config::snapshot::SnapshotHash;
-use crate::config::ConfigWithHash;
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
 use axum::extract::{rejection::JsonRejection, DefaultBodyLimit, FromRequest, Json, Request};

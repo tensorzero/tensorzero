@@ -20,9 +20,7 @@ use tensorzero_core::client::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
 };
-use tensorzero_core::config::{
-    ConfigFileGlob, ConfigWithHash, MetricConfigOptimize, UninitializedVariantInfo,
-};
+use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo};
 use tensorzero_core::endpoints::datasets::v1::{
     get_datapoints, list_datapoints,
     types::{GetDatapointsRequest, ListDatapointsRequest},

@@ -20,7 +20,6 @@ use super::inference::{
     InferenceIds, InferenceModels, InferenceParams, InferenceResponse, JsonInferenceResponse,
 };
 use crate::cache::{CacheEnabledMode, CacheOptions};
-use crate::config::snapshot::SnapshotHash;
 use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::endpoints::RequestApiKeyExtension;

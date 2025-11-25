@@ -1,7 +1,6 @@
 #![recursion_limit = "256"]
 #![deny(clippy::all)]
 use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
-use tensorzero_core::config::ConfigWithHash;
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 use url::Url;
 

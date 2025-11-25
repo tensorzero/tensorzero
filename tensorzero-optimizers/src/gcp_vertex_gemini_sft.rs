@@ -7,7 +7,7 @@ use url::Url;
 use uuid::Uuid;
 
 use tensorzero_core::{
-    config::{snapshot::SnapshotHash, Config},
+    config::Config,
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},

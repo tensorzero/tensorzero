@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{snapshot::SnapshotHash, Config, UninitializedVariantConfig},
+    config::{Config, UninitializedVariantConfig},
     db::{
         clickhouse::{
             clickhouse_client::ClickHouseClientType, ClickHouseConnectionInfo, ExternalDataInfo,

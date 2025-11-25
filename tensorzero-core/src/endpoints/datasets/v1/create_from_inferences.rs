@@ -4,7 +4,6 @@ use axum::extract::{Path, State};
 use axum::Json;
 use tracing::instrument;
 
-use crate::config::snapshot::SnapshotHash;
 use crate::config::Config;
 use crate::db::datasets::DatasetQueries;
 use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};

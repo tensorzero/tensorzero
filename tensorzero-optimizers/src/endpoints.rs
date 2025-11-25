@@ -14,7 +14,7 @@ use axum::{
 use rand::seq::SliceRandom;
 
 use tensorzero_core::{
-    config::{snapshot::SnapshotHash, Config},
+    config::Config,
     db::{
         clickhouse::{
             query_builder::{InferenceFilter, OrderBy},
