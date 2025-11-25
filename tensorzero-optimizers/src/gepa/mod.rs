@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use futures::future::join_all;
-use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
+use rand::{rngs::StdRng, seq::IteratorRandom, Rng, SeedableRng};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use tensorzero_core::{
@@ -27,9 +27,11 @@ use crate::{JobHandle, Optimizer};
 
 pub mod analyze;
 pub mod evaluate;
+pub mod mutate;
 pub mod pareto;
 pub mod validate;
 
+pub use mutate::mutate_variant;
 // TODO: remove public export after #4669 is merged and we can integrate the Pareto functions
 pub use pareto::{is_improvement, ParetoFrontier};
 
@@ -90,10 +92,11 @@ impl Optimizer for GEPAConfig {
             })
         })?;
 
-        tracing::info!("Gateway client built successfully for GEPA optimization");
+        tracing::debug!("Gateway client built successfully for GEPA optimization");
 
-        // Initialize the Pareto frontier with baseline or provided variants
-        let initial_variants = initialize_pareto_frontier(self, &function_context)?;
+        // Initialize baseline variants for optimization
+        // These will be used as the starting pool for GEPA iterations
+        let mut initial_variants = initialize_pareto_frontier(self, &function_context)?;
 
         // Track original variant names to filter them out at the end
         let original_variant_names: std::collections::HashSet<String> =
@@ -139,13 +142,6 @@ impl Optimizer for GEPAConfig {
         // Divide concurrency among variants to avoid max_concurrency² explosion
         // Since each variant is evaluated on the same dataset, they'll take similar time
         let per_variant_concurrency = (self.max_concurrency as usize / num_variants).max(1);
-
-        tracing::debug!(
-            "Evaluating {} variants with {} concurrency each (total ≈ {})",
-            num_variants,
-            per_variant_concurrency,
-            num_variants * per_variant_concurrency
-        );
 
         let evaluation_name = self.evaluation_name.clone();
 
@@ -212,13 +208,12 @@ impl Optimizer for GEPAConfig {
             }
         }
 
-        tracing::info!("Initial evaluation complete");
-        tracing::debug!(
-            "Collected validation scores for {} variants",
+        tracing::info!(
+            "Initial evaluation complete: collected validation scores for {} variants",
             initial_scores.len()
         );
 
-        // TODO: Initialize Pareto frontier with both variant configs and their validation scores
+        // TODO[#4739]: Initialize Pareto frontier with both variant configs and their validation scores
 
         // Initialize RNG for sampling variants and minibatches
         let mut rng = match self.seed {
@@ -229,8 +224,9 @@ impl Optimizer for GEPAConfig {
             }
         };
 
-        for iteration in 0..self.max_iterations {
-            let Some(candidate_name) = initial_variants.keys().choose(&mut rng) else {
+        for iteration in 0..(self.max_iterations as usize) {
+            // TODO[#4739]: sample from Pareto frontier
+            let Some(parent_name) = initial_variants.keys().choose(&mut rng) else {
                 tracing::warn!(
                     "Skipping iteration {} because no candidates were available (should be validated upstream)",
                     iteration
@@ -238,14 +234,20 @@ impl Optimizer for GEPAConfig {
                 continue;
             };
 
-            let Some(candidate_config) = initial_variants.get(candidate_name) else {
+            let Some(parent_config) = initial_variants.get(parent_name) else {
                 tracing::warn!(
                     "Skipping iteration {} because selected candidate '{}' is missing",
                     iteration,
-                    candidate_name
+                    parent_name
                 );
                 continue;
             };
+
+            tracing::info!(
+                "GEPA iteration {}: selected parent variant '{}'",
+                iteration,
+                parent_name
+            );
 
             let minibatch_size = self.batch_size.min(train_examples.len());
             let minibatch: Vec<RenderedSample> = train_examples
@@ -263,10 +265,9 @@ impl Optimizer for GEPAConfig {
             );
             temporary_datasets.push(train_dataset_name.clone());
 
-            tracing::info!(
-                "GEPA iteration {}: evaluating candidate '{}' on minibatch of {} examples",
+            tracing::debug!(
+                "GEPA iteration {}: creating minibatch dataset with {} examples",
                 iteration,
-                candidate_name,
                 minibatch.len()
             );
 
@@ -279,36 +280,48 @@ impl Optimizer for GEPAConfig {
             )
             .await?;
 
-            let candidate_results = match evaluate_variant(EvaluateVariantParams {
+            tracing::info!(
+                "GEPA iteration {}: evaluating parent variant on minibatch",
+                iteration
+            );
+
+            let parent_results = match evaluate_variant(EvaluateVariantParams {
                 gateway_client: gateway_client.clone(),
                 clickhouse_connection_info: clickhouse_connection_info.clone(),
                 tensorzero_config: Arc::clone(&config),
                 evaluation_config: Arc::clone(&function_context.evaluation_config),
                 evaluation_name: self.evaluation_name.clone(),
-                variant_name: (*candidate_name).clone(),
-                variant_config: candidate_config.clone(),
-                dataset_name: train_dataset_name,
+                variant_name: (*parent_name).clone(),
+                variant_config: parent_config.clone(),
+                dataset_name: train_dataset_name.clone(),
                 concurrency: self.max_concurrency as usize,
             })
             .await
             {
-                Ok(results) => results,
+                Ok(results) => {
+                    tracing::info!(
+                        "GEPA iteration {}: analyzing {} parent inferences",
+                        iteration,
+                        results.evaluation_infos.len()
+                    );
+                    results
+                }
                 Err(e) => {
                     tracing::warn!(
-                        "GEPA iteration {}: evaluation failed for candidate '{}': {}",
+                        "GEPA iteration {}: evaluation failed for parent '{}': {}",
                         iteration,
-                        candidate_name,
+                        parent_name,
                         e
                     );
                     continue;
                 }
             };
 
-            let candidate_analyses = match analyze_inferences(
+            let parent_analyses = match analyze_inferences(
                 &gateway_client,
-                &candidate_results.evaluation_infos,
+                &parent_results.evaluation_infos,
                 &function_context,
-                candidate_config,
+                parent_config,
                 self,
             )
             .await
@@ -316,9 +329,9 @@ impl Optimizer for GEPAConfig {
                 Ok(analyses) => analyses,
                 Err(err) => {
                     tracing::warn!(
-                        "GEPA iteration {}: analysis failed for candidate '{}': {}",
+                        "GEPA iteration {}: analysis failed for parent '{}': {}",
                         iteration,
-                        candidate_name,
+                        parent_name,
                         err
                     );
                     continue;
@@ -326,23 +339,156 @@ impl Optimizer for GEPAConfig {
             };
 
             tracing::info!(
-                "GEPA iteration {}: completed analysis for candidate '{}' ({} analyses)",
+                "GEPA iteration {}: completed {} analyses for parent '{}', generating child variant",
                 iteration,
-                candidate_name,
-                candidate_analyses.len()
+                parent_analyses.len(),
+                parent_name
             );
 
-            // TODO: Generate variant mutation based on analyses
-            // TODO: Evaluate mutated variant on minibatch dataset
-            // TODO: Check for improvement against candidate variant
-            // TODO: Evaluate improved variant on validation dataset
-            // TODO: Update Pareto frontier with new variant and scores
+            // Wrap parent in HashMap for mutate_variant API (expects single-entry map)
+            let mut parent = HashMap::new();
+            parent.insert(parent_name, parent_config);
+
+            // Generate improved child variant using the mutate function
+            let child = match mutate_variant(
+                &gateway_client,
+                &parent_analyses,
+                &function_context,
+                parent,
+                self,
+                iteration,
+            )
+            .await
+            {
+                Ok(child_variants) => {
+                    tracing::info!(
+                        "GEPA iteration {}: mutation complete, evaluating child variant",
+                        iteration
+                    );
+                    child_variants
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        "GEPA iteration {}: mutation failed for parent '{}': {}",
+                        iteration,
+                        parent_name,
+                        err
+                    );
+                    continue;
+                }
+            };
+
+            // Extract the child variant name and config for minibatch evaluation
+            // Clone to avoid borrowing child, so we can move it later
+            let (child_name, child_config) = child
+                .iter()
+                .next()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: "child HashMap should contain exactly one entry".to_string(),
+                    })
+                })?;
+
+            tracing::info!(
+                "GEPA iteration {}: evaluating child variant '{}' on minibatch",
+                iteration,
+                child_name
+            );
+
+            let _child_results = match evaluate_variant(EvaluateVariantParams {
+                gateway_client: gateway_client.clone(),
+                clickhouse_connection_info: clickhouse_connection_info.clone(),
+                tensorzero_config: Arc::clone(&config),
+                evaluation_config: Arc::clone(&function_context.evaluation_config),
+                evaluation_name: self.evaluation_name.clone(),
+                variant_name: child_name.clone(),
+                variant_config: child_config.clone(),
+                dataset_name: train_dataset_name,
+                concurrency: self.max_concurrency as usize,
+            })
+            .await
+            {
+                Ok(results) => {
+                    tracing::info!(
+                        "GEPA iteration {}: child variant '{}' minibatch evaluation complete",
+                        iteration,
+                        child_name
+                    );
+                    results
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "GEPA iteration {}: minibatch evaluation failed for child variant '{}': {}",
+                        iteration,
+                        child_name,
+                        e
+                    );
+                    continue;
+                }
+            };
+
+            // TODO[#4739]: Check for improvement against candidate variant
+            // For now, randomly decide whether to evaluate on validation set
+            let is_improvement = rng.random::<f64>() < 0.5;
+            if is_improvement {
+                tracing::info!(
+                    "GEPA iteration {}: evaluating child variant '{}' on validation dataset",
+                    iteration,
+                    child_name
+                );
+
+                match evaluate_variant(EvaluateVariantParams {
+                    gateway_client: gateway_client.clone(),
+                    clickhouse_connection_info: clickhouse_connection_info.clone(),
+                    tensorzero_config: Arc::clone(&config),
+                    evaluation_config: Arc::clone(&function_context.evaluation_config),
+                    evaluation_name: self.evaluation_name.clone(),
+                    variant_name: child_name.clone(),
+                    variant_config: child_config.clone(),
+                    dataset_name: val_dataset_name.clone(),
+                    concurrency: per_variant_concurrency,
+                })
+                .await
+                {
+                    Ok(results) => {
+                        let child_val_scores = results.per_datapoint_scores();
+                        tracing::info!(
+                            "GEPA iteration {}: child variant '{}' validation scores collected ({} datapoints)",
+                            iteration,
+                            child_name,
+                            child_val_scores.len()
+                        );
+                        // TODO[#4739]: Update Pareto frontier with child variant and validation scores
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "GEPA iteration {}: validation evaluation failed for child variant '{}': {}",
+                            iteration,
+                            child_name,
+                            e
+                        );
+                    }
+                }
+                // TODO[#4739]: Update Pareto frontier with new variant and scores
+                // Add the child variant to the pool for future iterations
+                initial_variants.extend(child);
+                tracing::info!(
+                    "GEPA iteration {}: successfully created child variant '{}' (pool size: {})",
+                    iteration,
+                    child_name,
+                    initial_variants.len()
+                );
+            }
         }
 
-        tracing::warn!("GEPA algorithm is not yet implemented - returning placeholder result");
+        // Filter out original variants to return only newly created variants
+        initial_variants.retain(|name, _| !original_variant_names.contains(name));
 
-        // TODO: Implement actual GEPA algorithm here
-        // For now, return initial variants
+        tracing::info!(
+            "GEPA optimization complete: created {} new variant(s)",
+            initial_variants.len()
+        );
 
         // For synchronous optimizers, we store the result in the handle
         // rather than returning an error from launch()
