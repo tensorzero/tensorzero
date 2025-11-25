@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 /// Implements a Python tensorzero client, using `pyo3` to wrap the existing Rust client.
 /// Overall structure of the crate:
 /// * `src/lib.rs` - the main entrypoint of the Python native module - the `#[pymodule]` function
