@@ -38,12 +38,6 @@ pub enum UpdateDatapointRequest {
 }
 
 /// An update request for a chat datapoint.
-/// For any fields that are optional in ChatInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:
-/// - If the field is omitted, it will be left unchanged.
-/// - If the field is specified as `null`, it will be set to `null`.
-/// - If the field has a value, it will be set to the provided value.
-///
-/// In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
 #[derive(Clone, Debug, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[export_schema]
@@ -59,7 +53,10 @@ pub struct UpdateChatDatapointRequest {
     /// Chat datapoint output. If omitted, it will be left unchanged. If specified as `null`, it will be set to
     /// `null`. Otherwise, it will overwrite the existing output (and can be an empty array).
     #[serde(default, deserialize_with = "deserialize_double_option")]
-    #[schemars(extend("x-double-option" = true))]
+    #[schemars(extend("x-double-option" = true), description = "Chat datapoint output.
+
+If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared.
+Otherwise, it will overwrite the existing output (and can be an empty list).")]
     pub output: Option<Option<Vec<ContentBlockChatOutput>>>,
 
     /// Datapoint tool parameters.
@@ -81,6 +78,10 @@ pub struct UpdateChatDatapointRequest {
     /// Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     /// it will be overwrite the existing tags.
     #[serde(default)]
+    #[schemars(description = "Datapoint tags.
+
+If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared.
+Otherwise, it will overwrite the existing tags.")]
     pub tags: Option<HashMap<String, String>>,
 
     /// Metadata fields to update.
@@ -204,7 +205,10 @@ pub struct UpdateDynamicToolParamsRequest {
     /// If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
     /// provided at inference time). If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
-    #[schemars(extend("x-double-option" = true))]
+    #[schemars(extend("x-double-option" = true), description = "A subset of static tools configured for the function that the inference is explicitly allowed to use.
+
+If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
+plus additional tools provided at inference time). If specified as a value, it will be set to the provided value.")]
     pub allowed_tools: Option<Option<Vec<String>>>,
 
     /// Tools that the user provided at inference time (not in function config), in addition to the function-configured tools, that are also allowed.
@@ -216,13 +220,19 @@ pub struct UpdateDynamicToolParamsRequest {
     /// User-specified tool choice strategy.
     /// If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
     #[serde(default, deserialize_with = "deserialize_double_option")]
-    #[schemars(extend("x-double-option" = true))]
+    #[schemars(extend("x-double-option" = true), description = "User-specified tool choice strategy.
+
+If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+tool choice). If specified as a value, it will be set to the provided value.")]
     pub tool_choice: Option<Option<ToolChoice>>,
 
     /// Whether to use parallel tool calls in the inference.
     /// If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
-    #[schemars(extend("x-double-option" = true))]
+    #[schemars(extend("x-double-option" = true), description = "Whether to use parallel tool calls in the inference.
+
+If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+parallel tool calls). If specified as a value, it will be set to the provided value.")]
     pub parallel_tool_calls: Option<Option<bool>>,
 
     /// Provider-specific tool configurations
@@ -231,12 +241,6 @@ pub struct UpdateDynamicToolParamsRequest {
 }
 
 /// An update request for a JSON datapoint.
-/// For any fields that are optional in JsonInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:
-/// - If the field is omitted, it will be left unchanged.
-/// - If the field is specified as `null`, it will be set to `null`.
-/// - If the field has a value, it will be set to the provided value.
-///
-/// In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
 #[derive(Clone, Debug, JsonSchema, Serialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 #[export_schema]
@@ -250,10 +254,10 @@ pub struct UpdateJsonDatapointRequest {
     pub input: Option<Input>,
 
     /// JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    /// This will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will
-    /// also be stored, because we allow invalid outputs in datapoints by design.
     #[serde(default, deserialize_with = "deserialize_double_option")]
-    #[schemars(extend("x-double-option" = true))]
+    #[schemars(extend("x-double-option" = true), description = "JSON datapoint output.
+If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (represents edge case where
+inference succeeded but model didn't output relevant content blocks). Otherwise, it will overwrite the existing output.")]
     pub output: Option<Option<JsonDatapointOutputUpdate>>,
 
     /// The output schema of the JSON datapoint. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
@@ -341,18 +345,16 @@ impl<'de> Deserialize<'de> for UpdateJsonDatapointRequest {
 }
 
 /// A request to update the output of a JSON datapoint.
-/// We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
-/// for users to run evals against them.
 ///
-/// The possible values for `output` are:
-/// - `None`: don't update `output`
-/// - `Some(None)`: set output to `None` (represents edge case where inference succeeded but model didn't output relevant content blocks)
-/// - `Some(String)`: set the output to the string (= JSON-serialized string)
+/// We intentionally only accept the `raw` field, because JSON datapoints can contain invalid or malformed JSON for eval purposes.
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 #[export_schema]
 pub struct JsonDatapointOutputUpdate {
     /// The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
+    ///
+    /// This will be parsed and validated against the datapoint's `output_schema`. Valid `raw` values will be parsed and stored as `parsed`, and
+    /// invalid `raw` values will be stored as-is, because we allow invalid outputs in datapoints by design.
     pub raw: Option<String>,
 }
 
@@ -363,7 +365,10 @@ pub struct JsonDatapointOutputUpdate {
 pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
-    #[schemars(extend("x-double-option" = true))]
+    #[schemars(extend("x-double-option" = true), description = "Datapoint name.
+
+If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+be set to the provided value.")]
     pub name: Option<Option<String>>,
 }
 
@@ -590,8 +595,6 @@ pub struct CreateJsonDatapointRequest {
     pub input: Input,
 
     /// JSON datapoint output. Optional.
-    /// If provided, it will be validated against the output_schema. Invalid raw outputs will be stored as-is (not parsed), because we allow
-    /// invalid outputs in datapoints by design.
     pub output: Option<JsonDatapointOutputUpdate>,
 
     /// The output schema of the JSON datapoint. Optional.

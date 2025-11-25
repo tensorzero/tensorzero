@@ -90,7 +90,10 @@ class DatapointMetadataUpdate:
 
     name: str | None | UnsetType = UNSET
     """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    Datapoint name.
+
+    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    be set to the provided value.
     """
 
 
@@ -574,18 +577,16 @@ class InputMessageContentUnknown:
 class JsonDatapointOutputUpdate:
     """
     A request to update the output of a JSON datapoint.
-    We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
-    for users to run evals against them.
 
-    The possible values for `output` are:
-    - `None`: don't update `output`
-    - `Some(None)`: set output to `None` (represents edge case where inference succeeded but model didn't output relevant content blocks)
-    - `Some(String)`: set the output to the string (= JSON-serialized string)
+    We intentionally only accept the `raw` field, because JSON datapoints can contain invalid or malformed JSON for eval purposes.
     """
 
     raw: str | None = None
     """
     The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
+
+    This will be parsed and validated against the datapoint's `output_schema`. Valid `raw` values will be parsed and stored as `parsed`, and
+    invalid `raw` values will be stored as-is, because we allow invalid outputs in datapoints by design.
     """
 
 
@@ -924,7 +925,10 @@ class UpdateDatapointMetadataRequest:
     """
     name: str | None | UnsetType = UNSET
     """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    Datapoint name.
+
+    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    be set to the provided value.
     """
 
 
@@ -1336,13 +1340,16 @@ class UpdateDynamicToolParamsRequest:
     allowed_tools: list[str] | None | UnsetType = UNSET
     """
     A subset of static tools configured for the function that the inference is explicitly allowed to use.
-    If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
-    provided at inference time). If specified as a value, it will be set to the provided value.
+
+    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
+    plus additional tools provided at inference time). If specified as a value, it will be set to the provided value.
     """
     parallel_tool_calls: bool | None | UnsetType = UNSET
     """
     Whether to use parallel tool calls in the inference.
-    If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+
+    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    parallel tool calls). If specified as a value, it will be set to the provided value.
     """
     provider_tools: list[ProviderTool] | None = None
     """
@@ -1352,7 +1359,9 @@ class UpdateDynamicToolParamsRequest:
     tool_choice: ToolChoice | None | UnsetType = UNSET
     """
     User-specified tool choice strategy.
-    If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
+
+    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    tool choice). If specified as a value, it will be set to the provided value.
     """
 
 
@@ -1542,12 +1551,6 @@ class StoredJsonInference:
 class UpdateChatDatapointRequestInternal:
     """
     An update request for a chat datapoint.
-    For any fields that are optional in ChatInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:
-    - If the field is omitted, it will be left unchanged.
-    - If the field is specified as `null`, it will be set to `null`.
-    - If the field has a value, it will be set to the provided value.
-
-    In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
     """
 
     id: str
@@ -1564,8 +1567,9 @@ class UpdateChatDatapointRequestInternal:
     allowed_tools: list[str] | None | UnsetType = UNSET
     """
     A subset of static tools configured for the function that the inference is explicitly allowed to use.
-    If omitted, it will be left unchanged. If specified as `null`, it will be cleared (we allow function-configured tools plus additional tools
-    provided at inference time). If specified as a value, it will be set to the provided value.
+
+    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we allow function-configured tools
+    plus additional tools provided at inference time). If specified as a value, it will be set to the provided value.
     """
     input: Input | None = None
     """
@@ -1578,17 +1582,24 @@ class UpdateChatDatapointRequestInternal:
     """
     name: str | None | UnsetType = UNSET
     """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    Datapoint name.
+
+    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    be set to the provided value.
     """
     output: list[ContentBlockChatOutput] | None | UnsetType = UNSET
     """
-    Chat datapoint output. If omitted, it will be left unchanged. If specified as `null`, it will be set to
-    `null`. Otherwise, it will overwrite the existing output (and can be an empty array).
+    Chat datapoint output.
+
+    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared.
+    Otherwise, it will overwrite the existing output (and can be an empty list).
     """
     parallel_tool_calls: bool | None | UnsetType = UNSET
     """
     Whether to use parallel tool calls in the inference.
-    If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+
+    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    parallel tool calls). If specified as a value, it will be set to the provided value.
     """
     provider_tools: list[ProviderTool] | None = None
     """
@@ -1597,13 +1608,17 @@ class UpdateChatDatapointRequestInternal:
     """
     tags: dict[str, Any] | None = None
     """
-    Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
-    it will be overwrite the existing tags.
+    Datapoint tags.
+
+    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared.
+    Otherwise, it will overwrite the existing tags.
     """
     tool_choice: ToolChoice | None | UnsetType = UNSET
     """
     User-specified tool choice strategy.
-    If omitted, it will be left unchanged. If specified as `null`, we will clear the dynamic tool choice and use function-configured tool choice.
+
+    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (we will use function-configured
+    tool choice). If specified as a value, it will be set to the provided value.
     """
     tool_params: UpdateDynamicToolParamsRequest | None = None
     """
@@ -1625,12 +1640,6 @@ class UpdateChatDatapointRequest(UpdateChatDatapointRequestInternal):
 class UpdateJsonDatapointRequestInternal:
     """
     An update request for a JSON datapoint.
-    For any fields that are optional in JsonInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:
-    - If the field is omitted, it will be left unchanged.
-    - If the field is specified as `null`, it will be set to `null`.
-    - If the field has a value, it will be set to the provided value.
-
-    In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
     """
 
     id: str
@@ -1648,13 +1657,16 @@ class UpdateJsonDatapointRequestInternal:
     """
     name: str | None | UnsetType = UNSET
     """
-    Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    Datapoint name.
+
+    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared. If specified as a value, it will
+    be set to the provided value.
     """
     output: JsonDatapointOutputUpdate | None | UnsetType = UNSET
     """
-    JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    This will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will
-    also be stored, because we allow invalid outputs in datapoints by design.
+    JSON datapoint output.
+    If omitted (which uses the default value `UNSET`), it will be left unchanged. If set to `None`, it will be cleared (represents edge case where
+    inference succeeded but model didn't output relevant content blocks). Otherwise, it will overwrite the existing output.
     """
     output_schema: Any | None = None
     """
@@ -1805,8 +1817,6 @@ class CreateJsonDatapointRequest:
     output: JsonDatapointOutputUpdate | None = None
     """
     JSON datapoint output. Optional.
-    If provided, it will be validated against the output_schema. Invalid raw outputs will be stored as-is (not parsed), because we allow
-    invalid outputs in datapoints by design.
     """
     output_schema: Any | None = None
     """
