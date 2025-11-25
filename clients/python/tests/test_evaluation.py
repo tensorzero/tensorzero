@@ -562,7 +562,7 @@ def test_sync_run_evaluation_with_datapoint_ids(
 
     # Select first 3 datapoint IDs (or fewer if dataset is smaller)
     num_to_select = min(3, len(all_datapoint_ids))
-    selected_ids = all_datapoint_ids[:num_to_select]
+    selected_ids: list[str] = all_datapoint_ids[:num_to_select]
 
     # Run evaluation with only the selected datapoint IDs
     second_job = embedded_sync_client.experimental_run_evaluation(
@@ -629,7 +629,7 @@ async def test_async_run_evaluation_with_datapoint_ids(
 
     # Select first 3 datapoint IDs (or fewer if dataset is smaller)
     num_to_select = min(3, len(all_datapoint_ids))
-    selected_ids = all_datapoint_ids[:num_to_select]
+    selected_ids: list[str] = all_datapoint_ids[:num_to_select]
 
     # Run evaluation with only the selected datapoint IDs
     second_job = await embedded_async_client.experimental_run_evaluation(
