@@ -123,13 +123,13 @@ impl From<StoredConfig> for UninitializedConfig {
             rate_limiting,
             object_storage,
             models,
+            embedding_models,
             functions,
             metrics,
             tools,
             evaluations,
             provider_types,
             optimizers,
-            embedding_models,
         }
     }
 }
