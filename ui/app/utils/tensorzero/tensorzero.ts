@@ -447,8 +447,14 @@ export class TensorZeroClient {
     return { id: body.ids[0] };
   }
 
-  async getDatapoint(datapointId: string): Promise<Datapoint | null> {
-    const endpoint = `/v1/datasets/get_datapoints`;
+  async getDatapoint(
+    datapointId: string,
+    datasetName?: string,
+  ): Promise<Datapoint | undefined> {
+    // We currently maintain 2 endpoints for getting a datapoint, with/without the dataset name.
+    const endpoint = datasetName
+      ? `/v1/datasets/${encodeURIComponent(datasetName)}/get_datapoints`
+      : `/v1/datasets/get_datapoints`;
     const requestBody: GetDatapointsRequest = {
       ids: [datapointId],
     };
@@ -464,7 +470,10 @@ export class TensorZeroClient {
     }
 
     const body = (await response.json()) as GetDatapointsResponse;
-    return body.datapoints[0] ?? null;
+    if (body.datapoints.length === 0) {
+      return undefined;
+    }
+    return body.datapoints[0];
   }
 
   async listDatapoints(
