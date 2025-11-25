@@ -1,0 +1,30 @@
+[functions.aws_bedrock_dynamic]
+type = "chat"
+
+[functions.aws_bedrock_dynamic.variants.aws_bedrock_dynamic_test]
+type = "chat_completion"
+model="aws_bedrock_dynamic_test"
+
+[models.aws_bedrock_dynamic_test]
+routing = ["aws_bedrock_normal","aws_bedrock_env","aws_bedrock_dynamic"]
+
+[models.aws_bedrock_dynamic_test.providers.aws_bedrock_normal]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+allow_auto_detect_region = true
+
+[models.aws_bedrock_dynamic_test.providers.aws_bedrock_env]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+allow_auto_detect_region = true
+access_key = "env::AWS_ACCESS_KEY_ID"
+secret_key = "env::AWS_SECRET_ACCESS_KEY"
+
+[models.aws_bedrock_dynamic_test.providers.aws_bedrock_dynamic]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
+region = "dynamic::AWS_DEFAULT_REGION"
+access_key = "dynamic::AWS_ACCESS_KEY_ID"
+secret_key = "dynamic::AWS_SECRET_ACCESS_KEY"
+
+
