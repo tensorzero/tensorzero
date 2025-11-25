@@ -782,17 +782,76 @@ impl Config {
         Ok(config_load_info)
     }
 
+    /// Loads and initializes a config from a parsed TOML table.
+    ///
+    /// This is the core config loading function that transforms a merged TOML table into
+    /// a fully validated and initialized `Config`, paired with a `ConfigSnapshot` for database storage.
+    ///
+    /// # Config Loading Flow
+    ///
+    /// This function performs the following steps:
+    ///
+    /// 1. **Prepare for Snapshot**: Sort the TOML table keys recursively to ensure deterministic
+    ///    hashing (order-independent). This sorted table is used for both parsing and snapshot creation.
+    ///
+    /// 2. **Parse to UninitializedConfig**: Deserialize the TOML table into an `UninitializedConfig`,
+    ///    which holds the raw config data before filesystem resources (schemas, templates) are loaded.
+    ///
+    /// 3. **Initialize Components**: Load and initialize all config components:
+    ///    - Object storage (S3, filesystem)
+    ///    - Gateway settings (timeouts, OTLP, etc.)
+    ///    - HTTP client
+    ///    - Built-in functions (tensorzero::*)
+    ///    - User-defined functions (with validation against tensorzero:: prefix)
+    ///    - Tools
+    ///    - Models (with async credential validation)
+    ///    - Embedding models
+    ///    - Optimizers
+    ///    - Templates (load from filesystem, compile with MiniJinja)
+    ///
+    /// 4. **Validate**: Run comprehensive validation checks:
+    ///    - Function validation (schemas, templates, tools exist)
+    ///    - Model validation (timeout settings)
+    ///    - Metric name restrictions
+    ///    - Name prefix restrictions (tensorzero:: reserved)
+    ///
+    /// 5. **Load Evaluations**: Add evaluation-specific functions and metrics to the config.
+    ///    This happens after validation since evaluations write tensorzero:: prefixed items.
+    ///
+    /// 6. **Create Snapshot**: Create a `ConfigSnapshot` with the sorted TOML and extra templates
+    ///    for database storage. The snapshot includes a Blake3 hash for version tracking.
+    ///
+    /// 7. **Return ConfigLoadInfo**: Pair the config and snapshot in a `ConfigLoadInfo`.
+    ///    This happens **before** database connections exist, so the snapshot is written later.
+    ///
+    /// # Why ConfigLoadInfo?
+    ///
+    /// This function returns `ConfigLoadInfo` (not just `Config`) because:
+    /// - Config loading happens **before** database connection setup
+    /// - The database connection settings come from the config itself
+    /// - We need to write the config snapshot to ClickHouse, but can't do it yet
+    /// - `ConfigLoadInfo` holds both the ready-to-use config and the snapshot for later DB write
+    ///
+    /// The caller pattern is:
+    /// ```ignore
+    /// let config_load_info = Config::load_from_toml(table).await?;
+    /// let clickhouse = setup_clickhouse(&config_load_info.config).await?;
+    /// let config_with_hash = config_load_info.into_config(&clickhouse).await?;
+    /// ```
     async fn load_from_toml(table: toml::Table) -> Result<ConfigLoadInfo, Error> {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.");
         }
-        // Steps for getting a sort-stable hashable Table
-        // Recursively walk the TOML table, sort all tables in place
-        // Serialize to a string, use that for ConfigSnapshot
-        // Continue parsing the table afterwards.
+
+        // Sort the table recursively for deterministic hashing.
+        // This ensures configs with the same content but different key ordering
+        // produce the same hash.
         let table = prepare_table_for_snapshot(table);
-        // Clone table before consuming - needed for ConfigSnapshot
+
+        // Clone the table before consumption - we need it for ConfigSnapshot creation
         let table_for_snapshot = table.clone();
+
+        // Deserialize the TOML table into UninitializedConfig
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
         let mut templates = TemplateConfig::new();
@@ -1194,6 +1253,26 @@ impl Config {
 pub mod unwritten_config {
     use super::*;
 
+    /// A wrapper around `Config` that indicates the config has been loaded and validated,
+    /// but has **not yet been written to the database**.
+    ///
+    /// This type exists to enforce correct sequencing in the config loading process:
+    /// 1. Config files are loaded and parsed
+    /// 2. The config is validated and initialized (producing `UnwrittenConfig`)
+    /// 3. Later, the config snapshot is written to the database (consuming `UnwrittenConfig`)
+    ///
+    /// This wrapper is necessary because config loading happens **before** database connections
+    /// are established. The gateway needs to read database connection settings from the config
+    /// itself before it can connect to ClickHouse.
+    ///
+    /// # Deref Behavior
+    /// This type implements `Deref<Target = Config>`, so you can access all `Config` methods
+    /// through an `UnwrittenConfig` reference.
+    ///
+    /// # Consuming the Config
+    /// To get the inner `Config`, you must either:
+    /// - Call `ConfigLoadInfo::into_config()` to write the snapshot to the database
+    /// - Call `ConfigLoadInfo::dangerous_into_config_without_writing()` (test/special cases only)
     #[derive(Debug)]
     pub struct UnwrittenConfig(Config);
 
@@ -1210,6 +1289,43 @@ pub mod unwritten_config {
             &self.0
         }
     }
+
+    /// Holds both the loaded config and its database snapshot representation.
+    ///
+    /// This is the return type of the main config loading functions (`Config::load_and_verify_from_path()`).
+    /// It pairs together:
+    /// - `UnwrittenConfig`: The fully loaded, validated, and initialized config (ready to use)
+    /// - `ConfigSnapshot`: The serialized representation for database storage (TOML + templates + hash)
+    ///
+    /// # Why This Exists
+    /// Config loading happens in two phases with a database connection in between:
+    ///
+    /// **Phase 1 (Before Database Connection):**
+    /// - Load and parse TOML files
+    /// - Validate all config settings
+    /// - Initialize models, functions, templates, etc.
+    /// - Create serializable snapshot
+    /// → Returns `ConfigLoadInfo`
+    ///
+    /// **Phase 2 (After Database Connection):**
+    /// - Write snapshot to ClickHouse
+    /// - Get config hash for tracking
+    /// → Returns `ConfigWithHash`
+    ///
+    /// This separation is necessary because the database connection settings are read from
+    /// the config itself, so we must fully load the config before we can connect to the database.
+    ///
+    /// # Usage
+    /// ```ignore
+    /// // Phase 1: Load config (no database connection needed)
+    /// let config_load_info = Config::load_and_verify_from_path(&config_glob).await?;
+    ///
+    /// // Use the config to get database connection settings
+    /// let clickhouse = create_clickhouse_connection(&config_load_info.config).await?;
+    ///
+    /// // Phase 2: Write snapshot to database
+    /// let config_with_hash = config_load_info.into_config(&clickhouse).await?;
+    /// ```
     #[derive(Debug)]
     pub struct ConfigLoadInfo {
         pub config: UnwrittenConfig,
@@ -1221,6 +1337,13 @@ pub mod unwritten_config {
             Self { config, snapshot }
         }
 
+        /// Writes the config snapshot to ClickHouse and returns the config with its hash.
+        ///
+        /// This consumes the `ConfigLoadInfo` and:
+        /// 1. Writes the `ConfigSnapshot` to the `ConfigSnapshot` table in ClickHouse
+        /// 2. Returns a `ConfigWithHash` containing the config and its hash
+        ///
+        /// The hash is used to track which config version was used for each inference request.
         pub async fn into_config(
             self,
             clickhouse: &ClickHouseConnectionInfo,
@@ -1234,6 +1357,10 @@ pub mod unwritten_config {
             })
         }
 
+        /// Extracts the config without writing to the database.
+        ///
+        /// **WARNING:** This should only be used in tests or special cases where database
+        /// writes are not possible or desired. In production, use `into_config()` instead.
         pub fn dangerous_into_config_without_writing(self) -> Config {
             self.config.0
         }

@@ -8,12 +8,73 @@ use crate::error::{Error, ErrorDetails};
 use super::stored::StoredConfig;
 use super::UninitializedConfig;
 
+/// A serializable snapshot of a config suitable for storage in the database.
+///
+/// This struct holds the parts of a config that need to be persisted to the `ConfigSnapshot`
+/// table in ClickHouse. It serves two main purposes:
+///
+/// 1. **Config Version Tracking**: Each unique config gets a deterministic hash. This hash is
+///    stored with each inference request, allowing you to correlate inference results with the
+///    exact config that was active at the time.
+///
+/// 2. **Config History**: All historical configs are preserved in the database, enabling:
+///    - Reproducing past behavior
+///    - Understanding config evolution over time
+///    - Debugging issues by comparing configs
+///
+/// # Fields
+///
+/// - `config`: The parsed config as a `StoredConfig` (will be serialized to TOML for storage)
+/// - `hash`: A deterministic Blake3 hash computed from the TOML and templates
+/// - `extra_templates`: Templates loaded from the filesystem (not in TOML)
+///
+/// # Templates in ConfigSnapshot
+///
+/// **IMPORTANT**: The `extra_templates` in this struct are **only used for database storage
+/// and hash computation**. They are NOT used at runtime by the gateway.
+///
+/// - At runtime, the gateway uses `Config.templates` (a `TemplateConfig` with compiled MiniJinja templates)
+/// - The `extra_templates` here are just the raw template strings that were loaded from disk
+/// - They're stored in the database to preserve the complete config state for reproducibility
+///
+/// # Hash Computation
+///
+/// The hash is computed from:
+/// 1. The TOML config (after sorting keys for determinism via `prepare_table_for_snapshot()`)
+/// 2. The extra templates (sorted by name for determinism)
+///
+/// This ensures that any change to the config or templates produces a different hash.
+///
+/// # Usage
+///
+/// This is typically created during config loading and then written to the database:
+///
+/// ```ignore
+/// // During config loading (in Config::load_from_toml)
+/// let snapshot = ConfigSnapshot::new(sorted_table, extra_templates)?;
+///
+/// // Later, after database connection is established
+/// write_config_snapshot(&clickhouse, snapshot).await?;
+/// ```
 #[expect(clippy::manual_non_exhaustive)]
 #[derive(Debug)]
 pub struct ConfigSnapshot {
-    pub config: StoredConfig, // serialized as TOML
+    /// The config in a form suitable for serialization to TOML for database storage.
+    /// Uses `StoredConfig` instead of `UninitializedConfig` to support backward-compatible
+    /// deserialization of historical snapshots (see `stored.rs` for details).
+    pub config: StoredConfig,
+
+    /// A deterministic Blake3 hash of the config TOML and templates.
+    /// This uniquely identifies this config version.
     pub hash: SnapshotHash,
+
+    /// Templates that were loaded from the filesystem (e.g., prompt templates).
+    /// These are stored separately from the TOML config itself.
+    ///
+    /// **NOTE**: These templates are for database storage only. At runtime, the gateway
+    /// uses the compiled templates in `Config.templates`, not these raw strings.
     pub extra_templates: HashMap<String, String>,
+
     __private: (),
 }
 
