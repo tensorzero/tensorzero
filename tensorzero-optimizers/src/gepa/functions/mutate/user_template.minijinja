@@ -17,21 +17,23 @@
 </message_templates>
 
 <analyses>
-{% for analysis in analyses %}
-<example>
-{% if analysis.inference is defined -%}
-<inference>
-{{analysis.inference | tojson(indent=2)}}
-</inference>
-{%- endif %}
+{%- for analysis in analyses %}
+<example n="{{loop.index}}">
+{% if analysis.input is defined -%}
+<input>
+{{analysis.input | tojson(indent=2)}}
+</input>
+<output>
+{{analysis.output | tojson(indent=2)}}
+</output>
+{%- endif -%}
 <analysis>
 {{analysis.analysis}}
 </analysis>
 </example>
-{% endfor %}
+{%- endfor %}
 </analyses>
 
-<task>
 Read the function_context, message_templates, and analyses above. Extract insights from the analyses and improve the message_templates to address identified issues while preserving what works well.
 Return your improved templates in the following JSON format:
 ```json
@@ -48,4 +50,3 @@ Notes:
 - Each template must have a "name" and "content" field
 - Preserve variable placeholders exactly as they appear in the schemas
 - If output_schema is provided in the function_config section, ensure your improved instructions align with it.
-</task>

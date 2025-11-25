@@ -13,9 +13,9 @@ The **message_templates** contain:
 - System, user, assistant, or other templates used to instruct the LLM or format content
 - These are the templates you will improve
 
-The **analyses** contain a list of:
-- **analysis:** of the LLM output (error reports, improvement suggestions, or optimal patterns)
-- **inference:** The input and LLM output analyzed, if provided
+The **analyses** contain numbered examples, each with:
+- **input** and **output:** The inference context (if provided)
+- **analysis:** Error reports, improvement suggestions, or optimal patterns from analyzing the inference
 
 ## Your Task
 
