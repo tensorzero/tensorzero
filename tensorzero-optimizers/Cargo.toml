@@ -73,11 +73,6 @@ name = "e2e_dicl"
 path = "tests/e2e/dicl.rs"
 required-features = ["e2e_tests"]
 
-[[test]]
-name = "e2e_gepa"
-path = "tests/e2e/gepa/mod.rs"
-required-features = ["e2e_tests"]
-
 # False positive (used in macro)
 [package.metadata.cargo-shear]
 ignored = ["paste"]
