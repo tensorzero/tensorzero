@@ -186,6 +186,7 @@ pub struct DatasetQueryParams {
     pub limit: Option<u32>,
     pub offset: Option<u32>,
 }
+
 #[derive(Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct GetDatasetMetadataParams {
