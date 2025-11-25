@@ -103,7 +103,7 @@ pub fn build_mutate_input(
         .map(|(name, config)| (name.clone(), config.path.data().to_string()))
         .collect();
 
-    // Build analyses map
+    // Serialize analyses to JSON
     let analyses_json = serde_json::to_value(analyses).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
             message: format!("Failed to serialize analyses: {e}"),
@@ -131,9 +131,10 @@ pub fn build_mutate_input(
 /// Takes aggregated analyses and calls the built-in `tensorzero::optimization::gepa::mutate`
 /// function to synthesize improved prompt templates.
 ///
-/// Returns MutateOutput with improved templates.
+/// Returns a HashMap with a single entry: the variant name mapped to its UninitializedChatCompletionConfig
+/// containing the improved templates. The variant name follows the pattern: `{prefix}-iter-{iteration}-{parent_name}`.
 ///
-/// Returns error only if mutation fails.
+/// Returns error if mutation fails (LLM call fails, invalid response format, etc.).
 pub async fn mutate_variant(
     gateway_client: &Client,
     analyses: &[Analysis],
@@ -201,7 +202,7 @@ pub async fn mutate_variant(
         }));
     };
 
-    // Extract json content from the response
+    // Extract JSON content from the response
     let InferenceResponse::Json(json_response) = &response else {
         return Err(Error::new(ErrorDetails::Inference {
             message: "mutate function is defined as Json, cannot return Chat".to_string(),
