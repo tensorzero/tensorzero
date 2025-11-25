@@ -380,7 +380,7 @@ mod tests {
     #[test]
     fn test_get_all_built_in_functions() {
         let functions = get_all_built_in_functions().unwrap();
-        assert_eq!(functions.len(), 3);
+        assert_eq!(functions.len(), 4);
         assert!(functions.contains_key("tensorzero::hello_chat"));
         assert!(functions.contains_key("tensorzero::hello_json"));
         assert!(functions.contains_key("tensorzero::optimization::gepa::analyze"));
