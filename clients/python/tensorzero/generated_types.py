@@ -1580,10 +1580,10 @@ class UpdateChatDatapointRequestInternal:
     """
     Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     """
-    output: list[ContentBlockChatOutput] | None = None
+    output: list[ContentBlockChatOutput] | None | UnsetType = UNSET
     """
-    Chat datapoint output. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
-    it will overwrite the existing output.
+    Chat datapoint output. If omitted, it will be left unchanged. If specified as `null`, it will be set to
+    `null`. Otherwise, it will overwrite the existing output (and can be an empty array).
     """
     parallel_tool_calls: bool | None | UnsetType = UNSET
     """
