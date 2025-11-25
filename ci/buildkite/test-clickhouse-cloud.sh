@@ -107,5 +107,5 @@ cd ui/fixtures
 cd ../..
 sleep 2
 
-cargo test-e2e-no-creds --no-fail-fast -- --skip test_concurrent_clickhouse_migrations
+cargo test-clickhouse --no-fail-fast -- --skip test_concurrent_clickhouse_migrations
 cat e2e_logs.txt

@@ -850,7 +850,7 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
-        run: cargo test-e2e-no-creds
+        run: cargo test-clickhouse
 
       - name: Print docker compose logs (replicated)
         if: always() && matrix.replicated == true
