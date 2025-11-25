@@ -174,7 +174,7 @@ jobs:
 
       - name: Upload new model inference cache
         if: always() && inputs.regen_cache == true
-        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: model-inference-cache
           path: |
@@ -302,18 +302,8 @@ jobs:
         run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
 
       - name: Upload Playwright artifacts (GitHub runner)
-        if: failure() && inputs.regen_cache == false
+        if: always()
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
-        with:
-          name: playwright-report-auth-${{ matrix.auth_enabled }}
-          path: |
-            ui/playwright-report/
-            ui/test-results/
-          retention-days: 7
-
-      - name: Upload Playwright artifacts (Namespace runner)
-        if: failure() && inputs.regen_cache == true
-        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
         with:
           name: playwright-report-auth-${{ matrix.auth_enabled }}
           path: |
