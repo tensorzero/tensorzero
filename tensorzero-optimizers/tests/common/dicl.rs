@@ -13,7 +13,7 @@ use tensorzero::{
     RenderedSample, Role, System,
 };
 use tensorzero_core::{
-    config::{snapshot::SnapshotHash, Config, ConfigFileGlob, UninitializedVariantConfig},
+    config::{Config, ConfigFileGlob, UninitializedVariantConfig},
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
         select_model_inferences_clickhouse, CLICKHOUSE_URL,
@@ -117,7 +117,6 @@ pub async fn test_dicl_optimization_chat() {
     .await
     .unwrap();
     let config = config_load_info.dangerous_into_config_without_writing();
-    let snapshot_hash = SnapshotHash::new_test();
 
     let job_handle = optimizer_info
         .launch(
@@ -127,7 +126,6 @@ pub async fn test_dicl_optimization_chat() {
             &credentials,
             &clickhouse,
             Arc::new(config),
-            snapshot_hash,
         )
         .await
         .unwrap();
@@ -404,7 +402,6 @@ pub async fn test_dicl_optimization_json() {
     .await
     .unwrap();
     let config = config_load_info.dangerous_into_config_without_writing();
-    let snapshot_hash = SnapshotHash::new_test();
 
     let job_handle = optimizer_info
         .launch(
@@ -414,7 +411,6 @@ pub async fn test_dicl_optimization_json() {
             &credentials,
             &clickhouse,
             Arc::new(config),
-            snapshot_hash,
         )
         .await
         .unwrap();

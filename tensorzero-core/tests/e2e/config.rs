@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
+use tensorzero_core::config::snapshot::ConfigSnapshot;
 use tensorzero_core::config::{write_config_snapshot, Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
@@ -101,8 +101,6 @@ async fn test_from_components_basic() {
         .unwrap()
         .dangerous_into_config_without_writing(),
     );
-    let snapshot_hash = SnapshotHash::new_test();
-
     // Create components
     let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
     let postgres_connection_info = PostgresConnectionInfo::Disabled;
@@ -111,7 +109,6 @@ async fn test_from_components_basic() {
     // Build client using FromComponents mode
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::FromComponents {
         config,
-        snapshot_hash,
         clickhouse_connection_info,
         postgres_connection_info,
         http_client,

@@ -1114,7 +1114,6 @@ mod tests {
             .unwrap()
             .dangerous_into_config_without_writing(),
         );
-        let snapshot_hash = SnapshotHash::new_test();
 
         // Create mock components
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();

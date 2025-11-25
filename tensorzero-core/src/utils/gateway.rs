@@ -204,8 +204,6 @@ impl GatewayHandle {
             PostgresConnectionInfo::new_mock(test_options.postgres_healthy);
         let cancel_token = CancellationToken::new();
         let auth_cache = create_auth_cache_from_config(&config);
-        // For testing only
-        let snapshot_hash = SnapshotHash::new_test();
         Self {
             app_state: AppStateData {
                 config,
@@ -597,11 +595,8 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let config_load_info = ConfigLoadInfo::new(
-            UnwrittenConfig::new(config),
-            ConfigSnapshot::new_empty_for_test(),
-        );
-        let clickhouse_connection_info = setup_clickhouse(&config_load_info, None, false)
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        let clickhouse_connection_info = setup_clickhouse(&unwritten_config, None, false)
             .await
             .unwrap();
         assert_eq!(
@@ -641,12 +636,9 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let config_load_info = ConfigLoadInfo::new(
-            UnwrittenConfig::new(config),
-            ConfigSnapshot::new_empty_for_test(),
-        );
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
 
-        let err = setup_clickhouse(&config_load_info, None, false)
+        let err = setup_clickhouse(&unwritten_config, None, false)
             .await
             .unwrap_err();
         assert!(err
@@ -677,11 +669,8 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let config_load_info = ConfigLoadInfo::new(
-            UnwrittenConfig::new(config),
-            ConfigSnapshot::new_empty_for_test(),
-        );
-        setup_clickhouse(&config_load_info, Some("bad_url".to_string()), false)
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
+        setup_clickhouse(&unwritten_config, Some("bad_url".to_string()), false)
             .await
             .expect_err("ClickHouse setup should fail given a bad URL");
         assert!(logs_contain("Invalid ClickHouse database URL"));
@@ -714,12 +703,9 @@ mod tests {
             gateway: gateway_config,
             ..Default::default()
         };
-        let config_load_info = ConfigLoadInfo::new(
-            UnwrittenConfig::new(config),
-            ConfigSnapshot::new_empty_for_test(),
-        );
+        let unwritten_config = UnwrittenConfig::new(config, ConfigSnapshot::new_empty_for_test());
         setup_clickhouse(
-            &config_load_info,
+            &unwritten_config,
             Some("https://tensorzero.invalid:8123".to_string()),
             false,
         )
@@ -837,7 +823,6 @@ mod tests {
             rate_limiting: Default::default(),
             ..Default::default()
         });
-        let hash = SnapshotHash::new_test();
 
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let postgres_connection_info = PostgresConnectionInfo::Disabled;
@@ -850,7 +835,6 @@ mod tests {
             postgres_connection_info,
             http_client,
             None,
-            hash,
         )
         .await
         .expect("Gateway setup should succeed when rate limiting has no rules");

@@ -261,7 +261,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            SnapshotHash::new_test(),
         )
         .await
         .unwrap();
@@ -308,7 +307,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            SnapshotHash::new_test(),
         )
         .await
         .unwrap();
@@ -351,7 +349,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            SnapshotHash::new_test(),
         )
         .await
         .unwrap();
@@ -403,7 +400,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            SnapshotHash::new_test(),
         )
         .await
         .unwrap();
@@ -445,7 +441,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            SnapshotHash::new_test(),
         )
         .await;
 
@@ -480,14 +475,8 @@ mod tests {
         };
 
         // Dataset name "builder" is reserved
-        let result = create_from_inferences(
-            &config,
-            &mock_clickhouse,
-            "builder".to_string(),
-            request,
-            SnapshotHash::new_test(),
-        )
-        .await;
+        let result =
+            create_from_inferences(&config, &mock_clickhouse, "builder".to_string(), request).await;
 
         assert!(result.is_err());
         let error = result.unwrap_err();
@@ -539,7 +528,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            SnapshotHash::new_test(),
         )
         .await
         .unwrap();
@@ -595,7 +583,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            SnapshotHash::new_test(),
         )
         .await
         .unwrap();
@@ -671,7 +658,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            SnapshotHash::new_test(),
         )
         .await
         .unwrap();

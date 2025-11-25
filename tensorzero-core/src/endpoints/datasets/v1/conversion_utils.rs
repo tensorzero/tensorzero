@@ -446,7 +446,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset", None)
+            .into_database_insert(&config, &fetch_context, "test_dataset")
             .await;
 
         // Invalid output should be accepted, but parsed should be None due to schema validation failure.
@@ -493,7 +493,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset", None)
+            .into_database_insert(&config, &fetch_context, "test_dataset")
             .await;
 
         // Invalid JSON output should be accepted, with parsed set to None.
@@ -527,7 +527,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset", None)
+            .into_database_insert(&config, &fetch_context, "test_dataset")
             .await;
 
         assert!(result.is_err());
@@ -574,7 +574,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset", None)
+            .into_database_insert(&config, &fetch_context, "test_dataset")
             .await;
 
         assert!(result.is_ok());
@@ -607,7 +607,7 @@ mod tests {
         };
 
         let result = request
-            .into_database_insert(&config, &fetch_context, "test_dataset", None)
+            .into_database_insert(&config, &fetch_context, "test_dataset")
             .await;
 
         assert!(result.is_err());

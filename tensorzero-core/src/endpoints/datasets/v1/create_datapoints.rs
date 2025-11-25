@@ -254,7 +254,6 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
-            None,
         )
         .await
         .unwrap();
@@ -330,7 +329,6 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
-            None,
         )
         .await
         .unwrap();
@@ -408,7 +406,6 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
-            None,
         )
         .await
         .unwrap();
@@ -436,7 +433,6 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
-            None,
         )
         .await;
 
@@ -477,7 +473,6 @@ mod tests {
             &mock_clickhouse,
             invalid_dataset_name,
             request,
-            None,
         )
         .await;
 
@@ -516,7 +511,6 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
-            None,
         )
         .await;
 
@@ -558,7 +552,6 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
-            None,
         )
         .await;
 
@@ -618,7 +611,6 @@ mod tests {
             &mock_clickhouse,
             dataset_name,
             request,
-            None,
         )
         .await
         .unwrap();

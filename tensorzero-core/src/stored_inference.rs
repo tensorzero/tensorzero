@@ -964,12 +964,7 @@ mod tests {
 
         let inference = StoredInference::Chat(chat_inference);
         let datapoint = inference
-            .into_datapoint_insert(
-                dataset_name,
-                &output_source,
-                &config,
-                SnapshotHash::new_test(),
-            )
+            .into_datapoint_insert(dataset_name, &output_source, &config)
             .unwrap();
 
         match datapoint {
@@ -1002,12 +997,7 @@ mod tests {
 
         let inference = StoredInference::Chat(chat_inference);
         let datapoint = inference
-            .into_datapoint_insert(
-                dataset_name,
-                &output_source,
-                &config,
-                SnapshotHash::new_test(),
-            )
+            .into_datapoint_insert(dataset_name, &output_source, &config)
             .unwrap();
 
         match datapoint {
@@ -1033,12 +1023,7 @@ mod tests {
         let original_output = chat_inference.output.clone();
         let inference = StoredInference::Chat(chat_inference);
         let datapoint = inference
-            .into_datapoint_insert(
-                dataset_name,
-                &output_source,
-                &config,
-                SnapshotHash::new_test(),
-            )
+            .into_datapoint_insert(dataset_name, &output_source, &config)
             .unwrap();
 
         match datapoint {
@@ -1067,12 +1052,7 @@ mod tests {
 
         let inference = StoredInference::Json(json_inference);
         let datapoint = inference
-            .into_datapoint_insert(
-                dataset_name,
-                &output_source,
-                &config,
-                SnapshotHash::new_test(),
-            )
+            .into_datapoint_insert(dataset_name, &output_source, &config)
             .unwrap();
 
         match datapoint {
@@ -1103,12 +1083,7 @@ mod tests {
 
         let inference = StoredInference::Json(json_inference);
         let datapoint = inference
-            .into_datapoint_insert(
-                dataset_name,
-                &output_source,
-                &config,
-                SnapshotHash::new_test(),
-            )
+            .into_datapoint_insert(dataset_name, &output_source, &config)
             .unwrap();
 
         match datapoint {
@@ -1134,12 +1109,7 @@ mod tests {
         let original_output = json_inference.output.clone();
         let inference = StoredInference::Json(json_inference);
         let datapoint = inference
-            .into_datapoint_insert(
-                dataset_name,
-                &output_source,
-                &config,
-                SnapshotHash::new_test(),
-            )
+            .into_datapoint_insert(dataset_name, &output_source, &config)
             .unwrap();
 
         match datapoint {
@@ -1162,20 +1132,10 @@ mod tests {
         let inference1 = StoredInference::Chat(chat_inference.clone());
         let inference2 = StoredInference::Chat(chat_inference);
         let datapoint1 = inference1
-            .into_datapoint_insert(
-                dataset_name,
-                &output_source,
-                &config,
-                SnapshotHash::new_test(),
-            )
+            .into_datapoint_insert(dataset_name, &output_source, &config)
             .unwrap();
         let datapoint2 = inference2
-            .into_datapoint_insert(
-                dataset_name,
-                &output_source,
-                &config,
-                SnapshotHash::new_test(),
-            )
+            .into_datapoint_insert(dataset_name, &output_source, &config)
             .unwrap();
 
         // Extract IDs
@@ -1207,12 +1167,7 @@ mod tests {
 
         let inference = StoredInference::Chat(chat_inference);
         let datapoint = inference
-            .into_datapoint_insert(
-                dataset_name,
-                &output_source,
-                &config,
-                SnapshotHash::new_test(),
-            )
+            .into_datapoint_insert(dataset_name, &output_source, &config)
             .unwrap();
 
         match datapoint {
@@ -1235,12 +1190,7 @@ mod tests {
 
         let inference = StoredInference::Json(json_inference);
         let datapoint = inference
-            .into_datapoint_insert(
-                dataset_name,
-                &output_source,
-                &config,
-                SnapshotHash::new_test(),
-            )
+            .into_datapoint_insert(dataset_name, &output_source, &config)
             .unwrap();
 
         match datapoint {

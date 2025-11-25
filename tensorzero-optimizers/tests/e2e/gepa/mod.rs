@@ -6,7 +6,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tensorzero::DynamicToolParams;
 use tensorzero_core::client::{ClientBuilder, ClientBuilderMode};
-use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_dataset_clickhouse, select_json_dataset_clickhouse,
@@ -329,7 +328,6 @@ async fn test_gepa_chat() {
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         http_client: http_client.clone(),
         timeout: Some(Duration::from_secs(gepa_config.timeout)),
-        snapshot_hash: SnapshotHash::new_test(),
     })
     .build()
     .await
@@ -548,7 +546,6 @@ async fn test_gepa_json() {
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         http_client: http_client.clone(),
         timeout: Some(Duration::from_secs(gepa_config.timeout)),
-        snapshot_hash: SnapshotHash::new_test(),
     })
     .build()
     .await
