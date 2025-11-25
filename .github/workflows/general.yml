@@ -75,7 +75,7 @@ jobs:
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-*-container
+          pattern: build-{gateway,ui}-container
           merge-multiple: true
 
       - name: Load `gateway` and `ui` containers
@@ -722,7 +722,7 @@ jobs:
       contents: read
       # Permission to download artifacts and for rust-cache
       actions: read
-    needs: [build-gateway-container]
+    needs: [build-gateway-container, build-mock-inference-container]
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
     # to avoid unnecessarily using Namespace credits (it should still always finish before
@@ -782,12 +782,13 @@ jobs:
       - name: Download container images
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          pattern: build-*-container
+          pattern: build-{gateway,mock-inference}-container
           merge-multiple: true
 
       - name: Load container images
         run: |
           docker load < gateway-container.tar
+          docker load < mock-inference-container.tar
 
       - name: Download ClickHouse fixtures
         run: uv run ./ui/fixtures/download-fixtures.py
@@ -804,6 +805,10 @@ jobs:
       - name: Set TENSORZERO_GATEWAY_TAG
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Set TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG
+        run: |
+          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
         if: matrix.replicated == false
@@ -864,7 +869,7 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
           TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
-        run: cargo test-e2e-no-creds
+        run: cargo test-clickhouse
 
       - name: Print docker compose logs (replicated)
         if: always() && matrix.replicated == true
@@ -1008,6 +1013,14 @@ jobs:
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
 
+  build-mock-inference-container:
+    uses: ./.github/workflows/build-mock-inference-container.yml
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+
   ui-tests:
     permissions:
       contents: read
@@ -1015,7 +1028,7 @@ jobs:
     uses: ./.github/workflows/ui-tests.yml
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
-    needs: build-gateway-container
+    needs: [build-gateway-container, build-mock-inference-container]
 
   ui-tests-e2e:
     permissions:
@@ -1024,7 +1037,7 @@ jobs:
     uses: ./.github/workflows/ui-tests-e2e.yml
     with:
       is_merge_group: ${{ github.event_name == 'merge_group' }}
-    needs: [build-gateway-container, build-ui-container]
+    needs: [build-gateway-container, build-ui-container, build-mock-inference-container]
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -1034,8 +1047,45 @@ jobs:
       S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
+  check-production-docker-container:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Build Docker container for production deployment tests
+        run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
+
+      - name: Launch ClickHouse container for E2E tests
+        run: |
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse -d --wait
+
+      - name: Set up .env file for production deployment tests
+        run: |
+          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" > examples/production-deployment/.env
+          echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@host.docker.internal:8123/tensorzero" >> examples/production-deployment/.env
+          echo "TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS=1" >> examples/production-deployment/.env
+
+      - name: Run docker compose for production deployment tests
+        run: docker compose -f examples/production-deployment/docker-compose.yml up -d --wait
+
+      - name: Run inference for production deployment tests
+        run: examples/production-deployment/run.sh
+
+      - name: Print Docker compose logs
+        if: always()
+        run: |
+          docker compose -f examples/production-deployment/docker-compose.yml logs -t
+
+      - name: Take down docker compose for production deployment tests
+        run: |
+          docker compose -f examples/production-deployment/docker-compose.yml down
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down
+
   run-merge-queue-checks:
-    needs: [build-gateway-e2e-container]
+    needs: [build-gateway-e2e-container, build-mock-inference-container]
     if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group')
     permissions:
       # Permission to checkout the repository
@@ -1058,6 +1108,7 @@ jobs:
       actions: read
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     uses: ./.github/workflows/mocked-batch-test.yml
+    needs: [build-mock-inference-container]
     secrets: inherit
 
   # See 'ci/README.md' at the repository root for more details.
@@ -1067,6 +1118,7 @@ jobs:
     needs:
       [
         check-version-consistency,
+        check-production-docker-container,
         check-if-edited-then-edit,
         check-docker-compose,
         check-latest-docker-compose,
@@ -1077,6 +1129,7 @@ jobs:
         build-ui-container,
         build-gateway-container,
         build-gateway-e2e-container,
+        build-mock-inference-container,
         mocked-batch-tests,
         minikube,
         rust-build,

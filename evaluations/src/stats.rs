@@ -5,7 +5,7 @@ use indicatif::ProgressBar;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tensorzero_core::client::InferenceResponse;
-use tensorzero_core::{endpoints::datasets::StoredDatapoint, evaluations::EvaluatorConfig};
+use tensorzero_core::{endpoints::datasets::Datapoint, evaluations::EvaluatorConfig};
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
@@ -165,7 +165,7 @@ pub enum EvaluationUpdate {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EvaluationInfo {
-    pub datapoint: StoredDatapoint,
+    pub datapoint: Datapoint,
     pub response: InferenceResponse,
     pub evaluations: HashMap<String, Option<Value>>,
     pub evaluator_errors: HashMap<String, String>,
@@ -173,7 +173,7 @@ pub struct EvaluationInfo {
 
 impl EvaluationInfo {
     pub fn new(
-        datapoint: StoredDatapoint,
+        datapoint: Datapoint,
         response: InferenceResponse,
         evaluation_result: evaluators::EvaluationResult,
     ) -> Self {

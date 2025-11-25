@@ -56,10 +56,11 @@ pub struct UpdateChatDatapointRequest {
     #[serde(default)]
     pub input: Option<Input>,
 
-    /// Chat datapoint output. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
-    /// it will overwrite the existing output.
-    #[serde(default)]
-    pub output: Option<Vec<ContentBlockChatOutput>>,
+    /// Chat datapoint output. If omitted, it will be left unchanged. If specified as `null`, it will be set to
+    /// `null`. Otherwise, it will overwrite the existing output (and can be an empty array).
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    #[schemars(extend("x-double-option" = true))]
+    pub output: Option<Option<Vec<ContentBlockChatOutput>>>,
 
     /// Datapoint tool parameters.
     #[serde(flatten)]
@@ -106,8 +107,8 @@ impl<'de> Deserialize<'de> for UpdateChatDatapointRequest {
             id: Uuid,
             #[serde(default)]
             input: Option<Input>,
-            #[serde(default)]
-            output: Option<Vec<ContentBlockChatOutput>>,
+            #[serde(default, deserialize_with = "deserialize_double_option")]
+            output: Option<Option<Vec<ContentBlockChatOutput>>>,
             #[serde(flatten)]
             tool_params_new: UpdateDynamicToolParamsRequest,
             #[serde(default)]
@@ -342,12 +343,17 @@ impl<'de> Deserialize<'de> for UpdateJsonDatapointRequest {
 /// A request to update the output of a JSON datapoint.
 /// We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
 /// for users to run evals against them.
+///
+/// The possible values for `output` are:
+/// - `None`: don't update `output`
+/// - `Some(None)`: set output to `None` (represents edge case where inference succeeded but model didn't output relevant content blocks)
+/// - `Some(String)`: set the output to the string (= JSON-serialized string)
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ts_rs::TS)]
 #[ts(export)]
 #[export_schema]
 pub struct JsonDatapointOutputUpdate {
     /// The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
-    pub raw: String,
+    pub raw: Option<String>,
 }
 
 /// A request to update the metadata of a datapoint.

@@ -260,6 +260,48 @@ impl InferenceBounds {
     }
 }
 
+#[derive(Debug)]
+pub enum PaginateByIdCondition {
+    /// Return the latest inferences before the given ID.
+    Before { id: Uuid },
+    /// Return the earliest inferences after the given ID.
+    After { id: Uuid },
+}
+
+/// Parameters for querying inferences by ID with before/after pagination.
+#[derive(Debug, Default)]
+pub struct ListInferencesByIdParams {
+    /// Maximum number of inferences to return.
+    pub limit: u32,
+    /// Optional function name to filter inferences by.
+    pub function_name: Option<String>,
+    /// Optional variant name to filter inferences by.
+    pub variant_name: Option<String>,
+    /// Optional episode ID to filter inferences by.
+    pub episode_id: Option<Uuid>,
+    /// Optional pagination condition to use.
+    /// This supports 2 types: "before a given ID" and "after a given ID".
+    /// By specifying this, we also set the order by to return the results in the correct order.
+    pub pagination: Option<PaginateByIdCondition>,
+}
+
+/// Metadata about an inference.
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+pub struct InferenceMetadata {
+    /// The ID of the inference.
+    pub id: Uuid,
+    /// The function name of the inference.
+    pub function_name: String,
+    /// The variant name of the inference.
+    pub variant_name: String,
+    /// The episode ID of the inference.
+    pub episode_id: Uuid,
+    /// The function type of the inference.
+    pub function_type: String,
+    /// The timestamp of the inference.
+    pub timestamp: DateTime<Utc>,
+}
+
 #[async_trait]
 #[cfg_attr(test, automock)]
 pub trait InferenceQueries {
@@ -274,4 +316,12 @@ pub trait InferenceQueries {
         &self,
         params: GetInferenceBoundsParams,
     ) -> Result<InferenceBounds, Error>;
+
+    /// Lists inferences by ID with pagination.
+    /// This queries the internal InferenceById table which does not contain actual input/output
+    /// of the inference. Used for UI only.
+    async fn list_inferences_by_id(
+        &self,
+        params: ListInferencesByIdParams,
+    ) -> Result<Vec<InferenceMetadata>, Error>;
 }

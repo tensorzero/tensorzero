@@ -9,12 +9,13 @@ use tensorzero::{
     Role, StoredDatapoint,
 };
 use tensorzero_core::config::{MetricConfigLevel, MetricConfigType};
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::clickhouse::test_helpers::{
+    clickhouse_flush_async_insert, get_clickhouse,
+};
 use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
-    DatasetMetadata, DatasetOutputSource, DatasetQueries, GetAdjacentDatapointIdsParams,
-    GetDatapointsParams, GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter,
-    StaleDatapointParams,
+    DatasetMetadata, DatasetOutputSource, DatasetQueries, GetDatapointsParams,
+    GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter,
 };
 use tensorzero_core::endpoints::datasets::DatapointKind;
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
@@ -1125,6 +1126,9 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
         .await
         .unwrap();
 
+    // Flush async insert to ensure datapoint is visible before deletion
+    clickhouse_flush_async_insert(&clickhouse).await;
+
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
@@ -1150,13 +1154,12 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
 
     // Test staling
     clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: "test_chat_dataset".to_string(),
-            datapoint_id,
-            function_type: DatapointKind::Chat,
-        })
+        .delete_datapoints("test_chat_dataset", Some(&[datapoint_id]))
         .await
         .unwrap();
+
+    // Flush async insert to ensure datapoint is deleted
+    clickhouse_flush_async_insert(&clickhouse).await;
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1256,11 +1259,7 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
 
     // Test staling
     clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: "test_json_dataset".to_string(),
-            datapoint_id,
-            function_type: DatapointKind::Json,
-        })
+        .delete_datapoints("test_json_dataset", Some(&[datapoint_id]))
         .await
         .unwrap();
 
@@ -1370,12 +1369,9 @@ async fn test_handles_staling_of_non_existent_datapoint() {
     let clickhouse = get_clickhouse().await;
 
     // Should not throw when trying to stale a non-existent datapoint
+    let datapoint_id = Uuid::now_v7();
     let result = clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: "fake".to_string(),
-            datapoint_id: Uuid::now_v7(),
-            function_type: DatapointKind::Chat,
-        })
+        .delete_datapoints("fake", Some(&[datapoint_id]))
         .await;
 
     // This should succeed without error (graceful handling)
@@ -1509,104 +1505,6 @@ async fn test_insert_datapoint_handles_invalid_dataset_names() {
     assert!(
         result.is_err(),
         "Should reject reserved dataset name 'builder'"
-    );
-}
-
-#[tokio::test]
-async fn test_get_adjacent_datapoint_ids() {
-    let clickhouse = get_clickhouse().await;
-
-    let dataset_name = format!("test_adjacent_{}", Uuid::now_v7());
-
-    // Insert three datapoints
-    let id1 = Uuid::now_v7();
-    let id2 = Uuid::now_v7();
-    let id3 = Uuid::now_v7();
-
-    for id in [id1, id2, id3] {
-        let datapoint = ChatInferenceDatapointInsert {
-            dataset_name: dataset_name.clone(),
-            function_name: "test_function".to_string(),
-            id,
-            name: None,
-            episode_id: None,
-            input: StoredInput {
-                system: None,
-                messages: vec![],
-            },
-            output: Some(vec![ContentBlockChatOutput::Text(Text {
-                text: "test".to_string(),
-            })]),
-            tool_params: None,
-            tags: None,
-            auxiliary: String::new(),
-            staled_at: None,
-            source_inference_id: None,
-            is_custom: true,
-        };
-
-        clickhouse
-            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
-            .await
-            .unwrap();
-    }
-
-    // Sleep for 1 second for ClickHouse to become consistent
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // Test middle datapoint
-    let adjacent = clickhouse
-        .get_adjacent_datapoint_ids(&GetAdjacentDatapointIdsParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: id2,
-        })
-        .await
-        .unwrap();
-    assert_eq!(
-        adjacent.previous_id,
-        Some(id1),
-        "Should return previous id for the middle datapoint"
-    );
-    assert_eq!(
-        adjacent.next_id,
-        Some(id3),
-        "Should return next id for the middle datapoint"
-    );
-
-    // Test first datapoint
-    let adjacent = clickhouse
-        .get_adjacent_datapoint_ids(&GetAdjacentDatapointIdsParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: id1,
-        })
-        .await
-        .unwrap();
-    assert_eq!(
-        adjacent.previous_id, None,
-        "Should return None as previous id for the first datapoint"
-    );
-    assert_eq!(
-        adjacent.next_id,
-        Some(id2),
-        "Should return next id for the first datapoint"
-    );
-
-    // Test last datapoint
-    let adjacent = clickhouse
-        .get_adjacent_datapoint_ids(&GetAdjacentDatapointIdsParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id: id3,
-        })
-        .await
-        .unwrap();
-    assert_eq!(
-        adjacent.previous_id,
-        Some(id2),
-        "Should return previous id for the last datapoint"
-    );
-    assert_eq!(
-        adjacent.next_id, None,
-        "Should return None as next id for the last datapoint"
     );
 }
 
@@ -2001,11 +1899,7 @@ async fn test_get_datapoints_respects_allow_stale_false() {
 
     // Stale the datapoint
     clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id,
-            function_type: DatapointKind::Chat,
-        })
+        .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
         .await
         .unwrap();
 
@@ -2071,11 +1965,7 @@ async fn test_get_datapoints_respects_allow_stale_true() {
 
     // Stale the datapoint
     clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: dataset_name.clone(),
-            datapoint_id,
-            function_type: DatapointKind::Chat,
-        })
+        .delete_datapoints(&dataset_name, Some(&[datapoint_id]))
         .await
         .unwrap();
 

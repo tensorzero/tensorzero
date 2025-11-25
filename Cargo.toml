@@ -19,7 +19,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.11.5"
+version = "2025.11.6"
 rust-version = "1.88.0"
 license = "Apache-2.0"
 
@@ -139,6 +139,9 @@ single_match_else = "allow"
 
 # This lint cannot be fixed with 'cargo fmt', and we don't currently generate docs
 doc_lazy_continuation = "allow"
+
+[profile.dev]
+debug = "limited"
 
 [profile.performance]
 inherits = "release"
