@@ -14,7 +14,9 @@ permissions:
 # that actually merging a PR requires the real 'check-all-general-jobs-passed' job to pass.
 
 on:
-  pull_request:
+  # We need to use 'pull_request_target' so that we have proper permissions to add statuses to the PR,
+  # even when the PR is from a fork.
+  pull_request_target:
     types: [labeled, unlabeled]
 
 jobs:
