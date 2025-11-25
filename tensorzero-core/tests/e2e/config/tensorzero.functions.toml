@@ -688,7 +688,6 @@ system_template = "../../../fixtures/config/functions/basic_test/prompt/system_t
 
 [functions.json_success.variants.tensorzero-relay-dummy]
 type = "chat_completion"
-weight = 1
 model = "tensorzero-relay-dummy"
 system_template = "../../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
 user_template = "../../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
