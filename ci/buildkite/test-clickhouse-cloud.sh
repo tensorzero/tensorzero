@@ -67,7 +67,7 @@ sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 3E4AD4719DDE9A
 # Get the system architecture
 ARCH=$(dpkg --print-architecture)
 # Add the ClickHouse repository to apt sources
-echo "deb [signed-by=/usr/share/keyrings/clickhouse-keyring.gpg arch=${ARCH}] https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/sources.list.d/clickhouse.list
+echo "deb https://packages.clickhouse.com/deb stable main" | sudo tee /etc/apt/sources.list.d/clickhouse.list
 # Update apt package lists
 sudo apt-get update
 sudo apt-get install -y clickhouse-client
