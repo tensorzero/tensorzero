@@ -138,16 +138,18 @@ pub async fn mutate_variant(
     gateway_client: &Client,
     analyses: &[Analysis],
     function_context: &FunctionContext,
-    parent: &HashMap<String, UninitializedChatCompletionConfig>,
+    parent: HashMap<&String, &UninitializedChatCompletionConfig>,
     gepa_config: &GEPAConfig,
     iteration: usize,
 ) -> Result<HashMap<String, UninitializedChatCompletionConfig>, Error> {
     // Extract the single parent from the HashMap
-    let (parent_name, parent_config) = parent.iter().next().ok_or_else(|| {
-        Error::new(ErrorDetails::InvalidRequest {
-            message: "parent HashMap must contain exactly one entry".to_string(),
-        })
-    })?;
+    // parent is HashMap<&String, &UninitializedChatCompletionConfig>, so .iter() gives (&&String, &&UninitializedChatCompletionConfig)
+    let (parent_name, parent_config) =
+        parent.iter().next().map(|(k, v)| (*k, *v)).ok_or_else(|| {
+            Error::new(ErrorDetails::InvalidRequest {
+                message: "parent HashMap must contain exactly one entry".to_string(),
+            })
+        })?;
 
     let mutation_model = &gepa_config.mutation_model;
     tracing::info!(
