@@ -59,7 +59,9 @@ set -x
 # Install prerequisite packages
 sudo apt-get install -y apt-transport-https ca-certificates curl gnupg
 # Download the ClickHouse GPG key and store it in the keyring
-curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg
+# This URL now gives 'Not Found'
+#curl -fsSL 'https://packages.clickhouse.com/rpm/lts/repodata/repomd.xml.key' | sudo gpg --dearmor -o /usr/share/keyrings/clickhouse-keyring.gpg
+sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 8919F6BD2B48D754
 # Get the system architecture
 ARCH=$(dpkg --print-architecture)
 # Add the ClickHouse repository to apt sources
