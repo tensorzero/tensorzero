@@ -7,12 +7,12 @@ use pyo3::{sync::PyOnceLock, types::PyModule, Bound, Py, PyAny, PyErr, PyResult,
 use serde::Deserialize;
 use uuid::Uuid;
 
+use crate::config::snapshot::SnapshotHash;
 use crate::config::Config;
 use crate::endpoints::datasets::{Datapoint, StoredDatapoint};
-use crate::inference::types::stored_input::StoredInput;
-use crate::inference::types::ResolvedContentBlock;
+use crate::inference::types::stored_input::{StoredInput, StoredInputMessageContent};
 use crate::inference::types::{
-    stored_input::StoredInputMessageContent, ContentBlockChatOutput, ResolvedInputMessageContent,
+    ContentBlockChatOutput, ResolvedContentBlock, ResolvedInputMessageContent,
 };
 use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
@@ -357,10 +357,14 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
 /// If it is, we return it directly.
 /// If it is not, we assume it is a Python object that matches the serialization pattern of the
 /// `StoredSample` type and deserialize it (and throw an error if it doesn't match).
+///
+/// NOTE(shuyangli): This doesn't store or fetch any files for the time being. We'll need to rearchitect the optimization
+/// pipeline to support proper file handling.
 pub fn deserialize_from_stored_sample<'a>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,
     config: &Config,
+    snapshot_hash: &SnapshotHash,
 ) -> PyResult<StoredSampleItem> {
     // Try deserializing into named types first
     let generated_types_module = py.import("tensorzero.generated_types")?;
@@ -384,7 +388,11 @@ pub fn deserialize_from_stored_sample<'a>(
                     Ok(f) => f,
                     Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
                 };
-                let datapoint = match chat_wire.into_storage(&function_config, &config.tools) {
+                let datapoint = match chat_wire.into_storage_without_file_handling(
+                    &function_config,
+                    &config.tools,
+                    snapshot_hash,
+                ) {
                     Ok(d) => d,
                     Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
                 };
@@ -392,9 +400,15 @@ pub fn deserialize_from_stored_sample<'a>(
                     datapoint,
                 )))
             }
-            Datapoint::Json(json_wire) => Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
-                json_wire.into_storage(),
-            ))),
+            Datapoint::Json(json_wire) => {
+                let datapoint = match json_wire.into_storage_without_file_handling() {
+                    Ok(d) => d,
+                    Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+                };
+                Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
+                    datapoint,
+                )))
+            }
         };
     }
 

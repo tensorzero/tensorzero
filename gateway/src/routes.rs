@@ -221,6 +221,10 @@ fn build_internal_routes() -> Router<AppStateData> {
             "/internal/inferences/bounds",
             get(endpoints::stored_inferences::v1::get_inference_bounds_handler),
         )
+        .route(
+            "/internal/inferences",
+            get(endpoints::stored_inferences::v1::list_inferences_by_id_handler),
+        )
 }
 
 /// This function builds the public routes for meta-observability (e.g. gateway health).

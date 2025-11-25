@@ -3,6 +3,15 @@ import type { InputMessage } from "./InputMessage";
 import type { System } from "./System";
 
 /**
- * A request is made that contains an Input
+ * API representation of an input to a model.
  */
-export type Input = { system?: System; messages: Array<InputMessage> };
+export type Input = {
+  /**
+   * System prompt of the input.
+   */
+  system?: System;
+  /**
+   * Messages in the input.
+   */
+  messages: Array<InputMessage>;
+};

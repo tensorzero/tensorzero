@@ -1,4 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
+use tensorzero_core::config::snapshot::SnapshotHash;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
@@ -459,6 +460,8 @@ pub trait ClientExt {
     // ================================================================
     fn config(&self) -> Option<&Config>;
 
+    fn snapshot_hash(&self) -> Option<&SnapshotHash>;
+
     fn get_config(&self) -> Result<Arc<Config>, TensorZeroError>;
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
@@ -527,6 +530,15 @@ impl ClientExt for Client {
         match self.mode() {
             ClientMode::HTTPGateway(_) => None,
             ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.handle.app_state.config),
+        }
+    }
+
+    fn snapshot_hash(&self) -> Option<&SnapshotHash> {
+        match self.mode() {
+            ClientMode::EmbeddedGateway { gateway, .. } => {
+                Some(&gateway.handle.app_state.snapshot_hash)
+            }
+            ClientMode::HTTPGateway(_) => None,
         }
     }
 

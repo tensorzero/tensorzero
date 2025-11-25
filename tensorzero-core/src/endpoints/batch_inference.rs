@@ -261,7 +261,7 @@ pub async fn start_batch_inference(
     let resolved_inputs = params
         .inputs
         .into_iter()
-        .map(|input| input.into_lazy_resolved_input(context))
+        .map(|input| input.into_lazy_resolved_input(&context))
         .collect::<Result<Vec<LazyResolvedInput>, Error>>()?;
 
     // If we have a pinned variant (only one candidate), skip sampling and directly start the batch inference
