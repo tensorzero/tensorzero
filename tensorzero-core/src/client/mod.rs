@@ -902,7 +902,7 @@ impl Client {
             ClientMode::HTTPGateway(_) => Ok(self.http_inference(params).await?.response),
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    let res = crate::endpoints::inference::inference(
+                    let res = Box::pin(crate::endpoints::inference::inference(
                         gateway.handle.app_state.config.clone(),
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.clickhouse_connection_info.clone(),
@@ -912,7 +912,7 @@ impl Client {
                         // We currently ban auth-enabled configs in embedded gateway mode,
                         // so we don't have an API key here
                         None,
-                    )
+                    ))
                     .await
                     .map_err(err_to_http)?;
                     match res {
