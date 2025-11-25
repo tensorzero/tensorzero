@@ -1477,11 +1477,36 @@ class StoredInputMessage:
 @dataclass(kw_only=True)
 class Input:
     """
-    A request is made that contains an Input
+    API representation of an input to a model.
     """
 
     messages: list[InputMessage] | None = field(default_factory=lambda: [])
+    """
+    Messages in the input.
+    """
     system: System | None = None
+    """
+    System prompt of the input.
+    """
+
+
+@dataclass(kw_only=True)
+class JsonInferenceDatapoint:
+    dataset_name: str
+    function_name: str
+    id: str
+    input: Input
+    is_deleted: bool
+    output_schema: Any
+    updated_at: str
+    auxiliary: str | None = None
+    episode_id: str | None = None
+    is_custom: bool | None = False
+    name: str | None = None
+    output: JsonInferenceOutput | None = None
+    source_inference_id: str | None = None
+    staled_at: str | None = None
+    tags: dict[str, Any] | None = None
 
 
 @dataclass(kw_only=True)
@@ -1653,7 +1678,7 @@ class ChatInferenceDatapoint:
     dataset_name: str
     function_name: str
     id: str
-    input: StoredInput
+    input: Input
     is_deleted: bool
     updated_at: str
     additional_tools: list[Tool] | None = None
@@ -1805,22 +1830,28 @@ class DatapointChat(ChatInferenceDatapoint):
 
 
 @dataclass(kw_only=True)
-class JsonInferenceDatapoint:
-    dataset_name: str
-    function_name: str
-    id: str
-    input: StoredInput
-    is_deleted: bool
-    output_schema: Any
-    updated_at: str
-    auxiliary: str | None = None
-    episode_id: str | None = None
-    is_custom: bool | None = False
-    name: str | None = None
-    output: JsonInferenceOutput | None = None
-    source_inference_id: str | None = None
-    staled_at: str | None = None
-    tags: dict[str, Any] | None = None
+class DatapointJson(JsonInferenceDatapoint):
+    """
+    Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
+    This one should be used in all public interfaces.
+    """
+
+    type: Literal["json"] = "json"
+
+
+Datapoint = DatapointChat | DatapointJson
+
+
+@dataclass(kw_only=True)
+class GetDatapointsResponse:
+    """
+    Response containing the requested datapoints.
+    """
+
+    datapoints: list[Datapoint]
+    """
+    The retrieved datapoints.
+    """
 
 
 @dataclass(kw_only=True)
@@ -1933,31 +1964,6 @@ class CreateDatapointsRequest:
     datapoints: list[CreateDatapointRequest]
     """
     The datapoints to create.
-    """
-
-
-@dataclass(kw_only=True)
-class DatapointJson(JsonInferenceDatapoint):
-    """
-    Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
-    This one should be used in all public interfaces.
-    """
-
-    type: Literal["json"] = "json"
-
-
-Datapoint = DatapointChat | DatapointJson
-
-
-@dataclass(kw_only=True)
-class GetDatapointsResponse:
-    """
-    Response containing the requested datapoints.
-    """
-
-    datapoints: list[Datapoint]
-    """
-    The retrieved datapoints.
     """
 
 

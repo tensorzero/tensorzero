@@ -36,7 +36,7 @@ import {
 import { useToast } from "~/hooks/use-toast";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
-import { resolveStoredInputToInput } from "~/utils/resolve.server";
+import { loadFileDataForInput } from "~/utils/resolve.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import { DatapointActions } from "./DatapointActions";
@@ -306,8 +306,9 @@ export async function loader({
       },
     );
   }
-  // Resolve input for InputElement component
-  const resolvedInput = await resolveStoredInputToInput(datapoint.input);
+
+  // Load file data for InputElement component
+  const resolvedInput = await loadFileDataForInput(datapoint.input);
 
   return {
     datapoint,

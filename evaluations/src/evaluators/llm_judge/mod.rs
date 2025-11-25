@@ -432,7 +432,7 @@ mod tests {
     use tensorzero_core::endpoints::inference::JsonInferenceResponse;
     use tensorzero_core::evaluations::LLMJudgeIncludeConfig;
     use tensorzero_core::evaluations::LLMJudgeOptimize;
-    use tensorzero_core::inference::types::StoredInput;
+    use tensorzero_core::inference::types::Input;
     use tensorzero_core::inference::types::Usage;
     use tensorzero_core::tool::{ToolCall, ToolCallWrapper};
     use tensorzero_core::{
@@ -587,7 +587,7 @@ mod tests {
                 name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
+                input: Input {
                     // This shouldn't get used
                     system: None,
                     messages: Vec::new(),
@@ -655,7 +655,7 @@ mod tests {
                 name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
+                input: Input {
                     // This shouldn't get used
                     system: None,
                     messages: Vec::new(),
@@ -849,7 +849,7 @@ mod tests {
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: StoredInput {
+            input: Input {
                 system: None,
                 messages: Vec::new(),
             },
@@ -883,7 +883,7 @@ mod tests {
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: StoredInput {
+            input: Input {
                 system: None,
                 messages: Vec::new(),
             },
@@ -910,7 +910,7 @@ mod tests {
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: StoredInput {
+            input: Input {
                 system: None,
                 messages: Vec::new(),
             },
@@ -938,7 +938,7 @@ mod tests {
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
-            input: StoredInput {
+            input: Input {
                 system: None,
                 messages: Vec::new(),
             },
@@ -1047,7 +1047,7 @@ mod tests {
                 name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
+                input: Input {
                     system: None,
                     messages: Vec::new(),
                 },
@@ -1163,7 +1163,7 @@ mod tests {
                 name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
+                input: Input {
                     system: None,
                     messages: Vec::new(),
                 },
