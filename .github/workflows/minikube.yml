@@ -70,8 +70,8 @@ jobs:
 
     - name: Port forward the gateway and ui services
       run: |
-        kubectl port-forward service/tensorzero-gateway -n tensorzero 3000:3000 &
-        kubectl port-forward service/tensorzero-ui -n tensorzero 4000:4000 &
+        kubectl port-forward service/tensorzero-gateway -n tensorzero 3000:3000 > gateway-port-forward.log 2>&1 &
+        kubectl port-forward service/tensorzero-ui -n tensorzero 4000:4000 > ui-port-forward.log 2>&1 &
 
     - name: Ping the gateway
       run: |
@@ -102,6 +102,16 @@ jobs:
       if: always()
       run: |
         kubectl logs -n tensorzero --timestamps=true --all-pods=true --all-containers=true -l app.kubernetes.io/instance=tensorzero
+
+    - name: Print gateway port forward logs
+      if: always()
+      run: |
+        cat gateway-port-forward.log
+
+    - name: Print ui port forward logs
+      if: always()
+      run: |
+        cat ui-port-forward.log
 
     - name: Print logs from stopped pods
       if: always()
