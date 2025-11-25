@@ -1,3 +1,5 @@
+// Required to compile large async/instrumented futures pulled in from tensorzero-core (e.g., AWS Bedrock client types)
+#![recursion_limit = "256"]
 //! TensorZero Optimizer Implementations
 //!
 //! This crate provides optimizer trait definitions, implementations, and HTTP endpoints.
