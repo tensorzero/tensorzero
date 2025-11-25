@@ -172,6 +172,7 @@ export * from "./LLMJudgeOutputType";
 export * from "./LaunchOptimizationParams";
 export * from "./LaunchOptimizationWorkflowParams";
 export * from "./ListDatapointsRequest";
+export * from "./ListDatasetsResponse";
 export * from "./ListInferencesRequest";
 export * from "./MetricConfig";
 export * from "./MetricConfigLevel";
