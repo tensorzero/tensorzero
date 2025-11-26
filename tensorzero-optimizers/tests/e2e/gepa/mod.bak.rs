@@ -21,15 +21,19 @@ use tensorzero_core::inference::types::{
 use tensorzero_core::optimization::gepa::GEPAConfig;
 use tensorzero_core::stored_inference::{RenderedSample, StoredOutput};
 
+use tensorzero_core::evaluations::EvaluationConfig;
 use tensorzero_core::utils::retries::RetryConfig;
 use tensorzero_optimizers::gepa::{
     analyze::analyze_inferences,
     evaluate::{
         create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, EvaluationResults,
     },
+    is_improvement,
     mutate::mutate_variant,
+    pareto::{Candidate, ParetoFrontier},
     validate::{get_uninitialized_variant_configs, validate_gepa_config},
 };
+use uuid::Uuid;
 
 pub mod analyze;
 
@@ -81,8 +85,8 @@ fn create_test_chat_rendered_sample(input: &str, output: &str) -> RenderedSample
         },
         output: Some(output_vec.clone()),
         stored_output: Some(StoredOutput::Chat(output_vec)),
-        episode_id: None,
-        inference_id: None,
+        episode_id: Some(Uuid::now_v7()),
+        inference_id: Some(Uuid::now_v7()),
         tool_params: DynamicToolParams::default(),
         output_schema: None,
         dispreferred_outputs: vec![],
@@ -132,8 +136,8 @@ fn create_test_json_rendered_sample(input: &str, output: &str) -> RenderedSample
         },
         output: None, // JSON functions don't have chat output
         stored_output: Some(StoredOutput::Json(json_output)),
-        episode_id: None,
-        inference_id: None,
+        episode_id: Some(Uuid::now_v7()),
+        inference_id: Some(Uuid::now_v7()),
         tool_params: DynamicToolParams::default(),
         output_schema: Some(serde_json::json!({
             "type": "object",
@@ -198,23 +202,17 @@ fn assert_evaluation_results_valid(evaluation_results: &EvaluationResults, expec
         per_datapoint_scores.len()
     );
 
-    // Verify each datapoint has scores for all evaluators
+    // Verify each datapoint has present scores for all evaluators
     for (datapoint_id, scores) in &per_datapoint_scores {
         for evaluator_name in &expected_evaluators {
             assert!(
                 scores.contains_key(*evaluator_name),
                 "Datapoint {datapoint_id} missing {evaluator_name} score"
             );
-        }
-
-        // Verify scores are valid (either None or finite)
-        for (evaluator_name, score_opt) in scores {
-            if let Some(score) = score_opt {
-                assert!(
-                    score.is_finite(),
-                    "Score for evaluator {evaluator_name} on datapoint {datapoint_id} is not finite: {score}"
-                );
-            }
+            assert!(
+                scores.get(*evaluator_name).and_then(|v| *v).is_some(),
+                "Datapoint {datapoint_id} has None score for {evaluator_name}"
+            );
         }
     }
 }
@@ -255,12 +253,8 @@ async fn test_gepa_step_chat() {
         .next()
         .expect("Should have at least one variant");
 
-    // Use deterministic dataset name for cache effectiveness
-    let dataset_name = "test_eval_dataset_chat_e2e".to_string();
-
-    // Clean up any leftover data from previous failed test runs
-    let _ = delete_dataset(&clickhouse, &dataset_name).await;
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    // Generate unique dataset name to ensure test isolation
+    let dataset_name = format!("test_eval_dataset_chat_{}", Uuid::now_v7());
 
     // Create test samples
     let samples = vec![
@@ -280,10 +274,8 @@ async fn test_gepa_step_chat() {
         "Expected 3 datapoint ids in response"
     );
 
-    // Give ClickHouse a moment to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-
     // Verify the datapoints were created in ClickHouse
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     let datapoints = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
         .await
         .unwrap();
@@ -300,6 +292,7 @@ async fn test_gepa_step_chat() {
     assert_eq!(first_datapoint.dataset_name, dataset_name);
     assert_eq!(first_datapoint.function_name, "basic_test");
     assert!(!first_datapoint.is_deleted);
+    assert!(first_datapoint.episode_id.is_some());
 
     // Verify tags are preserved
     assert!(first_datapoint.tags.is_some());
@@ -335,13 +328,7 @@ async fn test_gepa_step_chat() {
     };
 
     let evaluation_result = evaluate_variant(evaluation_params).await;
-    assert!(
-        evaluation_result.is_ok(),
-        "Failed to evaluate variant: {:?}",
-        evaluation_result.err()
-    );
-
-    let evaluation_results = evaluation_result.unwrap();
+    let evaluation_results = evaluation_result.expect("Failed to evaluate variant");
 
     // Assert evaluation results
     assert_eq!(
@@ -354,26 +341,32 @@ async fn test_gepa_step_chat() {
     // Verify evaluation results have expected structure and valid scores
     assert_evaluation_results_valid(&evaluation_results, 3);
 
-    // Delete the dataset
-    let delete_result = delete_dataset(&clickhouse, &dataset_name).await;
-    assert!(
-        delete_result.is_ok(),
-        "Failed to delete dataset: {:?}",
-        delete_result.err()
+    // Seed Pareto frontier with validation scores and datapoint IDs
+    let evaluator_configs = match &*function_context.evaluation_config {
+        EvaluationConfig::Inference(cfg) => &cfg.evaluators,
+    };
+
+    let mut pareto_frontier = ParetoFrontier::new(
+        response.ids.clone(),
+        evaluator_configs,
+        gepa_config.seed.map(|s| s as u64),
     );
-    assert_eq!(delete_result.unwrap().num_deleted_datapoints, 3);
 
-    // Give ClickHouse a moment to process the deletion
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-    // Verify the dataset is empty after deletion
-    let datapoints_after_delete = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
-        .await
-        .unwrap();
-    assert!(
-        datapoints_after_delete.is_empty(),
-        "Expected dataset to be empty after deletion, but found {} datapoints",
-        datapoints_after_delete.len()
+    let mut initial_candidates: HashMap<String, Candidate> = HashMap::new();
+    initial_candidates.insert(
+        internal_dynamic_variant_name.to_string(),
+        Candidate {
+            variant: internal_dynamic_variant_config.clone(),
+            scores: evaluation_results.per_datapoint_scores(),
+        },
+    );
+    pareto_frontier
+        .update(initial_candidates)
+        .expect("Pareto frontier should accept initial variant");
+    assert_eq!(
+        pareto_frontier.variant_configs().len(),
+        1,
+        "Frontier should contain the initial variant"
     );
 
     // Run Analyses
@@ -489,6 +482,99 @@ async fn test_gepa_step_chat() {
         system_template.path.data().contains("{{ assistant_name }}"),
         "Child system template should preserve {{ assistant_name }} variable"
     );
+
+    // Evaluate child on the validation dataset and check improvement logic
+    let child_eval = evaluate_variant(EvaluateVariantParams {
+        gateway_client: gateway_client.clone(),
+        clickhouse_connection_info: clickhouse.clone(),
+        tensorzero_config: config.clone(),
+        evaluation_config: Arc::clone(&function_context.evaluation_config),
+        evaluation_name: gepa_config.evaluation_name.clone(),
+        variant_name: child_name.to_string(),
+        variant_config: child_config.clone(),
+        dataset_name: dataset_name.clone(),
+        concurrency: gepa_config.max_concurrency as usize,
+    })
+    .await
+    .expect("Child validation evaluation should succeed");
+    println!("Child eval: {:?}", child_eval);
+
+    // Verify evaluation results have expected structure and valid scores
+    assert_evaluation_results_valid(&child_eval, 3);
+
+    // Check whether child dominates parent on validation stats
+    let improves = is_improvement(
+        &evaluation_results.evaluation_stats,
+        &child_eval.evaluation_stats,
+        evaluator_configs,
+    );
+
+    // Update Pareto frontier with child if it produced any scores; otherwise skip
+    let child_scores = child_eval.per_datapoint_scores();
+    let child_has_scores = child_scores
+        .values()
+        .flat_map(|m| m.values())
+        .any(|v| v.is_some());
+    if child_has_scores {
+        let mut child_candidate = HashMap::new();
+        child_candidate.insert(
+            child_name.to_string(),
+            Candidate {
+                variant: child_config.clone(),
+                scores: child_scores,
+            },
+        );
+        pareto_frontier
+            .update(child_candidate)
+            .expect("Pareto frontier update with child should succeed");
+    } else {
+        tracing::warn!(
+            "Child variant '{}' produced no valid scores; skipping Pareto update",
+            child_name
+        );
+    }
+
+    // Frontier should end with 1–2 variants; an improving child must appear, otherwise either variant may survive
+    let frontier_configs = pareto_frontier.variant_configs();
+    assert!(
+        (1..=2).contains(&frontier_configs.len()),
+        "Frontier should contain 1 or 2 variants after child addition"
+    );
+
+    if improves {
+        assert!(
+            frontier_configs.contains_key(child_name),
+            "Improving child should appear in the frontier"
+        );
+    } else {
+        assert!(
+            frontier_configs.contains_key(&parent_name)
+                || frontier_configs.contains_key(child_name),
+            "Frontier should retain at least one of the parent/child variants"
+        );
+    }
+
+    // Delete the dataset and verify cleanup
+    let delete_result = delete_dataset(&clickhouse, &dataset_name).await;
+    assert!(
+        delete_result.is_ok(),
+        "Failed to delete dataset: {:?}",
+        delete_result.err()
+    );
+    assert_eq!(delete_result.unwrap().num_deleted_datapoints, 3);
+
+    // Give ClickHouse a moment to process the deletion
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // Verify the dataset is empty after deletion
+    let datapoints_after_delete = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
+        .await
+        .unwrap();
+    assert!(
+        datapoints_after_delete.is_empty(),
+        "Expected dataset to be empty after deletion, but found {} datapoints",
+        datapoints_after_delete.len()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -527,12 +613,8 @@ async fn test_gepa_step_json() {
         .next()
         .expect("Should have at least one variant");
 
-    // Use deterministic dataset name for cache effectiveness
-    let dataset_name = "test_eval_dataset_json_e2e".to_string();
-
-    // Clean up any leftover data from previous failed test runs
-    let _ = delete_dataset(&clickhouse, &dataset_name).await;
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    // Generate unique dataset name to ensure test isolation
+    let dataset_name = format!("test_eval_dataset_json_{}", Uuid::now_v7());
 
     // Create test samples for JSON function
     let samples = vec![
@@ -552,7 +634,7 @@ async fn test_gepa_step_json() {
     );
 
     // Give ClickHouse a moment to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
 
     // Verify the datapoints were created in ClickHouse
     let datapoints = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
@@ -571,6 +653,7 @@ async fn test_gepa_step_json() {
     assert_eq!(first_datapoint.dataset_name, dataset_name);
     assert_eq!(first_datapoint.function_name, "json_success");
     assert!(!first_datapoint.is_deleted);
+    assert!(first_datapoint.episode_id.is_some());
 
     // Verify tags are preserved
     assert!(first_datapoint.tags.is_some());

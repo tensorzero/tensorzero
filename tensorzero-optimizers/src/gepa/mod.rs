@@ -38,7 +38,7 @@ use evaluate::{
 };
 use mutate::mutate_variant;
 use pareto::{is_improvement, Candidate, ParetoFrontier};
-use validate::{initialize_pareto_frontier, validate_examples, validate_gepa_config};
+use validate::{get_uninitialized_variant_configs, validate_examples, validate_gepa_config};
 
 #[async_trait]
 impl Optimizer for GEPAConfig {
@@ -93,9 +93,9 @@ impl Optimizer for GEPAConfig {
 
         tracing::debug!("Gateway client built successfully for GEPA optimization");
 
-        // Initialize baseline variants for optimization
+        // Uninitialize baseline variants for optimization
         // These will be used as the starting pool for GEPA iterations
-        let initial_variants = initialize_pareto_frontier(self, &function_context)?;
+        let initial_variants = get_uninitialized_variant_configs(self, &function_context)?;
 
         // Track original variant names to filter them out at the end
         let original_variant_names: std::collections::HashSet<String> =
