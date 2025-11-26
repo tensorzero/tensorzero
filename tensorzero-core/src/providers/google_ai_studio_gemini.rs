@@ -178,14 +178,15 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body =
-            serde_json::to_value(GeminiRequest::new(request).await?).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing Gemini request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+            serde_json::to_value(GeminiRequest::new(request, model_name, provider_name).await?)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing Gemini request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
         let api_key = self
             .credentials
             .get_api_key(dynamic_api_keys)
@@ -273,14 +274,15 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body =
-            serde_json::to_value(GeminiRequest::new(request).await?).map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing Gemini request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+            serde_json::to_value(GeminiRequest::new(request, model_name, provider_name).await?)
+                .map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!(
+                            "Error serializing Gemini request: {}",
+                            DisplayOrDebugGateway::new(e)
+                        ),
+                    })
+                })?;
         let api_key = self
             .credentials
             .get_api_key(dynamic_api_keys)
@@ -656,17 +658,27 @@ async fn convert_non_thought_content_block(
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-struct GeminiFunctionDeclaration<'a> {
+pub(super) struct GeminiFunctionDeclaration<'a> {
     name: &'a str,
     description: &'a str,
     parameters: Value, // Should be a JSONSchema as a Value
 }
 
+/// A tool that wraps function declarations for Gemini.
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct GeminiTool<'a> {
+pub(super) struct GeminiFunctionTool<'a> {
     pub function_declarations: Vec<GeminiFunctionDeclaration<'a>>,
     // TODO (if needed): code_execution ([docs](https://ai.google.dev/api/caching#CodeExecution))
+}
+
+/// A tool that can be either a function tool or a provider-specific tool (raw JSON).
+/// Provider tools are passed through as-is to the provider's API.
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub(super) enum GeminiTool<'a> {
+    Function(GeminiFunctionTool<'a>),
+    ProviderTool(&'a serde_json::Value),
 }
 
 impl<'a> GeminiFunctionDeclaration<'a> {
@@ -844,7 +856,11 @@ fn apply_inference_params(
 }
 
 impl<'a> GeminiRequest<'a> {
-    pub async fn new(request: &'a ModelInferenceRequest<'a>) -> Result<Self, Error> {
+    pub async fn new(
+        request: &'a ModelInferenceRequest<'a>,
+        model_name: &'a str,
+        provider_name: &'a str,
+    ) -> Result<Self, Error> {
         if request.messages.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
                 message: "Google AI Studio Gemini requires at least one message".to_string(),
@@ -869,7 +885,7 @@ impl<'a> GeminiRequest<'a> {
             .into_iter()
             .filter(|m| !m.parts.is_empty())
             .collect();
-        let (tools, tool_config) = prepare_tools(request)?;
+        let (tools, tool_config) = prepare_tools(request, model_name, provider_name)?;
         let (response_mime_type, response_schema) = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
                 match request.output_schema {
@@ -917,6 +933,8 @@ impl<'a> GeminiRequest<'a> {
 
 fn prepare_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
+    model_name: &'a str,
+    provider_name: &'a str,
 ) -> Result<
     (
         Option<Vec<GeminiTool<'a>>>,
@@ -929,12 +947,33 @@ fn prepare_tools<'a>(
             if !tool_config.any_tools_available() {
                 return Ok((None, None));
             }
-            let tools = Some(vec![GeminiTool {
-                function_declarations: tool_config
-                    .tools_available()?
-                    .map(GeminiFunctionDeclaration::from_tool_config)
-                    .collect(),
-            }]);
+
+            // Get scoped provider tools
+            let provider_tools = tool_config.get_scoped_provider_tools(model_name, provider_name);
+
+            let mut tools: Vec<GeminiTool> = Vec::new();
+
+            // Add function tools
+            let function_declarations: Vec<GeminiFunctionDeclaration> = tool_config
+                .tools_available()?
+                .map(GeminiFunctionDeclaration::from_tool_config)
+                .collect();
+
+            if !function_declarations.is_empty() {
+                tools.push(GeminiTool::Function(GeminiFunctionTool {
+                    function_declarations,
+                }));
+            }
+
+            // Add provider tools
+            tools.extend(
+                provider_tools
+                    .iter()
+                    .map(|t| GeminiTool::ProviderTool(&t.tool)),
+            );
+
+            let tools = if tools.is_empty() { None } else { Some(tools) };
+
             let tool_config_converted = Some(GoogleAIStudioGeminiToolConfig::from_tool_config(
                 tool_config,
             ));
@@ -1620,15 +1659,15 @@ mod tests {
     fn test_from_vec_tool() {
         let tools_vec: Vec<&FunctionToolConfig> =
             MULTI_TOOL_CONFIG.tools_available().unwrap().collect();
-        let tool = GeminiTool {
+        let tool = GeminiTool::Function(GeminiFunctionTool {
             function_declarations: tools_vec
                 .iter()
                 .map(|&t| GeminiFunctionDeclaration::from_tool_config(t))
                 .collect(),
-        };
+        });
         assert_eq!(
             tool,
-            GeminiTool {
+            GeminiTool::Function(GeminiFunctionTool {
                 function_declarations: vec![
                     GeminiFunctionDeclaration {
                         name: "get_temperature",
@@ -1641,7 +1680,7 @@ mod tests {
                         parameters: tools_vec[1].parameters().clone(),
                     }
                 ]
-            }
+            })
         );
     }
 
@@ -1805,7 +1844,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let result = GeminiRequest::new(&inference_request).await;
+        let result = GeminiRequest::new(&inference_request, "test_model", "test_provider").await;
         let error = result.unwrap_err();
         let details = error.get_details();
         assert_eq!(
@@ -1844,7 +1883,7 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let result = GeminiRequest::new(&inference_request).await;
+        let result = GeminiRequest::new(&inference_request, "test_model", "test_provider").await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 2);
         assert_eq!(request.contents[0].role, GeminiRole::User);
@@ -1904,7 +1943,7 @@ mod tests {
             ..Default::default()
         };
         // JSON schema should be supported for Gemini Pro models
-        let result = GeminiRequest::new(&inference_request).await;
+        let result = GeminiRequest::new(&inference_request, "test_model", "test_provider").await;
         let request = result.unwrap();
         assert_eq!(request.contents.len(), 3);
         assert_eq!(request.contents[0].role, GeminiRole::User);
@@ -2325,7 +2364,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools).unwrap();
+        let (tools, tool_choice) =
+            prepare_tools(&request_with_tools, "test_model", "test_provider").unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         assert_eq!(
@@ -2333,9 +2373,12 @@ mod tests {
             GeminiFunctionCallingMode::Any,
         );
         assert_eq!(tools.len(), 1);
-        let GeminiTool {
+        let GeminiTool::Function(GeminiFunctionTool {
             function_declarations,
-        } = &tools[0];
+        }) = &tools[0]
+        else {
+            panic!("Expected Function tool");
+        };
         assert_eq!(function_declarations.len(), 2);
         assert_eq!(function_declarations[0].name, WEATHER_TOOL.name());
         assert_eq!(
@@ -2368,7 +2411,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let (tools, tool_choice) = prepare_tools(&request_with_tools).unwrap();
+        let (tools, tool_choice) =
+            prepare_tools(&request_with_tools, "test_model", "test_provider").unwrap();
         let tools = tools.unwrap();
         let tool_config = tool_choice.unwrap();
         // Flash models do not support function calling mode Any
@@ -2378,9 +2422,12 @@ mod tests {
             GeminiFunctionCallingMode::Any,
         );
         assert_eq!(tools.len(), 1);
-        let GeminiTool {
+        let GeminiTool::Function(GeminiFunctionTool {
             function_declarations,
-        } = &tools[0];
+        }) = &tools[0]
+        else {
+            panic!("Expected Function tool");
+        };
         assert_eq!(function_declarations.len(), 2);
         assert_eq!(function_declarations[0].name, WEATHER_TOOL.name());
         assert_eq!(

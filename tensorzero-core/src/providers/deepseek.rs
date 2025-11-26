@@ -144,7 +144,7 @@ impl InferenceProvider for DeepSeekProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -153,7 +153,7 @@ impl InferenceProvider for DeepSeekProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = serde_json::to_value(
-            DeepSeekRequest::new(&self.model_name, request).await?,
+            DeepSeekRequest::new(&self.model_name, request, model_name, provider_name).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -248,7 +248,7 @@ impl InferenceProvider for DeepSeekProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -257,7 +257,7 @@ impl InferenceProvider for DeepSeekProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(
-            DeepSeekRequest::new(&self.model_name, request).await?,
+            DeepSeekRequest::new(&self.model_name, request, model_name, provider_name).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -399,6 +399,8 @@ impl<'a> DeepSeekRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        model_name: &str,
+        provider_name: &str,
     ) -> Result<DeepSeekRequest<'a>, Error> {
         let ModelInferenceRequest {
             temperature,
@@ -440,7 +442,8 @@ impl<'a> DeepSeekRequest<'a> {
         )
         .await?;
 
-        let (tools, tool_choice, _) = prepare_chat_completion_tools(request, false)?;
+        let (tools, tool_choice, _) =
+            prepare_chat_completion_tools(request, false, model_name, provider_name)?;
 
         let mut deepseek_request = DeepSeekRequest {
             messages,
@@ -871,9 +874,10 @@ mod tests {
             ..Default::default()
         };
 
-        let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools)
-            .await
-            .expect("failed to create Deepseek Request during test");
+        let deepseek_request =
+            DeepSeekRequest::new("deepseek-chat", &request_with_tools, "model", "provider")
+                .await
+                .expect("failed to create Deepseek Request during test");
 
         assert_eq!(deepseek_request.messages.len(), 1);
         assert_eq!(deepseek_request.temperature, Some(0.5));
@@ -885,8 +889,13 @@ mod tests {
         assert_eq!(tools.len(), 1);
 
         let tool = &tools[0];
-        assert_eq!(tool.function.name, WEATHER_TOOL.name());
-        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
+        match tool {
+            ChatCompletionTool::Function(f) => {
+                assert_eq!(f.function.name, WEATHER_TOOL.name());
+                assert_eq!(f.function.parameters, WEATHER_TOOL.parameters());
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function variant"),
+        }
         assert_eq!(
             deepseek_request.tool_choice,
             Some(ChatCompletionToolChoice::Specific(
@@ -921,9 +930,10 @@ mod tests {
             ..Default::default()
         };
 
-        let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools)
-            .await
-            .expect("failed to create Deepseek Request");
+        let deepseek_request =
+            DeepSeekRequest::new("deepseek-chat", &request_with_tools, "model", "provider")
+                .await
+                .expect("failed to create Deepseek Request");
 
         assert_eq!(deepseek_request.messages.len(), 2);
         assert_eq!(deepseek_request.temperature, Some(0.5));
@@ -939,8 +949,13 @@ mod tests {
         assert_eq!(tools.len(), 1);
 
         let tool = &tools[0];
-        assert_eq!(tool.function.name, WEATHER_TOOL.name());
-        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
+        match tool {
+            ChatCompletionTool::Function(f) => {
+                assert_eq!(f.function.name, WEATHER_TOOL.name());
+                assert_eq!(f.function.parameters, WEATHER_TOOL.parameters());
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function variant"),
+        }
         assert_eq!(
             deepseek_request.tool_choice,
             Some(ChatCompletionToolChoice::Specific(
@@ -958,7 +973,8 @@ mod tests {
             ..request_with_tools
         };
 
-        let deepseek_request = DeepSeekRequest::new("deepseek-chat", &request_with_tools).await;
+        let deepseek_request =
+            DeepSeekRequest::new("deepseek-chat", &request_with_tools, "model", "provider").await;
         let deepseek_request = deepseek_request.unwrap();
         // We should downgrade the strict JSON mode to normal JSON mode for deepseek
         assert_eq!(
@@ -1046,7 +1062,7 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &DeepSeekRequest::new("deepseek-chat", &generic_request)
+                &DeepSeekRequest::new("deepseek-chat", &generic_request, "model", "provider")
                     .await
                     .unwrap(),
             )

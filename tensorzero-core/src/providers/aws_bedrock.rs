@@ -193,7 +193,7 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -254,6 +254,14 @@ impl InferenceProvider for AWSBedrockProvider {
 
         if let Some(tool_config) = &request.tool_config {
             if !matches!(tool_config.tool_choice, ToolChoice::None) {
+                // Get scoped provider tools
+                // Note: AWS Bedrock doesn't support arbitrary JSON provider_tools like other providers
+                // because the AWS SDK uses strongly-typed Tool enums (ToolSpec, SystemTool, CachePoint).
+                // We call get_scoped_provider_tools for consistency with other providers,
+                // but we cannot actually use them.
+                let _provider_tools =
+                    tool_config.get_scoped_provider_tools(model_name, provider_name);
+
                 let tools: Vec<Tool> = tool_config
                     .strict_tools_available()?
                     .map(Tool::try_from)
@@ -334,7 +342,7 @@ impl InferenceProvider for AWSBedrockProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -395,6 +403,14 @@ impl InferenceProvider for AWSBedrockProvider {
 
         if let Some(tool_config) = &request.tool_config {
             if !matches!(tool_config.tool_choice, ToolChoice::None) {
+                // Get scoped provider tools
+                // Note: AWS Bedrock doesn't support arbitrary JSON provider_tools like other providers
+                // because the AWS SDK uses strongly-typed Tool enums (ToolSpec, SystemTool, CachePoint).
+                // We call get_scoped_provider_tools for consistency with other providers,
+                // but we cannot actually use them.
+                let _provider_tools =
+                    tool_config.get_scoped_provider_tools(model_name, provider_name);
+
                 let tools: Vec<Tool> = tool_config
                     .strict_tools_available()?
                     .map(Tool::try_from)

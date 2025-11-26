@@ -27,10 +27,19 @@ pub struct ChatCompletionFunction<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub struct ChatCompletionTool<'a> {
+pub struct ChatCompletionFunctionTool<'a> {
     pub r#type: ChatCompletionToolType,
     pub function: ChatCompletionFunction<'a>,
     pub strict: bool,
+}
+
+/// A tool that can be either a function tool or a provider-specific tool (raw JSON).
+/// Provider tools are passed through as-is to the provider's API.
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum ChatCompletionTool<'a> {
+    Function(ChatCompletionFunctionTool<'a>),
+    ProviderTool(&'a Value),
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -92,9 +101,9 @@ type PreparedChatCompletionToolsResult<'a> = (
     Option<bool>,
 );
 
-impl<'a> From<&'a FunctionToolConfig> for ChatCompletionTool<'a> {
+impl<'a> From<&'a FunctionToolConfig> for ChatCompletionFunctionTool<'a> {
     fn from(tool: &'a FunctionToolConfig) -> Self {
-        ChatCompletionTool {
+        ChatCompletionFunctionTool {
             r#type: ChatCompletionToolType::Function,
             function: ChatCompletionFunction {
                 name: tool.name(),
@@ -106,9 +115,15 @@ impl<'a> From<&'a FunctionToolConfig> for ChatCompletionTool<'a> {
     }
 }
 
-impl<'a> From<&'a FunctionTool> for ChatCompletionTool<'a> {
+impl<'a> From<&'a FunctionToolConfig> for ChatCompletionTool<'a> {
+    fn from(tool: &'a FunctionToolConfig) -> Self {
+        ChatCompletionTool::Function(tool.into())
+    }
+}
+
+impl<'a> From<&'a FunctionTool> for ChatCompletionFunctionTool<'a> {
     fn from(tool: &'a FunctionTool) -> Self {
-        ChatCompletionTool {
+        ChatCompletionFunctionTool {
             r#type: ChatCompletionToolType::Function,
             function: ChatCompletionFunction {
                 name: &tool.name,
@@ -117,6 +132,12 @@ impl<'a> From<&'a FunctionTool> for ChatCompletionTool<'a> {
             },
             strict: tool.strict,
         }
+    }
+}
+
+impl<'a> From<&'a FunctionTool> for ChatCompletionTool<'a> {
+    fn from(tool: &'a FunctionTool) -> Self {
+        ChatCompletionTool::Function(tool.into())
     }
 }
 
@@ -188,14 +209,23 @@ fn prepare_chat_completion_allowed_tools_constraint<'a>(
 /// When supports_allowed_tools is true, this function will use the allowed_tools constraint
 /// for providers that support OpenAI's allowed_tools format (Azure, Groq, OpenRouter).
 /// When false, it will filter tools using strict_tools_available for providers that don't support it.
+///
+/// The model_name and model_provider_name parameters are used to filter provider_tools by scope.
+/// Provider tools that match the scope are included in the returned tools list.
 pub fn prepare_chat_completion_tools<'a>(
     request: &'a ModelInferenceRequest,
     supports_allowed_tools: bool,
+    model_name: &str,
+    model_provider_name: &str,
 ) -> Result<PreparedChatCompletionToolsResult<'a>, Error> {
     match &request.tool_config {
         None => Ok((None, None, None)),
         Some(tool_config) => {
-            if !tool_config.any_tools_available() {
+            // Get scoped provider tools
+            let provider_tools =
+                tool_config.get_scoped_provider_tools(model_name, model_provider_name);
+
+            if !tool_config.any_tools_available() && provider_tools.is_empty() {
                 return Ok((None, None, None));
             }
 
@@ -204,29 +234,54 @@ pub fn prepare_chat_completion_tools<'a>(
             if supports_allowed_tools {
                 // Provider supports OpenAI's allowed_tools constraint
                 // Send all tools and use allowed_tools in tool_choice if needed
-                let tools = Some(tool_config.tools_available()?.map(Into::into).collect());
+                let mut tools: Vec<ChatCompletionTool> =
+                    tool_config.tools_available()?.map(Into::into).collect();
 
-                let tool_choice = if let Some(allowed_tools_choice) =
-                    prepare_chat_completion_allowed_tools_constraint(tool_config)
-                {
-                    Some(ChatCompletionToolChoice::AllowedTools(allowed_tools_choice))
+                // Add provider tools
+                tools.extend(
+                    provider_tools
+                        .iter()
+                        .map(|t| ChatCompletionTool::ProviderTool(&t.tool)),
+                );
+
+                let tools = if tools.is_empty() { None } else { Some(tools) };
+
+                let tool_choice = if tools.is_some() {
+                    if let Some(allowed_tools_choice) =
+                        prepare_chat_completion_allowed_tools_constraint(tool_config)
+                    {
+                        Some(ChatCompletionToolChoice::AllowedTools(allowed_tools_choice))
+                    } else {
+                        // No allowed_tools constraint, use regular tool_choice
+                        Some((&tool_config.tool_choice).into())
+                    }
                 } else {
-                    // No allowed_tools constraint, use regular tool_choice
-                    Some((&tool_config.tool_choice).into())
+                    None
                 };
 
                 Ok((tools, tool_choice, parallel_tool_calls))
             } else {
                 // Provider doesn't support allowed_tools constraint
                 // Filter tools using strict_tools_available and use regular tool_choice
-                let tools = Some(
-                    tool_config
-                        .strict_tools_available()?
-                        .map(Into::into)
-                        .collect(),
+                let mut tools: Vec<ChatCompletionTool> = tool_config
+                    .strict_tools_available()?
+                    .map(Into::into)
+                    .collect();
+
+                // Add provider tools
+                tools.extend(
+                    provider_tools
+                        .iter()
+                        .map(|t| ChatCompletionTool::ProviderTool(&t.tool)),
                 );
 
-                let tool_choice = Some((&tool_config.tool_choice).into());
+                let tools = if tools.is_empty() { None } else { Some(tools) };
+
+                let tool_choice = if tools.is_some() {
+                    Some((&tool_config.tool_choice).into())
+                } else {
+                    None
+                };
 
                 Ok((tools, tool_choice, parallel_tool_calls))
             }
@@ -237,7 +292,9 @@ pub fn prepare_chat_completion_tools<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
+    use crate::tool::{
+        AllowedTools, AllowedToolsChoice, ProviderTool, ProviderToolScope, ToolCallConfig,
+    };
     use serde_json::json;
 
     // Helper to create a test tool config
@@ -317,7 +374,7 @@ mod tests {
     #[test]
     fn test_chat_completion_tool_strict_true() {
         let params = json!({"type": "object"});
-        let tool = ChatCompletionTool {
+        let tool = ChatCompletionTool::Function(ChatCompletionFunctionTool {
             r#type: ChatCompletionToolType::Function,
             function: ChatCompletionFunction {
                 name: "test",
@@ -325,7 +382,7 @@ mod tests {
                 parameters: &params,
             },
             strict: true,
-        };
+        });
         let serialized = serde_json::to_value(&tool).unwrap();
         assert_eq!(serialized["strict"], true);
         assert_eq!(serialized["type"], "function");
@@ -334,7 +391,7 @@ mod tests {
     #[test]
     fn test_chat_completion_tool_strict_false() {
         let params = json!({"type": "object"});
-        let tool = ChatCompletionTool {
+        let tool = ChatCompletionTool::Function(ChatCompletionFunctionTool {
             r#type: ChatCompletionToolType::Function,
             function: ChatCompletionFunction {
                 name: "test",
@@ -342,9 +399,17 @@ mod tests {
                 parameters: &params,
             },
             strict: false,
-        };
+        });
         let serialized = serde_json::to_value(&tool).unwrap();
         assert_eq!(serialized["strict"], false);
+    }
+
+    #[test]
+    fn test_chat_completion_tool_provider_tool() {
+        let provider_tool = json!({"type": "web_search"});
+        let tool = ChatCompletionTool::ProviderTool(&provider_tool);
+        let serialized = serde_json::to_value(&tool).unwrap();
+        assert_eq!(serialized["type"], "web_search");
     }
 
     // Test ChatCompletionToolChoice serialization
@@ -408,10 +473,15 @@ mod tests {
         let tool_config = create_static_tool_config();
         let chat_tool: ChatCompletionTool = (&tool_config).into();
 
-        assert_eq!(chat_tool.function.name, "test_tool");
-        assert_eq!(chat_tool.function.description, Some("A test tool"));
-        assert!(chat_tool.strict);
-        assert!(matches!(chat_tool.r#type, ChatCompletionToolType::Function));
+        match chat_tool {
+            ChatCompletionTool::Function(f) => {
+                assert_eq!(f.function.name, "test_tool");
+                assert_eq!(f.function.description, Some("A test tool"));
+                assert!(f.strict);
+                assert!(matches!(f.r#type, ChatCompletionToolType::Function));
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function variant"),
+        }
     }
 
     #[tokio::test]
@@ -419,8 +489,13 @@ mod tests {
         let tool_config = create_dynamic_tool_config();
         let chat_tool: ChatCompletionTool = (&tool_config).into();
 
-        assert_eq!(chat_tool.function.name, "dynamic_tool");
-        assert!(matches!(chat_tool.r#type, ChatCompletionToolType::Function));
+        match chat_tool {
+            ChatCompletionTool::Function(f) => {
+                assert_eq!(f.function.name, "dynamic_tool");
+                assert!(matches!(f.r#type, ChatCompletionToolType::Function));
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function variant"),
+        }
     }
 
     #[test]
@@ -433,9 +508,14 @@ mod tests {
         };
         let chat_tool: ChatCompletionTool = (&tool).into();
 
-        assert_eq!(chat_tool.function.name, "direct_tool");
-        assert_eq!(chat_tool.function.description, Some("Direct tool"));
-        assert!(!chat_tool.strict);
+        match chat_tool {
+            ChatCompletionTool::Function(f) => {
+                assert_eq!(f.function.name, "direct_tool");
+                assert_eq!(f.function.description, Some("Direct tool"));
+                assert!(!f.strict);
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function variant"),
+        }
     }
 
     #[test]
@@ -612,7 +692,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
+        let (tools, tool_choice, parallel) =
+            prepare_chat_completion_tools(&request, true, "model", "provider").unwrap();
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel.is_none());
@@ -638,7 +719,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
+        let (tools, tool_choice, parallel) =
+            prepare_chat_completion_tools(&request, true, "model", "provider").unwrap();
         assert!(tools.is_none());
         assert!(tool_choice.is_none());
         assert!(parallel.is_none());
@@ -664,7 +746,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
+        let (tools, tool_choice, parallel) =
+            prepare_chat_completion_tools(&request, true, "model", "provider").unwrap();
         assert!(tools.is_some());
         assert_eq!(tools.unwrap().len(), 1);
         assert!(tool_choice.is_some());
@@ -697,7 +780,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel) = prepare_chat_completion_tools(&request, true).unwrap();
+        let (tools, tool_choice, parallel) =
+            prepare_chat_completion_tools(&request, true, "model", "provider").unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
         assert_eq!(parallel, Some(false));
@@ -736,7 +820,7 @@ mod tests {
         };
 
         let (tools, tool_choice, parallel) =
-            prepare_chat_completion_tools(&request, false).unwrap();
+            prepare_chat_completion_tools(&request, false, "model", "provider").unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
         assert!(parallel.is_none());
@@ -769,7 +853,7 @@ mod tests {
         };
 
         let (tools, tool_choice, parallel) =
-            prepare_chat_completion_tools(&request, false).unwrap();
+            prepare_chat_completion_tools(&request, false, "model", "provider").unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
         assert_eq!(parallel, Some(true));
@@ -819,13 +903,24 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, _) = prepare_chat_completion_tools(&request, true).unwrap();
+        let (tools, tool_choice, _) =
+            prepare_chat_completion_tools(&request, true, "model", "provider").unwrap();
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 2);
-        assert_eq!(tools[0].function.name, "tool1");
-        assert!(tools[0].strict);
-        assert_eq!(tools[1].function.name, "tool2");
-        assert!(!tools[1].strict);
+        match &tools[0] {
+            ChatCompletionTool::Function(f) => {
+                assert_eq!(f.function.name, "tool1");
+                assert!(f.strict);
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function variant"),
+        }
+        match &tools[1] {
+            ChatCompletionTool::Function(f) => {
+                assert_eq!(f.function.name, "tool2");
+                assert!(!f.strict);
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function variant"),
+        }
         assert!(tool_choice.is_some());
     }
 
@@ -849,7 +944,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, _) = prepare_chat_completion_tools(&request, true).unwrap();
+        let (tools, tool_choice, _) =
+            prepare_chat_completion_tools(&request, true, "model", "provider").unwrap();
         assert!(tools.is_some());
         assert!(tool_choice.is_some());
 
@@ -859,5 +955,117 @@ mod tests {
             }
             _ => panic!("Expected Specific variant"),
         }
+    }
+
+    #[test]
+    fn test_prepare_tools_with_provider_tools() {
+        let tool_config = ToolCallConfig {
+            tool_choice: ToolChoice::Auto,
+            allowed_tools: AllowedTools {
+                tools: Vec::new(),
+                choice: AllowedToolsChoice::FunctionDefault,
+            },
+            parallel_tool_calls: None,
+            static_tools_available: vec![create_static_tool_config()],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![
+                ProviderTool {
+                    scope: ProviderToolScope::Unscoped,
+                    tool: json!({"type": "web_search"}),
+                },
+                ProviderTool {
+                    scope: ProviderToolScope::ModelProvider {
+                        model_name: "model".to_string(),
+                        model_provider_name: "provider".to_string(),
+                    },
+                    tool: json!({"type": "code_interpreter"}),
+                },
+                // This should be filtered out because of mismatched scope
+                ProviderTool {
+                    scope: ProviderToolScope::ModelProvider {
+                        model_name: "other_model".to_string(),
+                        model_provider_name: "other_provider".to_string(),
+                    },
+                    tool: json!({"type": "should_not_appear"}),
+                },
+            ],
+            openai_custom_tools: vec![],
+        };
+
+        let request = ModelInferenceRequest {
+            tool_config: Some(std::borrow::Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, _) =
+            prepare_chat_completion_tools(&request, true, "model", "provider").unwrap();
+        let tools = tools.unwrap();
+        // 1 function tool + 2 provider tools (unscoped + matching scope)
+        assert_eq!(tools.len(), 3);
+
+        // First tool should be the function tool
+        match &tools[0] {
+            ChatCompletionTool::Function(f) => {
+                assert_eq!(f.function.name, "test_tool");
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function variant"),
+        }
+
+        // Second tool should be the unscoped provider tool
+        match &tools[1] {
+            ChatCompletionTool::ProviderTool(v) => {
+                assert_eq!(v["type"], "web_search");
+            }
+            ChatCompletionTool::Function(_) => panic!("Expected ProviderTool variant"),
+        }
+
+        // Third tool should be the matching scoped provider tool
+        match &tools[2] {
+            ChatCompletionTool::ProviderTool(v) => {
+                assert_eq!(v["type"], "code_interpreter");
+            }
+            ChatCompletionTool::Function(_) => panic!("Expected ProviderTool variant"),
+        }
+
+        assert!(tool_choice.is_some());
+    }
+
+    #[test]
+    fn test_prepare_tools_only_provider_tools() {
+        // Test that we can have only provider tools with no function tools
+        let tool_config = ToolCallConfig {
+            tool_choice: ToolChoice::Auto,
+            allowed_tools: AllowedTools {
+                tools: Vec::new(),
+                choice: AllowedToolsChoice::FunctionDefault,
+            },
+            parallel_tool_calls: None,
+            static_tools_available: vec![],
+            dynamic_tools_available: vec![],
+            provider_tools: vec![ProviderTool {
+                scope: ProviderToolScope::Unscoped,
+                tool: json!({"type": "web_search"}),
+            }],
+            openai_custom_tools: vec![],
+        };
+
+        let request = ModelInferenceRequest {
+            tool_config: Some(std::borrow::Cow::Owned(tool_config)),
+            ..Default::default()
+        };
+
+        let (tools, tool_choice, _) =
+            prepare_chat_completion_tools(&request, true, "model", "provider").unwrap();
+        let tools = tools.unwrap();
+        assert_eq!(tools.len(), 1);
+
+        match &tools[0] {
+            ChatCompletionTool::ProviderTool(v) => {
+                assert_eq!(v["type"], "web_search");
+            }
+            ChatCompletionTool::Function(_) => panic!("Expected ProviderTool variant"),
+        }
+
+        assert!(tool_choice.is_some());
     }
 }

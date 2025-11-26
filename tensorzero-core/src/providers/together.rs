@@ -163,7 +163,7 @@ impl InferenceProvider for TogetherProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -172,7 +172,7 @@ impl InferenceProvider for TogetherProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = serde_json::to_value(
-            TogetherRequest::new(&self.model_name, request).await?,
+            TogetherRequest::new(&self.model_name, request, model_name, provider_name).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -264,7 +264,7 @@ impl InferenceProvider for TogetherProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -273,7 +273,7 @@ impl InferenceProvider for TogetherProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(
-            TogetherRequest::new(&self.model_name, request).await?,
+            TogetherRequest::new(&self.model_name, request, model_name, provider_name).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -416,6 +416,8 @@ impl<'a> TogetherRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        model_name: &str,
+        provider_name: &str,
     ) -> Result<TogetherRequest<'a>, Error> {
         let response_format = match request.json_mode {
             ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
@@ -445,7 +447,7 @@ impl<'a> TogetherRequest<'a> {
 
         let (tools, mut tool_choice, parallel_tool_calls) = match tool_choice {
             Some(&ToolChoice::None) => (None, None, None),
-            _ => prepare_chat_completion_tools(request, false)?,
+            _ => prepare_chat_completion_tools(request, false, model_name, provider_name)?,
         };
         // Together AI doesn't seem to support `tool_choice="required"`, so we convert it to `tool_choice="auto"`
         if let Some(ChatCompletionToolChoice::String(ChatCompletionToolChoiceString::Required)) =
@@ -898,10 +900,14 @@ mod tests {
             ..Default::default()
         };
 
-        let together_request =
-            TogetherRequest::new("togethercomputer/llama-v3-8b", &request_with_tools)
-                .await
-                .unwrap();
+        let together_request = TogetherRequest::new(
+            "togethercomputer/llama-v3-8b",
+            &request_with_tools,
+            "model",
+            "provider",
+        )
+        .await
+        .unwrap();
 
         assert_eq!(together_request.model, "togethercomputer/llama-v3-8b");
         assert_eq!(together_request.messages.len(), 1);
@@ -915,8 +921,13 @@ mod tests {
         let tools = together_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
         let tool = &tools[0];
-        assert_eq!(tool.function.name, WEATHER_TOOL.name());
-        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
+        match tool {
+            ChatCompletionTool::Function(f) => {
+                assert_eq!(f.function.name, WEATHER_TOOL.name());
+                assert_eq!(f.function.parameters, WEATHER_TOOL.parameters());
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function variant"),
+        }
         assert_eq!(
             together_request.tool_choice,
             Some(ChatCompletionToolChoice::Specific(
@@ -1006,7 +1017,7 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &TogetherRequest::new("test-model", &generic_request)
+                &TogetherRequest::new("test-model", &generic_request, "model", "provider")
                     .await
                     .unwrap(),
             )
@@ -1054,7 +1065,7 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &TogetherRequest::new("test-model", &generic_request)
+                &TogetherRequest::new("test-model", &generic_request, "model", "provider")
                     .await
                     .unwrap(),
             )
@@ -1102,7 +1113,7 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &TogetherRequest::new("test-model", &generic_request)
+                &TogetherRequest::new("test-model", &generic_request, "model", "provider")
                     .await
                     .unwrap(),
             )
@@ -1177,7 +1188,7 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &TogetherRequest::new("test-model", &generic_request)
+                &TogetherRequest::new("test-model", &generic_request, "model", "provider")
                     .await
                     .unwrap(),
             )
@@ -1221,7 +1232,7 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &TogetherRequest::new("test-model", &generic_request)
+                &TogetherRequest::new("test-model", &generic_request, "model", "provider")
                     .await
                     .unwrap(),
             )

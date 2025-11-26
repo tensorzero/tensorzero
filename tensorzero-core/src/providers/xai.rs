@@ -137,7 +137,7 @@ impl InferenceProvider for XAIProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -145,15 +145,17 @@ impl InferenceProvider for XAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request).await?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing xAI request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body = serde_json::to_value(
+            XAIRequest::new(&self.model_name, request, model_name, provider_name).await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing xAI request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
         let api_key = self
             .credentials
@@ -238,7 +240,7 @@ impl InferenceProvider for XAIProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -246,15 +248,17 @@ impl InferenceProvider for XAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body = serde_json::to_value(XAIRequest::new(&self.model_name, request).await?)
-            .map_err(|e| {
-                Error::new(ErrorDetails::Serialization {
-                    message: format!(
-                        "Error serializing xAI request: {}",
-                        DisplayOrDebugGateway::new(e)
-                    ),
-                })
-            })?;
+        let request_body = serde_json::to_value(
+            XAIRequest::new(&self.model_name, request, model_name, provider_name).await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing xAI request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
 
         let request_url = get_chat_url(&XAI_DEFAULT_BASE_URL)?;
         let api_key = self
@@ -389,6 +393,8 @@ impl<'a> XAIRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        model_name: &str,
+        provider_name: &str,
     ) -> Result<XAIRequest<'a>, Error> {
         let ModelInferenceRequest {
             temperature,
@@ -427,7 +433,7 @@ impl<'a> XAIRequest<'a> {
         .await?;
 
         let (tools, tool_choice, parallel_tool_calls) =
-            prepare_chat_completion_tools(request, false)?;
+            prepare_chat_completion_tools(request, false, model_name, provider_name)?;
         let mut xai_request = XAIRequest {
             messages,
             model,
@@ -602,9 +608,14 @@ mod tests {
             ..Default::default()
         };
 
-        let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
-            .await
-            .expect("failed to create xAI Request during test");
+        let xai_request = XAIRequest::new(
+            "grok-beta",
+            &request_with_tools,
+            "grok-beta",
+            "test_provider",
+        )
+        .await
+        .expect("failed to create xAI Request during test");
 
         assert_eq!(xai_request.messages.len(), 1);
         assert_eq!(xai_request.temperature, Some(0.5));
@@ -616,8 +627,13 @@ mod tests {
         assert_eq!(tools.len(), 1);
 
         let tool = &tools[0];
-        assert_eq!(tool.function.name, WEATHER_TOOL.name());
-        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
+        match tool {
+            ChatCompletionTool::Function(f) => {
+                assert_eq!(f.function.name, WEATHER_TOOL.name());
+                assert_eq!(f.function.parameters, WEATHER_TOOL.parameters());
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function variant"),
+        }
         assert_eq!(
             xai_request.tool_choice,
             Some(ChatCompletionToolChoice::Specific(
@@ -652,9 +668,14 @@ mod tests {
             ..Default::default()
         };
 
-        let xai_request = XAIRequest::new("grok-beta", &request_with_tools)
-            .await
-            .expect("failed to create xAI Request");
+        let xai_request = XAIRequest::new(
+            "grok-beta",
+            &request_with_tools,
+            "grok-beta",
+            "test_provider",
+        )
+        .await
+        .expect("failed to create xAI Request");
 
         assert_eq!(xai_request.messages.len(), 2);
         assert_eq!(xai_request.temperature, Some(0.5));
@@ -670,8 +691,13 @@ mod tests {
         assert_eq!(tools.len(), 1);
 
         let tool = &tools[0];
-        assert_eq!(tool.function.name, WEATHER_TOOL.name());
-        assert_eq!(tool.function.parameters, WEATHER_TOOL.parameters());
+        match tool {
+            ChatCompletionTool::Function(f) => {
+                assert_eq!(f.function.name, WEATHER_TOOL.name());
+                assert_eq!(f.function.parameters, WEATHER_TOOL.parameters());
+            }
+            ChatCompletionTool::ProviderTool(_) => panic!("Expected Function variant"),
+        }
         assert_eq!(
             xai_request.tool_choice,
             Some(ChatCompletionToolChoice::Specific(
@@ -761,7 +787,7 @@ mod tests {
                 response_time: Duration::from_secs(0),
             },
             raw_request: serde_json::to_string(
-                &XAIRequest::new("grok-beta", &generic_request)
+                &XAIRequest::new("grok-beta", &generic_request, "grok-beta", "test_provider")
                     .await
                     .unwrap(),
             )

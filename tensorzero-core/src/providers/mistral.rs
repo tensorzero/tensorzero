@@ -155,7 +155,7 @@ impl InferenceProvider for MistralProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -164,7 +164,7 @@ impl InferenceProvider for MistralProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
         let request_body = serde_json::to_value(
-            MistralRequest::new(&self.model_name, request).await?,
+            MistralRequest::new(&self.model_name, model_name, provider_name, request).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -252,7 +252,7 @@ impl InferenceProvider for MistralProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -261,7 +261,7 @@ impl InferenceProvider for MistralProvider {
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
         let request_body = serde_json::to_value(
-            MistralRequest::new(&self.model_name, request).await?,
+            MistralRequest::new(&self.model_name, model_name, provider_name, request).await?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -469,21 +469,28 @@ impl<'a> From<&'a ToolChoice> for MistralToolChoice<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
-pub(super) struct MistralTool<'a> {
-    r#type: OpenAIToolType,
-    function: OpenAIFunction<'a>,
+pub(super) struct MistralFunctionTool<'a> {
+    pub(super) r#type: OpenAIToolType,
+    pub(super) function: OpenAIFunction<'a>,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(untagged)]
+pub(super) enum MistralTool<'a> {
+    Function(MistralFunctionTool<'a>),
+    ProviderTool(&'a serde_json::Value),
 }
 
 impl<'a> From<&'a FunctionToolConfig> for MistralTool<'a> {
     fn from(tool: &'a FunctionToolConfig) -> Self {
-        MistralTool {
+        MistralTool::Function(MistralFunctionTool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {
                 name: tool.name(),
                 description: Some(tool.description()),
                 parameters: tool.parameters(),
             },
-        }
+        })
     }
 }
 
@@ -491,6 +498,8 @@ impl<'a> From<&'a FunctionToolConfig> for MistralTool<'a> {
 /// Otherwise convert the tool choice and tools to Mistral format
 pub(super) fn prepare_mistral_tools<'a>(
     request: &'a ModelInferenceRequest<'a>,
+    model_name: &'a str,
+    provider_name: &'a str,
 ) -> Result<PreparedMistralToolsResult<'a>, Error> {
     match &request.tool_config {
         None => Ok((None, None, None)),
@@ -498,12 +507,24 @@ pub(super) fn prepare_mistral_tools<'a>(
             if !tool_config.any_tools_available() {
                 return Ok((None, None, None));
             }
-            let tools = Some(
-                tool_config
-                    .strict_tools_available()?
-                    .map(Into::into)
-                    .collect(),
+
+            // Get scoped provider tools
+            let provider_tools = tool_config.get_scoped_provider_tools(model_name, provider_name);
+
+            let mut tools: Vec<MistralTool> = tool_config
+                .strict_tools_available()?
+                .map(Into::into)
+                .collect();
+
+            // Add provider tools
+            tools.extend(
+                provider_tools
+                    .iter()
+                    .map(|t| MistralTool::ProviderTool(&t.tool)),
             );
+
+            let tools = if tools.is_empty() { None } else { Some(tools) };
+
             let parallel_tool_calls = tool_config.parallel_tool_calls;
 
             // Mistral does not support allowed_tools constraint, use regular tool_choice
@@ -578,6 +599,8 @@ fn apply_inference_params(
 impl<'a> MistralRequest<'a> {
     pub async fn new(
         model: &'a str,
+        model_name: &'a str,
+        provider_name: &'a str,
         request: &'a ModelInferenceRequest<'_>,
     ) -> Result<MistralRequest<'a>, Error> {
         let response_format = match request.json_mode {
@@ -596,7 +619,7 @@ impl<'a> MistralRequest<'a> {
             },
         )
         .await?;
-        let (tools, tool_choice, _) = prepare_mistral_tools(request)?;
+        let (tools, tool_choice, _) = prepare_mistral_tools(request, model_name, provider_name)?;
 
         let mut mistral_request = MistralRequest {
             messages,
@@ -902,9 +925,14 @@ mod tests {
             ..Default::default()
         };
 
-        let mistral_request = MistralRequest::new("mistral-small-latest", &request_with_tools)
-            .await
-            .unwrap();
+        let mistral_request = MistralRequest::new(
+            "mistral-small-latest",
+            "test_model",
+            "test_provider",
+            &request_with_tools,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(mistral_request.model, "mistral-small-latest");
         assert_eq!(mistral_request.messages.len(), 1);
@@ -918,8 +946,13 @@ mod tests {
         assert!(mistral_request.tools.is_some());
         let tools = mistral_request.tools.as_ref().unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
-        assert_eq!(tools[0].function.parameters, WEATHER_TOOL.parameters());
+        match &tools[0] {
+            MistralTool::Function(func_tool) => {
+                assert_eq!(func_tool.function.name, WEATHER_TOOL.name());
+                assert_eq!(func_tool.function.parameters, WEATHER_TOOL.parameters());
+            }
+            MistralTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
         assert_eq!(
             mistral_request.tool_choice,
             Some(MistralToolChoice::Specific(MistralSpecificToolChoice {
@@ -971,12 +1004,18 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_mistral_tools(&request, "test_model", "test_provider").unwrap();
 
         // Verify only allowed tools are returned (strict_tools_available respects allowed_tools)
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+        match &tools[0] {
+            MistralTool::Function(func_tool) => {
+                assert_eq!(func_tool.function.name, WEATHER_TOOL.name());
+            }
+            MistralTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
 
         // Verify tool_choice
         let tool_choice = tool_choice.unwrap();
@@ -1024,7 +1063,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_mistral_tools(&request, "test_model", "test_provider").unwrap();
 
         // Verify tools
         let tools = tools.unwrap();
@@ -1077,7 +1117,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_mistral_tools(&request, "test_model", "test_provider").unwrap();
 
         // Verify tools
         let tools = tools.unwrap();
@@ -1128,7 +1169,8 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_mistral_tools(&request, "test_model", "test_provider").unwrap();
 
         // Verify tools are still returned
         let tools = tools.unwrap();
@@ -1169,12 +1211,18 @@ mod tests {
             ..Default::default()
         };
 
-        let (tools, tool_choice, parallel_tool_calls) = prepare_mistral_tools(&request).unwrap();
+        let (tools, tool_choice, parallel_tool_calls) =
+            prepare_mistral_tools(&request, "test_model", "test_provider").unwrap();
 
         // Verify tools
         let tools = tools.unwrap();
         assert_eq!(tools.len(), 1);
-        assert_eq!(tools[0].function.name, WEATHER_TOOL.name());
+        match &tools[0] {
+            MistralTool::Function(func_tool) => {
+                assert_eq!(func_tool.function.name, WEATHER_TOOL.name());
+            }
+            MistralTool::ProviderTool(_) => panic!("Expected Function tool"),
+        }
 
         // Verify tool_choice is Specific
         let tool_choice = tool_choice.unwrap();
