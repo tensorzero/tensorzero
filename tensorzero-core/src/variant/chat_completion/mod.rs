@@ -558,10 +558,7 @@ pub async fn prepare_request_message(
                 content.push(ContentBlock::Thought(thought.clone()));
             }
             LazyResolvedInputMessageContent::Unknown(unknown) => {
-                content.push(ContentBlock::Unknown {
-                    data: unknown.data.clone(),
-                    model_provider_name: unknown.model_provider_name.clone(),
-                });
+                content.push(ContentBlock::Unknown(unknown.clone()));
             }
         }
     }

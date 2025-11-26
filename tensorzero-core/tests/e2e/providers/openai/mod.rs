@@ -2395,7 +2395,8 @@ model = "test-model"
         .content
         .iter()
         .filter(|block| {
-            if let ContentBlockChatOutput::Unknown { data, .. } = block {
+            if let ContentBlockChatOutput::Unknown(unknown) = block {
+                let data = &unknown.data;
                 data.get("type")
                     .and_then(|t| t.as_str())
                     .map(|t| t == "web_search_call")
@@ -2454,13 +2455,13 @@ model = "test-model"
             ContentBlockChatOutput::Thought(thought) => {
                 ClientInputMessageContent::Thought(thought.clone())
             }
-            ContentBlockChatOutput::Unknown {
-                data,
-                model_provider_name,
-            } => ClientInputMessageContent::Unknown(Unknown {
-                data: data.clone(),
-                model_provider_name: model_provider_name.clone(),
-            }),
+            ContentBlockChatOutput::Unknown(unknown) => {
+                ClientInputMessageContent::Unknown(Unknown {
+                    data: unknown.data.clone(),
+                    model_name: unknown.model_name.clone(),
+                    provider_name: unknown.provider_name.clone(),
+                })
+            }
         })
         .collect();
 
@@ -2784,7 +2785,8 @@ model = "test-model"
         .content
         .iter()
         .filter(|block| {
-            if let ContentBlockChatOutput::Unknown { data, .. } = block {
+            if let ContentBlockChatOutput::Unknown(unknown) = block {
+                let data = &unknown.data;
                 data.get("type")
                     .and_then(|t| t.as_str())
                     .map(|t| t == "web_search_call")
@@ -2843,13 +2845,13 @@ model = "test-model"
             ContentBlockChatOutput::Thought(thought) => {
                 ClientInputMessageContent::Thought(thought.clone())
             }
-            ContentBlockChatOutput::Unknown {
-                data,
-                model_provider_name,
-            } => ClientInputMessageContent::Unknown(Unknown {
-                data: data.clone(),
-                model_provider_name: model_provider_name.clone(),
-            }),
+            ContentBlockChatOutput::Unknown(unknown) => {
+                ClientInputMessageContent::Unknown(Unknown {
+                    data: unknown.data.clone(),
+                    model_name: unknown.model_name.clone(),
+                    provider_name: unknown.provider_name.clone(),
+                })
+            }
         })
         .collect();
 

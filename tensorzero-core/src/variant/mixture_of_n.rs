@@ -409,7 +409,7 @@ fn make_stream_from_non_stream(
                     id += 1;
                     Ok(chunk)
                 }
-                ContentBlockChatOutput::Unknown { .. } => {
+                ContentBlockChatOutput::Unknown(..) => {
                     Err(ErrorDetails::Inference {
                         message: "MixtureOfNConfig variant does not support unknown content blocks in streaming mode".to_string(),
                     }

@@ -1850,12 +1850,9 @@ async fn tensorzero_to_openai_user_messages<'a>(
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(messages_config.provider_type, thought);
             }
-            ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            } => {
+            ContentBlock::Unknown(unknown) => {
                 user_content_blocks.push(OpenAIContentBlock::Unknown {
-                    data: Cow::Borrowed(data),
+                    data: Cow::Borrowed(&unknown.data),
                 });
             }
         };
@@ -1934,20 +1931,14 @@ pub async fn tensorzero_to_openai_assistant_message<'a>(
             | Cow::Owned(ContentBlock::Thought(ref thought)) => {
                 warn_discarded_thought_block(messages_config.provider_type, thought);
             }
-            Cow::Borrowed(ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            }) => {
+            Cow::Borrowed(ContentBlock::Unknown(unknown)) => {
                 assistant_content_blocks.push(OpenAIContentBlock::Unknown {
-                    data: Cow::Borrowed(data),
+                    data: Cow::Borrowed(&unknown.data),
                 });
             }
-            Cow::Owned(ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            }) => {
+            Cow::Owned(ContentBlock::Unknown(unknown)) => {
                 assistant_content_blocks.push(OpenAIContentBlock::Unknown {
-                    data: Cow::Owned(data),
+                    data: Cow::Owned(unknown.data),
                 });
             }
         }

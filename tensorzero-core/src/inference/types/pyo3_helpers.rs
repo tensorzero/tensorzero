@@ -157,12 +157,15 @@ pub fn resolved_content_block_to_python(
                 ),
             )
         }
-        ResolvedContentBlock::Unknown {
-            data,
-            model_provider_name,
-        } => {
+        ResolvedContentBlock::Unknown(unknown) => {
             let unknown_content_block = import_unknown_content_block(py)?;
-            let serialized_data = serialize_to_dict(py, data)?;
+            let serialized_data = serialize_to_dict(py, &unknown.data)?;
+            let model_provider_name = match (&unknown.model_name, &unknown.provider_name) {
+                (Some(model), Some(provider)) => {
+                    Some(format!("tensorzero::model_name::{model}::provider_name::{provider}"))
+                }
+                _ => None,
+            };
             unknown_content_block.call1(py, (serialized_data, model_provider_name))
         }
     }
@@ -194,12 +197,15 @@ pub fn content_block_chat_output_to_python(
             let thought_content_block = import_thought_content_block(py)?;
             thought_content_block.call1(py, (thought.text,))
         }
-        ContentBlockChatOutput::Unknown {
-            data,
-            model_provider_name,
-        } => {
+        ContentBlockChatOutput::Unknown(unknown) => {
             let unknown_content_block = import_unknown_content_block(py)?;
-            let serialized_data = serialize_to_dict(py, data)?;
+            let serialized_data = serialize_to_dict(py, &unknown.data)?;
+            let model_provider_name = match (&unknown.model_name, &unknown.provider_name) {
+                (Some(model), Some(provider)) => {
+                    Some(format!("tensorzero::model_name::{model}::provider_name::{provider}"))
+                }
+                _ => None,
+            };
             unknown_content_block.call1(py, (serialized_data, model_provider_name))
         }
     }
@@ -262,7 +268,13 @@ pub fn stored_input_message_content_to_python(
         StoredInputMessageContent::Unknown(unknown) => {
             let unknown_content_block = import_unknown_content_block(py)?;
             let serialized_data = serialize_to_dict(py, &unknown.data)?;
-            unknown_content_block.call1(py, (serialized_data, &unknown.model_provider_name))
+            let model_provider_name = match (&unknown.model_name, &unknown.provider_name) {
+                (Some(model), Some(provider)) => {
+                    Some(format!("tensorzero::model_name::{model}::provider_name::{provider}"))
+                }
+                _ => None,
+            };
+            unknown_content_block.call1(py, (serialized_data, model_provider_name))
         }
     }
 }
@@ -327,7 +339,13 @@ pub fn resolved_input_message_content_to_python(
         ResolvedInputMessageContent::Unknown(unknown) => {
             let unknown_content_block = import_unknown_content_block(py)?;
             let serialized_data = serialize_to_dict(py, &unknown.data)?;
-            unknown_content_block.call1(py, (serialized_data, &unknown.model_provider_name))
+            let model_provider_name = match (&unknown.model_name, &unknown.provider_name) {
+                (Some(model), Some(provider)) => {
+                    Some(format!("tensorzero::model_name::{model}::provider_name::{provider}"))
+                }
+                _ => None,
+            };
+            unknown_content_block.call1(py, (serialized_data, model_provider_name))
         }
     }
 }

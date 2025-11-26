@@ -865,17 +865,86 @@ impl RawText {
 
 /// Struct that represents an unknown provider-specific content block.
 /// We pass this along as-is without any validation or transformation.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[serde(deny_unknown_fields)]
 #[export_schema]
 pub struct Unknown {
     /// The underlying content block to be passed to the model provider.
     pub data: Value,
-    /// A fully-qualified name specifying when this content block should
-    /// be included in the model provider input.
-    pub model_provider_name: Option<String>,
+    /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub model_name: Option<String>,
+    /// A provider name for the model you specified (e.g. `my_openai`)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub provider_name: Option<String>,
+}
+
+impl Unknown {
+    /// Returns whether this Unknown block should be included for the given model/provider combination
+    pub fn matches_model_provider(&self, model_name: &str, provider_name: &str) -> bool {
+        let model_matches = self
+            .model_name
+            .as_ref()
+            .is_none_or(|m| m == model_name);
+        let provider_matches = self
+            .provider_name
+            .as_ref()
+            .is_none_or(|p| p == provider_name);
+        model_matches && provider_matches
+    }
+}
+
+impl<'de> Deserialize<'de> for Unknown {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct NewFormat {
+            data: Value,
+            model_name: Option<String>,
+            provider_name: Option<String>,
+        }
+
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct OldFormat {
+            data: Value,
+            model_provider_name: Option<String>,
+        }
+
+        // Try new format first, then fall back to old format
+        let value = Value::deserialize(deserializer)?;
+
+        // Try new format
+        if let Ok(new_format) = serde_json::from_value::<NewFormat>(value.clone()) {
+            return Ok(Unknown {
+                data: new_format.data,
+                model_name: new_format.model_name,
+                provider_name: new_format.provider_name,
+            });
+        }
+
+        // Try old format (deprecated)
+        if let Ok(old_format) = serde_json::from_value::<OldFormat>(value.clone()) {
+            let (model_name, provider_name) = parse_fully_qualified_model_provider_name(
+                old_format.model_provider_name.as_deref(),
+            );
+            return Ok(Unknown {
+                data: old_format.data,
+                model_name,
+                provider_name,
+            });
+        }
+
+        Err(serde::de::Error::custom(
+            "Unknown must have 'data' field, and optionally 'model_name'/'provider_name' (new format) or 'model_provider_name' (deprecated format)",
+        ))
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -888,8 +957,13 @@ impl Unknown {
     }
 
     #[getter]
-    pub fn model_provider_name(&self) -> Option<String> {
-        self.model_provider_name.clone()
+    pub fn model_name(&self) -> Option<String> {
+        self.model_name.clone()
+    }
+
+    #[getter]
+    pub fn provider_name(&self) -> Option<String> {
+        self.provider_name.clone()
     }
 }
 
@@ -966,20 +1040,7 @@ pub enum ContentBlock {
     Thought(Thought),
     /// Represents an unknown provider-specific content block.
     /// We pass this along as-is without any validation or transformation.
-    Unknown {
-        /// The underlying content block to be passed to the model provider.
-        data: Value,
-        /// A fully-qualified name specifying when this content block should
-        /// be included in the model provider input.
-        /// E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
-        ///
-        /// If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
-        /// a model provider, and stripped from the input if it doesn't match.
-        /// If set to `None, then this is passed to all model providers.
-        /// Individual model provider implementation never need to check this field themselves -
-        /// they only need to produce it with the proper `fully_qualified_name` set.
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 impl ContentBlock {
@@ -997,13 +1058,7 @@ impl ContentBlock {
                 )))
             }
             ContentBlock::Thought(thought) => Ok(StoredContentBlock::Thought(thought)),
-            ContentBlock::Unknown {
-                data,
-                model_provider_name,
-            } => Ok(StoredContentBlock::Unknown {
-                data,
-                model_provider_name,
-            }),
+            ContentBlock::Unknown(unknown) => Ok(StoredContentBlock::Unknown(unknown)),
         }
     }
 
@@ -1018,13 +1073,7 @@ impl ContentBlock {
                 file.resolve().await?.clone().into_owned(),
             ))),
             ContentBlock::Thought(thought) => Ok(ResolvedContentBlock::Thought(thought)),
-            ContentBlock::Unknown {
-                data,
-                model_provider_name,
-            } => Ok(ResolvedContentBlock::Unknown {
-                data,
-                model_provider_name,
-            }),
+            ContentBlock::Unknown(unknown) => Ok(ResolvedContentBlock::Unknown(unknown)),
         }
     }
 }
@@ -1063,20 +1112,7 @@ pub enum StoredContentBlock {
     Thought(Thought),
     /// Represents an unknown provider-specific content block.
     /// We pass this along as-is without any validation or transformation.
-    Unknown {
-        /// The underlying content block to be passed to the model provider.
-        data: Value,
-        /// A fully-qualified name specifying when this content block should
-        /// be included in the model provider input.
-        /// E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
-        ///
-        /// If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
-        /// a model provider, and stripped from the input if it doesn't match.
-        /// If set to `None, then this is passed to all model providers.
-        /// Individual model provider implementation never need to check this field themselves -
-        /// they only need to produce it with the proper `fully_qualified_name` set.
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 /// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
@@ -1090,10 +1126,7 @@ pub enum ResolvedContentBlock {
     ToolResult(ToolResult),
     File(Box<ObjectStorageFile>),
     Thought(Thought),
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 impl ResolvedContentBlock {
@@ -1107,13 +1140,7 @@ impl ResolvedContentBlock {
                 ContentBlock::File(Box::new(LazyFile::ObjectStorage(*resolved)))
             }
             ResolvedContentBlock::Thought(thought) => ContentBlock::Thought(thought),
-            ResolvedContentBlock::Unknown {
-                data,
-                model_provider_name,
-            } => ContentBlock::Unknown {
-                data,
-                model_provider_name,
-            },
+            ResolvedContentBlock::Unknown(unknown) => ContentBlock::Unknown(unknown),
         }
     }
 }
@@ -1151,10 +1178,7 @@ pub enum ContentBlockOutput {
     Text(Text),
     ToolCall(ToolCall),
     Thought(Thought),
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 /// Defines the types of content block that can come from a `chat` function
@@ -1170,10 +1194,7 @@ pub enum ContentBlockChatOutput {
     #[schemars(title = "ContentBlockChatOutputThought")]
     Thought(Thought),
     #[schemars(title = "ContentBlockChatOutputUnknown")]
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 impl ContentBlockChatOutput {
@@ -2104,14 +2125,8 @@ pub async fn parse_chat_output(
             ContentBlockOutput::Thought(thought) => {
                 output.push(ContentBlockChatOutput::Thought(thought));
             }
-            ContentBlockOutput::Unknown {
-                data,
-                model_provider_name,
-            } => {
-                output.push(ContentBlockChatOutput::Unknown {
-                    data,
-                    model_provider_name,
-                });
+            ContentBlockOutput::Unknown(unknown) => {
+                output.push(ContentBlockChatOutput::Unknown(unknown));
             }
         }
     }
@@ -2232,13 +2247,7 @@ impl From<ContentBlockChatOutput> for ContentBlock {
                 ContentBlock::ToolCall(inference_response_tool_call.into())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlock::Thought(thought),
-            ContentBlockChatOutput::Unknown {
-                data,
-                model_provider_name,
-            } => ContentBlock::Unknown {
-                data,
-                model_provider_name,
-            },
+            ContentBlockChatOutput::Unknown(unknown) => ContentBlock::Unknown(unknown),
         }
     }
 }
@@ -2251,13 +2260,7 @@ impl From<ContentBlockChatOutput> for ContentBlockOutput {
                 ContentBlockOutput::ToolCall(tool_call.into())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlockOutput::Thought(thought),
-            ContentBlockChatOutput::Unknown {
-                data,
-                model_provider_name,
-            } => ContentBlockOutput::Unknown {
-                data,
-                model_provider_name,
-            },
+            ContentBlockChatOutput::Unknown(unknown) => ContentBlockOutput::Unknown(unknown),
         }
     }
 }
@@ -2300,6 +2303,30 @@ fn borrow_cow<'a, T: ToOwned + ?Sized>(cow: &'a Cow<'a, T>) -> Cow<'a, T> {
     match cow {
         Cow::Borrowed(x) => Cow::Borrowed(x),
         Cow::Owned(x) => Cow::Borrowed(x.borrow()),
+    }
+}
+
+/// Parses a fully-qualified model provider name in the format:
+/// `tensorzero::model_name::<model_name>::provider_name::<provider_name>`
+/// Returns (model_name, provider_name) if parsing succeeds, (None, None) otherwise.
+pub(crate) fn parse_fully_qualified_model_provider_name(
+    name: Option<&str>,
+) -> (Option<String>, Option<String>) {
+    let Some(name) = name else {
+        return (None, None);
+    };
+
+    // Format: tensorzero::model_name::<model>::provider_name::<provider>
+    let parts: Vec<&str> = name.split("::").collect();
+    if parts.len() == 5
+        && parts[0] == "tensorzero"
+        && parts[1] == "model_name"
+        && parts[3] == "provider_name"
+    {
+        (Some(parts[2].to_string()), Some(parts[4].to_string()))
+    } else {
+        // Could not parse - treat as if no name was provided
+        (None, None)
     }
 }
 
@@ -3327,5 +3354,108 @@ mod tests {
         let usage_mixed = result_mixed.usage_considering_cached();
         assert_eq!(usage_mixed.input_tokens, None); // None propagates
         assert_eq!(usage_mixed.output_tokens, Some(25)); // 0 (cached) + 25
+    }
+
+    #[test]
+    fn test_unknown_deserialization_new_format() {
+        // New format with model_name and provider_name
+        let json =
+            r#"{"data": {"foo": "bar"}, "model_name": "my_model", "provider_name": "my_provider"}"#;
+        let unknown: Unknown = serde_json::from_str(json).unwrap();
+        assert_eq!(unknown.data, json!({"foo": "bar"}));
+        assert_eq!(unknown.model_name, Some("my_model".to_string()));
+        assert_eq!(unknown.provider_name, Some("my_provider".to_string()));
+    }
+
+    #[test]
+    fn test_unknown_deserialization_new_format_minimal() {
+        // New format with just data
+        let json = r#"{"data": {"foo": "bar"}}"#;
+        let unknown: Unknown = serde_json::from_str(json).unwrap();
+        assert_eq!(unknown.data, json!({"foo": "bar"}));
+        assert_eq!(unknown.model_name, None);
+        assert_eq!(unknown.provider_name, None);
+    }
+
+    #[test]
+    fn test_unknown_deserialization_old_format_backwards_compatibility() {
+        // Old deprecated format with fully-qualified model_provider_name
+        let json = r#"{"data": {"foo": "bar"}, "model_provider_name": "tensorzero::model_name::my_model::provider_name::my_provider"}"#;
+        let unknown: Unknown = serde_json::from_str(json).unwrap();
+        assert_eq!(unknown.data, json!({"foo": "bar"}));
+        assert_eq!(unknown.model_name, Some("my_model".to_string()));
+        assert_eq!(unknown.provider_name, Some("my_provider".to_string()));
+    }
+
+    #[test]
+    fn test_unknown_deserialization_old_format_null() {
+        // Old format with null model_provider_name
+        let json = r#"{"data": {"foo": "bar"}, "model_provider_name": null}"#;
+        let unknown: Unknown = serde_json::from_str(json).unwrap();
+        assert_eq!(unknown.data, json!({"foo": "bar"}));
+        assert_eq!(unknown.model_name, None);
+        assert_eq!(unknown.provider_name, None);
+    }
+
+    #[test]
+    fn test_unknown_serialization_new_format() {
+        let unknown = Unknown {
+            data: json!({"foo": "bar"}),
+            model_name: Some("my_model".to_string()),
+            provider_name: Some("my_provider".to_string()),
+        };
+        let json = serde_json::to_value(&unknown).unwrap();
+        assert_eq!(json["data"], json!({"foo": "bar"}));
+        assert_eq!(json["model_name"], "my_model");
+        assert_eq!(json["provider_name"], "my_provider");
+        // Should NOT have model_provider_name
+        assert!(json.get("model_provider_name").is_none());
+    }
+
+    #[test]
+    fn test_unknown_matches_model_provider() {
+        let unknown_specific = Unknown {
+            data: json!({}),
+            model_name: Some("my_model".to_string()),
+            provider_name: Some("my_provider".to_string()),
+        };
+        assert!(unknown_specific.matches_model_provider("my_model", "my_provider"));
+        assert!(!unknown_specific.matches_model_provider("other_model", "my_provider"));
+        assert!(!unknown_specific.matches_model_provider("my_model", "other_provider"));
+
+        let unknown_any_provider = Unknown {
+            data: json!({}),
+            model_name: Some("my_model".to_string()),
+            provider_name: None,
+        };
+        assert!(unknown_any_provider.matches_model_provider("my_model", "any_provider"));
+        assert!(!unknown_any_provider.matches_model_provider("other_model", "any_provider"));
+
+        let unknown_any = Unknown {
+            data: json!({}),
+            model_name: None,
+            provider_name: None,
+        };
+        assert!(unknown_any.matches_model_provider("any_model", "any_provider"));
+    }
+
+    #[test]
+    fn test_parse_fully_qualified_model_provider_name() {
+        // Valid format
+        let (model, provider) = parse_fully_qualified_model_provider_name(Some(
+            "tensorzero::model_name::my_model::provider_name::my_provider",
+        ));
+        assert_eq!(model, Some("my_model".to_string()));
+        assert_eq!(provider, Some("my_provider".to_string()));
+
+        // None input
+        let (model, provider) = parse_fully_qualified_model_provider_name(None);
+        assert_eq!(model, None);
+        assert_eq!(provider, None);
+
+        // Invalid format
+        let (model, provider) = parse_fully_qualified_model_provider_name(Some("invalid_format"));
+        assert_eq!(model, None);
+        assert_eq!(provider, None);
     }
 }

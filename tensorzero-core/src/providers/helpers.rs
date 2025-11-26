@@ -16,7 +16,7 @@ use crate::{
         resolved_input::{FileUrl, LazyFile},
         ProviderInferenceResponseChunk,
     },
-    model::{fully_qualified_name, ModelProviderRequestInfo},
+    model::ModelProviderRequestInfo,
 };
 
 pub struct JsonlBatchFileInfo {
@@ -283,8 +283,10 @@ pub fn inject_extra_request_data(
 
     let expected_model_name = model_name;
     let expected_provider_name_plain = &model_provider.provider_name;
-    let expected_provider_name_fully_qualified =
-        fully_qualified_name(model_name, &model_provider.provider_name);
+    let expected_provider_name_fully_qualified = format!(
+        "tensorzero::model_name::{}::provider_name::{}",
+        model_name, &model_provider.provider_name
+    );
 
     // Finally, write the inference-level extra_body information. This can overwrite values set from the config-level extra_body.
     for extra_body in &config.inference_extra_body.data {

@@ -67,11 +67,65 @@ pub struct ThoughtChunk {
     pub provider_type: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct UnknownChunk {
     pub id: String,
     pub data: Value,
-    pub model_provider_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_name: Option<String>,
+}
+
+impl<'de> serde::Deserialize<'de> for UnknownChunk {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct NewFormat {
+            id: String,
+            data: Value,
+            model_name: Option<String>,
+            provider_name: Option<String>,
+        }
+
+        #[derive(Deserialize)]
+        struct OldFormat {
+            id: String,
+            data: Value,
+            model_provider_name: Option<String>,
+        }
+
+        let value = Value::deserialize(deserializer)?;
+
+        // Try new format first
+        if let Ok(new_format) = serde_json::from_value::<NewFormat>(value.clone()) {
+            return Ok(UnknownChunk {
+                id: new_format.id,
+                data: new_format.data,
+                model_name: new_format.model_name,
+                provider_name: new_format.provider_name,
+            });
+        }
+
+        // Try old format (deprecated)
+        if let Ok(old_format) = serde_json::from_value::<OldFormat>(value.clone()) {
+            let (model_name, provider_name) = super::parse_fully_qualified_model_provider_name(
+                old_format.model_provider_name.as_deref(),
+            );
+            return Ok(UnknownChunk {
+                id: old_format.id,
+                data: old_format.data,
+                model_name,
+                provider_name,
+            });
+        }
+
+        Err(serde::de::Error::custom(
+            "Failed to deserialize UnknownChunk",
+        ))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -488,7 +542,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                         ContentBlockChunk::Unknown(UnknownChunk {
                             id,
                             data,
-                            model_provider_name,
+                            model_name,
+                            provider_name,
                         }) => {
                             // Unknown chunks are not merged/coalesced - each one gets a unique entry
                             // We use the chunk ID as part of the key to ensure uniqueness
@@ -497,10 +552,11 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                             }
                             blocks.insert(
                                 (ContentBlockOutputType::Unknown, id.clone()),
-                                ContentBlockOutput::Unknown {
+                                ContentBlockOutput::Unknown(super::Unknown {
                                     data: data.clone(),
-                                    model_provider_name: model_provider_name.clone(),
-                                },
+                                    model_name: model_name.clone(),
+                                    provider_name: provider_name.clone(),
+                                }),
                             );
                         }
                     }
