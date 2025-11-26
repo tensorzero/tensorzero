@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use futures::future::join_all;
-use rand::{rngs::StdRng, seq::IteratorRandom, Rng, SeedableRng};
+use rand::{rngs::StdRng, seq::IteratorRandom, SeedableRng};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use tensorzero_core::{
@@ -14,6 +14,7 @@ use tensorzero_core::{
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     endpoints::{datasets::v1::delete_dataset, inference::InferenceCredentials},
     error::{Error, ErrorDetails},
+    evaluations::EvaluationConfig,
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
@@ -33,6 +34,7 @@ pub mod validate;
 
 pub use mutate::mutate_variant;
 // TODO: remove public export after #4669 is merged and we can integrate the Pareto functions
+use pareto::Candidate;
 pub use pareto::{is_improvement, ParetoFrontier};
 
 use analyze::analyze_inferences;
@@ -96,7 +98,7 @@ impl Optimizer for GEPAConfig {
 
         // Initialize baseline variants for optimization
         // These will be used as the starting pool for GEPA iterations
-        let mut initial_variants = initialize_pareto_frontier(self, &function_context)?;
+        let initial_variants = initialize_pareto_frontier(self, &function_context)?;
 
         // Track original variant names to filter them out at the end
         let original_variant_names: std::collections::HashSet<String> =
@@ -121,7 +123,7 @@ impl Optimizer for GEPAConfig {
             val_examples.len()
         );
 
-        let _val_response = create_evaluation_dataset(
+        let val_response = create_evaluation_dataset(
             &config,
             client,
             clickhouse_connection_info,
@@ -144,6 +146,9 @@ impl Optimizer for GEPAConfig {
         let per_variant_concurrency = (self.max_concurrency as usize / num_variants).max(1);
 
         let evaluation_name = self.evaluation_name.clone();
+        let evaluator_configs = match &*function_context.evaluation_config {
+            EvaluationConfig::Inference(cfg) => &cfg.evaluators,
+        };
 
         // Create parallel evaluation futures
         let evaluation_futures: Vec<_> = initial_variants
@@ -172,18 +177,14 @@ impl Optimizer for GEPAConfig {
                     })
                     .await
                     {
-                        Ok(results) => {
-                            // Compute scores map inline and drop full EvaluationResults
-                            let scores_map = results.per_datapoint_scores();
-                            Ok::<_, Error>((variant_name, scores_map))
-                        }
+                        Ok(results) => Ok::<_, Error>((variant_name, results)),
                         Err(e) => {
                             tracing::warn!(
                                 "Evaluation failed for variant '{}': {}",
                                 variant_name,
                                 e
                             );
-                            Ok((variant_name, HashMap::new()))
+                            Err(e)
                         }
                     }
                 }
@@ -193,13 +194,14 @@ impl Optimizer for GEPAConfig {
         // Execute in parallel
         let results = join_all(evaluation_futures).await;
 
-        // Collect into val_scores_map directly (only thing needed for Pareto filtering)
+        // Collect into validation maps for Pareto filtering and parent-child comparisons
         let mut initial_scores: HashMap<VariantName, VariantScores> = HashMap::new();
         for result in results {
             match result {
-                Ok((variant_name, scores)) => {
+                Ok((variant_name, eval_results)) => {
+                    let scores = eval_results.per_datapoint_scores();
                     if !scores.is_empty() {
-                        initial_scores.insert(variant_name, scores);
+                        initial_scores.insert(variant_name.clone(), scores);
                     }
                 }
                 Err(e) => {
@@ -213,7 +215,39 @@ impl Optimizer for GEPAConfig {
             initial_scores.len()
         );
 
-        // TODO[#4739]: Initialize Pareto frontier with both variant configs and their validation scores
+        if initial_scores.is_empty() {
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "No validation scores collected for initial variants".to_string(),
+            }));
+        }
+
+        // Initialize Pareto frontier with validation datapoint IDs and evaluator configs
+        let mut pareto_frontier = ParetoFrontier::new(
+            val_response.ids.clone(),
+            evaluator_configs,
+            self.seed.map(|s| s as u64),
+        );
+
+        // Seed the frontier with initial variants and their validation scores
+        let mut initial_candidates: HashMap<VariantName, Candidate> = HashMap::new();
+        for (variant_name, scores) in initial_scores {
+            if let Some(variant_config) = initial_variants.get(&variant_name) {
+                initial_candidates.insert(
+                    variant_name.clone(),
+                    Candidate {
+                        variant: variant_config.clone(),
+                        scores,
+                    },
+                );
+            } else {
+                tracing::warn!(
+                    "Validation scores found for unknown variant '{}'; skipping",
+                    variant_name
+                );
+            }
+        }
+
+        pareto_frontier.update(initial_candidates)?;
 
         // Initialize RNG for sampling variants and minibatches
         let mut rng = match self.seed {
@@ -225,23 +259,27 @@ impl Optimizer for GEPAConfig {
         };
 
         for iteration in 0..(self.max_iterations as usize) {
-            // TODO[#4739]: sample from Pareto frontier
-            let Some(parent_name) = initial_variants.keys().choose(&mut rng) else {
-                tracing::warn!(
-                    "Skipping iteration {} because no candidates were available (should be validated upstream)",
-                    iteration
-                );
-                continue;
+            let parent_map = match pareto_frontier.sample_by_frequency() {
+                Ok(map) => map,
+                Err(err) => {
+                    tracing::warn!(
+                        "Skipping iteration {} because no candidates were available: {}",
+                        iteration,
+                        err
+                    );
+                    continue;
+                }
             };
 
-            let Some(parent_config) = initial_variants.get(parent_name) else {
-                tracing::warn!(
-                    "Skipping iteration {} because selected candidate '{}' is missing",
-                    iteration,
-                    parent_name
-                );
-                continue;
-            };
+            let (parent_name, parent_config) = parent_map
+                .iter()
+                .next()
+                .map(|(name, cfg)| (name.clone(), cfg.clone()))
+                .ok_or_else(|| {
+                    Error::new(ErrorDetails::InternalError {
+                        message: "Pareto frontier sampling returned empty map".to_string(),
+                    })
+                })?;
 
             tracing::info!(
                 "GEPA iteration {}: selected parent variant '{}'",
@@ -291,7 +329,7 @@ impl Optimizer for GEPAConfig {
                 tensorzero_config: Arc::clone(&config),
                 evaluation_config: Arc::clone(&function_context.evaluation_config),
                 evaluation_name: self.evaluation_name.clone(),
-                variant_name: (*parent_name).clone(),
+                variant_name: parent_name.clone(),
                 variant_config: parent_config.clone(),
                 dataset_name: train_dataset_name.clone(),
                 concurrency: self.max_concurrency as usize,
@@ -321,7 +359,7 @@ impl Optimizer for GEPAConfig {
                 &gateway_client,
                 &parent_results.evaluation_infos,
                 &function_context,
-                parent_config,
+                &parent_config,
                 self,
             )
             .await
@@ -347,7 +385,7 @@ impl Optimizer for GEPAConfig {
 
             // Wrap parent in HashMap for mutate_variant API (expects single-entry map)
             let mut parent = HashMap::new();
-            parent.insert(parent_name, parent_config);
+            parent.insert(&parent_name, &parent_config);
 
             // Generate improved child variant using the mutate function
             let child = match mutate_variant(
@@ -396,7 +434,7 @@ impl Optimizer for GEPAConfig {
                 child_name
             );
 
-            let _child_results = match evaluate_variant(EvaluateVariantParams {
+            let child_results = match evaluate_variant(EvaluateVariantParams {
                 gateway_client: gateway_client.clone(),
                 clickhouse_connection_info: clickhouse_connection_info.clone(),
                 tensorzero_config: Arc::clone(&config),
@@ -428,10 +466,14 @@ impl Optimizer for GEPAConfig {
                 }
             };
 
-            // TODO[#4739]: Check for improvement against candidate variant
-            // For now, randomly decide whether to evaluate on validation set
-            let is_improvement = rng.random::<f64>() < 0.5;
-            if is_improvement {
+            // Check if the child Pareto-dominates the parent on the minibatch
+            let child_improves = is_improvement(
+                &parent_results.evaluation_stats,
+                &child_results.evaluation_stats,
+                evaluator_configs,
+            );
+
+            if child_improves {
                 tracing::info!(
                     "GEPA iteration {}: evaluating child variant '{}' on validation dataset",
                     iteration,
@@ -453,13 +495,37 @@ impl Optimizer for GEPAConfig {
                 {
                     Ok(results) => {
                         let child_val_scores = results.per_datapoint_scores();
+                        let mut candidate = HashMap::new();
+                        candidate.insert(
+                            child_name.clone(),
+                            Candidate {
+                                variant: child_config.clone(),
+                                scores: child_val_scores,
+                            },
+                        );
                         tracing::info!(
                             "GEPA iteration {}: child variant '{}' validation scores collected ({} datapoints)",
                             iteration,
                             child_name,
-                            child_val_scores.len()
+                            results.evaluation_infos.len()
                         );
-                        // TODO[#4739]: Update Pareto frontier with child variant and validation scores
+                        match pareto_frontier.update(candidate) {
+                            Ok(()) => {
+                                tracing::info!(
+                                    "GEPA iteration {}: Pareto frontier updated; pool size: {}",
+                                    iteration,
+                                    pareto_frontier.variant_configs().len()
+                                );
+                            }
+                            Err(err) => {
+                                tracing::warn!(
+                                    "GEPA iteration {}: failed to update Pareto frontier with child '{}': {}",
+                                    iteration,
+                                    child_name,
+                                    err
+                                );
+                            }
+                        }
                     }
                     Err(e) => {
                         tracing::warn!(
@@ -470,30 +536,22 @@ impl Optimizer for GEPAConfig {
                         );
                     }
                 }
-                // TODO[#4739]: Update Pareto frontier with new variant and scores
-                // Add the child variant to the pool for future iterations
-                initial_variants.extend(child);
-                tracing::info!(
-                    "GEPA iteration {}: successfully created child variant '{}' (pool size: {})",
-                    iteration,
-                    child_name,
-                    initial_variants.len()
-                );
             }
         }
 
         // Filter out original variants to return only newly created variants
-        initial_variants.retain(|name, _| !original_variant_names.contains(name));
+        let mut frontier_output = pareto_frontier.variant_configs().clone();
+        frontier_output.retain(|name, _| !original_variant_names.contains(name));
 
         tracing::info!(
             "GEPA optimization complete: created {} new variant(s)",
-            initial_variants.len()
+            frontier_output.len()
         );
 
         // For synchronous optimizers, we store the result in the handle
         // rather than returning an error from launch()
         let handle = GEPAJobHandle {
-            result: Ok(initial_variants),
+            result: Ok(frontier_output),
         };
 
         // Clean up temporary datasets
