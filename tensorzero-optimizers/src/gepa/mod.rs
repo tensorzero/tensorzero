@@ -32,15 +32,12 @@ pub mod mutate;
 pub mod pareto;
 pub mod validate;
 
-pub use mutate::mutate_variant;
-// TODO: remove public export after #4669 is merged and we can integrate the Pareto functions
-use pareto::Candidate;
-pub use pareto::{is_improvement, ParetoFrontier};
-
 use analyze::analyze_inferences;
 use evaluate::{
     create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, VariantName, VariantScores,
 };
+use mutate::mutate_variant;
+use pareto::{is_improvement, Candidate, ParetoFrontier};
 use validate::{initialize_pareto_frontier, validate_examples, validate_gepa_config};
 
 #[async_trait]
