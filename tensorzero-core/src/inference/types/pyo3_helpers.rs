@@ -367,6 +367,7 @@ pub fn deserialize_from_stored_sample<'a>(
     // Try deserializing into named types first
     let generated_types_module = py.import("tensorzero.generated_types")?;
     let stored_inference_type = generated_types_module.getattr("StoredInference")?;
+    // TODO: add the config hash to the StoredSample type
 
     if obj.is_instance(&stored_inference_type)? {
         let wire = deserialize_from_pyobj::<StoredInference>(py, obj)?;
