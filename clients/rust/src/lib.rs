@@ -252,10 +252,13 @@ pub trait ClientExt {
         datapoints: Vec<UpdateDatapointRequest>,
     ) -> Result<UpdateDatapointsResponse, TensorZeroError>;
 
-    /// Gets datapoints by their IDs.
+    /// Gets datapoints by their IDs and dataset name.
+    /// Including the dataset name improves query performance because the dataset is part of the
+    /// sorting key for datapoints.
     ///
     /// # Arguments
     ///
+    /// * `dataset_name` - The name of the dataset containing the datapoints.
     /// * `datapoint_ids` - The IDs of the datapoints to get.
     ///
     /// # Returns
@@ -267,6 +270,7 @@ pub trait ClientExt {
     /// Returns a `TensorZeroError` if the request fails.
     async fn get_datapoints(
         &self,
+        dataset_name: Option<String>,
         datapoint_ids: Vec<Uuid>,
     ) -> Result<GetDatapointsResponse, TensorZeroError>;
 
@@ -722,7 +726,7 @@ impl ClientExt for Client {
                 with_embedded_timeout(*timeout, async {
                     let mut response = tensorzero_core::endpoints::datasets::v1::get_datapoints(
                         &gateway.handle.app_state.clickhouse_connection_info,
-                        &gateway.handle.app_state.config,
+                        Some(dataset_name.clone()),
                         GetDatapointsRequest {
                             ids: vec![datapoint_id],
                         },
@@ -845,25 +849,39 @@ impl ClientExt for Client {
 
     async fn get_datapoints(
         &self,
+        dataset_name: Option<String>,
         datapoint_ids: Vec<Uuid>,
     ) -> Result<GetDatapointsResponse, TensorZeroError> {
         let request = GetDatapointsRequest { ids: datapoint_ids };
         match self.mode() {
-            ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join("v1/datasets/get_datapoints").map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /v1/datasets/get_datapoints endpoint: {e}"),
-                    })
-                    .into(),
-                })?;
-                let builder = client.http_client.post(url).json(&request);
-                client.send_and_parse_http_response(builder).await
+            ClientMode::HTTPGateway(http_client) => {
+                let url = match dataset_name.as_ref() {
+                    Some(dataset_name) => http_client
+                        .base_url
+                        .join(&format!("v1/datasets/{dataset_name}/get_datapoints"))
+                        .map_err(|e| TensorZeroError::Other {
+                            source: Error::new(ErrorDetails::InvalidBaseUrl {
+                                message: format!(
+                                    "Failed to join base URL with /v1/datasets/{dataset_name}/get_datapoints endpoint: {e}"
+                                ),
+                            })
+                            .into(),
+                        })?,
+                    None => http_client.base_url.join("v1/datasets/get_datapoints").map_err(|e| TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!("Failed to join base URL with /v1/datasets/get_datapoints endpoint: {e}"),
+                        })
+                        .into(),
+                    })?,
+                };
+                let builder = http_client.http_client.post(url).json(&request);
+                http_client.send_and_parse_http_response(builder).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::get_datapoints(
                         &gateway.handle.app_state.clickhouse_connection_info,
-                        &gateway.handle.app_state.config,
+                        dataset_name,
                         request,
                     )
                     .await
@@ -894,7 +912,6 @@ impl ClientExt for Client {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::list_datapoints(
                         &gateway.handle.app_state.clickhouse_connection_info,
-                        &gateway.handle.app_state.config,
                         dataset_name,
                         request,
                     )

@@ -2,17 +2,15 @@
 
 /**
  * A request to update the output of a JSON datapoint.
- * We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
- * for users to run evals against them.
  *
- * The possible values for `output` are:
- * - `None`: don't update `output`
- * - `Some(None)`: set output to `None` (represents edge case where inference succeeded but model didn't output relevant content blocks)
- * - `Some(String)`: set the output to the string (= JSON-serialized string)
+ * We intentionally only accept the `raw` field, because JSON datapoints can contain invalid or malformed JSON for eval purposes.
  */
 export type JsonDatapointOutputUpdate = {
   /**
    * The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
+   *
+   * This will be parsed and validated against the datapoint's `output_schema`. Valid `raw` values will be parsed and stored as `parsed`, and
+   * invalid `raw` values will be stored as-is, because we allow invalid outputs in datapoints by design.
    */
   raw: string | null;
 };

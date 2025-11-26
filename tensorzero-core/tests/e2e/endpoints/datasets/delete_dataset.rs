@@ -71,6 +71,8 @@ async fn test_delete_dataset_with_single_datapoint() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -101,6 +103,8 @@ async fn test_delete_dataset_with_single_datapoint() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -120,6 +124,8 @@ async fn test_delete_dataset_with_single_datapoint() {
             offset: 0,
             allow_stale: true,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -217,6 +223,8 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -247,6 +255,8 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -262,6 +272,8 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
             offset: 0,
             allow_stale: true,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -477,6 +489,8 @@ async fn test_delete_dataset_with_different_function_names() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();
@@ -491,6 +505,8 @@ async fn test_delete_dataset_with_different_function_names() {
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await
         .unwrap();

@@ -488,23 +488,16 @@ async fn run_evaluation_with_specific_datapoint_ids() {
     .await;
 
     // Query the dataset to get all datapoint IDs using v1 API
-    #[expect(deprecated)]
     let request = ListDatapointsRequest {
         function_name: Some("write_haiku".to_string()),
         limit: Some(u32::MAX),
-        page_size: None,
         offset: Some(0),
-        filter: None,
+        ..Default::default()
     };
-    let dataset = list_datapoints(
-        &clickhouse,
-        &*get_config().await,
-        dataset_name.clone(),
-        request,
-    )
-    .await
-    .unwrap()
-    .datapoints;
+    let dataset = list_datapoints(&clickhouse, dataset_name.clone(), request)
+        .await
+        .unwrap()
+        .datapoints;
 
     // Select only the first 5 datapoint IDs
     let selected_ids: Vec<Uuid> = dataset.iter().take(5).map(|dp| dp.id()).collect();
@@ -596,23 +589,16 @@ async fn run_exact_match_evaluation_chat() {
     .await;
 
     // Query the dataset to get datapoint IDs; use these instead of dataset_name in the eval run
-    #[expect(deprecated)]
     let request = ListDatapointsRequest {
         function_name: Some("write_haiku".to_string()),
         limit: Some(u32::MAX),
-        page_size: None,
         offset: Some(0),
-        filter: None,
+        ..Default::default()
     };
-    let dataset = list_datapoints(
-        &clickhouse,
-        &*get_config().await,
-        dataset_name.clone(),
-        request,
-    )
-    .await
-    .unwrap()
-    .datapoints;
+    let dataset = list_datapoints(&clickhouse, dataset_name.clone(), request)
+        .await
+        .unwrap()
+        .datapoints;
     let datapoint_ids: Vec<Uuid> = dataset.iter().map(|dp| dp.id()).collect();
 
     let config_path = PathBuf::from(&format!(
@@ -743,23 +729,16 @@ async fn run_llm_judge_evaluation_chat() {
     .await;
 
     // Query the dataset to get datapoint IDs; use these instead of dataset_name in the eval run
-    #[expect(deprecated)]
     let request = ListDatapointsRequest {
         function_name: Some("write_haiku".to_string()),
         limit: Some(u32::MAX),
-        page_size: None,
         offset: Some(0),
-        filter: None,
+        ..Default::default()
     };
-    let dataset = list_datapoints(
-        &clickhouse,
-        &*get_config().await,
-        dataset_name.clone(),
-        request,
-    )
-    .await
-    .unwrap()
-    .datapoints;
+    let dataset = list_datapoints(&clickhouse, dataset_name.clone(), request)
+        .await
+        .unwrap()
+        .datapoints;
     let datapoint_ids: Vec<Uuid> = dataset.iter().map(|dp| dp.id()).collect();
 
     let config_path = PathBuf::from(&format!(
@@ -2563,14 +2542,12 @@ async fn test_query_skips_staled_datapoints() {
     )
     .await;
 
-    let config = get_config().await;
-
     let request = ListDatapointsRequest {
         function_name: Some("extract_entities".to_string()),
         limit: Some(u32::MAX), // Get all datapoints
         ..Default::default()
     };
-    let dataset = list_datapoints(&clickhouse, &config, dataset_name.clone(), request)
+    let dataset = list_datapoints(&clickhouse, dataset_name.clone(), request)
         .await
         .unwrap()
         .datapoints;

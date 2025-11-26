@@ -1153,8 +1153,23 @@ impl TensorZeroGateway {
     ///
     /// :param ids: A list of datapoint IDs to retrieve.
     /// :return: A `GetDatapointsResponse` object.
-    #[pyo3(signature = (*, ids))]
-    fn get_datapoints(this: PyRef<'_, Self>, ids: Vec<Bound<'_, PyAny>>) -> PyResult<Py<PyAny>> {
+    #[pyo3(signature = (*, ids, dataset_name = None))]
+    fn get_datapoints(
+        this: PyRef<'_, Self>,
+        ids: Vec<Bound<'_, PyAny>>,
+        dataset_name: Option<String>,
+    ) -> PyResult<Py<PyAny>> {
+        if dataset_name.is_none() {
+            let warnings = PyModule::import(this.py(), "warnings")?;
+            warnings.call_method1(
+                "warn",
+                (
+                    "Calling get_datapoints without a dataset name is deprecated. Please provide a dataset name for performance reasons.",
+                    this.py().get_type::<PyDeprecationWarning>(),
+                ),
+            )?;
+        }
+
         let client = this.as_super().client.clone();
         let ids: Vec<uuid::Uuid> = ids
             .iter()
@@ -1164,7 +1179,7 @@ impl TensorZeroGateway {
                     .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid UUID: {e}")))
             })
             .collect::<PyResult<Vec<_>>>()?;
-        let fut = client.get_datapoints(ids);
+        let fut = client.get_datapoints(dataset_name, ids);
         let response =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         convert_response_to_python_dataclass(
@@ -2337,18 +2352,30 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param ids: A list of datapoint IDs to retrieve.
     /// :return: A `GetDatapointsResponse` object.
-    #[pyo3(signature = (*, ids))]
+    #[pyo3(signature = (*, ids, dataset_name = None))]
     fn get_datapoints<'a>(
         this: PyRef<'a, Self>,
         ids: Vec<Bound<'a, PyAny>>,
+        dataset_name: Option<String>,
     ) -> PyResult<Bound<'a, PyAny>> {
+        if dataset_name.is_none() {
+            let warnings = PyModule::import(this.py(), "warnings")?;
+            warnings.call_method1(
+                "warn",
+                (
+                    "Calling get_datapoints without a dataset name is deprecated. Please provide a dataset name for performance reasons.",
+                    this.py().get_type::<PyDeprecationWarning>(),
+                ),
+            )?;
+        }
+
         let client = this.as_super().client.clone();
         let ids: Vec<uuid::Uuid> = ids
             .into_iter()
             .map(|id| python_uuid_to_uuid("id", id))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.get_datapoints(ids).await;
+            let res = client.get_datapoints(dataset_name, ids).await;
             Python::attach(|py| match res {
                 Ok(response) => convert_response_to_python_dataclass(
                     py,

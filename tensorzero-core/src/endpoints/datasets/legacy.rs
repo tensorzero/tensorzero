@@ -1050,7 +1050,7 @@ pub async fn list_datapoints(
 
     let datapoints: Result<Vec<Datapoint>, _> = result_lines
         .iter()
-        .map(|line| serde_json::from_str::<StoredDatapoint>(line)?.into_datapoint(config))
+        .map(|line| serde_json::from_str::<StoredDatapoint>(line)?.into_datapoint())
         .collect();
     let datapoints = match datapoints {
         Ok(datapoints) => datapoints,
@@ -1116,7 +1116,7 @@ pub async fn get_datapoint_handler(
         .await?;
 
     // Convert storage type to wire type
-    let wire = datapoint.into_datapoint(&app_state.config)?;
+    let wire = datapoint.into_datapoint()?;
     Ok(Json(wire))
 }
 
@@ -1238,12 +1238,9 @@ impl Datapoint {
 impl StoredDatapoint {
     /// Convert to wire type, properly handling tool params by subtracting static tools
     /// TODO(shuyangli): Add parameter to optionally fetch files from object storage
-    pub fn into_datapoint(self, config: &Config) -> Result<Datapoint, Error> {
+    pub fn into_datapoint(self) -> Result<Datapoint, Error> {
         match self {
-            StoredDatapoint::Chat(chat) => {
-                let function_config = config.get_function(&chat.function_name)?;
-                Ok(Datapoint::Chat(chat.into_datapoint(&function_config)))
-            }
+            StoredDatapoint::Chat(chat) => Ok(Datapoint::Chat(chat.into_datapoint())),
             StoredDatapoint::Json(json) => Ok(Datapoint::Json(json.into_datapoint())),
         }
     }
@@ -1523,7 +1520,7 @@ impl Datapoint {
 }
 
 /// Storage variant of Datapoint enum for database operations (no Python/TypeScript bindings)
-/// Convert to Datapoint with `.into_datapoint(config)`
+/// Convert to Datapoint with `.into_datapoint()`
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StoredDatapoint {
@@ -1667,7 +1664,7 @@ impl std::fmt::Display for ChatInferenceDatapoint {
 impl StoredChatInferenceDatapoint {
     /// Convert to wire type, converting tool params from storage format to wire format using From<> trait
     /// TODO(shuyangli): Add parameter to optionally fetch files from object storage
-    pub fn into_datapoint(self, _function_config: &FunctionConfig) -> ChatInferenceDatapoint {
+    pub fn into_datapoint(self) -> ChatInferenceDatapoint {
         let tool_params = self.tool_params.map(|tp| tp.into()).unwrap_or_default();
 
         ChatInferenceDatapoint {
