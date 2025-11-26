@@ -1,0 +1,106 @@
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  GENERAL                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[gateway]
+bind_address = "0.0.0.0:3000"
+debug = true
+template_filesystem_access.base_path = ".."
+export.otlp.traces.enabled = true
+export.otlp.traces.extra_headers."x-config-static-header" = "config-static-value"
+export.otlp.traces.extra_headers."x-config-override-header" = "config-original-value"
+unstable_error_json = true
+
+[object_storage]
+type = "disabled"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  METRICS                                   │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[metrics.task_success]
+type = "boolean"
+optimize = "max"
+level = "inference"
+
+[metrics.goal_achieved]
+type = "boolean"
+optimize = "max"
+level = "episode"
+
+[metrics.user_rating]
+type = "float"
+optimize = "max"
+level = "episode"
+
+[metrics.brevity_score]
+type = "float"
+optimize = "max"
+level = "inference"
+
+[metrics.prometheus_test_boolean1]
+type = "boolean"
+optimize = "max"
+level = "inference"
+
+[metrics.prometheus_test_boolean2]
+type = "boolean"
+optimize = "max"
+level = "inference"
+
+[metrics.prometheus_test_float1]
+type = "float"
+optimize = "max"
+level = "inference"
+
+[metrics.prometheus_test_float2]
+type = "float"
+optimize = "max"
+level = "inference"
+
+[metrics.jaccard_similarity]
+type = "float"
+optimize = "max"
+level = "inference"
+
+[metrics.exact_match]
+type = "boolean"
+optimize = "max"
+level = "inference"
+
+[metrics.test_metric]
+type = "boolean"
+optimize = "max"
+level = "inference"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                                  TOOLS                                     │
+# └────────────────────────────────────────────────────────────────────────────┘
+
+[tools.get_temperature]
+description = "Get the current temperature in a given location"
+parameters = "../../../fixtures/config/tools/get_temperature.json"
+
+[tools.get_humidity]
+description = "Get the current humidity in a given location"
+parameters = "../../../fixtures/config/tools/get_humidity.json"
+
+[tools.think]
+description = "Think about the question and the information you have gathered so far. This is a good time to plan your next steps."
+parameters = "../../../fixtures/config/tools/think.json"
+strict = true
+
+[tools.search_wikipedia]
+description = "Search Wikipedia for pages that match the query. Returns a list of page titles."
+parameters = "../../../fixtures/config/tools/search_wikipedia.json"
+strict = true
+
+[tools.load_wikipedia_page]
+description = "Load a Wikipedia page. Returns the page content, or an error if the page does not exist."
+parameters = "../../../fixtures/config/tools/load_wikipedia_page.json"
+strict = true
+
+[tools.answer_question]
+description = "End the search process and answer a question. Returns the answer to the question."
+parameters = "../../../fixtures/config/tools/answer_question.json"
+strict = true

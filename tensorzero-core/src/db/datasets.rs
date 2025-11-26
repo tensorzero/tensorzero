@@ -8,6 +8,7 @@ use mockall::automock;
 
 use crate::config::{MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOperator};
+use crate::endpoints::datasets::v1::types::DatapointOrderBy;
 use crate::endpoints::datasets::{DatapointKind, StoredDatapoint};
 use crate::error::Error;
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
@@ -227,34 +228,12 @@ pub struct DatasetMetadata {
     pub last_updated: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
-pub struct AdjacentDatapointIds {
-    pub previous_id: Option<Uuid>,
-    pub next_id: Option<Uuid>,
-}
-
-#[derive(Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
-pub struct StaleDatapointParams {
-    pub dataset_name: String,
-    pub datapoint_id: Uuid,
-    pub function_type: DatapointKind,
-}
-
 #[derive(Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct CountDatapointsForDatasetFunctionParams {
     pub dataset_name: String,
     pub function_name: String,
     pub function_type: DatapointKind,
-}
-
-#[derive(Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
-pub struct GetAdjacentDatapointIdsParams {
-    pub dataset_name: String,
-    pub datapoint_id: Uuid,
 }
 
 #[derive(Deserialize, ts_rs::TS)]
@@ -297,6 +276,14 @@ pub struct GetDatapointsParams {
     /// Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
     #[serde(default)]
     pub filter: Option<DatapointFilter>,
+
+    /// Optional ordering criteria for the results.
+    #[serde(default)]
+    pub order_by: Option<Vec<DatapointOrderBy>>,
+
+    /// Text query to filter. Case-insensitive substring search.
+    #[serde(default)]
+    pub search_query_experimental: Option<String>,
 }
 
 #[async_trait]
@@ -324,9 +311,6 @@ pub trait DatasetQueries {
     /// Gets the count of unique dataset names
     async fn count_datasets(&self) -> Result<u32, Error>;
 
-    /// Marks a datapoint as stale by inserting a new row with staled_at set to now
-    async fn stale_datapoint(&self, params: &StaleDatapointParams) -> Result<(), Error>;
-
     /// Inserts a batch of datapoints into the database
     /// Internally separates chat and JSON datapoints and writes them to the appropriate tables
     /// Returns the number of rows written.
@@ -337,12 +321,6 @@ pub trait DatasetQueries {
         &self,
         params: &CountDatapointsForDatasetFunctionParams,
     ) -> Result<u32, Error>;
-
-    /// Gets the adjacent (previous and next) datapoint IDs for a given datapoint
-    async fn get_adjacent_datapoint_ids(
-        &self,
-        params: &GetAdjacentDatapointIdsParams,
-    ) -> Result<AdjacentDatapointIds, Error>;
 
     /// Gets a single datapoint by dataset name and ID
     /// TODO(shuyangli): To deprecate in favor of `get_datapoints`

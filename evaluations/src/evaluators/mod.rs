@@ -5,7 +5,7 @@ use anyhow::Result;
 use serde_json::Value;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::client::{ClientInput, FeedbackParams, InferenceResponse};
-use tensorzero_core::endpoints::datasets::StoredDatapoint;
+use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
 use tensorzero_core::evaluations::{get_evaluator_metric_name, EvaluationConfig, EvaluatorConfig};
 
@@ -17,13 +17,14 @@ use llm_judge::{run_llm_judge_evaluator, LLMJudgeEvaluationResult, RunLLMJudgeEv
 use tracing::{debug, error, info, instrument};
 use uuid::Uuid;
 
+use crate::stopping::CancellationTokens;
 use crate::Clients;
 
 pub type EvaluationResult = HashMap<String, Result<Option<Value>>>;
 
 pub struct EvaluateInferenceParams {
     pub inference_response: Arc<InferenceResponse>,
-    pub datapoint: Arc<StoredDatapoint>,
+    pub datapoint: Arc<Datapoint>,
     pub input: Arc<ClientInput>,
     pub evaluation_config: Arc<EvaluationConfig>,
     pub evaluation_name: Arc<String>,
@@ -33,15 +34,25 @@ pub struct EvaluateInferenceParams {
     pub send_feedback: bool,
 }
 
-/// Evaluates the inference response for the given datapoint using all the evaluators specified in the evaluation config.
+/// Evaluates the inference response for the given datapoint using the evaluators specified in the evaluation config.
+///
+/// ## Adaptive Stopping
+///
+/// The `cancellation_tokens` parameter controls which evaluators run:
+/// - If the token map is empty: runs all evaluators in the config (no adaptive stopping)
+/// - If the token map is non-empty: skips evaluators in the map with cancelled tokens
+///
+/// ## Return Value
+///
 /// Returns a map from evaluator name to Result<Option<Value>>.
 /// The semantics of the Result<Option<Value>> are as follows:
 /// - Ok(Some(value)): The evaluator was run successfully and the result was a valid value.
-/// - Ok(None): The evaluator was run successfully but the result was None (if for example the evaluator requires a reference output but none is present).
-/// - Err(e): The evaluator failed to run due to some error (like the LLM Judge failed to infer).
+/// - Ok(None): The evaluator was run successfully but the result was None (e.g., if the evaluator requires a reference output but none is present).
+/// - Err(e): The evaluator failed to run due to some error (e.g., the LLM Judge failed to infer).
 #[instrument(skip_all, fields(datapoint_id = %params.datapoint.id(), evaluation_name = %params.evaluation_name))]
 pub(crate) async fn evaluate_inference(
     params: EvaluateInferenceParams,
+    cancellation_tokens: &CancellationTokens,
 ) -> Result<EvaluationResult> {
     let EvaluateInferenceParams {
         inference_response,
@@ -55,13 +66,26 @@ pub(crate) async fn evaluate_inference(
         send_feedback,
     } = params;
     let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
+
+    // Filter evaluators based on cancellation tokens
+    let evaluators_to_run = inference_evaluation_config
+        .evaluators
+        .keys()
+        .filter(|name| {
+            // Only run evaluators whose tokens are not in the map or not cancelled
+            // Empty map means no adaptive stopping, so all evaluators run
+            cancellation_tokens
+                .get(*name)
+                .is_none_or(|token| !token.is_cancelled())
+        });
+
     info!(
-        evaluators = ?inference_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
+        evaluators = ?evaluators_to_run,
         "Starting evaluation with evaluators"
     );
 
     let results: EvaluationResult =
-        FuturesUnordered::from_iter(inference_evaluation_config.evaluators.keys().map(
+        FuturesUnordered::from_iter(evaluators_to_run.into_iter().map(
             |evaluator_name| async {
                 let inference_response = inference_response.clone();
                 let evaluation_config = evaluation_config.clone();
@@ -141,13 +165,12 @@ pub(crate) async fn evaluate_inference(
                                     })
                                     .await
                                 {
-                                    #[expect(clippy::ignored_unit_patterns)]
                                     Ok(_) => {
                                         debug!(evaluator_name = %evaluator_name, "Feedback sent successfully");
                                     },
                                     Err(e) => {
                                         error!(evaluator_name = %evaluator_name, error = %e, "Failed to send feedback");
-                                        return (evaluator_name, Err(e));
+                                        return (evaluator_name, Err(e.into()));
                                     }
                                 }
                             }
@@ -175,7 +198,7 @@ struct RunEvaluatorParams<'a> {
     evaluator_name: String,
     inference_response: &'a InferenceResponse,
     clients: &'a Clients,
-    datapoint: &'a StoredDatapoint,
+    datapoint: &'a Datapoint,
     evaluation_name: &'a str,
     evaluation_run_id: Uuid,
     input: &'a ClientInput,

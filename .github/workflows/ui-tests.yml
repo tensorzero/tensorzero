@@ -13,13 +13,12 @@ permissions:
 
 jobs:
   ui-tests:
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
 
     strategy:
       matrix:
-        # TODO: Temporarily using 25.9-alpine instead of latest-alpine
-        clickhouse_version: ${{ inputs.is_merge_group && fromJSON('["lts", "25.9"]') || fromJSON('["25.9"]') }}
+        clickhouse_version: ${{ inputs.is_merge_group && fromJSON('["lts", "latest"]') || fromJSON('["lts"]') }}
 
     steps:
       - name: Set DNS
@@ -68,16 +67,18 @@ jobs:
 
       - name: Build `tensorzero-node`
         working-directory: internal/tensorzero-node
-        run: pnpm build
+        run: pnpm build:debug
 
-      - name: Download `gateway` container
-        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+      - name: Download container images
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
         with:
-          name: build-gateway-container
-          path: .
+          pattern: build-{gateway,mock-inference}-container
+          merge-multiple: true
 
-      - name: Load `gateway` container
-        run: docker load < gateway-container.tar
+      - name: Load container images
+        run: |
+          docker load < gateway-container.tar
+          docker load < mock-inference-container.tar
 
       - name: Start Docker containers and apply fixtures
         working-directory: ui
@@ -86,6 +87,7 @@ jobs:
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
+          echo "TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG=sha-${{ github.sha }}" >> fixtures/.env
 
           # Environment variables only used by the gateway container
           # We deliberately leave these unset when starting the UI container, to ensure
@@ -93,7 +95,7 @@ jobs:
           echo "FIREWORKS_API_KEY=not_used" >> fixtures/.env-gateway
           echo "OPENAI_API_KEY=not_used" >> fixtures/.env-gateway
 
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up -d
+          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version }} docker compose -f fixtures/docker-compose.yml up clickhouse fixtures mock-inference-provider -d
           docker compose -f fixtures/docker-compose.yml wait fixtures
 
       - name: Run `pnpm test`

@@ -13,7 +13,7 @@ use tensorzero::{
     RenderedSample, Role, System,
 };
 use tensorzero_core::{
-    config::{Config, ConfigFileGlob, UninitializedVariantConfig},
+    config::{Config, ConfigFileGlob, ConfigLoadInfo, UninitializedVariantConfig},
     db::clickhouse::test_helpers::{
         get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
         select_model_inferences_clickhouse, CLICKHOUSE_URL,
@@ -108,9 +108,9 @@ pub async fn test_dicl_optimization_chat() {
         .unwrap();
 
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("../tensorzero-core/tests/e2e/tensorzero.toml");
+    config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let config = Config::load_from_path_optional_verify_credentials(
+    let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )
@@ -168,6 +168,9 @@ pub async fn test_dicl_optimization_chat() {
                 UninitializedVariantConfig::Dicl(dicl_config) => dicl_config.clone(),
                 _ => panic!("Expected DICL variant config"),
             }
+        }
+        OptimizerOutput::Variants(_) => {
+            panic!("Expected variant output from DICL optimizer, got variants output");
         }
         OptimizerOutput::Model(_) => {
             panic!("Expected variant output from DICL optimizer, got model output");
@@ -389,9 +392,9 @@ pub async fn test_dicl_optimization_json() {
         .unwrap();
 
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    config_path.push("../tensorzero-core/tests/e2e/tensorzero.toml");
+    config_path.push("../tensorzero-core/tests/e2e/config/tensorzero.*.toml");
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let config = Config::load_from_path_optional_verify_credentials(
+    let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )
@@ -449,6 +452,9 @@ pub async fn test_dicl_optimization_json() {
                 UninitializedVariantConfig::Dicl(dicl_config) => dicl_config.clone(),
                 _ => panic!("Expected DICL variant config"),
             }
+        }
+        OptimizerOutput::Variants(_) => {
+            panic!("Expected variant output from DICL optimizer, got variants output");
         }
         OptimizerOutput::Model(_) => {
             panic!("Expected variant output from DICL optimizer, got model output");

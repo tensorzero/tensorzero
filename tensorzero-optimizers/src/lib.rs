@@ -1,3 +1,5 @@
+// Required to compile large async/instrumented futures pulled in from tensorzero-core (e.g., AWS Bedrock client types)
+#![recursion_limit = "256"]
 //! TensorZero Optimizer Implementations
 //!
 //! This crate provides optimizer trait definitions, implementations, and HTTP endpoints.
@@ -23,6 +25,7 @@ pub mod dicl;
 pub mod endpoints;
 pub mod fireworks_sft;
 pub mod gcp_vertex_gemini_sft;
+pub mod gepa;
 pub mod openai;
 pub mod openai_rft;
 pub mod openai_sft;
@@ -66,6 +69,11 @@ impl JobHandle for OptimizationJobHandle {
                     .await
             }
             OptimizationJobHandle::TogetherSFT(job_handle) => {
+                job_handle
+                    .poll(client, credentials, default_credentials)
+                    .await
+            }
+            OptimizationJobHandle::GEPA(job_handle) => {
                 job_handle
                     .poll(client, credentials, default_credentials)
                     .await
@@ -179,6 +187,17 @@ impl Optimizer for OptimizerInfo {
                 )
                 .await
                 .map(OptimizationJobHandle::TogetherSFT),
+            OptimizerConfig::GEPA(optimizer_config) => optimizer_config
+                .launch(
+                    client,
+                    train_examples,
+                    val_examples,
+                    credentials,
+                    clickhouse_connection_info,
+                    config.clone(),
+                )
+                .await
+                .map(OptimizationJobHandle::GEPA),
         }
     }
 }

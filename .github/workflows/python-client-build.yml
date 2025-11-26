@@ -48,7 +48,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build wheels
-        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
         with:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
@@ -56,7 +56,7 @@ jobs:
           #sccache: "true"
           manylinux: auto
       - name: Upload wheels
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-linux-${{ matrix.platform.target }}
           path: ./clients/python/dist
@@ -98,7 +98,7 @@ jobs:
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
       - name: Build wheels
-        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
         with:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
@@ -106,7 +106,7 @@ jobs:
           #sccache: "true"
           manylinux: musllinux_1_2
       - name: Upload wheels
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-musllinux-${{ matrix.platform.target }}
           path: ./clients/python/dist
@@ -148,14 +148,14 @@ jobs:
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
         shell: bash
       - name: Build wheels
-        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
         with:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
           args: --release --out dist -i python3.10
           #sccache: "true"
       - name: Upload wheels
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-windows-${{ matrix.platform.target }}
           path: ./clients/python/dist
@@ -202,7 +202,7 @@ jobs:
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
 
       - name: Build wheels
-        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
         with:
           working-directory: ./clients/python
           target: ${{ matrix.platform.target }}
@@ -210,7 +210,7 @@ jobs:
           #sccache: "true"
 
       - name: Upload wheels
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-macos-${{ matrix.platform.target }}
           path: ./clients/python/dist
@@ -224,13 +224,13 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Build sdist
-        uses: PyO3/maturin-action@b3709a81b3e175ce3ede866725776fee42465311
+        uses: PyO3/maturin-action@86b9d133d34bc1b40018696f782949dac11bd380
         with:
           working-directory: ./clients/python
           command: sdist
           args: --out dist
       - name: Upload sdist
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: wheels-sdist
           path: ./clients/python/dist
@@ -249,7 +249,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
-      - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53
       - name: Count wheels
         run: |
           ls -lh ./wheels-*/*

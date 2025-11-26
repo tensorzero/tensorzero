@@ -8,14 +8,22 @@ import { z } from "zod";
 import {
   contentBlockChatOutputSchema,
   thoughtContentSchema,
-  JsonValueSchema,
-  type StoragePath,
+  ZodJsonValueSchema,
+  type ZodStoragePath,
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
 import type {
-  Datapoint as TensorZeroDatapoint,
+  Datapoint,
+  DeleteDatapointsRequest,
+  DeleteDatapointsResponse,
+  GetDatapointsRequest,
+  GetDatapointsResponse,
   UpdateDatapointsMetadataRequest,
+  UpdateDatapointsRequest,
+  UpdateDatapointRequest,
   UpdateDatapointsResponse,
+  GetInferenceBoundsResponse,
+  InternalListInferencesByIdResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -52,13 +60,13 @@ export const TextContentSchema = z.object({
 
 export const TextArgumentsContentSchema = z.object({
   type: z.literal("text"),
-  arguments: JsonValueSchema,
+  arguments: ZodJsonValueSchema,
 });
 
 export const TemplateContentSchema = z.object({
   type: z.literal("template"),
   name: z.string(),
-  arguments: JsonValueSchema,
+  arguments: ZodJsonValueSchema,
 });
 
 export const RawTextContentSchema = z.object({
@@ -99,7 +107,7 @@ export type ImageContent = z.infer<typeof ImageContentSchema>;
 // TODO(shuyangli): There's a lot of duplication between this and ui/app/utils/clickhouse/common.ts. We should get rid of all of them and use Rust-generated bindings.
 export const UnknownContentSchema = z.object({
   type: z.literal("unknown"),
-  data: JsonValueSchema,
+  data: ZodJsonValueSchema,
   model_provider_name: z.string().nullish(),
 });
 export type UnknownContent = z.infer<typeof UnknownContentSchema>;
@@ -131,7 +139,7 @@ export type InputMessage = z.infer<typeof InputMessageSchema>;
  * The inference input object.
  */
 export const InputSchema = z.object({
-  system: JsonValueSchema.optional(),
+  system: ZodJsonValueSchema.optional(),
   messages: z.array(InputMessageSchema),
 });
 export type Input = z.infer<typeof InputSchema>;
@@ -141,7 +149,7 @@ export type Input = z.infer<typeof InputSchema>;
  */
 export const ToolSchema = z.object({
   description: z.string(),
-  parameters: JsonValueSchema,
+  parameters: ZodJsonValueSchema,
   name: z.string(),
   strict: z.boolean().optional(),
 });
@@ -164,7 +172,7 @@ export type ToolChoice = z.infer<typeof ToolChoiceSchema>;
 /**
  * Inference parameters allow runtime overrides for a given variant.
  */
-export const InferenceParamsSchema = z.record(z.record(JsonValueSchema));
+export const InferenceParamsSchema = z.record(z.record(ZodJsonValueSchema));
 export type InferenceParams = z.infer<typeof InferenceParamsSchema>;
 
 /**
@@ -187,7 +195,7 @@ export const InferenceRequestSchema = z.object({
   additional_tools: z.array(ToolSchema).optional(),
   tool_choice: ToolChoiceSchema.optional(),
   parallel_tool_calls: z.boolean().optional(),
-  output_schema: JsonValueSchema.optional(),
+  output_schema: ZodJsonValueSchema.optional(),
   credentials: z.record(z.string()).optional(),
 });
 export type InferenceRequest = z.infer<typeof InferenceRequestSchema>;
@@ -215,7 +223,7 @@ export const JSONInferenceResponseSchema = z.object({
   variant_name: z.string(),
   output: z.object({
     raw: z.string(),
-    parsed: JsonValueSchema.nullable(),
+    parsed: ZodJsonValueSchema.nullable(),
   }),
   usage: z
     .object({
@@ -244,7 +252,7 @@ export const FeedbackRequestSchema = z.object({
   inference_id: z.string().nullable(),
   metric_name: z.string(),
   tags: z.record(z.string()).optional(),
-  value: JsonValueSchema,
+  value: ZodJsonValueSchema,
   internal: z.boolean().optional(),
 });
 export type FeedbackRequest = z.infer<typeof FeedbackRequestSchema>;
@@ -257,7 +265,7 @@ export type FeedbackResponse = z.infer<typeof FeedbackResponseSchema>;
 /**
  * Schema for tool parameters in a datapoint
  */
-export const ToolParamsSchema = z.record(JsonValueSchema);
+export const ToolParamsSchema = z.record(ZodJsonValueSchema);
 export type ToolParams = z.infer<typeof ToolParamsSchema>;
 
 /**
@@ -268,7 +276,7 @@ const BaseDatapointSchema = z.object({
   id: z.string().uuid(),
   episode_id: z.string().uuid().nullish(),
   input: InputSchema,
-  output: JsonValueSchema,
+  output: ZodJsonValueSchema,
   tags: z.record(z.string()).optional(),
   auxiliary: z.string().optional(),
   is_custom: z.boolean(),
@@ -291,7 +299,7 @@ export type ChatInferenceDatapoint = z.infer<
  * Schema for JSON inference datapoints
  */
 export const JsonInferenceDatapointSchema = BaseDatapointSchema.extend({
-  output_schema: JsonValueSchema,
+  output_schema: ZodJsonValueSchema,
 });
 export type JsonInferenceDatapoint = z.infer<
   typeof JsonInferenceDatapointSchema
@@ -304,7 +312,7 @@ export const DatapointSchema = z.union([
   ChatInferenceDatapointSchema,
   JsonInferenceDatapointSchema,
 ]);
-export type Datapoint = z.infer<typeof DatapointSchema>;
+export type ZodDatapoint = z.infer<typeof DatapointSchema>;
 
 /**
  * Schema for datapoint response
@@ -365,7 +373,7 @@ export class TensorZeroClient {
    * @returns A promise that resolves with the created datapoint response containing the new ID
    * @throws Error if validation fails or the request fails
    */
-  async createDatapoint(
+  async createDatapointFromInferenceLegacy(
     datasetName: string,
     inferenceId: string,
     outputKind: "inherit" | "demonstration" | "none" = "inherit",
@@ -406,35 +414,27 @@ export class TensorZeroClient {
   }
 
   /**
-   * Updates an existing datapoint in a dataset with the given ID.
+   * Updates an existing datapoint in a dataset.
+   * This operation creates a new datapoint with a new ID and marks the old one as stale.
+   * The v1 endpoint automatically handles both creating the new version and staling the old one.
    * @param datasetName - The name of the dataset containing the datapoint
-   * @param datapointId - The UUID of the datapoint to update
-   * @param datapoint - The datapoint data containing function_name, input, output, and optional fields
-   * @returns A promise that resolves with the response containing the datapoint ID
-   * @throws Error if validation fails or the request fails
+   * @param updateDatapointRequest - The update request containing type, id, input, output, and optional fields
+   * @returns A promise that resolves with the response containing the new datapoint ID
+   * @throws Error if the dataset name is invalid or the request fails
    */
   async updateDatapoint(
     datasetName: string,
-    datapoint: Datapoint,
+    updateDatapointRequest: UpdateDatapointRequest,
   ): Promise<DatapointResponse> {
-    // TODO(#3921): Move to native Rust client.
-    if (!datasetName || typeof datasetName !== "string") {
-      throw new Error("Dataset name must be a non-empty string");
-    }
+    const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}/datapoints`;
 
-    // Validate the datapoint using the Zod schema
-    const validationResult = DatapointSchema.safeParse(datapoint);
-    if (!validationResult.success) {
-      throw new Error(`Invalid datapoint: ${validationResult.error.message}`);
-    }
-
-    const endpoint = `/internal/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapoint.id)}`;
-    // We need to remove the id field from the datapoint before sending it to the server
-    const { id, ...rest } = datapoint;
+    const requestBody: UpdateDatapointsRequest = {
+      datapoints: [updateDatapointRequest],
+    };
 
     const response = await this.fetch(endpoint, {
-      method: "PUT",
-      body: JSON.stringify(rest),
+      method: "PATCH",
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
@@ -442,8 +442,28 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
 
-    const body = await response.json();
-    return DatapointResponseSchema.parse(body);
+    const body = (await response.json()) as UpdateDatapointsResponse;
+    return { id: body.ids[0] };
+  }
+
+  async getDatapoint(datapointId: string): Promise<Datapoint | null> {
+    const endpoint = `/v1/datasets/get_datapoints`;
+    const requestBody: GetDatapointsRequest = {
+      ids: [datapointId],
+    };
+
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+
+    const body = (await response.json()) as GetDatapointsResponse;
+    return body.datapoints[0] ?? null;
   }
 
   async listDatapoints(
@@ -451,7 +471,7 @@ export class TensorZeroClient {
     function_name?: string,
     limit?: number,
     offset?: number,
-  ): Promise<TensorZeroDatapoint[]> {
+  ): Promise<Datapoint[]> {
     const params = new URLSearchParams();
     if (function_name) {
       params.append("function_name", function_name);
@@ -474,7 +494,7 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     const body = await response.json();
-    return body as TensorZeroDatapoint[];
+    return body as Datapoint[];
   }
 
   async updateDatapointsMetadata(
@@ -494,7 +514,35 @@ export class TensorZeroClient {
     return body;
   }
 
-  async getObject(storagePath: StoragePath): Promise<string> {
+  /**
+   * Marks datapoints as deleted in a dataset by setting their `staled_at` timestamp.
+   * Marked datapoints will no longer appear in default queries, but are preserved in the database for auditing or recovery purposes.
+   * @param datasetName - The name of the dataset containing the datapoints
+   * @param datapointIds - Array of datapoint UUIDs to mark as deleted
+   * @returns A promise that resolves with the response containing the number of marked datapoints
+   * @throws Error if the dataset name is invalid, the IDs array is empty, or the request fails
+   */
+  async deleteDatapoints(
+    datasetName: string,
+    datapointIds: string[],
+  ): Promise<DeleteDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}/datapoints`;
+    const requestBody: DeleteDatapointsRequest = {
+      ids: datapointIds,
+    };
+    const response = await this.fetch(endpoint, {
+      method: "DELETE",
+      body: JSON.stringify(requestBody),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    const body = (await response.json()) as DeleteDatapointsResponse;
+    return body;
+  }
+
+  async getObject(storagePath: ZodStoragePath): Promise<string> {
     const endpoint = `/internal/object_storage?storage_path=${encodeURIComponent(JSON.stringify(storagePath))}`;
     const response = await this.fetch(endpoint, { method: "GET" });
     if (!response.ok) {
@@ -511,6 +559,84 @@ export class TensorZeroClient {
       this.handleHttpError({ message, response });
     }
     return StatusResponseSchema.parse(await response.json());
+  }
+
+  /**
+   * Gets inference table bounds (min/max IDs and count) with optional filters.
+   * @param params - Optional filters (function_name, variant_name, episode_id)
+   * @returns A promise that resolves with the inference bounds
+   * @throws Error if the request fails
+   */
+  async getInferenceBounds(params?: {
+    function_name?: string;
+    variant_name?: string;
+    episode_id?: string;
+  }): Promise<GetInferenceBoundsResponse> {
+    const searchParams = new URLSearchParams();
+
+    if (params?.function_name) {
+      searchParams.append("function_name", params.function_name);
+    }
+    if (params?.variant_name) {
+      searchParams.append("variant_name", params.variant_name);
+    }
+    if (params?.episode_id) {
+      searchParams.append("episode_id", params.episode_id);
+    }
+
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/inferences/bounds${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as GetInferenceBoundsResponse;
+  }
+
+  /**
+   * Internal: List inferences by ID with pagination.
+   * @param params - Query parameters for listing inferences
+   * @returns A promise that resolves with the list of inferences
+   * @throws Error if the request fails
+   */
+  async internalListInferencesById(params: {
+    limit: number;
+    before?: string;
+    after?: string;
+    function_name?: string;
+    variant_name?: string;
+    episode_id?: string;
+  }): Promise<InternalListInferencesByIdResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("limit", params.limit.toString());
+
+    if (params.before) {
+      searchParams.append("before", params.before);
+    }
+    if (params.after) {
+      searchParams.append("after", params.after);
+    }
+    if (params.function_name) {
+      searchParams.append("function_name", params.function_name);
+    }
+    if (params.variant_name) {
+      searchParams.append("variant_name", params.variant_name);
+    }
+    if (params.episode_id) {
+      searchParams.append("episode_id", params.episode_id);
+    }
+
+    const queryString = searchParams.toString();
+    const endpoint = `/internal/inferences${queryString ? `?${queryString}` : ""}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as InternalListInferencesByIdResponse;
   }
 
   private async fetch(

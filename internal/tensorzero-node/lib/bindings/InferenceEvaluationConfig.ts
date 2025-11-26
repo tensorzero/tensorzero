@@ -4,4 +4,5 @@ import type { EvaluatorConfig } from "./EvaluatorConfig";
 export type InferenceEvaluationConfig = {
   evaluators: { [key in string]?: EvaluatorConfig };
   function_name: string;
+  description?: string;
 };

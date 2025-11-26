@@ -41,7 +41,7 @@ use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
+use crate::tool::{FunctionToolConfig, ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice};
 
 use super::helpers::convert_stream_error;
 use super::helpers::{peek_first_chunk, warn_cannot_forward_url_if_missing_mime_type};
@@ -64,6 +64,7 @@ pub struct AnthropicProvider {
     api_base: Option<Url>,
     #[serde(skip)]
     credentials: AnthropicCredentials,
+    beta_structured_outputs: bool,
 }
 
 impl AnthropicProvider {
@@ -71,11 +72,13 @@ impl AnthropicProvider {
         model_name: String,
         api_base: Option<Url>,
         credentials: AnthropicCredentials,
+        beta_structured_outputs: bool,
     ) -> Self {
         AnthropicProvider {
             model_name,
             api_base,
             credentials,
+            beta_structured_outputs,
         }
     }
 
@@ -172,25 +175,31 @@ impl InferenceProvider for AnthropicProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<ProviderInferenceResponse, Error> {
-        let request_body =
-            serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request).await?)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing Anthropic request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?;
+        let request_body = serde_json::to_value(
+            AnthropicRequestBody::new(&self.model_name, request, self.beta_structured_outputs)
+                .await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Anthropic request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let api_key = self
             .credentials
             .get_api_key(dynamic_api_keys)
             .map_err(|e| e.log())?;
         let start_time = Instant::now();
-        let builder = http_client
+        let mut builder = http_client
             .post(self.base_url().as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
+
+        if self.beta_structured_outputs {
+            builder = builder.header("anthropic-beta", "structured-outputs-2025-11-13");
+        }
 
         let (res, raw_request) = inject_extra_request_data_and_send(
             PROVIDER_TYPE,
@@ -236,11 +245,10 @@ impl InferenceProvider for AnthropicProvider {
                 raw_request,
                 generic_request: request,
                 input_messages: request.messages.clone(),
-                function_type: &request.function_type,
-                json_mode: &request.json_mode,
                 raw_response,
                 model_name: tensorzero_model_name,
                 provider_name: &model_provider.name,
+                beta_structured_outputs: self.beta_structured_outputs,
             };
             Ok(response_with_latency.try_into()?)
         } else {
@@ -270,22 +278,28 @@ impl InferenceProvider for AnthropicProvider {
         api_key: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let request_body =
-            serde_json::to_value(AnthropicRequestBody::new(&self.model_name, request).await?)
-                .map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!(
-                            "Error serializing Anthropic request: {}",
-                            DisplayOrDebugGateway::new(e)
-                        ),
-                    })
-                })?;
+        let request_body = serde_json::to_value(
+            AnthropicRequestBody::new(&self.model_name, request, self.beta_structured_outputs)
+                .await?,
+        )
+        .map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!(
+                    "Error serializing Anthropic request: {}",
+                    DisplayOrDebugGateway::new(e)
+                ),
+            })
+        })?;
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key).map_err(|e| e.log())?;
-        let builder = http_client
+        let mut builder = http_client
             .post(self.base_url().as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
+
+        if self.beta_structured_outputs {
+            builder = builder.header("anthropic-beta", "structured-outputs-2025-11-13");
+        }
 
         let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
             PROVIDER_TYPE,
@@ -307,11 +321,7 @@ impl InferenceProvider for AnthropicProvider {
         )
         .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
-        if matches!(
-            request.json_mode,
-            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-        ) && matches!(request.function_type, FunctionType::Json)
-        {
+        if needs_json_prefill(request, self.beta_structured_outputs) {
             prefill_json_chunk_response(chunk);
         }
         Ok((stream, raw_request))
@@ -435,7 +445,7 @@ impl From<Role> for AnthropicRole {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
-enum AnthropicToolChoice<'a> {
+pub enum AnthropicToolChoice<'a> {
     Auto {
         disable_parallel_tool_use: Option<bool>,
     },
@@ -480,15 +490,18 @@ pub(super) struct AnthropicTool<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) description: Option<&'a str>,
     pub(super) input_schema: &'a Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) strict: Option<bool>,
 }
 
-impl<'a> From<&'a ToolConfig> for AnthropicTool<'a> {
-    fn from(value: &'a ToolConfig) -> Self {
+impl<'a> AnthropicTool<'a> {
+    pub fn new(tool: &'a FunctionToolConfig, beta_structured_outputs: bool) -> Self {
         // In case we add more tool types in the future, the compiler will complain here.
-        AnthropicTool {
-            name: value.name(),
-            description: Some(value.description()),
-            input_schema: value.parameters(),
+        Self {
+            name: tool.name(),
+            description: Some(tool.description()),
+            input_schema: tool.parameters(),
+            strict: beta_structured_outputs.then_some(tool.strict()),
         }
     }
 }
@@ -716,6 +729,13 @@ struct AnthropicThinkingConfig {
     budget_tokens: i32,
 }
 
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum AnthropicOutputFormat {
+    JsonSchema { schema: Value },
+}
+
 #[derive(Debug, Default, PartialEq, Serialize)]
 struct AnthropicRequestBody<'a> {
     model: &'a str,
@@ -723,6 +743,8 @@ struct AnthropicRequestBody<'a> {
     max_tokens: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output_format: Option<AnthropicOutputFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     // This is the system message
     system: Option<Vec<AnthropicSystemBlock<'a>>>,
@@ -747,10 +769,21 @@ pub(super) struct AnthropicMessagesConfig {
     pub(super) fetch_and_encode_input_files_before_inference: bool,
 }
 
+fn needs_json_prefill(request: &ModelInferenceRequest<'_>, beta_structured_outputs: bool) -> bool {
+    matches!(
+        request.json_mode,
+        ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
+    ) && matches!(request.function_type, FunctionType::Json)
+        // Anthropic rejects prefill when 'output_format' is specified
+        && !(beta_structured_outputs
+            && matches!(request.json_mode, ModelInferenceRequestJsonMode::Strict))
+}
+
 impl<'a> AnthropicRequestBody<'a> {
     async fn new(
         model_name: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        beta_structured_outputs: bool,
     ) -> Result<AnthropicRequestBody<'a>, Error> {
         if request.messages.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
@@ -774,11 +807,7 @@ impl<'a> AnthropicRequestBody<'a> {
             }))
             .await?;
         let messages = prepare_messages(request_messages);
-        let messages = if matches!(
-            request.json_mode,
-            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-        ) && matches!(request.function_type, FunctionType::Json)
-        {
+        let messages = if needs_json_prefill(request, beta_structured_outputs) {
             prefill_json_message(messages)
         } else {
             messages
@@ -787,17 +816,14 @@ impl<'a> AnthropicRequestBody<'a> {
         // Workaround for Anthropic API limitation: they don't support explicitly specifying "none"
         // for tool choice. When ToolChoice::None is specified, we don't send any tools in the
         // request payload to achieve the same effect.
-        let tools = request.tool_config.as_ref().and_then(|c| {
-            if matches!(c.tool_choice, ToolChoice::None) {
-                None
-            } else {
-                Some(
-                    c.strict_tools_available()
-                        .map(Into::into)
-                        .collect::<Vec<_>>(),
-                )
-            }
-        });
+        let tools = match &request.tool_config {
+            Some(c) if !matches!(c.tool_choice, ToolChoice::None) => Some(
+                c.strict_tools_available()?
+                    .map(|tool| AnthropicTool::new(tool, beta_structured_outputs))
+                    .collect::<Vec<_>>(),
+            ),
+            _ => None,
+        };
 
         // `tool_choice` should only be set if tools are set and non-empty
         let tool_choice: Option<AnthropicToolChoice> = tools
@@ -824,6 +850,20 @@ impl<'a> AnthropicRequestBody<'a> {
             service_tier: None, // handled below
             tool_choice,
             tools,
+            output_format: if beta_structured_outputs {
+                match request.json_mode {
+                    ModelInferenceRequestJsonMode::Strict => {
+                        request
+                            .output_schema
+                            .map(|schema| AnthropicOutputFormat::JsonSchema {
+                                schema: schema.clone(),
+                            })
+                    }
+                    ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Off => None,
+                }
+            } else {
+                None
+            },
             stop_sequences: request.borrow_stop_sequences(),
         };
 
@@ -1145,10 +1185,9 @@ struct AnthropicResponseWithMetadata<'a> {
     raw_request: String,
     generic_request: &'a ModelInferenceRequest<'a>,
     input_messages: Vec<RequestMessage>,
-    function_type: &'a FunctionType,
-    json_mode: &'a ModelInferenceRequestJsonMode,
     model_name: &'a str,
     provider_name: &'a str,
+    beta_structured_outputs: bool,
 }
 
 impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceResponse {
@@ -1161,21 +1200,16 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
             raw_request,
             generic_request,
             input_messages,
-            function_type,
-            json_mode,
             model_name,
             provider_name,
+            beta_structured_outputs,
         } = value;
         let output: Vec<ContentBlockOutput> = response
             .content
             .into_iter()
             .map(|block| convert_to_output(model_name, provider_name, block))
             .collect::<Result<Vec<_>, _>>()?;
-        let content = if matches!(
-            json_mode,
-            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict
-        ) && matches!(function_type, FunctionType::Json)
-        {
+        let content = if needs_json_prefill(generic_request, beta_structured_outputs) {
             prefill_json_response(output)?
         } else {
             output
@@ -1557,7 +1591,7 @@ mod tests {
     use crate::inference::types::{ContentBlock, FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
-    use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
+    use crate::tool::{DynamicToolConfig, ToolResult};
     use crate::utils::testing::capture_logs;
 
     #[test]
@@ -1628,19 +1662,20 @@ mod tests {
             },
             "required": ["location", "unit"]
         });
-        let tool = ToolConfig::Dynamic(DynamicToolConfig {
+        let tool = FunctionToolConfig::Dynamic(DynamicToolConfig {
             name: "test".to_string(),
             description: "test".to_string(),
             parameters: DynamicJSONSchema::new(parameters.clone()),
             strict: false,
         });
-        let anthropic_tool: AnthropicTool = (&tool).into();
+        let anthropic_tool: AnthropicTool = AnthropicTool::new(&tool, false);
         assert_eq!(
             anthropic_tool,
             AnthropicTool {
                 name: "test",
                 description: Some("test"),
                 input_schema: &parameters,
+                strict: None,
             }
         );
     }
@@ -1801,7 +1836,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request).await;
+        let anthropic_request_body =
+            AnthropicRequestBody::new(&model, &inference_request, false).await;
         let error = anthropic_request_body.unwrap_err();
         let details = error.get_details();
         assert_eq!(
@@ -1834,7 +1870,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request).await;
+        let anthropic_request_body =
+            AnthropicRequestBody::new(&model, &inference_request, false).await;
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -1891,7 +1928,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request).await;
+        let anthropic_request_body =
+            AnthropicRequestBody::new(&model, &inference_request, false).await;
         assert!(anthropic_request_body.is_ok());
         assert_eq!(
             anthropic_request_body.unwrap(),
@@ -1961,7 +1999,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request).await;
+        let anthropic_request_body =
+            AnthropicRequestBody::new(&model, &inference_request, false).await;
         assert!(anthropic_request_body.is_ok());
         // Convert messages asynchronously
         let expected_messages = try_join_all(inference_request.messages.iter().map(|m| {
@@ -2020,7 +2059,8 @@ mod tests {
             extra_body: Default::default(),
             ..Default::default()
         };
-        let anthropic_request_body = AnthropicRequestBody::new(&model, &inference_request).await;
+        let anthropic_request_body =
+            AnthropicRequestBody::new(&model, &inference_request, false).await;
         assert!(anthropic_request_body.is_ok());
         let result = anthropic_request_body.unwrap();
         assert_eq!(result.messages.len(), 4); // Original 2 messages + listening message + JSON prefill
@@ -2079,105 +2119,105 @@ mod tests {
         };
 
         let model = "claude-opus-4-1-20250805".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-20250514".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-20250514".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet-20250219".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-20241022".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku-20241022".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-1".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-opus-4-0".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 32_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-0".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-7-sonnet-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-sonnet-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-haiku-latest".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-haiku-20240307".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 4_096);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-haiku-4-5-20251001".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-sonnet-4-5-20250929".to_string();
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert_eq!(body.unwrap().max_tokens, 64_000);
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-3-5-ballad-latest".to_string(); // fake model
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert!(body.is_err());
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
         let model = "claude-4-5-haiku-20260101".to_string(); // fake model
-        let body = AnthropicRequestBody::new(&model, &request).await;
+        let body = AnthropicRequestBody::new(&model, &request, false).await;
         assert!(body.is_err());
-        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens, false).await;
         assert_eq!(body.unwrap().max_tokens, 100);
     }
 
@@ -2539,10 +2579,9 @@ mod tests {
             raw_request: raw_request.clone(),
             generic_request: &generic_request,
             input_messages: input_messages.clone(),
-            function_type: &FunctionType::Chat,
-            json_mode: &ModelInferenceRequestJsonMode::Off,
             model_name: "model-name",
             provider_name: "dummy",
+            beta_structured_outputs: false,
         };
 
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
@@ -2597,10 +2636,9 @@ mod tests {
             raw_request: raw_request.clone(),
             generic_request: &generic_request,
             input_messages: input_messages.clone(),
-            function_type: &FunctionType::Chat,
-            json_mode: &ModelInferenceRequestJsonMode::Off,
             model_name: "model-name",
             provider_name: "dummy",
+            beta_structured_outputs: false,
         };
 
         let inference_response: ProviderInferenceResponse = body_with_latency.try_into().unwrap();
@@ -2668,10 +2706,9 @@ mod tests {
             raw_request: raw_request.clone(),
             generic_request: &generic_request,
             input_messages: input_messages.clone(),
-            function_type: &FunctionType::Chat,
-            json_mode: &ModelInferenceRequestJsonMode::Off,
             model_name: "model-name",
             provider_name: "dummy",
+            beta_structured_outputs: false,
         };
         let inference_response = ProviderInferenceResponse::try_from(body_with_latency).unwrap();
         assert_eq!(
@@ -3056,6 +3093,7 @@ mod tests {
             "claude".to_string(),
             Some(custom_url.clone()),
             AnthropicCredentials::None,
+            false,
         );
 
         assert_eq!(provider.base_url(), &custom_url);
@@ -3063,8 +3101,12 @@ mod tests {
 
     #[test]
     fn test_anthropic_provider_default_api_base() {
-        let provider =
-            AnthropicProvider::new("claude".to_string(), None, AnthropicCredentials::None);
+        let provider = AnthropicProvider::new(
+            "claude".to_string(),
+            None,
+            AnthropicCredentials::None,
+            false,
+        );
 
         assert_eq!(
             provider.base_url().as_str(),
@@ -3393,6 +3435,7 @@ mod tests {
             static_tools_available: vec![WEATHER_TOOL.clone(), QUERY_TOOL.clone()],
             dynamic_tools_available: vec![],
             provider_tools: vec![],
+            openai_custom_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools {
@@ -3404,7 +3447,8 @@ mod tests {
         // Convert to Anthropic tools
         let tools: Vec<AnthropicTool> = tool_config
             .strict_tools_available()
-            .map(AnthropicTool::from)
+            .unwrap()
+            .map(|tool| AnthropicTool::new(tool, false))
             .collect();
 
         // Verify only the allowed tool is included

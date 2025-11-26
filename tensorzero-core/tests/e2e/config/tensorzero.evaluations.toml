@@ -1,0 +1,332 @@
+[evaluations.test_evaluation]
+type = "inference"
+function_name = "basic_test"
+
+[evaluations.test_evaluation.evaluators.happy_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+
+[evaluations.test_evaluation.evaluators.happy_bool.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::true"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+[evaluations.test_evaluation.evaluators.sad_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+
+[evaluations.test_evaluation.evaluators.sad_bool.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::false"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+[evaluations.test_evaluation.evaluators.zero]
+type = "llm_judge"
+output_type = "float"
+optimize = "max"
+
+[evaluations.test_evaluation.evaluators.zero.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::zero"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+[evaluations.test_evaluation.evaluators.one]
+type = "llm_judge"
+output_type = "float"
+optimize = "max"
+
+[evaluations.test_evaluation.evaluators.one.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::one"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+[evaluations.json_evaluation]
+type = "inference"
+function_name = "json_success"
+
+[evaluations.json_evaluation.evaluators.happy_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+
+[evaluations.json_evaluation.evaluators.happy_bool.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::true"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+[evaluations.json_evaluation.evaluators.sad_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "max"
+
+[evaluations.json_evaluation.evaluators.sad_bool.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::false"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+[evaluations.json_evaluation.evaluators.zero]
+type = "llm_judge"
+output_type = "float"
+optimize = "max"
+
+[evaluations.json_evaluation.evaluators.zero.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::zero"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+[evaluations.json_evaluation.evaluators.one]
+type = "llm_judge"
+output_type = "float"
+optimize = "max"
+
+[evaluations.json_evaluation.evaluators.one.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::one"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+[evaluations.entity_extraction]
+type = "inference"
+function_name = "extract_entities"
+
+[evaluations.entity_extraction.evaluators.exact_match]
+type = "exact_match"
+# expected to fail
+cutoff = 0.6
+
+[evaluations.entity_extraction.evaluators.count_sports]
+type = "llm_judge"
+output_type = "float"
+optimize = "min"
+include = { reference_output = false }
+cutoff = 0.5
+
+[evaluations.entity_extraction.evaluators.count_sports.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/entity_extraction/count_sports/system_instructions.txt"
+json_mode = "strict"
+temperature = 0.1
+
+[evaluations.entity_extraction.evaluators.error]
+type = "llm_judge"
+output_type = "float"
+optimize = "max"
+
+[evaluations.entity_extraction.evaluators.error.variants.dummy]
+type = "chat_completion"
+model = "dummy::llm_judge::error"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/test_evaluation/llm_judge_bool/system_instructions.txt"
+json_mode = "on"
+
+[evaluations.haiku_with_outputs]
+type = "inference"
+function_name = "write_haiku"
+
+[evaluations.haiku_with_outputs.evaluators.exact_match]
+type = "exact_match"
+
+[evaluations.haiku_without_outputs]
+type = "inference"
+function_name = "write_haiku"
+
+[evaluations.haiku_without_outputs.evaluators.exact_match]
+type = "exact_match"
+
+[evaluations.haiku_without_outputs.evaluators.topic_starts_with_f]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "min"
+include = { reference_output = false }
+cutoff = 0.5
+
+[evaluations.haiku_without_outputs.evaluators.topic_starts_with_f.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+active = true
+system_instructions = "../../../fixtures/config/evaluations/haiku_without_outputs/topic_starts_with_f/system_instructions.txt"
+json_mode = "strict"
+temperature = 0
+
+[evaluations.images]
+type = "inference"
+function_name = "image_judger"
+
+[evaluations.images.evaluators.exact_match]
+type = "exact_match"
+
+[evaluations.images.evaluators.honest_answer]
+type = "llm_judge"
+input_format = "messages"
+output_type = "boolean"
+optimize = "max"
+include = { reference_output = false }
+cutoff = 0.2
+
+[evaluations.images.evaluators.honest_answer.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_instructions = "../../../fixtures/config/evaluations/images/honest_answer/system_instructions.txt"
+temperature = 0
+json_mode = "strict"
+
+[evaluations.images.evaluators.matches_reference]
+type = "llm_judge"
+input_format = "messages"
+output_type = "boolean"
+optimize = "max"
+include = { reference_output = true }
+cutoff = 0.5
+
+[evaluations.images.evaluators.matches_reference.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_instructions = "../../../fixtures/config/evaluations/images/matches_reference/system_instructions.txt"
+temperature = 0
+json_mode = "strict"
+
+# This eval should fail on images because it uses the `serialized` input format.
+[evaluations.bad_images]
+type = "inference"
+function_name = "image_judger"
+
+[evaluations.bad_images.evaluators.honest_answer]
+type = "llm_judge"
+input_format = "serialized"
+output_type = "boolean"
+optimize = "max"
+include = { reference_output = false }
+cutoff = 0.2
+
+[evaluations.bad_images.evaluators.honest_answer.variants.mini]
+type = "chat_completion"
+model = "openai::gpt-4o-mini-2024-07-18"
+system_instructions = "../../../fixtures/config/evaluations/images/honest_answer/system_instructions.txt"
+temperature = 0
+json_mode = "strict"
+
+[evaluations.best_of_3]
+type = "inference"
+function_name = "extract_entities"
+
+[evaluations.best_of_3.evaluators.llm_judge_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "min"
+
+[evaluations.best_of_3.evaluators.llm_judge_bool.variants.anthropic_promptA]
+type = "chat_completion"
+model = "anthropic::claude-3-5-haiku-20241022"
+system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
+json_mode = "tool"
+
+[evaluations.best_of_3.evaluators.llm_judge_bool.variants.openai_promptA]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.best_of_3.evaluators.llm_judge_bool.variants.llama_promptA]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.best_of_3.evaluators.llm_judge_bool.variants.best_of_3]
+active = true
+type = "experimental_best_of_n_sampling"
+candidates = ["anthropic_promptA", "openai_promptA", "llama_promptA"]
+
+[evaluations.best_of_3.evaluators.llm_judge_bool.variants.best_of_3.evaluator]
+model = "openai::gpt-4o-mini"
+system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+temperature = 0.3
+
+[evaluations.mixture_of_3]
+type = "inference"
+function_name = "extract_entities"
+
+[evaluations.mixture_of_3.evaluators.llm_judge_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "min"
+
+[evaluations.mixture_of_3.evaluators.llm_judge_bool.variants.anthropic_promptA]
+type = "chat_completion"
+model = "anthropic::claude-3-5-haiku-20241022"
+system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
+json_mode = "tool"
+
+[evaluations.mixture_of_3.evaluators.llm_judge_bool.variants.openai_promptA]
+type = "chat_completion"
+model = "openai::gpt-4o-mini"
+system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.mixture_of_3.evaluators.llm_judge_bool.variants.llama_promptA]
+type = "chat_completion"
+model = "fireworks::accounts/fireworks/models/deepseek-v3p1"
+system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+
+[evaluations.mixture_of_3.evaluators.llm_judge_bool.variants.mixture_of_3]
+active = true
+type = "experimental_mixture_of_n"
+candidates = ["anthropic_promptA", "openai_promptA", "llama_promptA"]
+
+[evaluations.mixture_of_3.evaluators.llm_judge_bool.variants.mixture_of_3.fuser]
+model = "openai::gpt-4o-mini"
+system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"
+json_mode = "strict"
+temperature = 0.3
+
+[evaluations.dicl]
+type = "inference"
+function_name = "extract_entities"
+
+[evaluations.dicl.evaluators.llm_judge_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "min"
+
+[evaluations.dicl.evaluators.llm_judge_bool.variants.dicl]
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "text-embedding-3-small"
+k = 3
+model = "openai::gpt-4o-mini"
+
+[evaluations.dicl_custom_system]
+type = "inference"
+function_name = "extract_entities"
+
+[evaluations.dicl_custom_system.evaluators.llm_judge_bool]
+type = "llm_judge"
+output_type = "boolean"
+optimize = "min"
+
+[evaluations.dicl_custom_system.evaluators.llm_judge_bool.variants.dicl_custom_system]
+type = "experimental_dynamic_in_context_learning"
+embedding_model = "text-embedding-3-small"
+k = 3
+model = "openai::gpt-4o-mini"
+system_instructions = "../../../fixtures/config/evaluations/best_of_3/llm_judge_bool/system_instructions.txt"

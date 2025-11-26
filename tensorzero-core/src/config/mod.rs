@@ -1,6 +1,7 @@
 use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::http::TensorzeroHttpClient;
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
+use crate::utils::deprecation_warning;
 use chrono::Duration;
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
 ///            IT IS MEANT FOR INTERNAL USE ONLY.
@@ -18,6 +19,7 @@ use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
+use snapshot::prepare_table_for_snapshot;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -29,6 +31,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::config::gateway::{GatewayConfig, UninitializedGatewayConfig};
 use crate::config::path::{ResolvedTomlPathData, ResolvedTomlPathDirectory};
+use crate::config::snapshot::ConfigSnapshot;
 use crate::config::span_map::SpanMap;
 use crate::embeddings::{EmbeddingModelTable, UninitializedEmbeddingModelConfig};
 use crate::endpoints::inference::DEFAULT_FUNCTION_NAME;
@@ -44,7 +47,7 @@ use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
 use crate::model_table::{CowNoClone, ProviderTypeDefaultCredentials, ShorthandModelConfig};
 use crate::optimization::{OptimizerInfo, UninitializedOptimizerInfo};
-use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
+use crate::tool::{create_json_mode_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
 use crate::variant::chain_of_thought::UninitializedChainOfThoughtConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
@@ -58,6 +61,7 @@ pub mod gateway;
 pub mod path;
 pub mod provider_types;
 pub mod rate_limiting;
+mod snapshot;
 mod span_map;
 #[cfg(test)]
 mod tests;
@@ -716,6 +720,12 @@ fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<
     matched_files
 }
 
+#[derive(Debug)]
+pub struct ConfigLoadInfo {
+    pub config: Config,
+    pub snapshot: ConfigSnapshot,
+}
+
 impl Config {
     /// Constructs a new `Config`, as if from an empty config file.
     /// This is the only way to construct an empty config file in production code,
@@ -723,7 +733,7 @@ impl Config {
     ///
     /// In test code, a `Default` impl is available, but the config it produces might
     /// be completely broken (e.g. no builtin functions will be available).
-    pub async fn new_empty() -> Result<Config, Error> {
+    pub async fn new_empty() -> Result<ConfigLoadInfo, Error> {
         // Use an empty glob, and validate credentials
         Self::load_from_path_optional_verify_credentials_allow_empty_glob(
             &ConfigFileGlob::new_empty(),
@@ -733,14 +743,16 @@ impl Config {
         .await
     }
 
-    pub async fn load_and_verify_from_path(config_glob: &ConfigFileGlob) -> Result<Config, Error> {
+    pub async fn load_and_verify_from_path(
+        config_glob: &ConfigFileGlob,
+    ) -> Result<ConfigLoadInfo, Error> {
         Self::load_from_path_optional_verify_credentials(config_glob, true).await
     }
 
     pub async fn load_from_path_optional_verify_credentials(
         config_glob: &ConfigFileGlob,
         validate_credentials: bool,
-    ) -> Result<Config, Error> {
+    ) -> Result<ConfigLoadInfo, Error> {
         Self::load_from_path_optional_verify_credentials_allow_empty_glob(
             config_glob,
             validate_credentials,
@@ -753,9 +765,9 @@ impl Config {
         config_glob: &ConfigFileGlob,
         validate_credentials: bool,
         allow_empty_glob: bool,
-    ) -> Result<Config, Error> {
+    ) -> Result<ConfigLoadInfo, Error> {
         let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
-        let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
+        let config_load_info = if cfg!(feature = "e2e_tests") || !validate_credentials {
             SKIP_CREDENTIAL_VALIDATION
                 .scope((), Self::load_from_toml(globbed_config.table))
                 .await?
@@ -764,18 +776,29 @@ impl Config {
         };
 
         if validate_credentials {
-            if let Some(object_store) = &config.object_store_info {
+            if let Some(object_store) = &config_load_info.config.object_store_info {
                 object_store.verify().await?;
             }
         }
 
-        Ok(config)
+        Ok(config_load_info)
     }
 
-    async fn load_from_toml(table: toml::Table) -> Result<Config, Error> {
+    async fn load_from_toml(table: toml::Table) -> Result<ConfigLoadInfo, Error> {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.");
         }
+        // Steps for getting a sort-stable hashable Table
+        // Recursively walk the TOML table, sort all tables in place
+        // Serialize to a string, use that for ConfigSnapshot
+        // Continue parsing the table afterwards.
+        let table = prepare_table_for_snapshot(table);
+        // Write the prepared table back to a string so that we can hash + store it in the snapshot
+        let serialized_table = toml::to_string(&table).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize TOML config for snapshot: {e}"),
+            })
+        })?;
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
         let mut templates = TemplateConfig::new();
@@ -906,17 +929,18 @@ impl Config {
 
         // Initialize the templates
         let template_paths = config.get_templates();
-        let template_fs_base_path = if config.gateway.template_filesystem_access.enabled {
-            let base_path = config.gateway.template_filesystem_access.base_path
-                .as_ref()
-                .ok_or_else(|| Error::new(ErrorDetails::Config {
-                    message: "`gateway.template_filesystem_access.enabled` is true but `base_path` is not specified. Please set `gateway.template_filesystem_access.base_path` to the directory containing your template files.".to_string()
-                }))?;
-            Some(base_path.get_real_path().to_owned())
-        } else {
-            None
-        };
-        templates.initialize(template_paths, template_fs_base_path.as_deref())?;
+        if config.gateway.template_filesystem_access.enabled {
+            deprecation_warning("The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.");
+        }
+        let template_fs_path = config
+            .gateway
+            .template_filesystem_access
+            .base_path
+            .as_ref()
+            .map(|x| x.get_real_path());
+        let extra_templates = templates
+            .initialize(template_paths, template_fs_path)
+            .await?;
         config.templates = Arc::new(templates.clone());
 
         // Validate the config
@@ -980,7 +1004,13 @@ impl Config {
         config.evaluations = evaluations;
         config.templates = Arc::new(templates);
 
-        Ok(config)
+        Ok(ConfigLoadInfo {
+            config,
+            snapshot: snapshot::ConfigSnapshot {
+                config: serialized_table,
+                extra_templates,
+            },
+        })
     }
 
     /// Validate the config
@@ -1244,6 +1274,12 @@ pub struct UninitializedConfig {
     #[serde(default)]
     pub gateway: UninitializedGatewayConfig,
     #[serde(default)]
+    pub postgres: PostgresConfig,
+    #[serde(default)]
+    pub rate_limiting: UninitializedRateLimitingConfig,
+    pub object_storage: Option<StorageKind>,
+
+    #[serde(default)]
     pub models: HashMap<Arc<str>, UninitializedModelConfig>, // model name => model config
     #[serde(default)]
     pub embedding_models: HashMap<Arc<str>, UninitializedEmbeddingModelConfig>, // embedding model name => embedding model config
@@ -1257,13 +1293,8 @@ pub struct UninitializedConfig {
     pub evaluations: HashMap<String, UninitializedEvaluationConfig>, // evaluation name => evaluation
     #[serde(default)]
     pub provider_types: ProviderTypesConfig, // global configuration for all model providers of a particular type
-    pub object_storage: Option<StorageKind>,
     #[serde(default)]
     pub optimizers: HashMap<String, UninitializedOptimizerInfo>, // optimizer name => optimizer config
-    #[serde(default)]
-    pub postgres: PostgresConfig,
-    #[serde(default)]
-    pub rate_limiting: UninitializedRateLimitingConfig,
 }
 
 /// The result of parsing all of the globbed config files,
@@ -1532,8 +1563,8 @@ impl UninitializedFunctionConfig {
                     Some(path) => StaticJSONSchema::from_path(path)?,
                     None => StaticJSONSchema::default(),
                 };
-                let implicit_tool_call_config =
-                    create_implicit_tool_call_config(output_schema.clone());
+                let json_mode_tool_call_config =
+                    create_json_mode_tool_call_config(output_schema.clone());
                 let variants = params
                     .variants
                     .into_iter()
@@ -1598,7 +1629,7 @@ impl UninitializedFunctionConfig {
                     variants,
                     schemas: schema_data,
                     output_schema,
-                    implicit_tool_call_config,
+                    json_mode_tool_call_config,
                     description: params.description,
                     all_explicit_template_names: all_template_names,
                     experimentation,

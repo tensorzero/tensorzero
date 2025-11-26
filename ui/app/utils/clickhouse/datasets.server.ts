@@ -5,17 +5,8 @@ import type {
   DatasetDetailRow,
   GetDatasetMetadataParams,
   GetDatasetRowsParams,
-  GetDatapointParams,
-  Datapoint,
-  AdjacentDatapointIds,
 } from "~/types/tensorzero";
-import type {
-  ParsedDatasetRow,
-  ParsedChatInferenceDatapointRow,
-  ParsedJsonInferenceDatapointRow,
-} from "./datasets";
 import { getConfig, getFunctionConfig } from "../config/index.server";
-import { resolveStoredInput } from "../resolve.server";
 
 // TODO(shuyangli): Consider removing this file and fully use DatabaseClient from tensorzero-node/lib.
 
@@ -79,40 +70,6 @@ export async function getDatasetRows(
   return await dbClient.getDatasetRows(params);
 }
 
-export async function getDatapoint(
-  params: GetDatapointParams,
-): Promise<ParsedDatasetRow | null> {
-  // Swallow the error and return null if the datapoint is not found, to preserve existing behavior.
-  const dbClient = await getNativeDatabaseClient();
-  let datapoint: Datapoint | null = null;
-  try {
-    datapoint = await dbClient.getDatapoint(params);
-    // TODO(shuyangli): Rename ParsedDatasetRow to be more clear.
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.includes("Datapoint not found")
-    ) {
-      return null;
-    }
-    throw error;
-  }
-  return await datapointToParsedDatasetRow(datapoint);
-}
-
-export async function staleDatapoint(
-  dataset_name: string,
-  datapoint_id: string,
-  function_type: "chat" | "json",
-): Promise<void> {
-  const dbClient = await getNativeDatabaseClient();
-  await dbClient.staleDatapoint({
-    dataset_name,
-    datapoint_id,
-    function_type,
-  });
-}
-
 export async function countDatapointsForDatasetFunction(
   dataset_name: string,
   function_name: string,
@@ -129,65 +86,4 @@ export async function countDatapointsForDatasetFunction(
     function_name,
     function_type,
   });
-}
-
-export async function getAdjacentDatapointIds(
-  dataset_name: string,
-  datapoint_id: string,
-): Promise<AdjacentDatapointIds> {
-  const dbClient = await getNativeDatabaseClient();
-  return await dbClient.getAdjacentDatapointIds({
-    dataset_name,
-    datapoint_id,
-  });
-}
-
-/**
- * Converts a backend Datapoint to a frontend ParsedDatasetRow.
- * This is used when receiving data from the backend API.
- * TODO(shuyangli): Remove soon!
- */
-export async function datapointToParsedDatasetRow(
-  datapoint: Datapoint,
-): Promise<ParsedDatasetRow> {
-  const resolvedInput = await resolveStoredInput(datapoint.input);
-
-  if (datapoint.type === "chat") {
-    const chatDatapoint: ParsedChatInferenceDatapointRow = {
-      dataset_name: datapoint.dataset_name,
-      function_name: datapoint.function_name,
-      id: datapoint.id,
-      name: datapoint.name,
-      episode_id: datapoint.episode_id ?? null,
-      input: resolvedInput,
-      output: datapoint.output,
-      tags: datapoint.tags ?? null,
-      auxiliary: datapoint.auxiliary,
-      is_deleted: datapoint.is_deleted,
-      is_custom: datapoint.is_custom,
-      staled_at: datapoint.staled_at ?? null,
-      source_inference_id: datapoint.source_inference_id ?? null,
-      updated_at: datapoint.updated_at,
-    };
-    return chatDatapoint;
-  } else {
-    const jsonDatapoint: ParsedJsonInferenceDatapointRow = {
-      dataset_name: datapoint.dataset_name,
-      function_name: datapoint.function_name,
-      id: datapoint.id,
-      name: datapoint.name,
-      episode_id: datapoint.episode_id ?? null,
-      input: resolvedInput,
-      output: datapoint.output,
-      output_schema: datapoint.output_schema,
-      tags: datapoint.tags ?? null,
-      auxiliary: datapoint.auxiliary,
-      is_deleted: datapoint.is_deleted,
-      is_custom: datapoint.is_custom,
-      staled_at: datapoint.staled_at ?? null,
-      source_inference_id: datapoint.source_inference_id ?? null,
-      updated_at: datapoint.updated_at,
-    };
-    return jsonDatapoint;
-  }
 }

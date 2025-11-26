@@ -19,7 +19,7 @@ DISPLAY_BASE_URL=$(
 
 # Attempt to ping ClickHouse and check for OK response
 echo "Pinging ClickHouse at $DISPLAY_BASE_URL/ping to verify connectivity..."
-if ! curl -s --connect-timeout 5 "$BASE_URL/ping" > /dev/null; then
+if ! wget -q --timeout=5 -O /dev/null "$BASE_URL/ping"; then
   echo "Error: Failed to connect to ClickHouse at $DISPLAY_BASE_URL/ping"
   exit 1
 fi

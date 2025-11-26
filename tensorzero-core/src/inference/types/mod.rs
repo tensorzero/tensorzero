@@ -107,6 +107,7 @@ pub mod batch;
 pub mod chat_completion_inference_params;
 pub mod extra_body;
 pub mod extra_headers;
+pub mod extra_stuff;
 pub mod file;
 mod input_message;
 #[cfg(feature = "pyo3")]
@@ -138,15 +139,18 @@ pub use usage::Usage;
  * Most of them are defined below.
  */
 
-/// A request is made that contains an Input
+/// API representation of an input to a model.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default, ts_rs::TS, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[ts(export, optional_fields)]
 #[export_schema]
 pub struct Input {
+    /// System prompt of the input.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub system: Option<System>,
+
+    /// Messages in the input.
     #[serde(default)]
     pub messages: Vec<InputMessage>,
 }
@@ -160,7 +164,7 @@ pub struct FetchContext<'a> {
 impl Input {
     pub fn into_lazy_resolved_input(
         self,
-        context: FetchContext<'_>,
+        context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInput, Error> {
         Ok(LazyResolvedInput {
             system: self.system,
@@ -169,6 +173,19 @@ impl Input {
                 .into_iter()
                 .map(|message| message.into_lazy_resolved_input_message(context))
                 .collect::<Result<Vec<LazyResolvedInputMessage>, Error>>()?,
+        })
+    }
+
+    /// Turns the input into a StoredInput, without resolving network resources for files.
+    /// Returns an error if any files are present.
+    pub fn into_stored_input_without_file_handling(self) -> Result<StoredInput, Error> {
+        Ok(StoredInput {
+            system: self.system,
+            messages: self
+                .messages
+                .into_iter()
+                .map(InputMessage::into_stored_input_message_without_file_handling)
+                .try_collect()?,
         })
     }
 }
@@ -211,7 +228,7 @@ impl LazyResolvedInput {
 impl InputMessage {
     pub fn into_lazy_resolved_input_message(
         self,
-        context: FetchContext<'_>,
+        context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessage, Error> {
         Ok(LazyResolvedInputMessage {
             role: self.role,
@@ -220,6 +237,21 @@ impl InputMessage {
                 .into_iter()
                 .map(|content| content.into_lazy_resolved_input_message(context))
                 .collect::<Result<Vec<LazyResolvedInputMessageContent>, Error>>()?,
+        })
+    }
+
+    /// Turns the input message into a StoredInputMessage, without resolving network resources for files.
+    /// Returns an error if the message contains any files that require storage (e.g. external URLs, Base64).
+    pub fn into_stored_input_message_without_file_handling(
+        self,
+    ) -> Result<StoredInputMessage, Error> {
+        Ok(StoredInputMessage {
+            role: self.role,
+            content: self
+                .content
+                .into_iter()
+                .map(InputMessageContent::into_stored_input_message_content_without_file_handling)
+                .try_collect()?,
         })
     }
 }
@@ -274,7 +306,7 @@ impl InputMessageContent {
     /// we can remove the `role` parameter.
     pub fn into_lazy_resolved_input_message(
         self,
-        context: FetchContext<'_>,
+        context: &FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessageContent, Error> {
         Ok(match self {
             InputMessageContent::Text(Text { text }) => {
@@ -314,7 +346,7 @@ impl InputMessageContent {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
                         // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
-                        let storage_kind = get_storage_kind(&context)?;
+                        let storage_kind = get_storage_kind(context)?;
                         let client = context.client.clone();
                         // Construct a future that will actually fetch the file URL from the network.
                         // Important: we do *not* use `tokio::spawn` here. As a result, the future
@@ -364,7 +396,7 @@ impl InputMessageContent {
                         let detail = &base64_file.detail;
                         let filename = &base64_file.filename;
 
-                        let storage_kind = get_storage_kind(&context)?;
+                        let storage_kind = get_storage_kind(context)?;
                         let base64_file_for_path = Base64File::new(
                             source_url.clone(),
                             mime_type.clone(),
@@ -457,6 +489,45 @@ impl InputMessageContent {
             InputMessageContent::Unknown(unknown) => {
                 LazyResolvedInputMessageContent::Unknown(unknown)
             }
+        })
+    }
+
+    /// Convert the input message content into a StoredInputMessageContent, but without loading or storing any files.
+    pub fn into_stored_input_message_content_without_file_handling(
+        self,
+    ) -> Result<StoredInputMessageContent, Error> {
+        Ok(match self {
+            InputMessageContent::Text(Text { text }) => {
+                StoredInputMessageContent::Text(Text { text })
+            }
+            InputMessageContent::RawText(raw_text) => StoredInputMessageContent::RawText(raw_text),
+            InputMessageContent::Thought(thought) => StoredInputMessageContent::Thought(thought),
+            InputMessageContent::Template(template) => {
+                StoredInputMessageContent::Template(template)
+            }
+            InputMessageContent::ToolCall(tool_call) => {
+                StoredInputMessageContent::ToolCall(tool_call.try_into()?)
+            }
+            InputMessageContent::ToolResult(tool_result) => {
+                StoredInputMessageContent::ToolResult(tool_result)
+            }
+            InputMessageContent::File(file) => {
+                match file {
+                    // If `file` is external, we cannot convert it directly to a StoredFile.
+                    File::Url(_) | File::Base64(_) => {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: "Cannot resolve file input without a fetch context. Please provide a fetch context when creating the input.".to_string()
+                        }));
+                    }
+                    // If `file` is present in our object storage, even if it's an error, we can represent it as a StoredFile.
+                    File::ObjectStorage(ObjectStorageFile { file, .. })
+                    | File::ObjectStoragePointer(file)
+                    | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
+                        StoredInputMessageContent::File(Box::new(StoredFile(file)))
+                    }
+                }
+            }
+            InputMessageContent::Unknown(unknown) => StoredInputMessageContent::Unknown(unknown),
         })
     }
 }
@@ -607,6 +678,19 @@ impl LazyResolvedInputMessageContent {
 pub struct InputMessage {
     pub role: Role,
     pub content: Vec<InputMessageContent>,
+}
+
+impl From<StoredInputMessage> for InputMessage {
+    fn from(stored_input_message: StoredInputMessage) -> Self {
+        InputMessage {
+            role: stored_input_message.role,
+            content: stored_input_message
+                .content
+                .into_iter()
+                .map(StoredInputMessageContent::into_input_message_content)
+                .collect(),
+        }
+    }
 }
 
 /// A newtype wrapper around Map<String, Value> for template and system arguments
@@ -1957,9 +2041,10 @@ impl ChatInferenceResult {
         tool_config: Option<&ToolCallConfig>,
         inference_params: InferenceParams,
         original_response: Option<String>,
+        json_mode: Option<JsonMode>,
     ) -> Self {
         let created = current_timestamp();
-        let content = parse_chat_output(raw_content, tool_config).await;
+        let content = parse_chat_output(raw_content, tool_config, json_mode).await;
         let finish_reason = get_finish_reason(&model_inference_results);
         Self {
             inference_id,
@@ -1987,6 +2072,7 @@ fn get_finish_reason(
 pub async fn parse_chat_output(
     content: Vec<ContentBlockOutput>,
     tool_config: Option<&ToolCallConfig>,
+    json_mode: Option<JsonMode>,
 ) -> Vec<ContentBlockChatOutput> {
     if content.is_empty() {
         Error::new(ErrorDetails::Inference {
@@ -2001,12 +2087,19 @@ pub async fn parse_chat_output(
                 output.push(ContentBlockChatOutput::Text(text));
             }
             ContentBlockOutput::ToolCall(tool_call) => {
-                // Parse the tool call arguments
-                let inference_response_tool_call =
-                    InferenceResponseToolCall::new(tool_call, tool_config).await;
-                output.push(ContentBlockChatOutput::ToolCall(
-                    inference_response_tool_call,
-                ));
+                // If using json_mode="tool", convert tool call arguments to text
+                if json_mode == Some(JsonMode::Tool) {
+                    output.push(ContentBlockChatOutput::Text(Text {
+                        text: tool_call.arguments,
+                    }));
+                } else {
+                    // Normal tool call handling
+                    let inference_response_tool_call =
+                        InferenceResponseToolCall::new(tool_call, tool_config).await;
+                    output.push(ContentBlockChatOutput::ToolCall(
+                        inference_response_tool_call,
+                    ));
+                }
             }
             ContentBlockOutput::Thought(thought) => {
                 output.push(ContentBlockChatOutput::Thought(thought));
@@ -2174,7 +2267,7 @@ impl From<JsonMode> for ModelInferenceRequestJsonMode {
         match json_enforcement {
             JsonMode::On => ModelInferenceRequestJsonMode::On,
             JsonMode::Strict => ModelInferenceRequestJsonMode::Strict,
-            JsonMode::ImplicitTool => ModelInferenceRequestJsonMode::Off,
+            JsonMode::Tool => ModelInferenceRequestJsonMode::Off,
             JsonMode::Off => ModelInferenceRequestJsonMode::Off,
         }
     }
@@ -2224,10 +2317,39 @@ where
     let val = bool::deserialize(d)?;
     if !val {
         return Err(D::Error::custom(
-            "Error deserializing replacement config: 'delete' must be 'true', or not set",
+            "Error deserializing replacement config: `delete` must be `true`, or not set",
         ));
     }
     Ok(())
+}
+
+// Field-aware versions for struct fields (not enum variants)
+#[expect(clippy::trivially_copy_pass_by_ref)]
+pub(super) fn serialize_delete_field<S>(_: &(), s: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    true.serialize(s)
+}
+
+pub(super) fn deserialize_delete_field<'de, D>(d: D) -> Result<(), D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let val = bool::deserialize(d)?;
+    if !val {
+        return Err(D::Error::custom(
+            "Error deserializing replacement config: `delete` must be `true`, or not set",
+        ));
+    }
+    Ok(())
+}
+
+pub(super) fn schema_for_delete_field(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    let mut map = Map::new();
+    map.insert("type".to_owned(), Value::String("boolean".to_owned()));
+    map.insert("const".to_owned(), Value::Bool(true));
+    schemars::Schema::from(map)
 }
 
 #[cfg(test)]
@@ -2235,7 +2357,7 @@ mod tests {
     use super::*;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{DynamicToolConfig, ToolChoice, ToolConfig};
+    use crate::tool::{DynamicToolConfig, FunctionToolConfig, ToolChoice};
     use serde_json::json;
     use tokio::time::Instant;
 
@@ -2272,6 +2394,7 @@ mod tests {
             model_inference_responses,
             None,
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2323,6 +2446,7 @@ mod tests {
             Some(&weather_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2373,6 +2497,7 @@ mod tests {
             Some(&weather_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2419,6 +2544,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2486,6 +2612,7 @@ mod tests {
             model_inference_responses,
             Some(&weather_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2572,6 +2699,7 @@ mod tests {
             Some(&weather_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 2);
@@ -2615,7 +2743,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             ..ToolCallConfig::with_tools_available(
                 vec![],
-                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "custom_tool".to_string(),
                     description: "A custom tool".to_string(),
                     parameters: DynamicJSONSchema::new(
@@ -2665,6 +2793,7 @@ mod tests {
             model_inference_responses,
             Some(&additional_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2716,6 +2845,7 @@ mod tests {
             Some(&additional_tool_config),
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         assert_eq!(chat_inference_response.content.len(), 1);
@@ -2738,7 +2868,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             ..ToolCallConfig::with_tools_available(
                 vec![],
-                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                vec![FunctionToolConfig::Dynamic(DynamicToolConfig {
                     name: "weather_tool".to_string(),
                     description: "Get weather information".to_string(),
                     parameters: DynamicJSONSchema::new(
@@ -2789,6 +2919,7 @@ mod tests {
             model_inference_responses,
             Some(&restricted_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -2845,6 +2976,7 @@ mod tests {
             model_inference_responses,
             Some(&restricted_tool_config),
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -3059,6 +3191,7 @@ mod tests {
             None,
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         let result_all_some = InferenceResult::Chat(chat_result_all_some);
@@ -3089,6 +3222,7 @@ mod tests {
             model_responses_input_none,
             None,
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -3121,6 +3255,7 @@ mod tests {
             None,
             InferenceParams::default(),
             None,
+            None,
         )
         .await;
         let result_output_none = InferenceResult::Chat(chat_result_output_none);
@@ -3151,6 +3286,7 @@ mod tests {
             model_responses_all_none,
             None,
             InferenceParams::default(),
+            None,
             None,
         )
         .await;
@@ -3183,6 +3319,7 @@ mod tests {
             model_responses_mixed,
             None,
             InferenceParams::default(),
+            None,
             None,
         )
         .await;

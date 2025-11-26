@@ -12,14 +12,15 @@ use crate::db::datasets::{
     JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::{
-    validate_dataset_name, JsonInferenceDatapoint, StoredChatInferenceDatapoint, StoredDatapoint,
-    CLICKHOUSE_DATETIME_FORMAT,
+    validate_dataset_name, StoredChatInferenceDatapoint, StoredDatapoint,
+    StoredJsonInferenceDatapoint, CLICKHOUSE_DATETIME_FORMAT,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{FetchContext, Input};
 use crate::jsonschema_util::{DynamicJSONSchema, JsonSchemaRef};
+use crate::tool::apply_dynamic_tool_params_update_to_tool_call_config;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
@@ -100,6 +101,8 @@ pub async fn update_datapoints(
             offset: 0,
             allow_stale: false,
             filter: None, // No filtering when updating datapoints
+            order_by: None,
+            search_query_experimental: None,
         })
         .await?;
 
@@ -221,6 +224,7 @@ async fn prepare_chat_update(
     // Update the datapoint with new data
     let mut updated_datapoint: ChatInferenceDatapointInsert = existing_datapoint.into();
     updated_datapoint.id = updated_datapoint_id;
+    updated_datapoint.is_custom = true;
 
     let maybe_new_input =
         convert_input_to_stored_input(update.input, fetch_context, function_config.as_ref())
@@ -230,22 +234,22 @@ async fn prepare_chat_update(
     }
 
     if let Some(new_output) = update.output {
-        updated_datapoint.output = Some(new_output);
+        updated_datapoint.output = new_output;
     }
-    if let Some(new_tool_params) = update.tool_params {
-        updated_datapoint.tool_params = match new_tool_params {
-            Some(dynamic_params) => function_config
-                .dynamic_tool_params_to_database_insert(dynamic_params, &app_state.config.tools)?,
-            None => None,
-        };
-    }
+
+    // Apply the dynamic tool params update to the tool call config.
+    updated_datapoint.tool_params = apply_dynamic_tool_params_update_to_tool_call_config(
+        updated_datapoint.tool_params,
+        update.tool_params,
+        function_config.as_ref(),
+        &app_state.config.tools,
+    )?;
+
     if let Some(new_tags) = update.tags {
         updated_datapoint.tags = Some(new_tags);
     }
-    if let Some(new_metadata) = update.metadata {
-        if let Some(new_name) = new_metadata.name {
-            updated_datapoint.name = new_name;
-        }
+    if let Some(new_name) = update.metadata.name {
+        updated_datapoint.name = new_name;
     }
 
     Ok(PreparedUpdate {
@@ -260,7 +264,7 @@ async fn prepare_json_update(
     fetch_context: &FetchContext<'_>,
     dataset_name: &str,
     update: UpdateJsonDatapointRequest,
-    existing_datapoint: JsonInferenceDatapoint,
+    existing_datapoint: StoredJsonInferenceDatapoint,
     now_timestamp: &str,
 ) -> Result<PreparedUpdate, Error> {
     if existing_datapoint.dataset_name != dataset_name {
@@ -295,6 +299,7 @@ async fn prepare_json_update(
     // Update the datapoint with new data
     let mut updated_datapoint: JsonInferenceDatapointInsert = existing_datapoint.into();
     updated_datapoint.id = updated_datapoint_id;
+    updated_datapoint.is_custom = true;
 
     let maybe_new_input =
         convert_input_to_stored_input(update.input, fetch_context, function_config.as_ref())
@@ -345,10 +350,8 @@ async fn prepare_json_update(
         updated_datapoint.tags = Some(new_tags);
     }
 
-    if let Some(new_metadata) = update.metadata {
-        if let Some(new_name) = new_metadata.name {
-            updated_datapoint.name = new_name;
-        }
+    if let Some(new_name) = update.metadata.name {
+        updated_datapoint.name = new_name;
     }
 
     Ok(PreparedUpdate {
@@ -372,10 +375,7 @@ async fn convert_input_to_stored_input(
             // Otherwise, if the file needs to be fetched (because it's new), fetch it and convert to StoredInput.
             // This all happens behind the scene in `into_stored_input()`.
             let stored_input = input
-                .into_lazy_resolved_input(FetchContext {
-                    client: fetch_context.client,
-                    object_store_info: fetch_context.object_store_info,
-                })?
+                .into_lazy_resolved_input(fetch_context)?
                 // This call may trigger requests to write newly-provided files to object storage.
                 //
                 // TODO(shuyangli): consider refactoring file writing logic so it's hard to forget making these calls.
@@ -451,6 +451,8 @@ pub async fn update_datapoints_metadata(
             offset: 0,
             allow_stale: false,
             filter: None,
+            order_by: None,
+            search_query_experimental: None,
         })
         .await?;
 
@@ -519,7 +521,7 @@ mod tests {
     use crate::endpoints::datasets::v1::types::{
         DatapointMetadataUpdate, JsonDatapointOutputUpdate,
     };
-    use crate::endpoints::datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
+    use crate::endpoints::datasets::StoredChatInferenceDatapoint;
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
@@ -530,10 +532,7 @@ mod tests {
         StoredInputMessageContent, Text,
     };
     use crate::jsonschema_util::StaticJSONSchema;
-    use crate::tool::{
-        AllowedTools, AllowedToolsChoice, DynamicToolParams, ToolCallConfigDatabaseInsert,
-        ToolChoice,
-    };
+    use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert, ToolChoice};
     use crate::utils::gateway::{AppStateData, GatewayHandle, GatewayHandleTestOptions};
     use object_store::path::Path as ObjectStorePath;
     use serde_json::json;
@@ -750,8 +749,8 @@ mod tests {
         }
 
         /// Helper to create a sample JsonInferenceDatapoint
-        pub fn create_sample_json_datapoint(dataset_name: &str) -> JsonInferenceDatapoint {
-            JsonInferenceDatapoint {
+        pub fn create_sample_json_datapoint(dataset_name: &str) -> StoredJsonInferenceDatapoint {
+            StoredJsonInferenceDatapoint {
                 id: Uuid::now_v7(),
                 dataset_name: dataset_name.to_string(),
                 function_name: "test_json_function".to_string(),
@@ -790,6 +789,11 @@ mod tests {
     }
 
     mod prepare_update_tests {
+        use crate::{
+            endpoints::datasets::v1::types::UpdateDynamicToolParamsRequest,
+            tool::{FunctionTool, Tool, ToolChoice},
+        };
+
         use super::*;
 
         /// Helper to create a minimal AppStateData for testing
@@ -827,7 +831,7 @@ mod tests {
                         "additionalProperties": false
                     }))
                     .unwrap(),
-                    implicit_tool_call_config: crate::tool::ToolCallConfig::default(),
+                    json_mode_tool_call_config: crate::tool::ToolCallConfig::default(),
                     description: None,
                     experimentation: ExperimentationConfig::default(),
                     all_explicit_template_names: HashSet::new(),
@@ -887,8 +891,8 @@ mod tests {
         }
 
         /// Helper to create a sample JsonInferenceDatapoint
-        fn create_sample_json_datapoint(dataset_name: &str) -> JsonInferenceDatapoint {
-            JsonInferenceDatapoint {
+        fn create_sample_json_datapoint(dataset_name: &str) -> StoredJsonInferenceDatapoint {
+            StoredJsonInferenceDatapoint {
                 id: Uuid::now_v7(),
                 dataset_name: dataset_name.to_string(),
                 function_name: "test_json_function".to_string(),
@@ -948,9 +952,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1007,9 +1015,13 @@ mod tests {
                 id: existing.id,
                 input: Some(new_input),
                 output: None,
-                tool_params: None,
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1057,10 +1069,14 @@ mod tests {
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
                 input: None,
-                output: Some(new_output.clone()),
-                tool_params: None,
+                output: Some(Some(new_output.clone())),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1083,6 +1099,45 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn test_prepare_chat_update_output_set_to_null() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_chat_datapoint(dataset_name);
+
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(None),
+                tool_params: Default::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
+                tags: None,
+                metadata: Default::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
+            };
+
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing.clone(),
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+
+            // Output should be cleared
+            assert_eq!(updated.output, None);
+        }
+
+        #[tokio::test]
         async fn test_prepare_chat_update_tool_params_omitted() {
             let app_state = create_test_app_state();
             let fetch_context = create_fetch_context(&app_state.http_client);
@@ -1094,9 +1149,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None, // Omitted - should remain unchanged
+                tool_params: UpdateDynamicToolParamsRequest::default(), // Omitted - should remain unchanged
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1118,40 +1177,6 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn test_prepare_chat_update_tool_params_set_to_null() {
-            let app_state = create_test_app_state();
-            let fetch_context = create_fetch_context(&app_state.http_client);
-            let dataset_name = "test_dataset";
-            let existing = create_sample_chat_datapoint(dataset_name);
-
-            let update = UpdateChatDatapointRequest {
-                id: existing.id,
-                input: None,
-                output: None,
-                tool_params: Some(None), // Explicitly set to null
-                tags: None,
-                metadata: None,
-            };
-
-            let result = prepare_chat_update(
-                &app_state,
-                &fetch_context,
-                dataset_name,
-                update,
-                existing,
-                "2025-01-01 00:00:00",
-            )
-            .await
-            .unwrap();
-
-            let DatapointInsert::Chat(updated) = result.updated else {
-                panic!("Expected Chat insert");
-            };
-
-            assert_eq!(updated.tool_params, None);
-        }
-
-        #[tokio::test]
         async fn test_prepare_chat_update_tool_params_set_to_value() {
             let app_state = create_test_app_state();
             let fetch_context = create_fetch_context(&app_state.http_client);
@@ -1161,21 +1186,29 @@ mod tests {
             // Create DynamicToolParams directly instead of round-tripping through database_insert_to_dynamic_tool_params
             // This represents a user setting allowed_tools to an empty list with tool_choice None
             // When there are no tools available, the result should be None (tools disabled)
-            let dynamic_tool_params = DynamicToolParams {
-                allowed_tools: Some(vec![]),
-                additional_tools: None,
-                tool_choice: Some(ToolChoice::None),
-                parallel_tool_calls: Some(false),
-                provider_tools: vec![],
+            let new_function_tool = FunctionTool {
+                name: "test_tool".to_string(),
+                description: "Test tool".to_string(),
+                parameters: json!({}),
+                strict: false,
             };
-
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: Some(Some(dynamic_tool_params)),
+                tool_params: UpdateDynamicToolParamsRequest {
+                    allowed_tools: Some(Some(vec!["test_tool".to_string()])),
+                    additional_tools: Some(vec![Tool::Function(new_function_tool.clone())]),
+                    tool_choice: Some(Some(ToolChoice::None)),
+                    parallel_tool_calls: Some(Some(false)),
+                    provider_tools: Some(vec![]),
+                },
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1192,9 +1225,41 @@ mod tests {
             let DatapointInsert::Chat(updated) = result.updated else {
                 panic!("Expected Chat insert");
             };
+            let Some(tool_params) = updated.tool_params else {
+                panic!("Expected tool params in prepared update");
+            };
 
-            // When tools are disabled (empty allowed_tools), tool_params should be None
-            assert_eq!(updated.tool_params, None);
+            // Verify that tool params are transformed correctly into database type
+            assert_eq!(
+                tool_params.dynamic_tools,
+                vec![Tool::Function(new_function_tool)],
+                "Dynamic tools should be transformed correctly"
+            );
+            assert_eq!(
+                tool_params.dynamic_provider_tools,
+                vec![],
+                "Dynamic provider tools should be transformed correctly"
+            );
+            assert_eq!(
+                tool_params.allowed_tools,
+                AllowedTools {
+                    tools: vec!["test_tool".to_string()],
+                    choice: AllowedToolsChoice::Explicit,
+                },
+                "Allowed tools should be transformed correctly"
+            );
+            assert_eq!(
+                tool_params.tool_choice,
+                ToolChoice::None,
+                "Tool choice should be transformed correctly"
+            );
+            assert_eq!(
+                tool_params.parallel_tool_calls,
+                Some(false),
+                "Parallel tool calls should be transformed correctly"
+            );
+
+            // Don't check the legacy tool params field.
         }
 
         #[tokio::test]
@@ -1210,9 +1275,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1235,9 +1304,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: Some(HashMap::new()),
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1261,9 +1334,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: Some(new_tags.clone()),
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1294,9 +1371,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1319,9 +1400,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: Some(DatapointMetadataUpdate { name: Some(None) }),
+                metadata: DatapointMetadataUpdate { name: Some(None) },
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1344,11 +1429,15 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: None,
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
                 tags: None,
-                metadata: Some(DatapointMetadataUpdate {
+                metadata: DatapointMetadataUpdate {
                     name: Some(Some("new_name".to_string())),
-                }),
+                },
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_chat_update(
                 &app_state,
@@ -1389,23 +1478,25 @@ mod tests {
 
             // Create DynamicToolParams directly instead of round-tripping
             // Setting allowed_tools to empty list means "no tools" which results in None
-            let dynamic_tool_params = DynamicToolParams {
-                allowed_tools: Some(vec![]),
-                additional_tools: None,
-                tool_choice: Some(ToolChoice::None),
-                parallel_tool_calls: Some(false),
-                provider_tools: vec![],
-            };
-
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
                 input: Some(new_input),
-                output: Some(new_output.clone()),
-                tool_params: Some(Some(dynamic_tool_params)),
+                output: Some(Some(new_output.clone())),
+                tool_params: UpdateDynamicToolParamsRequest {
+                    allowed_tools: Some(Some(vec![])),
+                    additional_tools: None,
+                    tool_choice: Some(Some(ToolChoice::None)),
+                    parallel_tool_calls: Some(Some(false)),
+                    provider_tools: Some(vec![]),
+                },
                 tags: Some(new_tags.clone()),
-                metadata: Some(DatapointMetadataUpdate {
+                metadata: DatapointMetadataUpdate {
                     name: Some(Some("updated_name".to_string())),
-                }),
+                },
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_chat_update(
@@ -1448,7 +1539,9 @@ mod tests {
                 output: None,
                 output_schema: None,
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1495,7 +1588,9 @@ mod tests {
                 output: None, // Omitted
                 output_schema: None,
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1529,7 +1624,9 @@ mod tests {
                 output: Some(None), // Set to null
                 output_schema: None,
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1563,11 +1660,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&new_output_value).unwrap(),
+                    raw: Some(serde_json::to_string(&new_output_value).unwrap()),
                 })),
                 output_schema: None,
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1612,7 +1711,9 @@ mod tests {
                 output: None,
                 output_schema: Some(new_schema.clone()),
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1648,11 +1749,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&new_output).unwrap(),
+                    raw: Some(serde_json::to_string(&new_output).unwrap()),
                 })),
                 output_schema: Some(new_schema.clone()),
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1688,11 +1791,13 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&bad_output).unwrap(),
+                    raw: Some(serde_json::to_string(&bad_output).unwrap()),
                 })),
                 output_schema: None, // Will use existing schema which expects {value: string}
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1732,7 +1837,9 @@ mod tests {
                 output: None,
                 output_schema: Some(invalid_schema),
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1772,7 +1879,9 @@ mod tests {
                 output: None,
                 output_schema: None,
                 tags: None,
-                metadata: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
             let result = prepare_json_update(
                 &app_state,
@@ -1815,13 +1924,15 @@ mod tests {
                 id: existing.id,
                 input: Some(new_input),
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: serde_json::to_string(&new_output).unwrap(),
+                    raw: Some(serde_json::to_string(&new_output).unwrap()),
                 })),
                 output_schema: Some(new_schema.clone()),
                 tags: Some(new_tags.clone()),
-                metadata: Some(DatapointMetadataUpdate {
+                metadata: DatapointMetadataUpdate {
                     name: Some(Some("json_updated".to_string())),
-                }),
+                },
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
             };
 
             let result = prepare_json_update(
@@ -1843,6 +1954,194 @@ mod tests {
             assert_eq!(updated.output.as_ref().unwrap().parsed, Some(new_output));
             assert_eq!(updated.tags, Some(new_tags));
             assert_eq!(updated.name, Some("json_updated".to_string()));
+        }
+
+        #[tokio::test]
+        async fn test_prepare_chat_update_sets_is_custom_true_from_inference() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+
+            // Create a datapoint from an inference (is_custom = false, has source_inference_id)
+            let mut existing = create_sample_chat_datapoint(dataset_name);
+            existing.is_custom = false;
+            existing.source_inference_id = Some(Uuid::now_v7());
+            let source_inference_id = existing.source_inference_id;
+
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "edited output".to_string(),
+                })])),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
+                tags: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
+            };
+
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+
+            // After update, is_custom should be true
+            assert!(updated.is_custom);
+            // source_inference_id should be preserved
+            assert_eq!(updated.source_inference_id, source_inference_id);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_chat_update_keeps_is_custom_true() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+
+            // Create a custom datapoint (is_custom = true, no source_inference_id)
+            let mut existing = create_sample_chat_datapoint(dataset_name);
+            existing.is_custom = true;
+            existing.source_inference_id = None;
+
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "edited output".to_string(),
+                })])),
+                tool_params: UpdateDynamicToolParamsRequest::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_tool_params: None,
+                tags: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
+            };
+
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+
+            // is_custom should remain true
+            assert!(updated.is_custom);
+            // source_inference_id should remain None
+            assert_eq!(updated.source_inference_id, None);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_sets_is_custom_true_from_inference() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+
+            // Create a datapoint from an inference (is_custom = false, has source_inference_id)
+            let mut existing = create_sample_json_datapoint(dataset_name);
+            existing.is_custom = false;
+            existing.source_inference_id = Some(Uuid::now_v7());
+            let source_inference_id = existing.source_inference_id;
+
+            let new_output = json!({"value": "edited"});
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: Some(serde_json::to_string(&new_output).unwrap()),
+                })),
+                output_schema: None,
+                tags: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            // After update, is_custom should be true
+            assert!(updated.is_custom);
+            // source_inference_id should be preserved
+            assert_eq!(updated.source_inference_id, source_inference_id);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_keeps_is_custom_true() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+
+            // Create a custom datapoint (is_custom = true, no source_inference_id)
+            let mut existing = create_sample_json_datapoint(dataset_name);
+            existing.is_custom = true;
+            existing.source_inference_id = None;
+
+            let new_output = json!({"value": "edited"});
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: Some(serde_json::to_string(&new_output).unwrap()),
+                })),
+                output_schema: None,
+                tags: None,
+                metadata: DatapointMetadataUpdate::default(),
+                #[expect(deprecated)]
+                deprecated_do_not_use_metadata: None,
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            // is_custom should remain true
+            assert!(updated.is_custom);
+            // source_inference_id should remain None
+            assert_eq!(updated.source_inference_id, None);
         }
     }
 

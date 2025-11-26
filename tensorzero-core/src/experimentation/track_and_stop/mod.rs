@@ -68,6 +68,7 @@ use crate::{
         ExperimentationQueries, HealthCheckable,
     },
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    utils::spawn_ignoring_shutdown,
     variant::VariantInfo,
 };
 
@@ -492,9 +493,7 @@ impl VariantSampler for TrackAndStopConfig {
         // 3. Computes new optimal sampling probabilities based on observed performance
         // 4. Updates the shared `self.state` via ArcSwap (lock-free concurrent updates)
         // 5. Concurrent `sample()` calls read the latest state without blocking
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-        #[expect(clippy::disallowed_methods)]
-        tokio::spawn(probability_update_task(ProbabilityUpdateTaskArgs {
+        spawn_ignoring_shutdown(probability_update_task(ProbabilityUpdateTaskArgs {
             db,
             candidate_variants: self.candidate_variants.clone().into(),
             metric_name: self.metric.clone(),

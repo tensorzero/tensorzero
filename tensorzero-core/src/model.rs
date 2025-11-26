@@ -1,5 +1,6 @@
 use futures::future::try_join_all;
 use futures::StreamExt;
+use indexmap::IndexMap;
 use secrecy::SecretString;
 use serde_json::Value;
 use std::borrow::Cow;
@@ -399,7 +400,7 @@ impl ModelConfig {
         let span = tracing::Span::current();
         clients.otlp_config.mark_openinference_chain_span(&span);
 
-        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {
                 let provider = self.providers.get(provider_name).ok_or_else(|| {
@@ -504,7 +505,7 @@ impl ModelConfig {
         clients
             .otlp_config
             .mark_openinference_chain_span(&tracing::Span::current());
-        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {
                 let provider = self.providers.get(provider_name).ok_or_else(|| {
@@ -575,7 +576,7 @@ impl ModelConfig {
         client: &'request TensorzeroHttpClient,
         api_keys: &'request InferenceCredentials,
     ) -> Result<StartBatchModelInferenceResponse, Error> {
-        let mut provider_errors: HashMap<String, Error> = HashMap::new();
+        let mut provider_errors: IndexMap<String, Error> = IndexMap::new();
         for provider_name in &self.routing {
             let provider = self.providers.get(provider_name).ok_or_else(|| {
                 Error::new(ErrorDetails::ProviderNotFound {
@@ -972,6 +973,8 @@ pub enum UninitializedProviderConfig {
         api_base: Option<Url>,
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
+        #[serde(default)]
+        beta_structured_outputs: bool,
     },
     #[strum(serialize = "aws_bedrock")]
     #[serde(rename = "aws_bedrock")]
@@ -1120,6 +1123,7 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_base,
                 api_key_location,
+                beta_structured_outputs,
             } => ProviderConfig::Anthropic(AnthropicProvider::new(
                 model_name,
                 api_base,
@@ -1129,6 +1133,7 @@ impl UninitializedProviderConfig {
                         provider_type_default_credentials,
                     )
                     .await?,
+                beta_structured_outputs,
             )),
             UninitializedProviderConfig::AWSBedrock {
                 model_id,
@@ -2230,7 +2235,7 @@ pub enum Credential {
     },
 }
 
-const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
+pub const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
     "anthropic::",
     "deepseek::",
     "fireworks::",
@@ -2265,6 +2270,8 @@ impl ShorthandModelConfig for ModelConfig {
                 AnthropicKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                // We don't support beta structured output for shorthand models
+                false,
             )),
             "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(
                 model_name,
@@ -2577,7 +2584,7 @@ mod tests {
         assert_eq!(
             response,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider for model 'error'."
@@ -2967,7 +2974,7 @@ mod tests {
         assert_eq!(
             error,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "error".to_string(),
                     ErrorDetails::InferenceClient {
                         message: "Error sending request to Dummy provider for model 'error'."
@@ -3185,7 +3192,7 @@ mod tests {
         assert_eq!(
             error,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
                         provider_name: "Dummy".to_string(),
@@ -3226,7 +3233,7 @@ mod tests {
         assert_eq!(
             response,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::InferenceClient {
                         message: "Invalid API key for Dummy provider".to_string(),
@@ -3308,7 +3315,7 @@ mod tests {
         assert_eq!(
             error,
             ErrorDetails::ModelProvidersExhausted {
-                provider_errors: HashMap::from([(
+                provider_errors: IndexMap::from([(
                     "model".to_string(),
                     ErrorDetails::ApiKeyMissing {
                         provider_name: "Dummy".to_string(),
@@ -3387,6 +3394,7 @@ mod tests {
                 "claude".to_string(),
                 None,
                 AnthropicCredentials::None,
+                false,
             ))
         });
         let anthropic_model_config = ModelConfig {

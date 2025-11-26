@@ -17,7 +17,8 @@ impl PostgresClient {
         // The default pool size is 10 which should be reasonable
         let config = Config::new_empty()
             .await
-            .map_err(|e| napi::Error::from_reason(format!("Failed to setup Postgres: {e}")))?;
+            .map_err(|e| napi::Error::from_reason(format!("Failed to setup Postgres: {e}")))?
+            .config;
 
         let connection_info = setup_postgres(&config, Some(postgres_url))
             .await

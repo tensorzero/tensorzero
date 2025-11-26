@@ -1,4 +1,4 @@
-import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
+import type { InternalInferenceMetadata } from "~/types/tensorzero";
 import {
   Table,
   TableBody,
@@ -19,7 +19,7 @@ import { toInferenceUrl, toEpisodeUrl, toFunctionUrl } from "~/utils/urls";
 export default function InferencesTable({
   inferences,
 }: {
-  inferences: InferenceByIdRow[];
+  inferences: InternalInferenceMetadata[];
 }) {
   return (
     <div>
