@@ -143,8 +143,7 @@ pub async fn mutate_variant(
     gepa_config: &GEPAConfig,
     iteration: usize,
 ) -> Result<HashMap<String, UninitializedChatCompletionConfig>, Error> {
-    // Extract the single parent from the HashMap
-    // parent is HashMap<&String, &UninitializedChatCompletionConfig>, so .iter() gives (&&String, &&UninitializedChatCompletionConfig)
+    // Extract the single entry from the HashMap
     let (parent_name, parent_config) =
         parent.iter().next().map(|(k, v)| (*k, *v)).ok_or_else(|| {
             Error::new(ErrorDetails::InvalidRequest {
