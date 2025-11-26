@@ -1905,6 +1905,7 @@ async fn test_get_datapoints_with_search_query() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -1933,6 +1934,7 @@ async fn test_get_datapoints_with_search_query() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -1960,6 +1962,7 @@ async fn test_get_datapoints_with_search_query() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse
@@ -2025,6 +2028,7 @@ async fn test_get_datapoints_with_search_query_with_json_encoded_term() {
         staled_at: None,
         source_inference_id: None,
         is_custom: true,
+        snapshot_hash: None,
     };
 
     clickhouse

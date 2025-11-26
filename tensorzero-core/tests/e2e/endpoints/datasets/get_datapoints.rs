@@ -64,6 +64,7 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse
@@ -585,6 +586,7 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse
@@ -647,6 +649,7 @@ mod get_datapoints_tests {
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
+            snapshot_hash: None,
         });
 
         clickhouse
