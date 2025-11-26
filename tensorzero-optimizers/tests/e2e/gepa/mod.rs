@@ -270,10 +270,11 @@ async fn test_gepa_step_chat() {
     let result =
         create_evaluation_dataset(&config, &http_client, &clickhouse, samples, &dataset_name).await;
 
-    assert!(
-        result.is_ok(),
-        "Failed to create evaluation dataset: {:?}",
-        result.err()
+    let response = result.expect("Failed to create evaluation dataset");
+    assert_eq!(
+        response.ids.len(),
+        3,
+        "Expected 3 datapoint ids in response"
     );
 
     // Give ClickHouse a moment to process
@@ -537,10 +538,11 @@ async fn test_gepa_step_json() {
     let result =
         create_evaluation_dataset(&config, &http_client, &clickhouse, samples, &dataset_name).await;
 
-    assert!(
-        result.is_ok(),
-        "Failed to create evaluation dataset: {:?}",
-        result.err()
+    let response = result.expect("Failed to create evaluation dataset");
+    assert_eq!(
+        response.ids.len(),
+        2,
+        "Expected 2 datapoint ids in response"
     );
 
     // Give ClickHouse a moment to process

@@ -121,7 +121,7 @@ impl Optimizer for GEPAConfig {
             val_examples.len()
         );
 
-        create_evaluation_dataset(
+        let _val_response = create_evaluation_dataset(
             &config,
             client,
             clickhouse_connection_info,
@@ -271,7 +271,7 @@ impl Optimizer for GEPAConfig {
                 minibatch.len()
             );
 
-            create_evaluation_dataset(
+            let _train_response = create_evaluation_dataset(
                 &config,
                 client,
                 clickhouse_connection_info,
