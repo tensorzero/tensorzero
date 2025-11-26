@@ -34,7 +34,7 @@ use analyze::analyze_inferences;
 use evaluate::{
     create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, VariantName, VariantScores,
 };
-pub use mutate::mutate_variant;
+use mutate::mutate_variant;
 use validate::{initialize_pareto_frontier, validate_examples, validate_gepa_config};
 
 #[async_trait]
