@@ -45,9 +45,8 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
     TimeFilter,
 };
 pub use tensorzero_core::db::datasets::{
-    CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetDetailRow, DatasetQueries,
-    DatasetQueryParams, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
-    GetDatasetRowsParams,
+    CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetQueries, DatasetQueryParams,
+    GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
 };
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
 pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};
@@ -726,7 +725,6 @@ impl ClientExt for Client {
                 with_embedded_timeout(*timeout, async {
                     let mut response = tensorzero_core::endpoints::datasets::v1::get_datapoints(
                         &gateway.handle.app_state.clickhouse_connection_info,
-                        &gateway.handle.app_state.config,
                         Some(dataset_name.clone()),
                         GetDatapointsRequest {
                             ids: vec![datapoint_id],
@@ -882,7 +880,6 @@ impl ClientExt for Client {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::get_datapoints(
                         &gateway.handle.app_state.clickhouse_connection_info,
-                        &gateway.handle.app_state.config,
                         dataset_name,
                         request,
                     )
@@ -914,7 +911,6 @@ impl ClientExt for Client {
                 with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::list_datapoints(
                         &gateway.handle.app_state.clickhouse_connection_info,
-                        &gateway.handle.app_state.config,
                         dataset_name,
                         request,
                     )

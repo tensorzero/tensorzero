@@ -516,14 +516,9 @@ pub async fn run_evaluation_core_streaming(
             offset: Some(0),
             ..Default::default()
         };
-        list_datapoints(
-            &clients.clickhouse_client,
-            &args.config,
-            dataset_name.clone(),
-            request,
-        )
-        .await?
-        .datapoints
+        list_datapoints(&clients.clickhouse_client, dataset_name.clone(), request)
+            .await?
+            .datapoints
     } else {
         // Load by IDs
         let request = GetDatapointsRequest {
@@ -531,7 +526,6 @@ pub async fn run_evaluation_core_streaming(
         };
         get_datapoints(
             &clients.clickhouse_client,
-            &args.config,
             /*dataset_name=*/ None,
             request,
         )

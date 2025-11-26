@@ -86,7 +86,7 @@ pub async fn chat_completions_handler(
         .into()),
     }?;
 
-    let response = inference(
+    let response = Box::pin(inference(
         config,
         &http_client,
         clickhouse_connection_info,
@@ -94,7 +94,7 @@ pub async fn chat_completions_handler(
         deferred_tasks,
         params,
         api_key_ext,
-    )
+    ))
     .await?;
 
     match response {
