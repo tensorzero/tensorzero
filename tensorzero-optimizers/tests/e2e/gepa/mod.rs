@@ -30,7 +30,6 @@ use tensorzero_optimizers::gepa::{
     mutate::mutate_variant,
     validate::{initialize_pareto_frontier, validate_gepa_config},
 };
-use uuid::Uuid;
 
 pub mod analyze;
 
@@ -82,8 +81,8 @@ fn create_test_chat_rendered_sample(input: &str, output: &str) -> RenderedSample
         },
         output: Some(output_vec.clone()),
         stored_output: Some(StoredOutput::Chat(output_vec)),
-        episode_id: Some(Uuid::now_v7()),
-        inference_id: Some(Uuid::now_v7()),
+        episode_id: None,
+        inference_id: None,
         tool_params: DynamicToolParams::default(),
         output_schema: None,
         dispreferred_outputs: vec![],
@@ -133,8 +132,8 @@ fn create_test_json_rendered_sample(input: &str, output: &str) -> RenderedSample
         },
         output: None, // JSON functions don't have chat output
         stored_output: Some(StoredOutput::Json(json_output)),
-        episode_id: Some(Uuid::now_v7()),
-        inference_id: Some(Uuid::now_v7()),
+        episode_id: None,
+        inference_id: None,
         tool_params: DynamicToolParams::default(),
         output_schema: Some(serde_json::json!({
             "type": "object",
@@ -256,8 +255,12 @@ async fn test_gepa_step_chat() {
         .next()
         .expect("Should have at least one variant");
 
-    // Generate unique dataset name to ensure test isolation
-    let dataset_name = format!("test_eval_dataset_chat_{}", Uuid::now_v7());
+    // Use deterministic dataset name for cache effectiveness
+    let dataset_name = "test_eval_dataset_chat_e2e".to_string();
+
+    // Clean up any leftover data from previous failed test runs
+    let _ = delete_dataset(&clickhouse, &dataset_name).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     // Create test samples
     let samples = vec![
@@ -278,7 +281,7 @@ async fn test_gepa_step_chat() {
     );
 
     // Give ClickHouse a moment to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     // Verify the datapoints were created in ClickHouse
     let datapoints = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
@@ -297,7 +300,6 @@ async fn test_gepa_step_chat() {
     assert_eq!(first_datapoint.dataset_name, dataset_name);
     assert_eq!(first_datapoint.function_name, "basic_test");
     assert!(!first_datapoint.is_deleted);
-    assert!(first_datapoint.episode_id.is_some());
 
     // Verify tags are preserved
     assert!(first_datapoint.tags.is_some());
@@ -525,8 +527,12 @@ async fn test_gepa_step_json() {
         .next()
         .expect("Should have at least one variant");
 
-    // Generate unique dataset name to ensure test isolation
-    let dataset_name = format!("test_eval_dataset_json_{}", Uuid::now_v7());
+    // Use deterministic dataset name for cache effectiveness
+    let dataset_name = "test_eval_dataset_json_e2e".to_string();
+
+    // Clean up any leftover data from previous failed test runs
+    let _ = delete_dataset(&clickhouse, &dataset_name).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     // Create test samples for JSON function
     let samples = vec![
@@ -546,7 +552,7 @@ async fn test_gepa_step_json() {
     );
 
     // Give ClickHouse a moment to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     // Verify the datapoints were created in ClickHouse
     let datapoints = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
@@ -565,7 +571,6 @@ async fn test_gepa_step_json() {
     assert_eq!(first_datapoint.dataset_name, dataset_name);
     assert_eq!(first_datapoint.function_name, "json_success");
     assert!(!first_datapoint.is_deleted);
-    assert!(first_datapoint.episode_id.is_some());
 
     // Verify tags are preserved
     assert!(first_datapoint.tags.is_some());
