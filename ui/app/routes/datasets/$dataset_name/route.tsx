@@ -1,7 +1,4 @@
-import {
-  getDatasetMetadata,
-  getDatasetRows,
-} from "~/utils/clickhouse/datasets.server";
+import { getDatasetMetadata } from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
 import DatasetRowTable from "./DatasetRowTable";
 import { data, isRouteErrorResponse, redirect } from "react-router";
@@ -22,6 +19,7 @@ import { DeleteButton } from "~/components/utils/DeleteButton";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { useReadOnly } from "~/context/read-only";
+import { listDatapoints } from "~/utils/tensorzero.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -40,7 +38,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const [counts, rows] = await Promise.all([
     getDatasetMetadata({}),
-    getDatasetRows({ dataset_name, limit, offset }),
+    listDatapoints(dataset_name, /*function_name=*/ undefined, limit, offset),
   ]);
   const count_info = counts.find(
     (count) => count.dataset_name === dataset_name,

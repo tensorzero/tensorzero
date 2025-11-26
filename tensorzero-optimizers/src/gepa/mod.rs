@@ -28,7 +28,11 @@ use crate::{JobHandle, Optimizer};
 pub mod analyze;
 pub mod evaluate;
 pub mod mutate;
+pub mod pareto;
 pub mod validate;
+
+// TODO: remove public export after #4669 is merged and we can integrate the Pareto functions
+pub use pareto::{is_improvement, ParetoFrontier};
 
 use analyze::analyze_inferences;
 use evaluate::{
