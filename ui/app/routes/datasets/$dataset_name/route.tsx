@@ -19,7 +19,6 @@ import { DeleteButton } from "~/components/utils/DeleteButton";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { useReadOnly } from "~/context/read-only";
-import { listDatapoints } from "~/utils/tensorzero.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -36,9 +35,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Limit cannot exceed 100", { status: 400 });
   }
 
-  const [counts, rows] = await Promise.all([
+  const [counts, getDatapointsResponse] = await Promise.all([
     getDatasetMetadata({}),
-    listDatapoints(dataset_name, /*function_name=*/ undefined, limit, offset),
+    getTensorZeroClient().listDatapoints(dataset_name, { limit, offset }),
   ]);
   const count_info = counts.find(
     (count) => count.dataset_name === dataset_name,
@@ -46,6 +45,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!count_info) {
     throw data("Dataset not found", { status: 404 });
   }
+  const rows = getDatapointsResponse.datapoints;
   return { rows, count_info, limit, offset, rowsAdded, rowsSkipped };
 }
 
