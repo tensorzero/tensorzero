@@ -1807,8 +1807,7 @@ impl<'a> GCPVertexGeminiToolConfig<'a> {
             ToolChoice::Auto => {
                 let allowed_function_names = tool_config.allowed_tools.as_dynamic_allowed_tools();
                 // If allowed_function_names is set, we need to use Any mode because
-                // Gemini's Auto mode with allowed_function_names still allows the model
-                // to not call a function, which is not the behavior we want.
+                // Gemini's Auto mode with allowed_function_names errors
                 let mode = if allowed_function_names.is_some()
                     && !MODELS_NOT_SUPPORTING_ANY_MODE.contains(&model_name)
                 {
