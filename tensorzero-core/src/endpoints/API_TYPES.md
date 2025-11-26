@@ -1,6 +1,6 @@
 # A note about API types
 
-We currently use Rust as the source of truth for API types. 
+We currently use Rust as the source of truth for API types.
 
 
 ## Patch semantics
@@ -13,7 +13,7 @@ In Rust, we represent these types as `Option<Option<T>>`s, and use these custom 
 ```rust
 pub struct UpdateChatDatapointRequest {
     // ... omitted ...
-    
+
     /// Chat datapoint output. If omitted, it will be left unchanged. If specified as `null`, it will be set to
     /// `null`. Otherwise, it will overwrite the existing output (and can be an empty array).
     #[serde(default, deserialize_with = "deserialize_double_option")]

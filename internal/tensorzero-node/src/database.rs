@@ -1,8 +1,7 @@
 use serde::Deserialize;
 use tensorzero::{
     setup_clickhouse_without_config, ClickHouseConnection, CountDatapointsForDatasetFunctionParams,
-    DatasetQueryParams, GetDatapointParams, GetDatasetMetadataParams, GetDatasetRowsParams,
-    TimeWindow,
+    DatasetQueryParams, GetDatapointParams, GetDatasetMetadataParams, TimeWindow,
 };
 use uuid::Uuid;
 
@@ -93,11 +92,6 @@ impl DatabaseClient {
     #[napi]
     pub async fn insert_rows_for_dataset(&self, params: String) -> Result<u32, napi::Error> {
         napi_call_no_deserializing!(&self, insert_rows_for_dataset, params, DatasetQueryParams)
-    }
-
-    #[napi]
-    pub async fn get_dataset_rows(&self, params: String) -> Result<String, napi::Error> {
-        napi_call!(&self, get_dataset_rows, params, GetDatasetRowsParams)
     }
 
     #[napi]
