@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.10"
 # dependencies = [
-#   "datamodel-code-generator[http]>=0.26.0",
+#   "datamodel-code-generator[http]==0.35.0",
 # ]
 # ///
 """
