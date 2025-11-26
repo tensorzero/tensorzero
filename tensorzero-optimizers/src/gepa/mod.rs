@@ -455,7 +455,7 @@ impl Optimizer for GEPAConfig {
                             child_name,
                             child_val_scores.len()
                         );
-                        // TODO: Update Pareto frontier with child variant and validation scores
+                        // TODO[#4739]: Update Pareto frontier with child variant and validation scores
                     }
                     Err(e) => {
                         tracing::warn!(
