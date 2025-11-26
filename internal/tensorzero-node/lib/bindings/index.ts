@@ -127,7 +127,6 @@ export * from "./GetCumulativeFeedbackTimeseriesParams";
 export * from "./GetDatapointParams";
 export * from "./GetDatapointsRequest";
 export * from "./GetDatapointsResponse";
-export * from "./GetDatasetMetadataParams";
 export * from "./GetFeedbackByVariantParams";
 export * from "./GetInferenceBoundsResponse";
 export * from "./GetInferencesRequest";
