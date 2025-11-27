@@ -1121,3 +1121,290 @@ async fn test_openai_compatible_file_with_custom_filename() {
         "myfile.pdf"
     );
 }
+
+#[tokio::test]
+async fn test_openai_compatible_parallel_tool_calls() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+    let body = json!({
+        "stream": false,
+        "model": "tensorzero::function_name::weather_helper_parallel",
+        "messages": [
+            { "role": "system", "content": [{"type": "tensorzero::template", "name": "system", "arguments": {"assistant_name": "Dr.Mehta"}}]},
+            {
+                "role": "user",
+                "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+            }
+        ],
+        "parallel_tool_calls": true,
+        "tensorzero::episode_id": episode_id.to_string(),
+        "tensorzero::variant_name": "openai",
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+
+    // Check if the API response is fine
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("API response: {response_json:#?}");
+
+    // Extract inference_id from response
+    let inference_id: Uuid = response_json
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    // Validate response structure
+    assert_eq!(
+        response_json.get("object").unwrap().as_str().unwrap(),
+        "chat.completion"
+    );
+
+    let model = response_json.get("model").unwrap().as_str().unwrap();
+    assert_eq!(
+        model,
+        "tensorzero::function_name::weather_helper_parallel::variant_name::openai"
+    );
+
+    // Validate choices
+    let choices = response_json.get("choices").unwrap().as_array().unwrap();
+    assert_eq!(choices.len(), 1);
+
+    let choice = &choices[0];
+    assert_eq!(choice.get("index").unwrap().as_u64().unwrap(), 0);
+    assert_eq!(
+        choice.get("finish_reason").unwrap().as_str().unwrap(),
+        "tool_calls"
+    );
+
+    // Validate message
+    let message = choice.get("message").unwrap();
+    assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
+
+    // Content should be null or empty when there are tool calls
+    let content = message.get("content");
+    assert!(
+        content.is_none()
+            || content.unwrap().is_null()
+            || content.unwrap().as_str().unwrap().is_empty()
+    );
+
+    // Validate tool_calls array
+    let tool_calls = message.get("tool_calls").unwrap().as_array().unwrap();
+    assert_eq!(
+        tool_calls.len(),
+        2,
+        "Expected exactly 2 parallel tool calls"
+    );
+
+    // Find and validate get_temperature tool call
+    let temp_call = tool_calls
+        .iter()
+        .find(|tc| {
+            tc.get("function")
+                .unwrap()
+                .get("name")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                == "get_temperature"
+        })
+        .expect("get_temperature tool call not found");
+
+    assert!(!temp_call.get("id").unwrap().as_str().unwrap().is_empty());
+    assert_eq!(temp_call.get("type").unwrap().as_str().unwrap(), "function");
+
+    let temp_args: Value = serde_json::from_str(
+        temp_call
+            .get("function")
+            .unwrap()
+            .get("arguments")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        temp_args
+            .get("location")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase(),
+        "tokyo"
+    );
+    assert_eq!(temp_args.get("units").unwrap().as_str().unwrap(), "celsius");
+
+    // Find and validate get_humidity tool call
+    let humidity_call = tool_calls
+        .iter()
+        .find(|tc| {
+            tc.get("function")
+                .unwrap()
+                .get("name")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                == "get_humidity"
+        })
+        .expect("get_humidity tool call not found");
+
+    assert!(!humidity_call
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        humidity_call.get("type").unwrap().as_str().unwrap(),
+        "function"
+    );
+
+    let humidity_args: Value = serde_json::from_str(
+        humidity_call
+            .get("function")
+            .unwrap()
+            .get("arguments")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        humidity_args
+            .get("location")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_lowercase(),
+        "tokyo"
+    );
+
+    // Validate usage
+    let usage = response_json.get("usage").unwrap();
+    assert!(usage.get("prompt_tokens").unwrap().as_u64().unwrap() > 0);
+    assert!(usage.get("completion_tokens").unwrap().as_u64().unwrap() > 0);
+    assert!(usage.get("total_tokens").unwrap().as_u64().unwrap() > 0);
+
+    // Sleep to allow ClickHouse writes
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // ClickHouse validation
+    let clickhouse = get_clickhouse().await;
+
+    // Validate ChatInference table
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ChatInference: {result:#?}");
+
+    // Basic fields
+    assert_eq!(
+        Uuid::parse_str(result.get("id").unwrap().as_str().unwrap()).unwrap(),
+        inference_id
+    );
+    assert_eq!(
+        result.get("function_name").unwrap().as_str().unwrap(),
+        "weather_helper_parallel"
+    );
+    assert_eq!(
+        result.get("variant_name").unwrap().as_str().unwrap(),
+        "openai"
+    );
+    assert_eq!(
+        Uuid::parse_str(result.get("episode_id").unwrap().as_str().unwrap()).unwrap(),
+        episode_id
+    );
+
+    // Validate output (content blocks)
+    let output: Vec<Value> =
+        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
+    let tool_call_blocks: Vec<_> = output
+        .iter()
+        .filter(|block| block.get("type").unwrap().as_str().unwrap() == "tool_call")
+        .collect();
+    assert_eq!(
+        tool_call_blocks.len(),
+        2,
+        "Expected 2 tool call blocks in ClickHouse"
+    );
+
+    // Validate that both tools are present
+    let tool_names: HashSet<_> = tool_call_blocks
+        .iter()
+        .map(|block| block.get("name").unwrap().as_str().unwrap().to_string())
+        .collect();
+    assert!(tool_names.contains("get_temperature"));
+    assert!(tool_names.contains("get_humidity"));
+
+    // Validate decomposed tool call columns (Migration 0041)
+    let parallel_tool_calls = result
+        .get("parallel_tool_calls")
+        .unwrap()
+        .as_bool()
+        .unwrap();
+    assert!(parallel_tool_calls);
+
+    let dynamic_tools = result.get("dynamic_tools").unwrap().as_array().unwrap();
+    assert_eq!(dynamic_tools.len(), 0);
+
+    let dynamic_provider_tools = result
+        .get("dynamic_provider_tools")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert_eq!(dynamic_provider_tools.len(), 0);
+
+    let allowed_tools = result.get("allowed_tools").unwrap().as_str().unwrap();
+    let allowed_tools_json: Value = serde_json::from_str(allowed_tools).unwrap();
+    let tools = allowed_tools_json.get("tools").unwrap().as_array().unwrap();
+    assert_eq!(tools.len(), 2);
+    let tool_names: HashSet<_> = tools
+        .iter()
+        .map(|t| t.as_str().unwrap().to_string())
+        .collect();
+    assert!(tool_names.contains("get_temperature"));
+    assert!(tool_names.contains("get_humidity"));
+    assert_eq!(
+        allowed_tools_json.get("choice").unwrap().as_str().unwrap(),
+        "function_default"
+    );
+
+    // Validate ModelInference table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {result:#?}");
+
+    assert_eq!(
+        Uuid::parse_str(result.get("inference_id").unwrap().as_str().unwrap()).unwrap(),
+        inference_id
+    );
+
+    // Verify raw_request contains both tools
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("get_temperature"));
+    assert!(raw_request.to_lowercase().contains("get_humidity"));
+
+    // Verify raw_response contains tool calls
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    assert!(raw_response.contains("get_temperature"));
+    assert!(raw_response.contains("get_humidity"));
+
+    // Token and timing validation
+    assert!(result.get("input_tokens").unwrap().as_u64().unwrap() > 0);
+    assert!(result.get("output_tokens").unwrap().as_u64().unwrap() > 0);
+    assert!(result.get("response_time_ms").unwrap().as_u64().unwrap() > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null()); // Non-streaming
+}
