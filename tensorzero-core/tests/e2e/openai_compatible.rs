@@ -1138,7 +1138,7 @@ async fn test_openai_compatible_parallel_tool_calls() {
         ],
         "parallel_tool_calls": true,
         "tensorzero::episode_id": episode_id.to_string(),
-        "tensorzero::variant_name": "openai",
+        "tensorzero::variant_name": "gpt-5-mini",
     });
 
     let response = client
@@ -1153,7 +1153,8 @@ async fn test_openai_compatible_parallel_tool_calls() {
     let response_json = response.json::<Value>().await.unwrap();
 
     println!("API response: {response_json:#?}");
-
+    // Sleep to allow ClickHouse writes
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     // Extract inference_id from response
     let inference_id: Uuid = response_json
         .get("id")
@@ -1162,6 +1163,23 @@ async fn test_openai_compatible_parallel_tool_calls() {
         .unwrap()
         .parse()
         .unwrap();
+
+    // ClickHouse validation
+    let clickhouse = get_clickhouse().await;
+
+    // Validate ChatInference table
+    let chat_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ChatInference: {chat_inference:#?}");
+
+    // Validate ModelInference table
+    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {model_inference:#?}");
 
     // Validate response structure
     assert_eq!(
@@ -1172,7 +1190,7 @@ async fn test_openai_compatible_parallel_tool_calls() {
     let model = response_json.get("model").unwrap().as_str().unwrap();
     assert_eq!(
         model,
-        "tensorzero::function_name::weather_helper_parallel::variant_name::openai"
+        "tensorzero::function_name::weather_helper_parallel::variant_name::gpt-5-mini"
     );
 
     // Validate choices
@@ -1295,40 +1313,35 @@ async fn test_openai_compatible_parallel_tool_calls() {
     assert!(usage.get("completion_tokens").unwrap().as_u64().unwrap() > 0);
     assert!(usage.get("total_tokens").unwrap().as_u64().unwrap() > 0);
 
-    // Sleep to allow ClickHouse writes
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-    // ClickHouse validation
-    let clickhouse = get_clickhouse().await;
-
-    // Validate ChatInference table
-    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
-
-    println!("ClickHouse - ChatInference: {result:#?}");
-
     // Basic fields
     assert_eq!(
-        Uuid::parse_str(result.get("id").unwrap().as_str().unwrap()).unwrap(),
+        Uuid::parse_str(chat_inference.get("id").unwrap().as_str().unwrap()).unwrap(),
         inference_id
     );
     assert_eq!(
-        result.get("function_name").unwrap().as_str().unwrap(),
+        chat_inference
+            .get("function_name")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "weather_helper_parallel"
     );
     assert_eq!(
-        result.get("variant_name").unwrap().as_str().unwrap(),
-        "openai"
+        chat_inference
+            .get("variant_name")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        "gpt-5-mini"
     );
     assert_eq!(
-        Uuid::parse_str(result.get("episode_id").unwrap().as_str().unwrap()).unwrap(),
+        Uuid::parse_str(chat_inference.get("episode_id").unwrap().as_str().unwrap()).unwrap(),
         episode_id
     );
 
     // Validate output (content blocks)
     let output: Vec<Value> =
-        serde_json::from_str(result.get("output").unwrap().as_str().unwrap()).unwrap();
+        serde_json::from_str(chat_inference.get("output").unwrap().as_str().unwrap()).unwrap();
     let tool_call_blocks: Vec<_> = output
         .iter()
         .filter(|block| block.get("type").unwrap().as_str().unwrap() == "tool_call")
@@ -1348,24 +1361,32 @@ async fn test_openai_compatible_parallel_tool_calls() {
     assert!(tool_names.contains("get_humidity"));
 
     // Validate decomposed tool call columns (Migration 0041)
-    let parallel_tool_calls = result
+    let parallel_tool_calls = chat_inference
         .get("parallel_tool_calls")
         .unwrap()
         .as_bool()
         .unwrap();
     assert!(parallel_tool_calls);
 
-    let dynamic_tools = result.get("dynamic_tools").unwrap().as_array().unwrap();
+    let dynamic_tools = chat_inference
+        .get("dynamic_tools")
+        .unwrap()
+        .as_array()
+        .unwrap();
     assert_eq!(dynamic_tools.len(), 0);
 
-    let dynamic_provider_tools = result
+    let dynamic_provider_tools = chat_inference
         .get("dynamic_provider_tools")
         .unwrap()
         .as_array()
         .unwrap();
     assert_eq!(dynamic_provider_tools.len(), 0);
 
-    let allowed_tools = result.get("allowed_tools").unwrap().as_str().unwrap();
+    let allowed_tools = chat_inference
+        .get("allowed_tools")
+        .unwrap()
+        .as_str()
+        .unwrap();
     let allowed_tools_json: Value = serde_json::from_str(allowed_tools).unwrap();
     let tools = allowed_tools_json.get("tools").unwrap().as_array().unwrap();
     assert_eq!(tools.len(), 2);
@@ -1380,31 +1401,195 @@ async fn test_openai_compatible_parallel_tool_calls() {
         "function_default"
     );
 
-    // Validate ModelInference table
-    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
-        .await
-        .unwrap();
-
-    println!("ClickHouse - ModelInference: {result:#?}");
-
     assert_eq!(
-        Uuid::parse_str(result.get("inference_id").unwrap().as_str().unwrap()).unwrap(),
+        Uuid::parse_str(
+            model_inference
+                .get("inference_id")
+                .unwrap()
+                .as_str()
+                .unwrap()
+        )
+        .unwrap(),
         inference_id
     );
 
     // Verify raw_request contains both tools
-    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    let raw_request = model_inference
+        .get("raw_request")
+        .unwrap()
+        .as_str()
+        .unwrap();
     assert!(raw_request.to_lowercase().contains("get_temperature"));
     assert!(raw_request.to_lowercase().contains("get_humidity"));
 
     // Verify raw_response contains tool calls
-    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let raw_response = model_inference
+        .get("raw_response")
+        .unwrap()
+        .as_str()
+        .unwrap();
     assert!(raw_response.contains("get_temperature"));
     assert!(raw_response.contains("get_humidity"));
 
     // Token and timing validation
-    assert!(result.get("input_tokens").unwrap().as_u64().unwrap() > 0);
-    assert!(result.get("output_tokens").unwrap().as_u64().unwrap() > 0);
-    assert!(result.get("response_time_ms").unwrap().as_u64().unwrap() > 0);
-    assert!(result.get("ttft_ms").unwrap().is_null()); // Non-streaming
+    assert!(
+        model_inference
+            .get("input_tokens")
+            .unwrap()
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert!(
+        model_inference
+            .get("output_tokens")
+            .unwrap()
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert!(
+        model_inference
+            .get("response_time_ms")
+            .unwrap()
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert!(model_inference.get("ttft_ms").unwrap().is_null()); // Non-streaming
+}
+
+#[tokio::test]
+async fn test_openai_compatible_parallel_tool_calls_multi_turn() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    // First request: Get parallel tool calls
+    let body = json!({
+        "stream": false,
+        "model": "tensorzero::function_name::weather_helper_parallel",
+        "messages": [
+            { "role": "system", "content": [{"type": "tensorzero::template", "name": "system", "arguments": {"assistant_name": "Dr.Mehta"}}]},
+            {
+                "role": "user",
+                "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+            }
+        ],
+        "parallel_tool_calls": true,
+        "tensorzero::episode_id": episode_id.to_string(),
+        "tensorzero::variant_name": "gpt-5-mini",
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    println!("First request response: {response_json:#?}");
+    // Sleep to allow ClickHouse writes
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    // Extract inference_id from response
+    let inference_id: Uuid = response_json
+        .get("id")
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+
+    // ClickHouse validation
+    let clickhouse = get_clickhouse().await;
+
+    // Validate ChatInference table
+    let chat_inference = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ChatInference: {chat_inference:#?}");
+
+    // Validate ModelInference table
+    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    println!("ClickHouse - ModelInference: {model_inference:#?}");
+
+    // Extract tool calls from response
+    let first_message = response_json["choices"][0]["message"].clone();
+    let tool_calls = first_message["tool_calls"].as_array().unwrap();
+    assert_eq!(tool_calls.len(), 2);
+
+    // Build messages with tool results (one tool message per tool call)
+    let mut messages = vec![
+        json!({ "role": "system", "content": [{"type": "tensorzero::template", "name": "system", "arguments": {"assistant_name": "Dr.Mehta"}}]}),
+        json!({
+            "role": "user",
+            "content": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+        }),
+        first_message.clone(),
+    ];
+
+    // Add one tool message for each tool call
+    for tool_call in tool_calls {
+        let tool_id = tool_call["id"].as_str().unwrap();
+        let tool_name = tool_call["function"]["name"].as_str().unwrap();
+
+        let result_content = match tool_name {
+            "get_temperature" => "22°C",
+            "get_humidity" => "65%",
+            _ => panic!("Unexpected tool: {tool_name}"),
+        };
+
+        messages.push(json!({
+            "role": "tool",
+            "tool_call_id": tool_id,
+            "content": result_content
+        }));
+    }
+
+    // Second request: Submit tool results and get final response
+    let second_body = json!({
+        "stream": false,
+        "model": "tensorzero::function_name::weather_helper_parallel",
+        "messages": messages,
+        "tensorzero::episode_id": episode_id.to_string(),
+        "tensorzero::variant_name": "openai",
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/openai/v1/chat/completions"))
+        .json(&second_body)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let final_response_json = response.json::<Value>().await.unwrap();
+
+    println!("Final response: {final_response_json:#?}");
+
+    // Validate final response
+    let final_choice = &final_response_json["choices"][0];
+    let finish_reason = final_choice["finish_reason"].as_str().unwrap();
+    // Should be "stop" (normal completion) not "tool_calls" since we provided results
+    assert_eq!(finish_reason, "stop");
+
+    // Should have text content in the response
+    let content = final_choice["message"]["content"].as_str();
+    assert!(content.is_some());
+    assert!(!content.unwrap().is_empty());
+
+    // Should not have tool_calls in final response
+    let tool_calls = final_choice["message"]["tool_calls"].as_array().unwrap();
+    assert!(tool_calls.is_empty());
+
+    println!(
+        "Multi-turn test passed! Got final response: {}",
+        content.unwrap()
+    );
 }
