@@ -83,6 +83,7 @@ services:
       retries: 3
 
   mock-inference-provider:
+    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
     build:
       context: ../../../
       dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
@@ -90,12 +91,6 @@ services:
       RUST_LOG: debug
     ports:
       - "3030:3030"
-    healthcheck:
-      test: wget --spider --tries 1 http://localhost:3030/status
-      interval: 1s
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
 
   minio:
     image: bitnamilegacy/minio:2025.7.23

@@ -52,9 +52,9 @@ impl UninitializedChainOfThoughtConfig {
 
 impl ChainOfThoughtConfig {
     /// Converts this initialized config back to its uninitialized form.
-    pub fn into_uninitialized(self) -> UninitializedChainOfThoughtConfig {
+    pub fn as_uninitialized(self) -> UninitializedChainOfThoughtConfig {
         UninitializedChainOfThoughtConfig {
-            inner: self.inner.into_uninitialized(),
+            inner: self.inner.as_uninitialized(),
         }
     }
 }
@@ -420,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_basic_fields() {
+    fn test_as_uninitialized_preserves_basic_fields() {
         let uninitialized = UninitializedChainOfThoughtConfig {
             inner: UninitializedChatCompletionConfig {
                 model: "gpt-4".into(),
@@ -436,7 +436,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.inner.model, "gpt-4".into());
         assert_eq!(exported.inner.weight, Some(0.8));
@@ -446,7 +446,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_preserves_none_values() {
+    fn test_as_uninitialized_preserves_none_values() {
         let uninitialized = UninitializedChainOfThoughtConfig {
             inner: UninitializedChatCompletionConfig {
                 model: "gpt-4".into(),
@@ -461,7 +461,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         assert_eq!(exported.inner.weight, None);
         assert_eq!(exported.inner.temperature, None);
@@ -469,7 +469,7 @@ mod tests {
     }
 
     #[test]
-    fn test_into_uninitialized_serialization_round_trip() {
+    fn test_as_uninitialized_serialization_round_trip() {
         let original = UninitializedChainOfThoughtConfig {
             inner: UninitializedChatCompletionConfig {
                 model: "gpt-4".into(),
@@ -484,7 +484,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap();
 
-        let exported = config.into_uninitialized();
+        let exported = config.as_uninitialized();
 
         // Serialize and deserialize
         let json = serde_json::to_string(&exported).unwrap();

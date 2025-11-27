@@ -24,7 +24,7 @@ import type {
   EvaluationStatistics,
   ParsedEvaluationResult,
 } from "~/utils/clickhouse/evaluations";
-import type { DisplayInput } from "~/utils/clickhouse/common";
+import type { ZodDisplayInput } from "~/utils/clickhouse/common";
 import { Output } from "~/components/inference/Output";
 
 // Import the custom tooltip styles
@@ -59,7 +59,7 @@ type TruncatedContentProps = (
     }
   | {
       type: "input";
-      content: DisplayInput;
+      content: ZodDisplayInput;
     }
   | {
       type: "output";
@@ -124,7 +124,7 @@ const TruncatedContentTooltip: React.FC<
 );
 
 // Helper function to generate a summary of an Input object
-function getInputSummary(input: DisplayInput): string {
+function getInputSummary(input: ZodDisplayInput): string {
   if (!input || !input.messages || input.messages.length === 0) {
     return "Empty input";
   }
@@ -264,7 +264,7 @@ export function EvaluationTable({
       {
         id: string;
         name: string | null;
-        input: DisplayInput;
+        input: ZodDisplayInput;
         reference_output: JsonInferenceOutput | ContentBlockChatOutput[] | null;
       }
     >();

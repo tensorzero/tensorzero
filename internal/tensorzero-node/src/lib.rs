@@ -45,7 +45,7 @@ pub struct EvaluationRunStartEvent {
     pub evaluation_run_id: Uuid,
     pub num_datapoints: usize,
     pub evaluation_name: String,
-    pub dataset_name: String,
+    pub dataset_name: Option<String>,
     pub variant_name: String,
 }
 
@@ -114,7 +114,8 @@ pub struct RunEvaluationStreamingParams {
     pub clickhouse_url: String,
     pub config_path: String,
     pub evaluation_name: String,
-    pub dataset_name: String,
+    pub dataset_name: Option<String>,
+    pub datapoint_ids: Option<Vec<String>>,
     pub variant_name: String,
     pub concurrency: u32,
     pub inference_cache: String,
@@ -185,10 +186,18 @@ pub async fn run_evaluation_streaming(
         ))
     })?;
 
-    let evaluation_run_id = Uuid::now_v7();
+    let datapoint_ids: Vec<Uuid> = params
+        .datapoint_ids
+        .unwrap_or_default()
+        .iter()
+        .map(|s| {
+            Uuid::parse_str(s).map_err(|e| {
+                napi::Error::from_reason(format!("Invalid UUID in datapoint_ids: {e}"))
+            })
+        })
+        .collect::<Result<Vec<Uuid>, napi::Error>>()?;
 
-    // Convert max_datapoints from u32 to usize
-    let max_datapoints = params.max_datapoints.map(|v| v as usize);
+    let evaluation_run_id = Uuid::now_v7();
 
     // Parse precision_targets from JSON string to HashMap
     let precision_targets = if let Some(limits_json_str) = params.precision_targets {
@@ -207,6 +216,7 @@ pub async fn run_evaluation_streaming(
         clickhouse_client: clickhouse_client.clone(),
         config: config.clone(),
         dataset_name: params.dataset_name.clone(),
+        datapoint_ids: Some(datapoint_ids.clone()),
         variant: EvaluationVariant::Name(params.variant_name.clone()),
         evaluation_name: params.evaluation_name.clone(),
         evaluation_run_id,
@@ -215,7 +225,9 @@ pub async fn run_evaluation_streaming(
     };
 
     let result =
-        match run_evaluation_core_streaming(core_args, max_datapoints, precision_targets).await {
+        match run_evaluation_core_streaming(core_args, params.max_datapoints, precision_targets)
+            .await
+        {
             Ok(result) => result,
             Err(error) => {
                 let _ = callback.abort();

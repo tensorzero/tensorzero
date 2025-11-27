@@ -149,6 +149,7 @@ test.describe("System Message - Template", () => {
       .first()
       .locator("..")
       .locator("..")
+      .locator("..")
       .locator("..");
     await expect(templateSection).toBeVisible();
     let codeContent = await templateSection

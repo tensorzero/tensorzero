@@ -6,7 +6,7 @@ use std::{
 };
 
 use axum::{body::Body, extract::Request, middleware::Next, response::Response};
-use http::Method;
+use http::{Method, StatusCode};
 use http_body::{Frame, SizeHint};
 use tracing::Span;
 
@@ -14,29 +14,43 @@ use tracing::Span;
 struct ConnectionDropGuard {
     span: Span,
     start_time: Instant,
-    finished: Cell<bool>,
+    warn_on_drop: Cell<bool>,
+    status: Option<StatusCode>,
 }
 
 impl ConnectionDropGuard {
+    fn elapsed_latency(&self) -> String {
+        format!("{} ms", self.start_time.elapsed().as_millis())
+    }
     // Mark the guard as explicitly finished by the server.
     // This suppresses the warning that we would otherwise log in the `Drop` impl.
     // Note that we call this method even if the server produces an error - the purpose
     // of this method is to detect early drops, when the server didn't produce a response of any kind.
     fn mark_finished(&self) {
-        self.finished.set(true);
+        self.warn_on_drop.set(true);
     }
 }
 
 impl Drop for ConnectionDropGuard {
     fn drop(&mut self) {
-        // If `start_time` is set, then `ConnectionDropGuard` was dropped before the response was sent
+        let _guard = self.span.enter();
+        let latency = self.elapsed_latency();
+        // If `log_on_drop` is set, then `ConnectionDropGuard` was dropped before the response was sent
         // We log a warning and the latency of the request.
-        if !self.finished.get() {
-            let latency = format!("{} ms", self.start_time.elapsed().as_millis());
-            let _guard = self.span.enter();
+        if !self.warn_on_drop.get() {
             tracing::warn!(
                 %latency,
                 "Client closed the connection before the response was sent",
+            );
+        }
+        // We might have a status code even if the client closed the connection early
+        // (e.g. if we were sending an SSE stream)
+        if let Some(status) = self.status {
+            tracing::debug!(
+                %latency,
+                status = i32::from(status.as_u16()),
+                success = status.is_success(),
+                "finished processing request"
             );
         }
     }
@@ -97,21 +111,38 @@ impl http_body::Body for GuardBodyWrapper {
     }
 }
 
-/// An Axum middleware that logs a warning if it's dropped early (which will occur if the client closes the connection early)
-pub async fn warn_on_early_connection_drop(
+// An Axum middleware that logs request processing events
+// * 'started processing request' when we begin processing a request
+// * 'finished processing request' when we we *completely* finish a request.
+//    For SSE streams, this is logged when we finish sending the entire stream,
+//    not when the response status code is initially sent
+// * 'Client closed the connection before the response was sent' if the connection is closed early.
+pub async fn request_logging_middleware(
     request: Request,
     next: Next,
 ) -> Response<GuardBodyWrapper> {
     let start_time = Instant::now();
+    let span = tracing::info_span!(
+        target: "gateway",
+        "request",
+        method = %request.method(),
+        uri = %request.uri(),
+        version = ?request.version(),
+    );
+    span.in_scope(|| {
+        tracing::debug!("started processing request");
+    });
+
     // Axum runs GET handlers when a HEAD requests is made, but drops the body.
     // To avoid false positives, we never log a warning for HEAD requests.
     let is_finished = matches!(request.method(), &Method::HEAD);
-    let guard = ConnectionDropGuard {
-        // Save the current span, since we have no idea what span we'll be in when `Drop` runs.
-        span: Span::current(),
+    let mut guard = ConnectionDropGuard {
+        span,
         start_time,
-        finished: Cell::new(is_finished),
+        warn_on_drop: Cell::new(is_finished),
+        status: None,
     };
     let response = next.run(request).await;
+    guard.status = Some(response.status());
     response.map(|body| GuardBodyWrapper { inner: body, guard })
 }
