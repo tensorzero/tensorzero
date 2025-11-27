@@ -55,7 +55,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
     ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
-    ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk,
+    ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk, Unknown,
     UnknownChunk,
 };
 use crate::inference::InferenceProvider;
@@ -2229,10 +2229,10 @@ async fn convert_non_thought_content_block<'a>(
                 },
             ))
         }
-        Cow::Borrowed(ContentBlock::Unknown { data, .. }) => {
+        Cow::Borrowed(ContentBlock::Unknown(Unknown { data, .. })) => {
             Ok(FlattenUnknown::Unknown(Cow::Borrowed(data)))
         }
-        Cow::Owned(ContentBlock::Unknown { data, .. }) => {
+        Cow::Owned(ContentBlock::Unknown(Unknown { data, .. })) => {
             Ok(FlattenUnknown::Unknown(Cow::Owned(data)))
         }
         Cow::Borrowed(ContentBlock::Thought(_)) | Cow::Owned(ContentBlock::Thought(_)) => {
@@ -2445,8 +2445,8 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                                 raw_response: None,
                             }));
                         }
-                        Some(Cow::Borrowed(ContentBlock::Unknown { .. }))
-                        | Some(Cow::Owned(ContentBlock::Unknown { .. })) => {
+                        Some(Cow::Borrowed(ContentBlock::Unknown(_)))
+                        | Some(Cow::Owned(ContentBlock::Unknown(_))) => {
                             return Err(Error::new(ErrorDetails::InferenceServer {
                                 message: "Thought block with signature cannot be followed by an unknown block in GCP Vertex Gemini".to_string(),
                                 provider_type: PROVIDER_TYPE.to_string(),
@@ -2465,14 +2465,14 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                     }
                 }
             }
-            Cow::Borrowed(ContentBlock::Unknown { data, .. }) => {
+            Cow::Borrowed(ContentBlock::Unknown(Unknown { data, .. })) => {
                 model_content_blocks.push(GCPVertexGeminiContentPart {
                     thought: false,
                     thought_signature: None,
                     data: FlattenUnknown::Unknown(Cow::Borrowed(data)),
                 });
             }
-            Cow::Owned(ContentBlock::Unknown { data, .. }) => {
+            Cow::Owned(ContentBlock::Unknown(Unknown { data, .. })) => {
                 model_content_blocks.push(GCPVertexGeminiContentPart {
                     thought: false,
                     thought_signature: None,
@@ -2705,7 +2705,7 @@ fn convert_to_output(
                 })]);
             }
             _ => {
-                return Ok(vec![ContentBlockOutput::Unknown {
+                return Ok(vec![ContentBlockOutput::Unknown(Unknown {
                     data: serde_json::to_value(part).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
@@ -2715,7 +2715,7 @@ fn convert_to_output(
                     })?,
                     model_name: Some(model_name.to_string()),
                     provider_name: Some(provider_name.to_string()),
-                }]);
+                })]);
             }
         }
     }
@@ -2756,20 +2756,20 @@ fn convert_to_output(
             }));
         }
         FlattenUnknown::Normal(GCPVertexGeminiResponseContentPartData::ExecutableCode(data)) => {
-            output.push(ContentBlockOutput::Unknown {
+            output.push(ContentBlockOutput::Unknown(Unknown {
                 data: serde_json::json!({
                     "executableCode": data,
                 }),
                 model_name: Some(model_name.to_string()),
                 provider_name: Some(provider_name.to_string()),
-            });
+            }));
         }
         FlattenUnknown::Unknown(data) => {
-            output.push(ContentBlockOutput::Unknown {
+            output.push(ContentBlockOutput::Unknown(Unknown {
                 data: data.into_owned(),
                 model_name: Some(model_name.to_string()),
                 provider_name: Some(provider_name.to_string()),
-            });
+            }));
         }
     }
     Ok(output)

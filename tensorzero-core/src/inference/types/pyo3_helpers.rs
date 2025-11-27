@@ -13,6 +13,7 @@ use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::ResolvedContentBlock;
 use crate::inference::types::{
     stored_input::StoredInputMessageContent, ContentBlockChatOutput, ResolvedInputMessageContent,
+    Unknown,
 };
 use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
@@ -158,11 +159,11 @@ pub fn resolved_content_block_to_python(
                 ),
             )
         }
-        ResolvedContentBlock::Unknown {
+        ResolvedContentBlock::Unknown(Unknown {
             data,
             model_name,
             provider_name,
-        } => {
+        }) => {
             let unknown_content_block = import_unknown_content_block(py)?;
             let serialized_data = serialize_to_dict(py, data)?;
             unknown_content_block.call1(py, (serialized_data, model_name, provider_name))
@@ -196,11 +197,11 @@ pub fn content_block_chat_output_to_python(
             let thought_content_block = import_thought_content_block(py)?;
             thought_content_block.call1(py, (thought.text,))
         }
-        ContentBlockChatOutput::Unknown {
+        ContentBlockChatOutput::Unknown(Unknown {
             data,
             model_name,
             provider_name,
-        } => {
+        }) => {
             let unknown_content_block = import_unknown_content_block(py)?;
             let serialized_data = serialize_to_dict(py, data)?;
             unknown_content_block.call1(py, (serialized_data, model_name, provider_name))

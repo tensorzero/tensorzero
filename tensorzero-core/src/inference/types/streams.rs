@@ -9,7 +9,7 @@ use crate::inference::types::{
     ContentBlockOutput, ContentBlockOutputType, FinishReason, FunctionConfigType, InferenceConfig,
     Latency, ModelInferenceResponse, ModelInferenceResponseWithMetadata, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, RequestMessage, Text, Thought, ThoughtSummaryBlock, ToolCall,
-    Usage,
+    Unknown, Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
@@ -501,11 +501,11 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                             }
                             blocks.insert(
                                 (ContentBlockOutputType::Unknown, id.clone()),
-                                ContentBlockOutput::Unknown {
+                                ContentBlockOutput::Unknown(Unknown {
                                     data: data.clone(),
                                     model_name: model_name.clone(),
                                     provider_name: provider_name.clone(),
-                                },
+                                }),
                             );
                         }
                     }

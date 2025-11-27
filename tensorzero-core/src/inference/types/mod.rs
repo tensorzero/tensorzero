@@ -961,24 +961,7 @@ pub enum ContentBlock {
     #[serde(alias = "image")]
     File(Box<LazyFile>),
     Thought(Thought),
-    /// Represents an unknown provider-specific content block.
-    /// We pass this along as-is without any validation or transformation.
-    Unknown {
-        /// The underlying content block to be passed to the model provider.
-        data: Value,
-        /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`).
-        /// If set to `Some`, this is compared against the model name before invoking
-        /// a model provider, and stripped from the input if it doesn't match.
-        /// If set to `None`, then this is passed to all models.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        model_name: Option<String>,
-        /// A provider name for the model you specified (e.g. `my_openai`).
-        /// If set to `Some`, this is compared against the provider name before invoking
-        /// a model provider, and stripped from the input if it doesn't match.
-        /// If set to `None`, then this is passed to all providers for the matching model.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 impl ContentBlock {
@@ -996,15 +979,7 @@ impl ContentBlock {
                 )))
             }
             ContentBlock::Thought(thought) => Ok(StoredContentBlock::Thought(thought)),
-            ContentBlock::Unknown {
-                data,
-                model_name,
-                provider_name,
-            } => Ok(StoredContentBlock::Unknown {
-                data,
-                model_name,
-                provider_name,
-            }),
+            ContentBlock::Unknown(unknown) => Ok(StoredContentBlock::Unknown(unknown)),
         }
     }
 
@@ -1019,15 +994,7 @@ impl ContentBlock {
                 file.resolve().await?.clone().into_owned(),
             ))),
             ContentBlock::Thought(thought) => Ok(ResolvedContentBlock::Thought(thought)),
-            ContentBlock::Unknown {
-                data,
-                model_name,
-                provider_name,
-            } => Ok(ResolvedContentBlock::Unknown {
-                data,
-                model_name,
-                provider_name,
-            }),
+            ContentBlock::Unknown(unknown) => Ok(ResolvedContentBlock::Unknown(unknown)),
         }
     }
 }
@@ -1047,7 +1014,7 @@ impl RateLimitedInputContent for ContentBlock {
             ContentBlock::ToolResult(tool_result) => tool_result.estimated_input_token_usage(),
             ContentBlock::File(file) => file.estimated_input_token_usage(),
             ContentBlock::Thought(thought) => thought.estimated_input_token_usage(),
-            ContentBlock::Unknown { .. } => 0,
+            ContentBlock::Unknown(_) => 0,
         }
     }
 }
@@ -1064,24 +1031,7 @@ pub enum StoredContentBlock {
     #[serde(alias = "image")]
     File(Box<StoredFile>),
     Thought(Thought),
-    /// Represents an unknown provider-specific content block.
-    /// We pass this along as-is without any validation or transformation.
-    Unknown {
-        /// The underlying content block to be passed to the model provider.
-        data: Value,
-        /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`).
-        /// If set to `Some`, this is compared against the model name before invoking
-        /// a model provider, and stripped from the input if it doesn't match.
-        /// If set to `None`, then this is passed to all models.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        model_name: Option<String>,
-        /// A provider name for the model you specified (e.g. `my_openai`).
-        /// If set to `Some`, this is compared against the provider name before invoking
-        /// a model provider, and stripped from the input if it doesn't match.
-        /// If set to `None`, then this is passed to all providers for the matching model.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 /// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
@@ -1095,13 +1045,7 @@ pub enum ResolvedContentBlock {
     ToolResult(ToolResult),
     File(Box<ObjectStorageFile>),
     Thought(Thought),
-    Unknown {
-        data: Value,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        model_name: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 impl ResolvedContentBlock {
@@ -1115,15 +1059,7 @@ impl ResolvedContentBlock {
                 ContentBlock::File(Box::new(LazyFile::ObjectStorage(*resolved)))
             }
             ResolvedContentBlock::Thought(thought) => ContentBlock::Thought(thought),
-            ResolvedContentBlock::Unknown {
-                data,
-                model_name,
-                provider_name,
-            } => ContentBlock::Unknown {
-                data,
-                model_name,
-                provider_name,
-            },
+            ResolvedContentBlock::Unknown(unknown) => ContentBlock::Unknown(unknown),
         }
     }
 }
@@ -1161,13 +1097,7 @@ pub enum ContentBlockOutput {
     Text(Text),
     ToolCall(ToolCall),
     Thought(Thought),
-    Unknown {
-        data: Value,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        model_name: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 /// Defines the types of content block that can come from a `chat` function
@@ -1183,13 +1113,7 @@ pub enum ContentBlockChatOutput {
     #[schemars(title = "ContentBlockChatOutputThought")]
     Thought(Thought),
     #[schemars(title = "ContentBlockChatOutputUnknown")]
-    Unknown {
-        data: Value,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        model_name: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 impl ContentBlockChatOutput {
@@ -2120,16 +2044,8 @@ pub async fn parse_chat_output(
             ContentBlockOutput::Thought(thought) => {
                 output.push(ContentBlockChatOutput::Thought(thought));
             }
-            ContentBlockOutput::Unknown {
-                data,
-                model_name,
-                provider_name,
-            } => {
-                output.push(ContentBlockChatOutput::Unknown {
-                    data,
-                    model_name,
-                    provider_name,
-                });
+            ContentBlockOutput::Unknown(unknown) => {
+                output.push(ContentBlockChatOutput::Unknown(unknown));
             }
         }
     }
@@ -2250,15 +2166,7 @@ impl From<ContentBlockChatOutput> for ContentBlock {
                 ContentBlock::ToolCall(inference_response_tool_call.into())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlock::Thought(thought),
-            ContentBlockChatOutput::Unknown {
-                data,
-                model_name,
-                provider_name,
-            } => ContentBlock::Unknown {
-                data,
-                model_name,
-                provider_name,
-            },
+            ContentBlockChatOutput::Unknown(unknown) => ContentBlock::Unknown(unknown),
         }
     }
 }
@@ -2271,15 +2179,7 @@ impl From<ContentBlockChatOutput> for ContentBlockOutput {
                 ContentBlockOutput::ToolCall(tool_call.into())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlockOutput::Thought(thought),
-            ContentBlockChatOutput::Unknown {
-                data,
-                model_name,
-                provider_name,
-            } => ContentBlockOutput::Unknown {
-                data,
-                model_name,
-                provider_name,
-            },
+            ContentBlockChatOutput::Unknown(unknown) => ContentBlockOutput::Unknown(unknown),
         }
     }
 }

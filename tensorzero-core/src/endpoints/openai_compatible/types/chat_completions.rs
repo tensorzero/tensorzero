@@ -697,7 +697,7 @@ pub fn process_chat_content(
                     "Ignoring 'thought' content block when constructing OpenAI-compatible response"
                 );
             }
-            ContentBlockChatOutput::Unknown { .. } => {
+            ContentBlockChatOutput::Unknown(_) => {
                 tracing::warn!(
                     "Ignoring 'unknown' content block when constructing OpenAI-compatible response"
                 );

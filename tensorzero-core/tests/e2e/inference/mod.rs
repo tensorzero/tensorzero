@@ -34,7 +34,7 @@ use tensorzero_core::{
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
         Base64File, ContentBlockOutput, File, RawText, Role, StoredContentBlock,
-        StoredInputMessageContent, StoredRequestMessage, Text, TextKind,
+        StoredInputMessageContent, StoredRequestMessage, Text, TextKind, Unknown,
     },
     providers::dummy::{
         DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
@@ -221,16 +221,16 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
             StoredRequestMessage {
                 role: Role::User,
                 content: vec![
-                    StoredContentBlock::Unknown {
+                    StoredContentBlock::Unknown(Unknown {
                         model_name: Some("test".to_string()),
                         provider_name: Some("good".to_string()),
                         data: json!({"my": "custom data"})
-                    },
-                    StoredContentBlock::Unknown {
+                    }),
+                    StoredContentBlock::Unknown(Unknown {
                         model_name: None,
                         provider_name: None,
                         data: "Non-provider-specific unknown block".into()
-                    }
+                    })
                 ]
             },
         ]
@@ -372,16 +372,16 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
             StoredRequestMessage {
                 role: Role::User,
                 content: vec![
-                    StoredContentBlock::Unknown {
+                    StoredContentBlock::Unknown(Unknown {
                         model_name: Some("test".to_string()),
                         provider_name: Some("good".to_string()),
                         data: json!({"my": "custom data"})
-                    },
-                    StoredContentBlock::Unknown {
+                    }),
+                    StoredContentBlock::Unknown(Unknown {
                         model_name: None,
                         provider_name: None,
                         data: "Non-provider-specific unknown block".into()
-                    }
+                    })
                 ]
             },
         ]

@@ -3,7 +3,7 @@ use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use tensorzero_core::{
-    inference::types::{Role, StoredContentBlock, StoredRequestMessage, Text},
+    inference::types::{Role, StoredContentBlock, StoredRequestMessage, Text, Unknown},
     providers::dummy::DUMMY_INFER_RESPONSE_CONTENT,
 };
 use uuid::Uuid;
@@ -384,11 +384,11 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                             text: "Please write me a sentence about Megumin making an explosion."
                                 .to_string()
                         }),
-                        StoredContentBlock::Unknown {
+                        StoredContentBlock::Unknown(Unknown {
                             model_name: Some("gemini-2.0-flash-001".into()),
                             provider_name: Some("gcp_vertex_gemini".into()),
                             data: serde_json::json!({"text": "My extra gemini text"})
-                        }
+                        })
                     ],
                 }
             );
@@ -441,11 +441,11 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                             text: "Please write me a sentence about Megumin making an explosion."
                                 .to_string()
                         }),
-                        StoredContentBlock::Unknown {
+                        StoredContentBlock::Unknown(Unknown {
                             model_name: Some("json".into()),
                             provider_name: Some("json".into()),
                             data: serde_json::json!({"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}})
-                        }
+                        })
                     ],
                 }
             );

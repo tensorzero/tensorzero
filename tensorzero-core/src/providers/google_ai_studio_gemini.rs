@@ -33,7 +33,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
     ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
-    Thought, ThoughtChunk, UnknownChunk,
+    Thought, ThoughtChunk, Unknown, UnknownChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::InferenceProvider;
@@ -515,7 +515,7 @@ impl<'a> GeminiContent<'a> {
                                     raw_response: None,
                                 }));
                             }
-                            Some(ContentBlock::Unknown { .. }) => {
+                            Some(ContentBlock::Unknown(_)) => {
                                 return Err(Error::new(ErrorDetails::InferenceServer {
                                     message: "Thought block with signature cannot be followed by an unknown block in Gemini".to_string(),
                                     provider_type: PROVIDER_TYPE.to_string(),
@@ -534,7 +534,7 @@ impl<'a> GeminiContent<'a> {
                                             data: FlattenUnknown::Normal(part),
                                         });
                                     }
-                                    // We should have handled this case above with `Some(ContentBlock::Unknown { .. })`
+                                    // We should have handled this case above with `Some(ContentBlock::Unknown(_))`
                                     FlattenUnknown::Unknown(_) => {
                                         return Err(Error::new(ErrorDetails::InternalError {
                                             message: format!("Got unknown block after thought block. {IMPOSSIBLE_ERROR_MESSAGE}"),
@@ -648,7 +648,7 @@ async fn convert_non_thought_content_block(
         ContentBlock::Thought(_) => Err(Error::new(ErrorDetails::InternalError {
             message: format!("Got thought block in `convert_non_thought_content_block`. {IMPOSSIBLE_ERROR_MESSAGE}"),
         })),
-        ContentBlock::Unknown { data, .. } => Ok(FlattenUnknown::Unknown(Cow::Borrowed(data))),
+        ContentBlock::Unknown(Unknown { data, .. }) => Ok(FlattenUnknown::Unknown(Cow::Borrowed(data))),
     }
 }
 
@@ -1122,7 +1122,7 @@ fn convert_part_to_output(
                 }));
             }
             _ => {
-                output.push(ContentBlockOutput::Unknown {
+                output.push(ContentBlockOutput::Unknown(Unknown {
                     data: serde_json::to_value(part).map_err(|e| {
                         Error::new(ErrorDetails::Serialization {
                             message: format!(
@@ -1132,7 +1132,7 @@ fn convert_part_to_output(
                     })?,
                     model_name: Some(model_name.to_string()),
                     provider_name: Some(provider_name.to_string()),
-                });
+                }));
             }
         }
         return Ok(());
@@ -1170,11 +1170,11 @@ fn convert_part_to_output(
             }));
         }
         FlattenUnknown::Unknown(part) => {
-            output.push(ContentBlockOutput::Unknown {
+            output.push(ContentBlockOutput::Unknown(Unknown {
                 data: part.into_owned(),
                 model_name: Some(model_name.to_string()),
                 provider_name: Some(provider_name.to_string()),
-            });
+            }));
         }
     }
     Ok(())

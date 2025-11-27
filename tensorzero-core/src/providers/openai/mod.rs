@@ -46,7 +46,7 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-    TextChunk, Usage,
+    TextChunk, Unknown, Usage,
 };
 use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, ThoughtChunk,
@@ -1850,7 +1850,7 @@ async fn tensorzero_to_openai_user_messages<'a>(
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(messages_config.provider_type, thought);
             }
-            ContentBlock::Unknown { data, .. } => {
+            ContentBlock::Unknown(Unknown { data, .. }) => {
                 user_content_blocks.push(OpenAIContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
@@ -1931,12 +1931,12 @@ pub async fn tensorzero_to_openai_assistant_message<'a>(
             | Cow::Owned(ContentBlock::Thought(ref thought)) => {
                 warn_discarded_thought_block(messages_config.provider_type, thought);
             }
-            Cow::Borrowed(ContentBlock::Unknown { data, .. }) => {
+            Cow::Borrowed(ContentBlock::Unknown(Unknown { data, .. })) => {
                 assistant_content_blocks.push(OpenAIContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
             }
-            Cow::Owned(ContentBlock::Unknown { data, .. }) => {
+            Cow::Owned(ContentBlock::Unknown(Unknown { data, .. })) => {
                 assistant_content_blocks.push(OpenAIContentBlock::Unknown {
                     data: Cow::Owned(data),
                 });

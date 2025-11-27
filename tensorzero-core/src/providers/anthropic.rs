@@ -26,7 +26,7 @@ use crate::inference::types::chat_completion_inference_params::{
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
-    FunctionType, Latency, ModelInferenceRequestJsonMode, ObjectStorageFile, Role, Text,
+    FunctionType, Latency, ModelInferenceRequestJsonMode, ObjectStorageFile, Role, Text, Unknown,
 };
 use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
@@ -678,7 +678,7 @@ impl<'a> AnthropicMessageContent<'a> {
                     Ok(None)
                 }
             }
-            ContentBlock::Unknown { data, .. } => {
+            ContentBlock::Unknown(Unknown { data, .. }) => {
                 Ok(Some(FlattenUnknown::Unknown(Cow::Borrowed(data))))
             }
         }
@@ -1116,11 +1116,11 @@ fn convert_to_output(
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             }))
         }
-        FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown {
+        FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown(Unknown {
             data: data.into_owned(),
             model_name: Some(model_name.to_string()),
             provider_name: Some(provider_name.to_string()),
-        }),
+        })),
     }
 }
 

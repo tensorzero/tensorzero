@@ -4,7 +4,7 @@ import type { Text } from "./Text";
 import type { Thought } from "./Thought";
 import type { ToolCall } from "./ToolCall";
 import type { ToolResult } from "./ToolResult";
-import type { JsonValue } from "./serde_json/JsonValue";
+import type { Unknown } from "./Unknown";
 
 /**
  * The version of `ContentBlock` that is stored in ClickHouse.
@@ -16,24 +16,4 @@ export type StoredContentBlock =
   | ({ type: "tool_result" } & ToolResult)
   | ({ type: "file" } & StoredFile)
   | ({ type: "thought" } & Thought)
-  | {
-      type: "unknown";
-      /**
-       * The underlying content block to be passed to the model provider.
-       */
-      data: JsonValue;
-      /**
-       * A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`).
-       * If set to `Some`, this is compared against the model name before invoking
-       * a model provider, and stripped from the input if it doesn't match.
-       * If set to `None`, then this is passed to all models.
-       */
-      model_name: string | null;
-      /**
-       * A provider name for the model you specified (e.g. `my_openai`).
-       * If set to `Some`, this is compared against the provider name before invoking
-       * a model provider, and stripped from the input if it doesn't match.
-       * If set to `None`, then this is passed to all providers for the matching model.
-       */
-      provider_name: string | null;
-    };
+  | ({ type: "unknown" } & Unknown);

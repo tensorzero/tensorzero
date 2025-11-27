@@ -28,7 +28,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Thought, Usage,
+    ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Thought, Unknown, Usage,
 };
 use crate::inference::InferenceProvider;
 use crate::model::CredentialLocationWithFallback;
@@ -748,11 +748,11 @@ fn convert_to_output(
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             }))
         }
-        FlattenUnknown::Unknown(obj) => Ok(ContentBlockOutput::Unknown {
+        FlattenUnknown::Unknown(obj) => Ok(ContentBlockOutput::Unknown(Unknown {
             data: obj.into_owned(),
             model_name: Some(model_name.to_string()),
             provider_name: Some(provider_name.to_string()),
-        }),
+        })),
     }
 }
 
@@ -1640,11 +1640,11 @@ mod tests {
             inference_response.output,
             vec![
                 "Response text".to_string().into(),
-                ContentBlockOutput::Unknown {
+                ContentBlockOutput::Unknown(Unknown {
                     data: serde_json::json!({"my_custom": "content"}),
                     model_name: Some("my-model".to_string()),
                     provider_name: Some("my-provider".to_string()),
-                }
+                })
             ]
         );
 

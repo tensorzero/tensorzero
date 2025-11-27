@@ -28,7 +28,7 @@ use crate::{
         file::Detail, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason,
         FlattenUnknown, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
         ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-        RequestMessage, Role, Text, TextChunk, Thought, ThoughtChunk, UnknownChunk, Usage,
+        RequestMessage, Role, Text, TextChunk, Thought, ThoughtChunk, Unknown, UnknownChunk, Usage,
     },
     providers::openai::{
         prepare_file_message, prepare_system_or_developer_message_helper, OpenAIContentBlock,
@@ -218,11 +218,11 @@ impl OpenAIResponsesResponse<'_> {
                     output.push(ContentBlockOutput::Thought(thought));
                 }
                 FlattenUnknown::Unknown(data) => {
-                    output.push(ContentBlockOutput::Unknown {
+                    output.push(ContentBlockOutput::Unknown(Unknown {
                         data: data.into_owned(),
                         model_name: Some(model_name.to_string()),
                         provider_name: Some(provider_name.to_string()),
-                    });
+                    }));
                 }
             }
         }
@@ -876,7 +876,7 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(messages_config.provider_type, thought);
             }
-            ContentBlock::Unknown { data, .. } => {
+            ContentBlock::Unknown(Unknown { data, .. }) => {
                 // The user included an 'unknown' content block inside of the user message,
                 // so push a new user message that includes their custom JSON value
                 messages.push(OpenAIResponsesInput::Unknown(Cow::Borrowed(data)));
@@ -977,10 +977,10 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
                 }
             }
 
-            Cow::Borrowed(ContentBlock::Unknown { data, .. }) => {
+            Cow::Borrowed(ContentBlock::Unknown(Unknown { data, .. })) => {
                 output.push(OpenAIResponsesInput::Unknown(Cow::Borrowed(data)));
             }
-            Cow::Owned(ContentBlock::Unknown { data, .. }) => {
+            Cow::Owned(ContentBlock::Unknown(Unknown { data, .. })) => {
                 output.push(OpenAIResponsesInput::Unknown(Cow::Owned(data)));
             }
         }
@@ -2441,11 +2441,11 @@ mod tests {
         assert_eq!(provider_response.output.len(), 1);
 
         match &provider_response.output[0] {
-            ContentBlockOutput::Unknown {
+            ContentBlockOutput::Unknown(Unknown {
                 data,
                 model_name,
                 provider_name,
-            } => {
+            }) => {
                 assert_eq!(
                     data.get("type").and_then(|v| v.as_str()),
                     Some("web_search_call")
@@ -2550,7 +2550,7 @@ mod tests {
 
         // Second should be unknown (web_search_call)
         match &provider_response.output[1] {
-            ContentBlockOutput::Unknown { data, .. } => {
+            ContentBlockOutput::Unknown(Unknown { data, .. }) => {
                 assert_eq!(
                     data.get("type").and_then(|v| v.as_str()),
                     Some("web_search_call")
@@ -2570,11 +2570,11 @@ mod tests {
 
         // Fourth should be unknown (another_unknown_type)
         match &provider_response.output[3] {
-            ContentBlockOutput::Unknown {
+            ContentBlockOutput::Unknown(Unknown {
                 data,
                 model_name,
                 provider_name,
-            } => {
+            }) => {
                 assert_eq!(
                     data.get("type").and_then(|v| v.as_str()),
                     Some("another_unknown_type")

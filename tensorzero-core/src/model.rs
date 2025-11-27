@@ -41,7 +41,7 @@ use crate::inference::types::extra_headers::ExtraHeadersConfig;
 use crate::inference::types::{
     current_timestamp, ContentBlock, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponseChunk, ProviderInferenceResponseStreamInner, RequestMessage, Thought,
-    Usage,
+    Unknown, Usage,
 };
 use crate::inference::WrappedProvider;
 use crate::model_table::{
@@ -235,11 +235,11 @@ impl ModelConfig {
         let provider_name = provider.name.as_ref();
         let needs_filter = request.messages.iter().any(|m| {
             m.content.iter().any(|c| match c {
-                ContentBlock::Unknown {
+                ContentBlock::Unknown(Unknown {
                     model_name: block_model_name,
                     provider_name: block_provider_name,
                     data: _,
-                } => Self::should_filter_unknown_block(
+                }) => Self::should_filter_unknown_block(
                     block_model_name,
                     block_provider_name,
                     model_name,
@@ -265,11 +265,11 @@ impl ModelConfig {
                         .content
                         .iter()
                         .flat_map(|c| match c {
-                            ContentBlock::Unknown {
+                            ContentBlock::Unknown(Unknown {
                                 model_name: block_model_name,
                                 provider_name: block_provider_name,
                                 data: _,
-                            } => {
+                            }) => {
                                 if Self::should_filter_unknown_block(
                                     block_model_name,
                                     block_provider_name,
