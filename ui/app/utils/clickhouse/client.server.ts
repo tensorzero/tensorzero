@@ -34,8 +34,8 @@ export function getClickhouseClient(): ClickHouseClient {
         url: env.TENSORZERO_CLICKHOUSE_URL,
         request_timeout: 1000 * 60 * 5,
         clickhouse_settings: {
-          join_algorithm: 'auto'
-        }
+          join_algorithm: 'auto',
+        },
       }),
       {
         get(target, prop, receiver) {
