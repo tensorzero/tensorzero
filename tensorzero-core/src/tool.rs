@@ -355,71 +355,13 @@ impl OpenAICustomTool {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[schemars(title = "ProviderToolScopeModelProvider")]
 #[ts(optional_fields)]
 pub struct ProviderToolScopeModelProvider {
     pub model_name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(alias = "model_provider_name", skip_serializing_if = "Option::is_none")] // legacy
     pub provider_name: Option<String>,
-}
-
-impl<'de> Deserialize<'de> for ProviderToolScopeModelProvider {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct ProviderToolScopeModelProviderVisitor;
-
-        impl<'de> Visitor<'de> for ProviderToolScopeModelProviderVisitor {
-            type Value = ProviderToolScopeModelProvider;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a map with model_name and optionally provider_name")
-            }
-
-            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
-            where
-                M: MapAccess<'de>,
-            {
-                let mut model_name: Option<String> = None;
-                let mut provider_name: Option<String> = None;
-
-                while let Some(key) = map.next_key::<String>()? {
-                    match key.as_str() {
-                        "model_name" => {
-                            if model_name.is_some() {
-                                return Err(de::Error::duplicate_field("model_name"));
-                            }
-                            model_name = Some(map.next_value()?);
-                        }
-                        // Accept both "provider_name" (new) and "model_provider_name" (old/deprecated)
-                        "provider_name" | "model_provider_name" => {
-                            if provider_name.is_some() {
-                                return Err(de::Error::duplicate_field("provider_name"));
-                            }
-                            provider_name = Some(map.next_value()?);
-                        }
-                        _ => {
-                            return Err(de::Error::unknown_field(
-                                &key,
-                                &["model_name", "provider_name"],
-                            ));
-                        }
-                    }
-                }
-
-                let model_name =
-                    model_name.ok_or_else(|| de::Error::missing_field("model_name"))?;
-                Ok(ProviderToolScopeModelProvider {
-                    model_name,
-                    provider_name,
-                })
-            }
-        }
-
-        deserializer.deserialize_map(ProviderToolScopeModelProviderVisitor)
-    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
