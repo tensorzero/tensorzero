@@ -901,20 +901,31 @@ impl<'de> Deserialize<'de> for Unknown {
             provider_name: Option<String>,
         }
 
+        /// Parse legacy FQN format: `tensorzero::model_name::XXX::provider_name::YYY`
+        /// Uses best-effort parsing: everything between prefix and `::provider_name::` is model_name,
+        /// everything after `::provider_name::` is provider_name.
         fn parse_fully_qualified_model_provider_name(
             fqn: &str,
-        ) -> (Option<String>, Option<String>) {
-            let parts: Vec<&str> = fqn.split("::").collect();
-            if parts.len() == 5
-                && parts[0] == "tensorzero"
-                && parts[1] == "model_name"
-                && parts[3] == "provider_name"
-            {
-                (Some(parts[2].to_string()), Some(parts[4].to_string()))
-            } else {
-                tracing::warn!("Failed to parse legacy `model_provider_name` format: {fqn}");
-                (None, None)
-            }
+        ) -> Result<(String, String), String> {
+            const PREFIX: &str = "tensorzero::model_name::";
+            const SUFFIX: &str = "::provider_name::";
+
+            let Some(rest) = fqn.strip_prefix(PREFIX) else {
+                return Err(format!(
+                    "Invalid legacy `model_provider_name` format (missing prefix): {fqn}"
+                ));
+            };
+
+            let Some(suffix_pos) = rest.find(SUFFIX) else {
+                return Err(format!(
+                    "Invalid legacy `model_provider_name` format (missing provider_name): {fqn}"
+                ));
+            };
+
+            let model_name = &rest[..suffix_pos];
+            let provider_name = &rest[suffix_pos + SUFFIX.len()..];
+
+            Ok((model_name.to_string(), provider_name.to_string()))
         }
 
         let helper = UnknownDeserialize::deserialize(deserializer)?;
@@ -935,7 +946,11 @@ impl<'de> Deserialize<'de> for Unknown {
 
         // Parse legacy format if present
         let (model_name, provider_name) = match helper.model_provider_name {
-            Some(ref fqn) => parse_fully_qualified_model_provider_name(fqn),
+            Some(ref fqn) => {
+                let (m, p) = parse_fully_qualified_model_provider_name(fqn)
+                    .map_err(serde::de::Error::custom)?;
+                (Some(m), Some(p))
+            }
             None => (None, None),
         };
 
