@@ -2790,7 +2790,7 @@ mod tool_call_storage_tests {
         let provider_tool = ProviderTool {
             scope: ProviderToolScope::ModelProvider {
                 model_name: "gpt-4".to_string(),
-                model_provider_name: "openai".to_string(),
+                provider_name: Some("openai".to_string()),
             },
             tool: json!({
                 "type": "code_interpreter"
@@ -2851,11 +2851,11 @@ mod tool_call_storage_tests {
             assert_eq!(tool_params.dynamic_provider_tools.len(), 1);
             if let ProviderToolScope::ModelProvider {
                 model_name,
-                model_provider_name,
+                provider_name,
             } = &tool_params.dynamic_provider_tools[0].scope
             {
                 assert_eq!(model_name, "gpt-4");
-                assert_eq!(model_provider_name, "openai");
+                assert_eq!(provider_name, &Some("openai".to_string()));
             } else {
                 panic!("Expected ModelProvider scope");
             }
@@ -3095,7 +3095,7 @@ mod tool_call_storage_tests {
         let provider_tool = ProviderTool {
             scope: ProviderToolScope::ModelProvider {
                 model_name: "claude-3-opus".to_string(),
-                model_provider_name: "anthropic".to_string(),
+                provider_name: Some("anthropic".to_string()),
             },
             tool: json!({
                 "type": "computer_use"

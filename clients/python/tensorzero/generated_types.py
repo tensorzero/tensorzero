@@ -617,7 +617,7 @@ OrderDirection = Literal["ascending", "descending"]
 @dataclass(kw_only=True)
 class ProviderToolScopeModelProvider:
     model_name: str
-    model_provider_name: str
+    provider_name: str | None = None
 
 
 ProviderToolScope = ProviderToolScopeModelProvider | None

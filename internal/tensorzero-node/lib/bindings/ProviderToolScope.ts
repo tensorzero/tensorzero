@@ -2,5 +2,5 @@
 
 export type ProviderToolScope = null | {
   model_name: string;
-  model_provider_name: string;
+  provider_name?: string;
 };

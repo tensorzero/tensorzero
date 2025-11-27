@@ -355,8 +355,9 @@ impl OpenAICustomTool {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
 #[serde(untagged)]
+#[ts(optional_fields)]
 #[export_schema]
 pub enum ProviderToolScope {
     #[default]
@@ -364,18 +365,99 @@ pub enum ProviderToolScope {
     #[schemars(title = "ProviderToolScopeModelProvider")]
     ModelProvider {
         model_name: String,
-        model_provider_name: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        provider_name: Option<String>,
     },
 }
 
+impl<'de> Deserialize<'de> for ProviderToolScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ProviderToolScopeVisitor;
+
+        impl<'de> Visitor<'de> for ProviderToolScopeVisitor {
+            type Value = ProviderToolScope;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("null or a map with model_name and optionally provider_name")
+            }
+
+            fn visit_unit<E>(self) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(ProviderToolScope::Unscoped)
+            }
+
+            fn visit_none<E>(self) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(ProviderToolScope::Unscoped)
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let mut model_name: Option<String> = None;
+                let mut provider_name: Option<String> = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "model_name" => {
+                            if model_name.is_some() {
+                                return Err(de::Error::duplicate_field("model_name"));
+                            }
+                            model_name = Some(map.next_value()?);
+                        }
+                        // Accept both "provider_name" (new) and "model_provider_name" (old/deprecated)
+                        "provider_name" | "model_provider_name" => {
+                            if provider_name.is_some() {
+                                return Err(de::Error::duplicate_field("provider_name"));
+                            }
+                            provider_name = Some(map.next_value()?);
+                        }
+                        _ => {
+                            return Err(de::Error::unknown_field(
+                                &key,
+                                &["model_name", "provider_name"],
+                            ));
+                        }
+                    }
+                }
+
+                let model_name =
+                    model_name.ok_or_else(|| de::Error::missing_field("model_name"))?;
+                Ok(ProviderToolScope::ModelProvider {
+                    model_name,
+                    provider_name,
+                })
+            }
+        }
+
+        deserializer.deserialize_any(ProviderToolScopeVisitor)
+    }
+}
+
 impl ProviderToolScope {
-    fn matches(&self, scope_model_name: &str, scope_model_provider_name: &str) -> bool {
+    fn matches(&self, scope_model_name: &str, scope_provider_name: &str) -> bool {
         match self {
             ProviderToolScope::Unscoped => true,
             ProviderToolScope::ModelProvider {
                 model_name,
-                model_provider_name,
-            } => scope_model_name == model_name && scope_model_provider_name == model_provider_name,
+                provider_name,
+            } => {
+                if scope_model_name != model_name {
+                    return false;
+                }
+                match provider_name {
+                    Some(pn) => scope_provider_name == pn,
+                    None => true, // If provider_name is None, match any provider for this model
+                }
+            }
         }
     }
 }
@@ -2926,14 +3008,14 @@ mod tests {
             ProviderTool {
                 scope: ProviderToolScope::ModelProvider {
                     model_name: "gpt-4".to_string(),
-                    model_provider_name: "openai".to_string(),
+                    provider_name: Some("openai".to_string()),
                 },
                 tool: json!({"type": "gpt4_tool"}),
             },
             ProviderTool {
                 scope: ProviderToolScope::ModelProvider {
                     model_name: "claude-3".to_string(),
-                    model_provider_name: "anthropic".to_string(),
+                    provider_name: Some("anthropic".to_string()),
                 },
                 tool: json!({"type": "claude_tool"}),
             },
@@ -4887,5 +4969,105 @@ mod tests {
 
         let tools: Vec<_> = result.unwrap().collect();
         assert_eq!(tools.len(), 2);
+    }
+
+    #[test]
+    fn test_provider_tool_scope_deserialize_new_format_with_provider() {
+        let json = r#"{"model_name": "gpt-4", "provider_name": "openai"}"#;
+        let scope: ProviderToolScope = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            scope,
+            ProviderToolScope::ModelProvider {
+                model_name: "gpt-4".to_string(),
+                provider_name: Some("openai".to_string()),
+            }
+        );
+    }
+
+    #[test]
+    fn test_provider_tool_scope_deserialize_new_format_without_provider() {
+        let json = r#"{"model_name": "gpt-4"}"#;
+        let scope: ProviderToolScope = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            scope,
+            ProviderToolScope::ModelProvider {
+                model_name: "gpt-4".to_string(),
+                provider_name: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_provider_tool_scope_deserialize_old_format_backward_compat() {
+        // Old format with model_provider_name should still work
+        let json = r#"{"model_name": "gpt-4", "model_provider_name": "openai"}"#;
+        let scope: ProviderToolScope = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            scope,
+            ProviderToolScope::ModelProvider {
+                model_name: "gpt-4".to_string(),
+                provider_name: Some("openai".to_string()),
+            }
+        );
+    }
+
+    #[test]
+    fn test_provider_tool_scope_deserialize_null() {
+        let json = "null";
+        let scope: ProviderToolScope = serde_json::from_str(json).unwrap();
+        assert_eq!(scope, ProviderToolScope::Unscoped);
+    }
+
+    #[test]
+    fn test_provider_tool_scope_serialize_with_provider() {
+        let scope = ProviderToolScope::ModelProvider {
+            model_name: "gpt-4".to_string(),
+            provider_name: Some("openai".to_string()),
+        };
+        let json = serde_json::to_string(&scope).unwrap();
+        // Should serialize with provider_name (new format)
+        assert_eq!(json, r#"{"model_name":"gpt-4","provider_name":"openai"}"#);
+    }
+
+    #[test]
+    fn test_provider_tool_scope_serialize_without_provider() {
+        let scope = ProviderToolScope::ModelProvider {
+            model_name: "gpt-4".to_string(),
+            provider_name: None,
+        };
+        let json = serde_json::to_string(&scope).unwrap();
+        // Should serialize without provider_name field when None
+        assert_eq!(json, r#"{"model_name":"gpt-4"}"#);
+    }
+
+    #[test]
+    fn test_provider_tool_scope_serialize_unscoped() {
+        let scope = ProviderToolScope::Unscoped;
+        let json = serde_json::to_string(&scope).unwrap();
+        assert_eq!(json, "null");
+    }
+
+    #[test]
+    fn test_provider_tool_scope_matches_with_provider() {
+        let scope = ProviderToolScope::ModelProvider {
+            model_name: "gpt-4".to_string(),
+            provider_name: Some("openai".to_string()),
+        };
+        assert!(scope.matches("gpt-4", "openai"));
+        assert!(!scope.matches("gpt-4", "azure"));
+        assert!(!scope.matches("claude-3", "openai"));
+    }
+
+    #[test]
+    fn test_provider_tool_scope_matches_without_provider() {
+        // When provider_name is None, should match any provider for the model
+        let scope = ProviderToolScope::ModelProvider {
+            model_name: "gpt-4".to_string(),
+            provider_name: None,
+        };
+        assert!(scope.matches("gpt-4", "openai"));
+        assert!(scope.matches("gpt-4", "azure"));
+        assert!(scope.matches("gpt-4", "any-provider"));
+        assert!(!scope.matches("claude-3", "anthropic"));
     }
 }

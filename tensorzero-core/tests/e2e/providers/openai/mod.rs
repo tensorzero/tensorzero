@@ -2756,7 +2756,7 @@ model = "test-model"
                     ProviderTool {
                         scope: ProviderToolScope::ModelProvider {
                             model_name: "garbage".to_string(),
-                            model_provider_name: "model".to_string(),
+                            provider_name: Some("model".to_string()),
                         },
                         tool: json!({"type": "garbage"}),
                     },
