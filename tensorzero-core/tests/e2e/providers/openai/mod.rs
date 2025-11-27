@@ -26,7 +26,9 @@ use tensorzero_core::inference::types::{
 };
 use tensorzero_core::model_table::ProviderTypeDefaultCredentials;
 use tensorzero_core::rate_limiting::ScopeInfo;
-use tensorzero_core::tool::{ProviderTool, ProviderToolScope, ToolCallWrapper};
+use tensorzero_core::tool::{
+    ProviderTool, ProviderToolScope, ProviderToolScopeModelProvider, ToolCallWrapper,
+};
 use url::Url;
 use uuid::Uuid;
 
@@ -2754,10 +2756,10 @@ model = "test-model"
                     },
                     // This should get filtered out
                     ProviderTool {
-                        scope: ProviderToolScope::ModelProvider {
+                        scope: ProviderToolScope::ModelProvider(ProviderToolScopeModelProvider {
                             model_name: "garbage".to_string(),
                             provider_name: Some("model".to_string()),
-                        },
+                        }),
                         tool: json!({"type": "garbage"}),
                     },
                 ],

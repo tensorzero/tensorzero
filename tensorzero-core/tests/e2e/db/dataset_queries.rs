@@ -2519,8 +2519,8 @@ mod tool_call_storage_tests {
     use super::*;
     use serde_json::json;
     use tensorzero_core::tool::{
-        AllowedTools, AllowedToolsChoice, FunctionTool, ProviderTool, ProviderToolScope, Tool,
-        ToolCallConfigDatabaseInsert, ToolChoice,
+        AllowedTools, AllowedToolsChoice, FunctionTool, ProviderTool, ProviderToolScope,
+        ProviderToolScopeModelProvider, Tool, ToolCallConfigDatabaseInsert, ToolChoice,
     };
 
     #[tokio::test]
@@ -2788,10 +2788,10 @@ mod tool_call_storage_tests {
         let dataset_name = format!("test_tool_storage_{}", Uuid::now_v7());
 
         let provider_tool = ProviderTool {
-            scope: ProviderToolScope::ModelProvider {
+            scope: ProviderToolScope::ModelProvider(ProviderToolScopeModelProvider {
                 model_name: "gpt-4".to_string(),
                 provider_name: Some("openai".to_string()),
-            },
+            }),
             tool: json!({
                 "type": "code_interpreter"
             }),
@@ -2849,13 +2849,11 @@ mod tool_call_storage_tests {
 
             // Verify provider tools are preserved (previously would have been lost!)
             assert_eq!(tool_params.dynamic_provider_tools.len(), 1);
-            if let ProviderToolScope::ModelProvider {
-                model_name,
-                provider_name,
-            } = &tool_params.dynamic_provider_tools[0].scope
+            if let ProviderToolScope::ModelProvider(mp) =
+                &tool_params.dynamic_provider_tools[0].scope
             {
-                assert_eq!(model_name, "gpt-4");
-                assert_eq!(provider_name, &Some("openai".to_string()));
+                assert_eq!(mp.model_name, "gpt-4");
+                assert_eq!(mp.provider_name, Some("openai".to_string()));
             } else {
                 panic!("Expected ModelProvider scope");
             }
@@ -3093,10 +3091,10 @@ mod tool_call_storage_tests {
         });
 
         let provider_tool = ProviderTool {
-            scope: ProviderToolScope::ModelProvider {
+            scope: ProviderToolScope::ModelProvider(ProviderToolScopeModelProvider {
                 model_name: "claude-3-opus".to_string(),
                 provider_name: Some("anthropic".to_string()),
-            },
+            }),
             tool: json!({
                 "type": "computer_use"
             }),
