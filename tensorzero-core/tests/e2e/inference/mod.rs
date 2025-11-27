@@ -170,10 +170,10 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "unknown", "model_provider_name": "bad_model_provider", "data": {} },
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"my": "custom data"}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
-                        {"type": "unknown", "model_provider_name": null, "data": "Non-provider-specific unknown block"}
+                        {"type": "unknown", "data": {} },
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"my": "custom data"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
+                        {"type": "unknown", "data": "Non-provider-specific unknown block"}
                     ]
                 }
             ]
@@ -318,10 +318,10 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "unknown", "model_provider_name": "bad_model_provider", "data": {} },
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"my": "custom data"}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
-                        {"type": "unknown", "model_provider_name": null, "data": "Non-provider-specific unknown block"}
+                        {"type": "unknown", "data": {} },
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"my": "custom data"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
+                        {"type": "unknown", "data": "Non-provider-specific unknown block"}
                     ]
                 }
             ]

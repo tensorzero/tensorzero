@@ -276,7 +276,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "Please write me a sentence about the anime character Megumin."},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"type": "text", "text": "My extra test-model input"}}
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"type": "text", "text": "My extra test-model input"}}
                     ]
                 }
             ]},
@@ -366,7 +366,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "Please write me a sentence about the anime character Megumin."},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"type": "text", "text": "My extra test-model input"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"type": "text", "text": "My extra test-model input"}},
                     ]
                 }
             ]

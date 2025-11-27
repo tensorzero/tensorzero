@@ -205,8 +205,8 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "Please write me a sentence about Megumin making an explosion."},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-2.0-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
+                        {"type": "unknown", "model_name": "json", "provider_name": "json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
+                        {"type": "unknown", "model_name": "gemini-2.0-flash-001", "provider_name": "gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
                     ]
                 }
             ]},
@@ -264,8 +264,8 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "Please write me a sentence about Megumin making an explosion."},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::json::provider_name::json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::gemini-2.0-flash-001::provider_name::gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
+                        {"type": "unknown", "model_name": "json", "provider_name": "json", "data": {"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}}},
+                        {"type": "unknown", "model_name": "gemini-2.0-flash-001", "provider_name": "gcp_vertex_gemini", "data": {"text": "My extra gemini text"}}
                     ]
                 }
             ]
