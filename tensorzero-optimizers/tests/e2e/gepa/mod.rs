@@ -29,6 +29,7 @@ use tensorzero_optimizers::gepa::{
     },
     mutate::mutate_variant,
     validate::{get_uninitialized_variant_configs, validate_gepa_config},
+    GEPAVariant,
 };
 
 pub mod analyze;
@@ -420,15 +421,16 @@ async fn test_gepa_step_chat() {
     }
 
     // Test mutate_variant function
-    let parent_name = internal_dynamic_variant_name.to_string();
-    let mut parent = HashMap::new();
-    parent.insert(&parent_name, internal_dynamic_variant_config);
+    let parent = GEPAVariant {
+        name: internal_dynamic_variant_name.to_string(),
+        config: internal_dynamic_variant_config.clone(),
+    };
 
     let mutate_result = mutate_variant(
         &gateway_client,
         &analyses,
         &function_context,
-        parent,
+        &parent,
         &gepa_config,
         0, // iteration
     )
@@ -443,16 +445,8 @@ async fn test_gepa_step_chat() {
 
     let child_variants = mutate_result.unwrap();
 
-    // Validate returned HashMap has exactly 1 entry
-    assert_eq!(
-        child_variants.len(),
-        1,
-        "Expected exactly 1 child variant, got {}",
-        child_variants.len()
-    );
-
     // Get the child variant
-    let (child_name, child_config) = child_variants.iter().next().unwrap();
+    let child_config = &child_variants.config;
 
     // Verify child variant name format uses the configured prefix
     let expected_prefix = format!(
@@ -460,8 +454,9 @@ async fn test_gepa_step_chat() {
         gepa_config.variant_prefix.as_deref().unwrap_or("gepa")
     );
     assert!(
-        child_name.starts_with(&expected_prefix),
-        "Child variant name '{child_name}' should start with '{expected_prefix}'"
+        child_variants.name.starts_with(&expected_prefix),
+        "Child variant name '{}' should start with '{expected_prefix}'",
+        child_variants.name
     );
 
     // Verify templates are non-empty
@@ -708,15 +703,16 @@ async fn test_gepa_step_json() {
     }
 
     // Test mutate_variant function
-    let parent_name = internal_dynamic_variant_name.to_string();
-    let mut parent = HashMap::new();
-    parent.insert(&parent_name, internal_dynamic_variant_config);
+    let parent = GEPAVariant {
+        name: internal_dynamic_variant_name.to_string(),
+        config: internal_dynamic_variant_config.clone(),
+    };
 
     let mutate_result = mutate_variant(
         &gateway_client,
         &analyses,
         &function_context,
-        parent,
+        &parent,
         &gepa_config,
         0, // iteration
     )
@@ -731,16 +727,7 @@ async fn test_gepa_step_json() {
 
     let child_variants = mutate_result.unwrap();
 
-    // Validate returned HashMap has exactly 1 entry
-    assert_eq!(
-        child_variants.len(),
-        1,
-        "Expected exactly 1 child variant, got {}",
-        child_variants.len()
-    );
-
-    // Get the child variant
-    let (child_name, child_config) = child_variants.iter().next().unwrap();
+    let child_config = &child_variants.config;
 
     // Verify child variant name format uses the configured prefix
     let expected_prefix = format!(
@@ -748,8 +735,9 @@ async fn test_gepa_step_json() {
         gepa_config.variant_prefix.as_deref().unwrap_or("gepa")
     );
     assert!(
-        child_name.starts_with(&expected_prefix),
-        "Child variant name '{child_name}' should start with '{expected_prefix}'"
+        child_variants.name.starts_with(&expected_prefix),
+        "Child variant name '{}' should start with '{expected_prefix}'",
+        child_variants.name
     );
 
     // Verify templates are non-empty
