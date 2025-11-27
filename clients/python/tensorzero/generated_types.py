@@ -98,6 +98,26 @@ class DatapointMetadataUpdate:
 
 
 @dataclass(kw_only=True)
+class DatasetMetadata:
+    """
+    Metadata for a single dataset.
+    """
+
+    count: int
+    """
+    The total number of datapoints in the dataset.
+    """
+    dataset_name: str
+    """
+    The name of the dataset.
+    """
+    last_updated: str
+    """
+    The timestamp of the last update (ISO 8601 format).
+    """
+
+
+@dataclass(kw_only=True)
 class DeleteDatapointsRequest:
     """
     Request to delete datapoints from a dataset.
@@ -600,6 +620,18 @@ class JsonInferenceOutput:
     """
     This is never omitted from the response even if it's None. A `null` value indicates no output from the model.
     It's rare and unexpected from the model, but it's possible.
+    """
+
+
+@dataclass(kw_only=True)
+class ListDatasetsResponse:
+    """
+    Response containing a list of datasets.
+    """
+
+    datasets: list[DatasetMetadata]
+    """
+    List of dataset metadata.
     """
 
 
