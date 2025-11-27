@@ -59,9 +59,7 @@ use crate::inference::types::{
     UnknownChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{
-    fully_qualified_name, Credential, CredentialLocationWithFallback, ModelProvider,
-};
+use crate::model::{Credential, CredentialLocationWithFallback, ModelProvider};
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
@@ -2467,20 +2465,14 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
                     }
                 }
             }
-            Cow::Borrowed(ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            }) => {
+            Cow::Borrowed(ContentBlock::Unknown { data, .. }) => {
                 model_content_blocks.push(GCPVertexGeminiContentPart {
                     thought: false,
                     thought_signature: None,
                     data: FlattenUnknown::Unknown(Cow::Borrowed(data)),
                 });
             }
-            Cow::Owned(ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            }) => {
+            Cow::Owned(ContentBlock::Unknown { data, .. }) => {
                 model_content_blocks.push(GCPVertexGeminiContentPart {
                     thought: false,
                     thought_signature: None,
@@ -2675,7 +2667,8 @@ fn content_part_to_tensorzero_chunk(
                 output.push(ContentBlockChunk::Unknown(UnknownChunk {
                     id: "0".to_string(),
                     data: part.into_owned(),
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
                 }));
             }
         }
@@ -2720,7 +2713,8 @@ fn convert_to_output(
                             ),
                         })
                     })?,
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
                 }]);
             }
         }
@@ -2766,13 +2760,15 @@ fn convert_to_output(
                 data: serde_json::json!({
                     "executableCode": data,
                 }),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
             });
         }
         FlattenUnknown::Unknown(data) => {
             output.push(ContentBlockOutput::Unknown {
                 data: data.into_owned(),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
             });
         }
     }

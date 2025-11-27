@@ -277,7 +277,8 @@ function tensorZeroStoredContentToInputContent(
       return {
         type: "unknown",
         data: content.data,
-        model_provider_name: content.model_provider_name,
+        model_name: content.model_name,
+        provider_name: content.provider_name,
       };
   }
 }
@@ -591,7 +592,8 @@ function resolvedInputMessageContentToClientInputMessageContent(
       return {
         type: "unknown",
         data: content.data,
-        model_provider_name: content.model_provider_name,
+        model_name: content.model_name,
+        provider_name: content.provider_name,
       };
     case "file":
       return resolvedFileContentToClientFile(content);

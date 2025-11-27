@@ -558,7 +558,8 @@ pub async fn prepare_request_message(
             LazyResolvedInputMessageContent::Unknown(unknown) => {
                 content.push(ContentBlock::Unknown {
                     data: unknown.data.clone(),
-                    model_provider_name: unknown.model_provider_name.clone(),
+                    model_name: unknown.model_name.clone(),
+                    provider_name: unknown.provider_name.clone(),
                 });
             }
         }

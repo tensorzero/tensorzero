@@ -37,7 +37,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::InferenceProvider;
-use crate::model::{fully_qualified_name, Credential, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::tool::FunctionToolConfig;
 #[cfg(test)]
 use crate::tool::{AllowedTools, AllowedToolsChoice};
@@ -648,10 +648,7 @@ async fn convert_non_thought_content_block(
         ContentBlock::Thought(_) => Err(Error::new(ErrorDetails::InternalError {
             message: format!("Got thought block in `convert_non_thought_content_block`. {IMPOSSIBLE_ERROR_MESSAGE}"),
         })),
-        ContentBlock::Unknown {
-            data,
-            model_provider_name: _,
-        } => Ok(FlattenUnknown::Unknown(Cow::Borrowed(data))),
+        ContentBlock::Unknown { data, .. } => Ok(FlattenUnknown::Unknown(Cow::Borrowed(data))),
     }
 }
 
@@ -1088,7 +1085,8 @@ fn content_part_to_tensorzero_chunk(
             output.push(ContentBlockChunk::Unknown(UnknownChunk {
                 id: last_unknown_chunk_id.to_string(),
                 data: part.into_owned(),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
             }));
             *last_unknown_chunk_id += 1;
         }
@@ -1132,7 +1130,8 @@ fn convert_part_to_output(
                             ),
                         })
                     })?,
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
                 });
             }
         }
@@ -1173,7 +1172,8 @@ fn convert_part_to_output(
         FlattenUnknown::Unknown(part) => {
             output.push(ContentBlockOutput::Unknown {
                 data: part.into_owned(),
-                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                model_name: Some(model_name.to_string()),
+                provider_name: Some(provider_name.to_string()),
             });
         }
     }

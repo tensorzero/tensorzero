@@ -380,9 +380,13 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                 StoredRequestMessage {
                     role: Role::User,
                     content: vec![
-                        StoredContentBlock::Text(Text { text: "Please write me a sentence about Megumin making an explosion.".to_string() }),
+                        StoredContentBlock::Text(Text {
+                            text: "Please write me a sentence about Megumin making an explosion."
+                                .to_string()
+                        }),
                         StoredContentBlock::Unknown {
-                            model_provider_name: Some("tensorzero::model_name::gemini-2.0-flash-001::provider_name::gcp_vertex_gemini".into()),
+                            model_name: Some("gemini-2.0-flash-001".into()),
+                            provider_name: Some("gcp_vertex_gemini".into()),
                             data: serde_json::json!({"text": "My extra gemini text"})
                         }
                     ],
@@ -438,9 +442,8 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                                 .to_string()
                         }),
                         StoredContentBlock::Unknown {
-                            model_provider_name: Some(
-                                "tensorzero::model_name::json::provider_name::json".into()
-                            ),
+                            model_name: Some("json".into()),
+                            provider_name: Some("json".into()),
                             data: serde_json::json!({"type": "text", "text": "My extra json-model input", "my": {"other": "keys"}})
                         }
                     ],

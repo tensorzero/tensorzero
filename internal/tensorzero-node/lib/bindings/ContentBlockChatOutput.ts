@@ -11,4 +11,9 @@ export type ContentBlockChatOutput =
   | ({ type: "text" } & Text)
   | ({ type: "tool_call" } & InferenceResponseToolCall)
   | ({ type: "thought" } & Thought)
-  | { type: "unknown"; data: JsonValue; model_provider_name: string | null };
+  | {
+      type: "unknown";
+      data: JsonValue;
+      model_name?: string;
+      provider_name?: string;
+    };

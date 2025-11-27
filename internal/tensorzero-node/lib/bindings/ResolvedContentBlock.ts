@@ -16,4 +16,9 @@ export type ResolvedContentBlock =
   | ({ type: "tool_result" } & ToolResult)
   | ({ type: "file" } & ObjectStorageFile)
   | ({ type: "thought" } & Thought)
-  | { type: "unknown"; data: JsonValue; model_provider_name: string | null };
+  | {
+      type: "unknown";
+      data: JsonValue;
+      model_name: string | null;
+      provider_name: string | null;
+    };

@@ -497,9 +497,8 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
                                 .to_string()
                         }),
                         StoredContentBlock::Unknown {
-                            model_provider_name: Some(
-                                "tensorzero::model_name::test::provider_name::good".to_string()
-                            ),
+                            model_name: Some("test".to_string()),
+                            provider_name: Some("good".to_string()),
                             data: serde_json::json!({"type": "text", "text": "My extra test-model input"})
                         }
                     ],

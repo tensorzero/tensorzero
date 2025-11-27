@@ -23,15 +23,17 @@ export type StoredContentBlock =
        */
       data: JsonValue;
       /**
-       * A fully-qualified name specifying when this content block should
-       * be included in the model provider input.
-       * E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
-       *
-       * If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
+       * A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`).
+       * If set to `Some`, this is compared against the model name before invoking
        * a model provider, and stripped from the input if it doesn't match.
-       * If set to `None, then this is passed to all model providers.
-       * Individual model provider implementation never need to check this field themselves -
-       * they only need to produce it with the proper `fully_qualified_name` set.
+       * If set to `None`, then this is passed to all models.
        */
-      model_provider_name: string | null;
+      model_name: string | null;
+      /**
+       * A provider name for the model you specified (e.g. `my_openai`).
+       * If set to `Some`, this is compared against the provider name before invoking
+       * a model provider, and stripped from the input if it doesn't match.
+       * If set to `None`, then this is passed to all providers for the matching model.
+       */
+      provider_name: string | null;
     };

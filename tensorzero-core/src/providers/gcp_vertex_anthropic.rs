@@ -32,7 +32,7 @@ use crate::inference::types::{
 };
 use crate::inference::InferenceProvider;
 use crate::model::CredentialLocationWithFallback;
-use crate::model::{fully_qualified_name, ModelProvider};
+use crate::model::ModelProvider;
 use crate::model_table::{GCPVertexAnthropicKind, ProviderType, ProviderTypeDefaultCredentials};
 use crate::providers::anthropic::{
     anthropic_to_tensorzero_stream_message, handle_anthropic_error, AnthropicStreamMessage,
@@ -750,7 +750,8 @@ fn convert_to_output(
         }
         FlattenUnknown::Unknown(obj) => Ok(ContentBlockOutput::Unknown {
             data: obj.into_owned(),
-            model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+            model_name: Some(model_name.to_string()),
+            provider_name: Some(provider_name.to_string()),
         }),
     }
 }
@@ -1641,9 +1642,8 @@ mod tests {
                 "Response text".to_string().into(),
                 ContentBlockOutput::Unknown {
                     data: serde_json::json!({"my_custom": "content"}),
-                    model_provider_name: Some(
-                        "tensorzero::model_name::my-model::provider_name::my-provider".to_string()
-                    )
+                    model_name: Some("my-model".to_string()),
+                    provider_name: Some("my-provider".to_string()),
                 }
             ]
         );

@@ -795,17 +795,79 @@ impl RawText {
 
 /// Struct that represents an unknown provider-specific content block.
 /// We pass this along as-is without any validation or transformation.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
-#[ts(export)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass)]
-#[serde(deny_unknown_fields)]
 #[export_schema]
 pub struct Unknown {
     /// The underlying content block to be passed to the model provider.
     pub data: Value,
-    /// A fully-qualified name specifying when this content block should
-    /// be included in the model provider input.
-    pub model_provider_name: Option<String>,
+    /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_name: Option<String>,
+    /// A provider name for the model you specified (e.g. `my_openai`)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_name: Option<String>,
+}
+
+impl<'de> Deserialize<'de> for Unknown {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct UnknownDeserialize {
+            data: Value,
+            model_provider_name: Option<String>,
+            model_name: Option<String>,
+            provider_name: Option<String>,
+        }
+
+        fn parse_fully_qualified_model_provider_name(
+            fqn: &str,
+        ) -> (Option<String>, Option<String>) {
+            let parts: Vec<&str> = fqn.split("::").collect();
+            if parts.len() == 5
+                && parts[0] == "tensorzero"
+                && parts[1] == "model_name"
+                && parts[3] == "provider_name"
+            {
+                (Some(parts[2].to_string()), Some(parts[4].to_string()))
+            } else {
+                tracing::warn!("Failed to parse legacy `model_provider_name` format: {fqn}");
+                (None, None)
+            }
+        }
+
+        let helper = UnknownDeserialize::deserialize(deserializer)?;
+
+        // If new fields are present, use them directly
+        if helper.model_name.is_some() || helper.provider_name.is_some() {
+            if helper.model_provider_name.is_some() {
+                return Err(serde::de::Error::custom(
+                    "Cannot specify both `model_provider_name` and `model_name`/`provider_name`",
+                ));
+            }
+            return Ok(Unknown {
+                data: helper.data,
+                model_name: helper.model_name,
+                provider_name: helper.provider_name,
+            });
+        }
+
+        // Parse legacy format if present
+        let (model_name, provider_name) = match helper.model_provider_name {
+            Some(ref fqn) => parse_fully_qualified_model_provider_name(fqn),
+            None => (None, None),
+        };
+
+        Ok(Unknown {
+            data: helper.data,
+            model_name,
+            provider_name,
+        })
+    }
 }
 
 #[cfg(feature = "pyo3")]
@@ -818,8 +880,13 @@ impl Unknown {
     }
 
     #[getter]
-    pub fn model_provider_name(&self) -> Option<String> {
-        self.model_provider_name.clone()
+    pub fn model_name(&self) -> Option<String> {
+        self.model_name.clone()
+    }
+
+    #[getter]
+    pub fn provider_name(&self) -> Option<String> {
+        self.provider_name.clone()
     }
 }
 
@@ -899,16 +966,18 @@ pub enum ContentBlock {
     Unknown {
         /// The underlying content block to be passed to the model provider.
         data: Value,
-        /// A fully-qualified name specifying when this content block should
-        /// be included in the model provider input.
-        /// E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
-        ///
-        /// If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
+        /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`).
+        /// If set to `Some`, this is compared against the model name before invoking
         /// a model provider, and stripped from the input if it doesn't match.
-        /// If set to `None, then this is passed to all model providers.
-        /// Individual model provider implementation never need to check this field themselves -
-        /// they only need to produce it with the proper `fully_qualified_name` set.
-        model_provider_name: Option<String>,
+        /// If set to `None`, then this is passed to all models.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model_name: Option<String>,
+        /// A provider name for the model you specified (e.g. `my_openai`).
+        /// If set to `Some`, this is compared against the provider name before invoking
+        /// a model provider, and stripped from the input if it doesn't match.
+        /// If set to `None`, then this is passed to all providers for the matching model.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        provider_name: Option<String>,
     },
 }
 
@@ -929,10 +998,12 @@ impl ContentBlock {
             ContentBlock::Thought(thought) => Ok(StoredContentBlock::Thought(thought)),
             ContentBlock::Unknown {
                 data,
-                model_provider_name,
+                model_name,
+                provider_name,
             } => Ok(StoredContentBlock::Unknown {
                 data,
-                model_provider_name,
+                model_name,
+                provider_name,
             }),
         }
     }
@@ -950,10 +1021,12 @@ impl ContentBlock {
             ContentBlock::Thought(thought) => Ok(ResolvedContentBlock::Thought(thought)),
             ContentBlock::Unknown {
                 data,
-                model_provider_name,
+                model_name,
+                provider_name,
             } => Ok(ResolvedContentBlock::Unknown {
                 data,
-                model_provider_name,
+                model_name,
+                provider_name,
             }),
         }
     }
@@ -996,16 +1069,18 @@ pub enum StoredContentBlock {
     Unknown {
         /// The underlying content block to be passed to the model provider.
         data: Value,
-        /// A fully-qualified name specifying when this content block should
-        /// be included in the model provider input.
-        /// E.g `tensorzero::model_name::claude-3-7-sonnet-20250219-thinking::provider_name::anthropic-extra-body`
-        ///
-        /// If set to `Some`, this is compared against the output of `fully_qualified_name` before invoking
+        /// A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`).
+        /// If set to `Some`, this is compared against the model name before invoking
         /// a model provider, and stripped from the input if it doesn't match.
-        /// If set to `None, then this is passed to all model providers.
-        /// Individual model provider implementation never need to check this field themselves -
-        /// they only need to produce it with the proper `fully_qualified_name` set.
-        model_provider_name: Option<String>,
+        /// If set to `None`, then this is passed to all models.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model_name: Option<String>,
+        /// A provider name for the model you specified (e.g. `my_openai`).
+        /// If set to `Some`, this is compared against the provider name before invoking
+        /// a model provider, and stripped from the input if it doesn't match.
+        /// If set to `None`, then this is passed to all providers for the matching model.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        provider_name: Option<String>,
     },
 }
 
@@ -1022,7 +1097,10 @@ pub enum ResolvedContentBlock {
     Thought(Thought),
     Unknown {
         data: Value,
-        model_provider_name: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model_name: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        provider_name: Option<String>,
     },
 }
 
@@ -1039,10 +1117,12 @@ impl ResolvedContentBlock {
             ResolvedContentBlock::Thought(thought) => ContentBlock::Thought(thought),
             ResolvedContentBlock::Unknown {
                 data,
-                model_provider_name,
+                model_name,
+                provider_name,
             } => ContentBlock::Unknown {
                 data,
-                model_provider_name,
+                model_name,
+                provider_name,
             },
         }
     }
@@ -1083,13 +1163,16 @@ pub enum ContentBlockOutput {
     Thought(Thought),
     Unknown {
         data: Value,
-        model_provider_name: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model_name: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        provider_name: Option<String>,
     },
 }
 
 /// Defines the types of content block that can come from a `chat` function
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS, JsonSchema)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[export_schema]
 pub enum ContentBlockChatOutput {
@@ -1102,7 +1185,10 @@ pub enum ContentBlockChatOutput {
     #[schemars(title = "ContentBlockChatOutputUnknown")]
     Unknown {
         data: Value,
-        model_provider_name: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model_name: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        provider_name: Option<String>,
     },
 }
 
@@ -2036,11 +2122,13 @@ pub async fn parse_chat_output(
             }
             ContentBlockOutput::Unknown {
                 data,
-                model_provider_name,
+                model_name,
+                provider_name,
             } => {
                 output.push(ContentBlockChatOutput::Unknown {
                     data,
-                    model_provider_name,
+                    model_name,
+                    provider_name,
                 });
             }
         }
@@ -2164,10 +2252,12 @@ impl From<ContentBlockChatOutput> for ContentBlock {
             ContentBlockChatOutput::Thought(thought) => ContentBlock::Thought(thought),
             ContentBlockChatOutput::Unknown {
                 data,
-                model_provider_name,
+                model_name,
+                provider_name,
             } => ContentBlock::Unknown {
                 data,
-                model_provider_name,
+                model_name,
+                provider_name,
             },
         }
     }
@@ -2183,10 +2273,12 @@ impl From<ContentBlockChatOutput> for ContentBlockOutput {
             ContentBlockChatOutput::Thought(thought) => ContentBlockOutput::Thought(thought),
             ContentBlockChatOutput::Unknown {
                 data,
-                model_provider_name,
+                model_name,
+                provider_name,
             } => ContentBlockOutput::Unknown {
                 data,
-                model_provider_name,
+                model_name,
+                provider_name,
             },
         }
     }

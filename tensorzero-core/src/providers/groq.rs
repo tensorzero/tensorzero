@@ -735,10 +735,7 @@ async fn tensorzero_to_groq_user_messages(
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);
             }
-            ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            } => {
+            ContentBlock::Unknown { data, .. } => {
                 user_content_blocks.push(GroqContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });
@@ -837,10 +834,7 @@ async fn tensorzero_to_groq_assistant_messages(
             ContentBlock::Thought(thought) => {
                 warn_discarded_thought_block(PROVIDER_TYPE, thought);
             }
-            ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            } => {
+            ContentBlock::Unknown { data, .. } => {
                 assistant_content_blocks.push(GroqContentBlock::Unknown {
                     data: Cow::Borrowed(data),
                 });

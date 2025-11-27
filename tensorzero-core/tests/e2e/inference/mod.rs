@@ -222,13 +222,13 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
                 role: Role::User,
                 content: vec![
                     StoredContentBlock::Unknown {
-                        model_provider_name: Some(
-                            "tensorzero::model_name::test::provider_name::good".to_string()
-                        ),
+                        model_name: Some("test".to_string()),
+                        provider_name: Some("good".to_string()),
                         data: json!({"my": "custom data"})
                     },
                     StoredContentBlock::Unknown {
-                        model_provider_name: None,
+                        model_name: None,
+                        provider_name: None,
                         data: "Non-provider-specific unknown block".into()
                     }
                 ]
@@ -373,13 +373,13 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
                 role: Role::User,
                 content: vec![
                     StoredContentBlock::Unknown {
-                        model_provider_name: Some(
-                            "tensorzero::model_name::test::provider_name::good".to_string()
-                        ),
+                        model_name: Some("test".to_string()),
+                        provider_name: Some("good".to_string()),
                         data: json!({"my": "custom data"})
                     },
                     StoredContentBlock::Unknown {
-                        model_provider_name: None,
+                        model_name: None,
+                        provider_name: None,
                         data: "Non-provider-specific unknown block".into()
                     }
                 ]

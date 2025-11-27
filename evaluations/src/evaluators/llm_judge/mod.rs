@@ -519,7 +519,8 @@ mod tests {
             }),
             ContentBlockChatOutput::Unknown {
                 data: json!({"foo": "bar"}),
-                model_provider_name: Some("foo".to_string()),
+                model_name: Some("foo".to_string()),
+                provider_name: Some("bar".to_string()),
             },
         ];
         let serialized_output = prepare_serialized_chat_output(&content).unwrap();
@@ -799,7 +800,8 @@ mod tests {
         // Test with Unknown content (should error)
         let content = vec![ClientInputMessageContent::Unknown(Unknown {
             data: json!({"unknown": "data"}),
-            model_provider_name: Some("provider".to_string()),
+            model_name: Some("model".to_string()),
+            provider_name: Some("provider".to_string()),
         })];
         let err = serialize_content_for_messages_input(&content).unwrap_err();
         assert_eq!(
@@ -1111,7 +1113,8 @@ mod tests {
         // Test with only Unknown blocks
         let content = vec![ContentBlockChatOutput::Unknown {
             data: json!({"foo": "bar"}),
-            model_provider_name: Some("provider".to_string()),
+            model_name: Some("model".to_string()),
+            provider_name: Some("provider".to_string()),
         }];
         let err = prepare_serialized_chat_output(&content).unwrap_err();
         assert_eq!(err.to_string(), "No valid content blocks to serialize");

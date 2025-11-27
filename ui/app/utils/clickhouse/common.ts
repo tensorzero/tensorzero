@@ -108,7 +108,8 @@ export type ThoughtContent = z.infer<typeof thoughtContentSchema>;
 export const unknownSchema = z.object({
   type: z.literal("unknown"),
   data: JsonValueSchema,
-  model_provider_name: z.string().nullable(),
+  model_name: z.string().optional(),
+  provider_name: z.string().optional(),
 });
 export type Unknown = z.infer<typeof unknownSchema>;
 

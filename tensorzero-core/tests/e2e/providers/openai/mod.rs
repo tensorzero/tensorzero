@@ -2456,10 +2456,12 @@ model = "test-model"
             }
             ContentBlockChatOutput::Unknown {
                 data,
-                model_provider_name,
+                model_name,
+                provider_name,
             } => ClientInputMessageContent::Unknown(Unknown {
                 data: data.clone(),
-                model_provider_name: model_provider_name.clone(),
+                model_name: model_name.clone(),
+                provider_name: provider_name.clone(),
             }),
         })
         .collect();
@@ -2845,10 +2847,12 @@ model = "test-model"
             }
             ContentBlockChatOutput::Unknown {
                 data,
-                model_provider_name,
+                model_name,
+                provider_name,
             } => ClientInputMessageContent::Unknown(Unknown {
                 data: data.clone(),
-                model_provider_name: model_provider_name.clone(),
+                model_name: model_name.clone(),
+                provider_name: provider_name.clone(),
             }),
         })
         .collect();
