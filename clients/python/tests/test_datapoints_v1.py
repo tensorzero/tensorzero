@@ -701,3 +701,210 @@ def test_sync_get_datapoints_nonexistent_ids(sync_client: TensorZeroGateway):
     # Non-existent IDs should return empty list, not error
     assert datapoints is not None
     assert len(datapoints) == 0
+
+
+def test_sync_list_datasets_no_params(sync_client: TensorZeroGateway):
+    """Test listing all datasets without parameters."""
+    # Create some test datasets
+    dataset_name = f"test_list_all_{uuid7()}"
+
+    sync_client.create_datapoints(
+        dataset_name=dataset_name,
+        requests=[
+            CreateDatapointRequestChat(
+                function_name="basic_test",
+                input=Input(
+                    system={"assistant_name": "TestBot"},
+                    messages=[
+                        InputMessage(role="user", content=[InputMessageContentText(text=f"Test for {dataset_name}")])
+                    ],
+                ),
+                output=[ContentBlockChatOutputText(text="Test response")],
+            )
+        ],
+    )
+
+    # Wait for data to propagate
+    sleep(1)
+
+    # List all datasets
+    response = sync_client.list_datasets()
+    datasets = response.datasets
+
+    assert datasets is not None
+    assert len(datasets) > 0
+
+    # Verify our datasets are in the list
+    dataset_name_set = {d.dataset_name for d in datasets}
+    assert dataset_name in dataset_name_set, f"Dataset {dataset_name} should be in the list"
+
+    # Verify dataset metadata structure
+    for dataset in datasets:
+        if dataset.dataset_name == dataset_name:
+            assert dataset.count >= 1, "Dataset should have at least 1 datapoint"
+            assert dataset.last_updated is not None, "Dataset should have last_updated timestamp"
+
+    # Clean up
+    sync_client.delete_dataset(dataset_name=dataset_name)
+
+
+def test_sync_list_datasets_with_pagination(sync_client: TensorZeroGateway):
+    """Test listing datasets with limit and offset."""
+    # Create multiple test datasets
+    dataset_names = [f"test_list_page_{uuid7()}" for _ in range(5)]
+
+    for dataset_name in dataset_names:
+        sync_client.create_datapoints(
+            dataset_name=dataset_name,
+            requests=[
+                CreateDatapointRequestChat(
+                    function_name="basic_test",
+                    input=Input(
+                        system={"assistant_name": "TestBot"},
+                        messages=[
+                            InputMessage(
+                                role="user", content=[InputMessageContentText(text=f"Test for {dataset_name}")]
+                            )
+                        ],
+                    ),
+                    output=[ContentBlockChatOutputText(text="Test response")],
+                )
+            ],
+        )
+
+    # Wait for data to propagate
+    sleep(1)
+
+    # Test with limit
+    response = sync_client.list_datasets(limit=2)
+    datasets = response.datasets
+
+    assert datasets is not None
+    assert len(datasets) <= 2, "Should respect limit parameter"
+
+    # Test with offset
+    response = sync_client.list_datasets(limit=2, offset=1)
+    datasets_with_offset = response.datasets
+
+    assert datasets_with_offset is not None
+
+    # Clean up
+    for dataset_name in dataset_names:
+        sync_client.delete_dataset(dataset_name=dataset_name)
+
+
+def test_sync_list_datasets_empty_result(sync_client: TensorZeroGateway):
+    """Test listing datasets with a filter that returns no results."""
+    # Use a function name that shouldn't exist
+    nonexistent_function = f"nonexistent_func_{uuid7()}"
+
+    response = sync_client.list_datasets(function_name=nonexistent_function)
+    datasets = response.datasets
+
+    assert datasets is not None
+    assert len(datasets) == 0, "Should return empty list for non-existent function"
+
+
+@pytest.mark.asyncio
+async def test_async_list_datasets_no_params(async_client: AsyncTensorZeroGateway):
+    """Test async listing of all datasets without parameters."""
+    # Create some test datasets
+    dataset_name = f"test_list_all_async_{uuid7()}"
+
+    await async_client.create_datapoints(
+        dataset_name=dataset_name,
+        requests=[
+            CreateDatapointRequestChat(
+                function_name="basic_test",
+                input=Input(
+                    system={"assistant_name": "TestBot"},
+                    messages=[
+                        InputMessage(role="user", content=[InputMessageContentText(text=f"Test for {dataset_name}")])
+                    ],
+                ),
+                output=[ContentBlockChatOutputText(text="Test response")],
+            )
+        ],
+    )
+
+    # Wait for data to propagate
+    sleep(1)
+
+    # List all datasets
+    response = await async_client.list_datasets()
+    datasets = response.datasets
+
+    assert datasets is not None
+    assert len(datasets) > 0
+
+    # Verify our datasets are in the list
+    dataset_name_set = {d.dataset_name for d in datasets}
+    assert dataset_name in dataset_name_set, f"Dataset {dataset_name} should be in the list"
+
+    # Verify dataset metadata structure
+    for dataset in datasets:
+        if dataset.dataset_name == dataset_name:
+            assert dataset.count >= 1, "Dataset should have at least 1 datapoint"
+            assert dataset.last_updated is not None, "Dataset should have last_updated timestamp"
+
+    # Clean up
+    await async_client.delete_dataset(dataset_name=dataset_name)
+
+
+@pytest.mark.asyncio
+async def test_async_list_datasets_with_pagination(async_client: AsyncTensorZeroGateway):
+    """Test async listing datasets with limit and offset."""
+    # Create multiple test datasets
+    dataset_names = [f"test_list_page_async_{uuid7()}" for _ in range(5)]
+
+    for dataset_name in dataset_names:
+        await async_client.create_datapoints(
+            dataset_name=dataset_name,
+            requests=[
+                CreateDatapointRequestChat(
+                    function_name="basic_test",
+                    input=Input(
+                        system={"assistant_name": "TestBot"},
+                        messages=[
+                            InputMessage(
+                                role="user", content=[InputMessageContentText(text=f"Test for {dataset_name}")]
+                            )
+                        ],
+                    ),
+                    output=[ContentBlockChatOutputText(text="Test response")],
+                )
+            ],
+        )
+
+    # Wait for data to propagate
+    sleep(1)
+
+    # Test with limit
+    response = await async_client.list_datasets(limit=2)
+    datasets = response.datasets
+
+    assert datasets is not None
+    assert len(datasets) <= 2, "Should respect limit parameter"
+
+    # Test with offset
+    response = await async_client.list_datasets(limit=2, offset=1)
+    datasets_with_offset = response.datasets
+
+    assert datasets_with_offset is not None
+
+    # Clean up
+    for dataset_name in dataset_names:
+        await async_client.delete_dataset(dataset_name=dataset_name)
+
+
+@pytest.mark.asyncio
+async def test_async_list_datasets_empty_result(async_client: AsyncTensorZeroGateway):
+    """Test async listing datasets with a filter that returns no results."""
+    # Use a function name that shouldn't exist
+    nonexistent_function = f"nonexistent_func_async_{uuid7()}"
+
+    response = await async_client.list_datasets(function_name=nonexistent_function)
+    datasets = response.datasets
+
+    assert datasets is not None
+    assert len(datasets) == 0, "Should return empty list for non-existent function"
