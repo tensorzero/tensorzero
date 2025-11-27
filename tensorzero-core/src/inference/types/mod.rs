@@ -886,7 +886,7 @@ pub struct Unknown {
 /// Current format: separate `model_name` and `provider_name` fields
 ///
 /// If both old and new fields are present, return an error.
-/// If parsing the legacy format fails (e.g. either name has `::`), log a warning and drop the filter.
+/// If parsing the legacy format fails (e.g. either name has `::`), a deserialization error is returned.
 impl<'de> Deserialize<'de> for Unknown {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
