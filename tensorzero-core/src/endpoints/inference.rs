@@ -171,7 +171,7 @@ pub async fn inference_handler(
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
-    let inference_output = inference(
+    let inference_output = Box::pin(inference(
         config,
         &http_client,
         clickhouse_connection_info,
@@ -179,7 +179,7 @@ pub async fn inference_handler(
         deferred_tasks,
         params,
         api_key_ext,
-    )
+    ))
     .await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),

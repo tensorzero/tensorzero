@@ -1,7 +1,4 @@
-import {
-  getDatasetMetadata,
-  getDatasetRows,
-} from "~/utils/clickhouse/datasets.server";
+import { getDatasetMetadata } from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
 import DatasetRowTable from "./DatasetRowTable";
 import { data, isRouteErrorResponse, redirect } from "react-router";
@@ -38,9 +35,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Limit cannot exceed 100", { status: 400 });
   }
 
-  const [counts, rows] = await Promise.all([
+  const [counts, getDatapointsResponse] = await Promise.all([
     getDatasetMetadata({}),
-    getDatasetRows({ dataset_name, limit, offset }),
+    getTensorZeroClient().listDatapoints(dataset_name, { limit, offset }),
   ]);
   const count_info = counts.find(
     (count) => count.dataset_name === dataset_name,
@@ -48,6 +45,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!count_info) {
     throw data("Dataset not found", { status: 404 });
   }
+  const rows = getDatapointsResponse.datapoints;
   return { rows, count_info, limit, offset, rowsAdded, rowsSkipped };
 }
 

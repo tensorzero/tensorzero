@@ -194,15 +194,6 @@ pub struct DatasetQueryParams {
     pub limit: Option<u32>,
     pub offset: Option<u32>,
 }
-
-#[derive(Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
-pub struct GetDatasetRowsParams {
-    pub dataset_name: String,
-    pub limit: u32,
-    pub offset: u32,
-}
-
 #[derive(Deserialize, ts_rs::TS)]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct GetDatasetMetadataParams {
@@ -214,18 +205,6 @@ pub struct GetDatasetMetadataParams {
 
     /// The number of datasets to skip before starting to return results.
     pub offset: Option<u32>,
-}
-
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[cfg_attr(test, ts(export, optional_fields))]
-pub struct DatasetDetailRow {
-    pub id: String,
-    #[serde(rename = "type")]
-    pub row_type: String,
-    pub function_name: String,
-    pub name: Option<String>,
-    pub episode_id: Option<String>,
-    pub updated_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, ts_rs::TS)]
@@ -303,12 +282,6 @@ pub trait DatasetQueries {
     /// Inserts rows into a dataset table by selecting from the inference tables
     /// Returns the number of rows inserted
     async fn insert_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error>;
-
-    /// Gets rows from a dataset with pagination
-    async fn get_dataset_rows(
-        &self,
-        params: &GetDatasetRowsParams,
-    ) -> Result<Vec<DatasetDetailRow>, Error>;
 
     /// Gets dataset metadata (name, count, last updated)
     async fn get_dataset_metadata(
