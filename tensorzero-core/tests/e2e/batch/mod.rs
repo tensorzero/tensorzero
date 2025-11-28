@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use serde_json::json;
 use tensorzero_core::config::Config;
@@ -12,6 +13,7 @@ use tensorzero_core::endpoints::batch_inference::{
     PollInferenceResponse, PollPathParams,
 };
 use tensorzero_core::endpoints::inference::{InferenceParams, InferenceResponse};
+use tensorzero_core::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use tensorzero_core::inference::types::batch::{
     BatchModelInferenceRow, BatchRequestRow, BatchStatus, PollBatchInferenceResponse,
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse, UnparsedBatchRequestRow,
@@ -145,7 +147,10 @@ async fn test_write_poll_batch_inference() {
         status,
         errors,
     });
-    let unwritten_config = Config::new_empty().await.unwrap();
+    let config = Config::new_empty()
+        .await
+        .unwrap()
+        .dangerous_into_config_without_writing();
 
     // Write a pending batch
     let poll_inference_response = write_poll_batch_inference(
@@ -155,7 +160,7 @@ async fn test_write_poll_batch_inference() {
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
         },
-        &unwritten_config,
+        &config,
     )
     .await
     .unwrap();
@@ -190,7 +195,7 @@ async fn test_write_poll_batch_inference() {
             raw_request: raw_request.clone(),
             raw_response: raw_response.clone(),
         },
-        &unwritten_config,
+        &config,
     )
     .await
     .unwrap();
@@ -336,12 +341,15 @@ async fn test_write_read_completed_batch_inference_chat() {
         status,
         errors,
     });
-    let unwritten_config = Config::new_empty().await.unwrap();
-    let config_for_tests = Config::new_empty()
+    let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+        variants: HashMap::new(),
+        ..Default::default()
+    }));
+    let mut config = Config::new_empty()
         .await
         .unwrap()
         .dangerous_into_config_without_writing();
-    let config = config_for_tests;
+    config.functions = HashMap::from([(function_name.to_string(), function_config)]);
     let batch_model_inference_rows =
         write_2_batch_model_inference_rows(&clickhouse, batch_id).await;
     let inference_id1 = batch_model_inference_rows[0].inference_id;
@@ -372,7 +380,7 @@ async fn test_write_read_completed_batch_inference_chat() {
         raw_response: raw_response.clone(),
     };
     let mut inference_responses =
-        write_completed_batch_inference(&clickhouse, &batch_request, response, &unwritten_config)
+        write_completed_batch_inference(&clickhouse, &batch_request, response, &config)
             .await
             .unwrap();
 
@@ -560,7 +568,7 @@ async fn test_write_read_completed_batch_inference_json() {
         status,
         errors: vec![],
     });
-    let _output_schema = StaticJSONSchema::from_value(json!({
+    let output_schema = StaticJSONSchema::from_value(json!({
         "type": "object",
         "properties": {
             "answer": {
@@ -570,12 +578,16 @@ async fn test_write_read_completed_batch_inference_json() {
         "required": ["answer"]
     }))
     .unwrap();
-    let unwritten_config = Config::new_empty().await.unwrap();
-    let config_for_tests = Config::new_empty()
+    let function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
+        variants: HashMap::new(),
+        output_schema,
+        ..Default::default()
+    }));
+    let mut config = Config::new_empty()
         .await
         .unwrap()
         .dangerous_into_config_without_writing();
-    let config = config_for_tests;
+    config.functions = HashMap::from([(function_name.to_string(), function_config)]);
     let batch_model_inference_rows =
         write_2_batch_model_inference_rows(&clickhouse, batch_id).await;
     let inference_id1 = batch_model_inference_rows[0].inference_id;
@@ -608,7 +620,7 @@ async fn test_write_read_completed_batch_inference_json() {
         raw_response,
     };
     let inference_responses =
-        write_completed_batch_inference(&clickhouse, &batch_request, response, &unwritten_config)
+        write_completed_batch_inference(&clickhouse, &batch_request, response, &config)
             .await
             .unwrap();
 

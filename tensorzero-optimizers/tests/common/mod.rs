@@ -106,13 +106,13 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .clone();
 
     let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
-    let load_info = Config::load_from_path_optional_verify_credentials(
+    let config = Config::load_from_path_optional_verify_credentials(
         &config_glob,
         false, // don't validate credentials in tests
     )
     .await
-    .unwrap();
-    let config = load_info.dangerous_into_config_without_writing();
+    .unwrap()
+    .dangerous_into_config_without_writing();
     let job_handle = optimizer_info
         .launch(
             &client,
