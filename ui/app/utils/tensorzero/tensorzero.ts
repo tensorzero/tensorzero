@@ -13,6 +13,7 @@ import {
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
 import type {
+  CloneDatapointsResponse,
   Datapoint,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
@@ -537,6 +538,29 @@ export class TensorZeroClient {
     }
     const body = (await response.json()) as DeleteDatapointsResponse;
     return body;
+  }
+
+  /**
+   * Clones datapoints to a target dataset, preserving all fields except id and dataset_name.
+   * @param targetDatasetName - The name of the target dataset to clone datapoints to
+   * @param datapointIds - Array of datapoint UUIDs to clone
+   * @returns A promise that resolves with the response containing the new datapoint IDs (null if source not found)
+   * @throws Error if the dataset name is invalid or the request fails
+   */
+  async cloneDatapoints(
+    targetDatasetName: string,
+    datapointIds: string[],
+  ): Promise<CloneDatapointsResponse> {
+    const endpoint = `/internal/datasets/${encodeURIComponent(targetDatasetName)}/datapoints/clone`;
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify({ datapoint_ids: datapointIds }),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as CloneDatapointsResponse;
   }
 
   async getObject(storagePath: ZodStoragePath): Promise<string> {
