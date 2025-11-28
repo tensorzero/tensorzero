@@ -53,6 +53,7 @@ lazy_static = { workspace = true }
 metrics = "0.24.2"
 metrics-exporter-prometheus = { workspace = true }
 minijinja = { workspace = true }
+num-bigint = "0.4"
 object_store = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }

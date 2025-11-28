@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde_json::json;
-use tensorzero_core::config::{Config, ConfigLoadInfo};
+use tensorzero_core::config::Config;
 use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 /// End-to-end tests for particular internal functionality in the batch inference endpoint
 /// These are not tests of the public API (those should go in tests/e2e/providers/batch.rs)
@@ -147,7 +147,10 @@ async fn test_write_poll_batch_inference() {
         status,
         errors,
     });
-    let ConfigLoadInfo { config, .. } = Config::new_empty().await.unwrap();
+    let config = Config::new_empty()
+        .await
+        .unwrap()
+        .dangerous_into_config_without_writing();
 
     // Write a pending batch
     let poll_inference_response = write_poll_batch_inference(
@@ -328,7 +331,10 @@ async fn test_write_read_completed_batch_inference_chat() {
         variants: HashMap::new(),
         ..Default::default()
     }));
-    let ConfigLoadInfo { mut config, .. } = Config::new_empty().await.unwrap();
+    let mut config = Config::new_empty()
+        .await
+        .unwrap()
+        .dangerous_into_config_without_writing();
     config.functions = HashMap::from([(function_name.to_string(), function_config)]);
     let batch_model_inference_rows =
         write_2_batch_model_inference_rows(&clickhouse, batch_id).await;
@@ -528,7 +534,10 @@ async fn test_write_read_completed_batch_inference_json() {
         output_schema,
         ..Default::default()
     }));
-    let ConfigLoadInfo { mut config, .. } = Config::new_empty().await.unwrap();
+    let mut config = Config::new_empty()
+        .await
+        .unwrap()
+        .dangerous_into_config_without_writing();
     config.functions = HashMap::from([(function_name.to_string(), function_config)]);
     let batch_model_inference_rows =
         write_2_batch_model_inference_rows(&clickhouse, batch_id).await;

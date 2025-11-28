@@ -6143,6 +6143,7 @@ dependencies = [
  "minijinja-utils",
  "mockall",
  "moka",
+ "num-bigint",
  "object_store",
  "once_cell",
  "opentelemetry",

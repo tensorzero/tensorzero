@@ -20,9 +20,7 @@ use tensorzero_core::client::{
     input_handling::resolved_input_to_client_input, Client, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, DynamicToolParams, InferenceOutput, InferenceParams, InferenceResponse,
 };
-use tensorzero_core::config::{
-    ConfigFileGlob, ConfigLoadInfo, MetricConfigOptimize, UninitializedVariantInfo,
-};
+use tensorzero_core::config::{ConfigFileGlob, MetricConfigOptimize, UninitializedVariantInfo};
 use tensorzero_core::endpoints::datasets::v1::{
     get_datapoints, list_datapoints,
     types::{GetDatapointsRequest, ListDatapointsRequest},
@@ -268,14 +266,17 @@ pub async fn run_evaluation(
     // We do not validate credentials here since we just want the evaluator config
     // If we are using an embedded gateway, credentials are validated when that is initialized
     info!(config_file = ?args.config_file, "Loading configuration");
-    let ConfigLoadInfo {
-        config,
-        snapshot: _, // TODO: do an actual snapshot
-    } = Config::load_from_path_optional_verify_credentials(
+    let unwritten_config = Config::load_from_path_optional_verify_credentials(
         &ConfigFileGlob::new_from_path(&args.config_file)?,
         false,
     )
     .await?;
+    let clickhouse_client = ClickHouseConnectionInfo::new(
+        &clickhouse_url,
+        unwritten_config.gateway.observability.batch_writes.clone(),
+    )
+    .await?;
+    let config = unwritten_config.into_config(&clickhouse_client).await?;
     let config = Arc::new(config);
     debug!("Configuration loaded successfully");
     let tensorzero_client = match args.gateway_url {
@@ -294,12 +295,6 @@ pub async fn run_evaluation(
     .build()
     .await
     .map_err(|e| anyhow!("Failed to build client: {e}"))?;
-
-    let clickhouse_client = ClickHouseConnectionInfo::new(
-        &clickhouse_url,
-        config.gateway.observability.batch_writes.clone(),
-    )
-    .await?;
 
     let core_args = EvaluationCoreArgs {
         tensorzero_client,

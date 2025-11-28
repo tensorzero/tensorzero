@@ -240,9 +240,7 @@ mod tests {
     use std::io::Write;
 
     use super::*;
-    use crate::config::{
-        Config, ConfigFileGlob, ConfigLoadInfo, ErrorContext, SchemaData, TimeoutsConfig,
-    };
+    use crate::config::{Config, ConfigFileGlob, ErrorContext, SchemaData, TimeoutsConfig};
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::variant::chat_completion::ChatCompletionConfig;
     use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
@@ -462,7 +460,7 @@ mod tests {
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(config_str.as_bytes()).unwrap();
 
-        let ConfigLoadInfo { config, .. } = Config::load_from_path_optional_verify_credentials(
+        let config = Config::load_from_path_optional_verify_credentials(
             &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
             false,
         )

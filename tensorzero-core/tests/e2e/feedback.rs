@@ -2,10 +2,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tensorzero_core::{
-    config::{
-        Config, ConfigLoadInfo, MetricConfig, MetricConfigLevel, MetricConfigOptimize,
-        MetricConfigType,
-    },
+    config::{Config, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType},
     db::{
         clickhouse::test_helpers::{
             select_feedback_clickhouse, select_feedback_tags_clickhouse,
@@ -186,7 +183,10 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
 
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_test_comment_feedback_validation_disabled() {
-    let ConfigLoadInfo { mut config, .. } = Config::new_empty().await.unwrap();
+    let mut config = Config::new_empty()
+        .await
+        .unwrap()
+        .dangerous_into_config_without_writing();
     let clickhouse = get_clickhouse().await;
     config.gateway.unstable_disable_feedback_target_validation = true;
     let handle = GatewayHandle::new_with_database_and_http_client(
@@ -1213,7 +1213,10 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
 
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_test_float_feedback_validation_disabled() {
-    let ConfigLoadInfo { mut config, .. } = Config::new_empty().await.unwrap();
+    let mut config = Config::new_empty()
+        .await
+        .unwrap()
+        .dangerous_into_config_without_writing();
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
@@ -1453,7 +1456,10 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
 
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_test_boolean_feedback_validation_disabled() {
-    let ConfigLoadInfo { mut config, .. } = Config::new_empty().await.unwrap();
+    let mut config = Config::new_empty()
+        .await
+        .unwrap()
+        .dangerous_into_config_without_writing();
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,
