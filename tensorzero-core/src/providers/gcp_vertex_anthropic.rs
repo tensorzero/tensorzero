@@ -599,6 +599,7 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
     } else if model_id.starts_with("claude-sonnet-4@")
         || model_id.starts_with("claude-haiku-4-5@")
         || model_id.starts_with("claude-sonnet-4-5@")
+        || model_id.starts_with("claude-opus-4-5@")
     {
         Ok(64_000)
     } else if model_id.starts_with("claude-opus-4@") || model_id.starts_with("claude-opus-4-1@") {
