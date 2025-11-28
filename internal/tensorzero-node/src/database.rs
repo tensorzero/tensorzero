@@ -1,8 +1,7 @@
 use serde::Deserialize;
 use tensorzero::{
     setup_clickhouse_without_config, ClickHouseConnection, CountDatapointsForDatasetFunctionParams,
-    DatasetQueryParams, GetDatapointParams, GetDatasetMetadataParams, GetDatasetRowsParams,
-    TimeWindow,
+    DatasetQueryParams, GetDatasetMetadataParams, TimeWindow,
 };
 use uuid::Uuid;
 
@@ -96,11 +95,6 @@ impl DatabaseClient {
     }
 
     #[napi]
-    pub async fn get_dataset_rows(&self, params: String) -> Result<String, napi::Error> {
-        napi_call!(&self, get_dataset_rows, params, GetDatasetRowsParams)
-    }
-
-    #[napi]
     pub async fn get_dataset_metadata(&self, params: String) -> Result<String, napi::Error> {
         napi_call!(
             &self,
@@ -182,11 +176,6 @@ impl DatabaseClient {
                 limit
             }
         )
-    }
-
-    #[napi]
-    pub async fn get_datapoint(&self, params: String) -> Result<String, napi::Error> {
-        napi_call!(&self, get_datapoint, params, GetDatapointParams)
     }
 
     #[napi]

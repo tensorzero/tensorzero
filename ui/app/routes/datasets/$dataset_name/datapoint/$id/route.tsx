@@ -36,7 +36,7 @@ import {
 import { useToast } from "~/hooks/use-toast";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
-import { resolveStoredInputToInput } from "~/utils/resolve.server";
+import { loadFileDataForInput } from "~/utils/resolve.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import type { Route } from "./+types/route";
 import { DatapointActions } from "./DatapointActions";
@@ -291,23 +291,15 @@ export async function loader({
       status: 404,
     });
   }
-  const datapoint = await getTensorZeroClient().getDatapoint(id);
+  const datapoint = await getTensorZeroClient().getDatapoint(id, dataset_name);
   if (!datapoint) {
     throw data(`No datapoint found for ID \`${id}\`.`, {
       status: 404,
     });
   }
-  // Note (GabrielBianconi): `getDatapoint` no longer depends on the dataset name, but maybe it should?
-  if (datapoint.dataset_name !== dataset_name) {
-    throw data(
-      `The datapoint \`${id}\` does not belong to dataset \`${dataset_name}\`.`,
-      {
-        status: 400,
-      },
-    );
-  }
-  // Resolve input for InputElement component
-  const resolvedInput = await resolveStoredInputToInput(datapoint.input);
+
+  // Load file data for InputElement component
+  const resolvedInput = await loadFileDataForInput(datapoint.input);
 
   return {
     datapoint,

@@ -11,18 +11,29 @@ async fn main() -> Result<()> {
     let args = Args::parse();
     let mut writer = std::io::stdout();
 
-    info!(
-        evaluation_run_id = %evaluation_run_id,
-        evaluation_name = %args.evaluation_name,
-        dataset_name = %args.dataset_name,
-        variant_name = %args.variant_name,
-        concurrency = %args.concurrency,
-        "Starting evaluation run"
-    );
+    if let Some(dataset_name) = &args.dataset_name {
+        info!(
+            evaluation_run_id = %evaluation_run_id,
+            evaluation_name = %args.evaluation_name,
+            dataset_name = %dataset_name,
+            variant_name = %args.variant_name,
+            concurrency = %args.concurrency,
+            "Starting evaluation run"
+        );
+    } else {
+        info!(
+            evaluation_run_id = %evaluation_run_id,
+            evaluation_name = %args.evaluation_name,
+            num_datapoint_ids = %args.datapoint_ids.as_deref().unwrap_or_default().len(),
+            variant_name = %args.variant_name,
+            concurrency = %args.concurrency,
+            "Starting evaluation run"
+        );
+    }
 
     setup_logging(&args)?;
 
-    let result = run_evaluation(args, evaluation_run_id, &mut writer).await;
+    let result = Box::pin(run_evaluation(args, evaluation_run_id, &mut writer)).await;
 
     match &result {
         Ok(()) => {

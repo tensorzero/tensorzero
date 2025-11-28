@@ -427,14 +427,6 @@ export const TableBoundsSchema = z.object({
   first_id: z.string().uuid().nullable(), // UUIDv7 string
   last_id: z.string().uuid().nullable(), // UUIDv7 string
 });
-export type ZodTableBounds = z.infer<typeof TableBoundsSchema>;
-
-export const TableBoundsWithCountSchema = TableBoundsSchema.extend({
-  count: z.number(),
-});
-export type ZodTableBoundsWithCount = z.infer<
-  typeof TableBoundsWithCountSchema
->;
 
 export const FeedbackBoundsSchema = TableBoundsSchema.extend({
   by_type: z.object({

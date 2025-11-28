@@ -32,7 +32,6 @@ pub async fn create_from_inferences_handler(
         &app_state.clickhouse_connection_info,
         dataset_name,
         request,
-        Some(app_state.snapshot_hash.clone()),
     )
     .await?;
 
@@ -48,7 +47,6 @@ pub async fn create_from_inferences(
     clickhouse: &(impl InferenceQueries + DatasetQueries),
     dataset_name: String,
     request: CreateDatapointsFromInferenceRequest,
-    snapshot_hash: Option<crate::config::snapshot::SnapshotHash>,
 ) -> Result<CreateDatapointsResponse, Error> {
     validate_dataset_name(&dataset_name)?;
 
@@ -123,12 +121,8 @@ pub async fn create_from_inferences(
     let mut datapoints_to_insert = Vec::new();
 
     for inference in inferences {
-        let datapoint_insert = inference.into_datapoint_insert(
-            &dataset_name,
-            &request_output_source,
-            config,
-            snapshot_hash.clone(),
-        )?;
+        let datapoint_insert =
+            inference.into_datapoint_insert(&dataset_name, &request_output_source, config)?;
         ids.push(datapoint_insert.id());
         datapoints_to_insert.push(datapoint_insert);
     }
@@ -267,7 +261,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
         )
         .await
         .unwrap();
@@ -314,7 +307,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
         )
         .await
         .unwrap();
@@ -357,7 +349,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
         )
         .await
         .unwrap();
@@ -409,7 +400,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
         )
         .await
         .unwrap();
@@ -451,7 +441,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
         )
         .await;
 
@@ -486,14 +475,8 @@ mod tests {
         };
 
         // Dataset name "builder" is reserved
-        let result = create_from_inferences(
-            &config,
-            &mock_clickhouse,
-            "builder".to_string(),
-            request,
-            None,
-        )
-        .await;
+        let result =
+            create_from_inferences(&config, &mock_clickhouse, "builder".to_string(), request).await;
 
         assert!(result.is_err());
         let error = result.unwrap_err();
@@ -545,7 +528,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
         )
         .await
         .unwrap();
@@ -601,7 +583,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
         )
         .await
         .unwrap();
@@ -677,7 +658,6 @@ mod tests {
             &mock_clickhouse,
             "test_dataset".to_string(),
             request,
-            None,
         )
         .await
         .unwrap();

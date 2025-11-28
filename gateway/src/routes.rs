@@ -146,6 +146,11 @@ fn build_datasets_routes() -> Router<AppStateData> {
             delete(endpoints::datasets::v1::delete_dataset_handler),
         )
         .route(
+            "/v1/datasets/{dataset_name}/get_datapoints",
+            post(endpoints::datasets::v1::get_datapoints_by_dataset_handler),
+        )
+        // DEPRECATED: prefer /v1/datasets/{dataset_name}/get_datapoints
+        .route(
             "/v1/datasets/get_datapoints",
             post(endpoints::datasets::v1::get_datapoints_handler),
         )
@@ -220,6 +225,10 @@ fn build_internal_routes() -> Router<AppStateData> {
         .route(
             "/internal/inferences/bounds",
             get(endpoints::stored_inferences::v1::get_inference_bounds_handler),
+        )
+        .route(
+            "/internal/inferences",
+            get(endpoints::stored_inferences::v1::list_inferences_by_id_handler),
         )
 }
 

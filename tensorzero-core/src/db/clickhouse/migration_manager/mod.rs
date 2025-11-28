@@ -288,6 +288,7 @@ pub async fn run(args: RunMigrationManagerArgs<'_>) -> Result<(), Error> {
                     is_replicated,
                 })
                 .await?;
+
                 for migration in &migrations[1..] {
                     run_migration(RunMigrationArgs {
                         clickhouse,

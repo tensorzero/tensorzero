@@ -32,14 +32,13 @@ import type {
 } from "~/utils/clickhouse/common";
 import type { InferenceUsage } from "~/utils/clickhouse/helpers";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
-import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import type { InferenceResponse } from "~/utils/tensorzero";
 import { logger } from "~/utils/logger";
 import type {
   ClientInferenceParams,
-  StoredInput as TensorZeroStoredInput,
-  StoredInputMessage as TensorZeroStoredInputMessage,
-  StoredInputMessageContent as TensorZeroStoredInputMessageContent,
+  Input,
+  InputMessage,
+  InputMessageContent,
   ContentBlockChatOutput,
   JsonInferenceOutput,
   ChatInferenceDatapoint,
@@ -196,60 +195,57 @@ export function useInferenceActionFetcher() {
   } satisfies ActionFetcher;
 }
 
-// Convert TensorZero's StoredInput to our Input type
-export function tensorZeroStoredInputToInput(
-  resolvedInput: TensorZeroStoredInput,
-): ZodInput {
+// Convert Input type from a datapoint to the Zod Input type used in the UI
+export function datapointInputToZodInput(input: Input): ZodInput {
   return {
-    system: resolvedInput.system ?? undefined,
-    messages: resolvedInput.messages.map(tensorZeroStoredMessageToInputMessage),
+    system: input.system ?? undefined,
+    messages: input.messages.map(inputMessageToZodInputMessage),
   };
 }
 
-function tensorZeroStoredMessageToInputMessage(
-  message: TensorZeroStoredInputMessage,
-): ZodInputMessage {
+function inputMessageToZodInputMessage(message: InputMessage): ZodInputMessage {
   return {
     role: message.role,
-    content: message.content.map(tensorZeroStoredContentToInputContent),
+    content: message.content.map(inputMessageContentToZodInputMessageContent),
   };
 }
 
-function tensorZeroStoredContentToInputContent(
-  content: TensorZeroStoredInputMessageContent,
+function inputMessageContentToZodInputMessageContent(
+  content: InputMessageContent,
 ): ZodInputMessageContent {
   switch (content.type) {
-    case "text":
-      return {
-        type: "text",
-        value: content.text,
-      };
-    case "template":
     case "raw_text":
+    case "template":
+    case "text":
+    case "thought":
+    case "tool_result":
+    case "unknown":
       return content;
     case "tool_call":
-      return {
-        type: "tool_call",
-        id: content.id,
-        name: content.name,
-        arguments: content.arguments,
-      };
-    case "tool_result":
-      return {
-        type: "tool_result",
-        id: content.id,
-        name: content.name,
-        result: content.result,
-      };
-    case "thought":
-      return {
-        type: "thought",
-        text: content.text,
-        _internal_provider_type: content._internal_provider_type,
-        signature: content.signature,
-      };
+      if ("raw_arguments" in content) {
+        // This is an InferenceResponseToolCall.
+        return {
+          type: "tool_call",
+          name: content.raw_name,
+          arguments: content.raw_arguments,
+          id: content.id,
+        };
+      } else {
+        return {
+          type: "tool_call",
+          name: content.name,
+          arguments: content.arguments,
+          id: content.id,
+        };
+      }
     case "file": {
       // Handle the StoragePath conversion properly
+      if (content.file_type === "url" || content.file_type === "base64") {
+        // The file should've been stored, but here they are not. This shouldn't happen.
+        throw new Error(
+          "URL and base64 files should not be passed to `tensorZeroStoredContentToInputContent`. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
+        );
+      }
       const storageKind = content.storage_path.kind;
       let convertedKind;
 
@@ -275,12 +271,6 @@ function tensorZeroStoredContentToInputContent(
         },
       };
     }
-    case "unknown":
-      return {
-        type: "unknown",
-        data: content.data,
-        model_provider_name: content.model_provider_name,
-      };
   }
 }
 
@@ -295,12 +285,6 @@ interface InferenceDefaultFunctionActionArgs {
   resource: ParsedInferenceRow;
   variant?: undefined;
   model_name: string;
-}
-
-interface DatapointActionArgs {
-  source: "zod_datapoint";
-  resource: ParsedDatasetRow;
-  variant: string;
 }
 
 interface T0DatapointActionArgs {
@@ -328,7 +312,6 @@ interface ClickHouseDatapointActionArgs {
 type ActionArgs =
   | InferenceActionArgs
   | InferenceDefaultFunctionActionArgs
-  | DatapointActionArgs
   | T0DatapointActionArgs
   | ClickHouseDatapointActionArgs;
 
@@ -408,11 +391,10 @@ export function prepareInferenceActionRequest(
     };
   } else if (args.source === "t0_datapoint") {
     // Handle datapoints from tensorzero-node (with StoredInput)
-    const clientInput = storedInputToClientInput(args.resource.input);
     return {
       ...baseParams,
       function_name: args.resource.function_name,
-      input: clientInput,
+      input: args.resource.input,
       variant_name: args.variant,
     };
   } else {
@@ -484,54 +466,6 @@ export function resolvedInputToClientInput(
     system: input.system || null,
     messages: input.messages.map(resolvedInputMessageToClientInputMessage),
   };
-}
-
-export function storedInputToClientInput(
-  input: TensorZeroStoredInput,
-): ClientInput {
-  return {
-    system: input.system || undefined,
-    messages: input.messages.map(storedInputMessageToClientInputMessage),
-  };
-}
-
-function storedInputMessageToClientInputMessage(
-  message: TensorZeroStoredInputMessage,
-): ClientInputMessage {
-  return {
-    role: message.role,
-    content: message.content.map(
-      storedInputMessageContentToClientInputMessageContent,
-    ),
-  };
-}
-
-function storedInputMessageContentToClientInputMessageContent(
-  content: TensorZeroStoredInputMessageContent,
-): ClientInputMessageContent {
-  switch (content.type) {
-    case "text":
-    case "raw_text":
-    case "template":
-    case "tool_call":
-    case "tool_result":
-    case "thought":
-    case "unknown":
-      return content;
-    case "file": {
-      // For files, we need to pass the storage path information
-      // The backend will handle resolving the file from storage
-      return {
-        type: "file",
-        file_type: "object_storage_pointer",
-        source_url: content.source_url,
-        mime_type: content.mime_type,
-        storage_path: content.storage_path,
-        detail: content.detail,
-        filename: content.filename,
-      };
-    }
-  }
 }
 
 export function resolvedInputToTensorZeroInput(

@@ -1,5 +1,6 @@
 /// Comprehensive tests for the get_datapoints and list_datapoints API endpoints.
-/// Tests both the POST /v1/datasets/get_datapoints and POST /v1/datasets/{dataset_name}/list_datapoints endpoints.
+/// Tests both the dataset-scoped POST /v1/datasets/{dataset_name}/get_datapoints and the deprecated
+/// POST /v1/datasets/get_datapoints endpoints alongside POST /v1/datasets/{dataset_name}/list_datapoints.
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -17,9 +18,92 @@ use tensorzero_core::inference::types::{
 
 use crate::common::get_gateway_endpoint;
 
-/// Tests for the /v1/datasets/get_datapoints endpoint.
+/// Tests for the /v1/datasets/{dataset_name}/get_datapoints endpoint.
 mod get_datapoints_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn test_get_datapoints_single_chat_datapoint_without_dataset_name() {
+        let http_client = Client::new();
+        let clickhouse = get_clickhouse().await;
+        let dataset_name = format!("test-get-dp-single-chat-{}", Uuid::now_v7());
+
+        // Create a chat datapoint
+        let datapoint_id = Uuid::now_v7();
+        let mut tags = HashMap::new();
+        tags.insert("env".to_string(), "test".to_string());
+
+        let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+            dataset_name: dataset_name.clone(),
+            function_name: "basic_test".to_string(),
+            name: Some("Test Datapoint".to_string()),
+            id: datapoint_id,
+            episode_id: None,
+            input: StoredInput {
+                system: Some(System::Template(Arguments(
+                    json!({"assistant_name": "TestBot"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ))),
+                messages: vec![StoredInputMessage {
+                    role: Role::User,
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, world!".to_string(),
+                    })],
+                }],
+            },
+            output: Some(vec![
+                tensorzero_core::inference::types::ContentBlockChatOutput::Text(Text {
+                    text: "Hi there!".to_string(),
+                }),
+            ]),
+            tool_params: None,
+            tags: Some(tags.clone()),
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            snapshot_hash: None,
+        });
+
+        clickhouse
+            .insert_datapoints(&[datapoint_insert])
+            .await
+            .unwrap();
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
+
+        // Get the datapoint via the endpoint
+        let resp = http_client
+            .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+            .json(&json!({
+                "ids": [datapoint_id.to_string()]
+            }))
+            .send()
+            .await
+            .unwrap();
+
+        assert!(
+            resp.status().is_success(),
+            "Request failed: {:?}",
+            resp.status()
+        );
+
+        let resp_json: Value = resp.json().await.unwrap();
+        let datapoints = resp_json["datapoints"].as_array().unwrap();
+        assert_eq!(datapoints.len(), 1);
+
+        let dp = &datapoints[0];
+        assert_eq!(dp["id"], datapoint_id.to_string());
+        assert_eq!(dp["type"], "chat");
+        assert_eq!(dp["dataset_name"], dataset_name);
+        assert_eq!(dp["function_name"], "basic_test");
+        assert_eq!(dp["name"], "Test Datapoint");
+        assert_eq!(dp["tags"]["env"], "test");
+        assert_eq!(dp["output"][0]["type"], "text");
+        assert_eq!(dp["output"][0]["text"], "Hi there!");
+    }
 
     #[tokio::test]
     async fn test_get_datapoints_single_chat_datapoint() {
@@ -75,7 +159,9 @@ mod get_datapoints_tests {
 
         // Get the datapoint via the endpoint
         let resp = http_client
-            .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/get_datapoints"
+            )))
             .json(&json!({
                 "ids": [datapoint_id.to_string()]
             }))
@@ -161,7 +247,9 @@ mod get_datapoints_tests {
 
         // Get the datapoint via the endpoint
         let resp = http_client
-            .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/get_datapoints"
+            )))
             .json(&json!({
                 "ids": [datapoint_id.to_string()]
             }))
@@ -289,7 +377,9 @@ mod get_datapoints_tests {
 
         // Get all three datapoints
         let resp = http_client
-            .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/get_datapoints"
+            )))
             .json(&json!({
                 "ids": [chat_id1.to_string(), chat_id2.to_string(), json_id.to_string()]
             }))
@@ -368,7 +458,9 @@ mod get_datapoints_tests {
         let non_existent_id2 = Uuid::now_v7();
 
         let resp = http_client
-        .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+        .post(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/get_datapoints"
+        )))
         .json(&json!({
             "ids": [existing_id.to_string(), non_existent_id1.to_string(), non_existent_id2.to_string()]
         }))
@@ -440,7 +532,9 @@ mod get_datapoints_tests {
 
         // get_datapoints should return stale datapoints (unlike list_datapoints)
         let resp = http_client
-            .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/get_datapoints"
+            )))
             .json(&json!({
                 "ids": [datapoint_id.to_string()]
             }))
@@ -461,9 +555,51 @@ mod get_datapoints_tests {
     #[tokio::test]
     async fn test_get_datapoints_empty_ids_list() {
         let http_client = Client::new();
+        let clickhouse = get_clickhouse().await;
+        let dataset_name = format!("test-get-dp-empty-ids-list-{}", Uuid::now_v7());
+
+        // Create a datapoint so we have a valid dataset name.
+        let datapoint_id = Uuid::now_v7();
+        let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+            dataset_name: dataset_name.clone(),
+            function_name: "basic_test".to_string(),
+            name: None,
+            id: datapoint_id,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![StoredInputMessage {
+                    role: Role::User,
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test".to_string(),
+                    })],
+                }],
+            },
+            output: Some(vec![
+                tensorzero_core::inference::types::ContentBlockChatOutput::Text(Text {
+                    text: "Original output".to_string(),
+                }),
+            ]),
+            tool_params: None,
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            snapshot_hash: None,
+        });
+
+        clickhouse
+            .insert_datapoints(&[datapoint_insert])
+            .await
+            .unwrap();
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
 
         let resp = http_client
-            .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/get_datapoints"
+            )))
             .json(&json!({
                 "ids": []
             }))
@@ -480,10 +616,53 @@ mod get_datapoints_tests {
 
     #[tokio::test]
     async fn test_get_datapoints_invalid_uuid() {
+        // Create a valid dataset name so we have a valid dataset name.
+        let dataset_name = format!("test-get-dp-invalid-uuid-{}", Uuid::now_v7());
         let http_client = Client::new();
+        let clickhouse = get_clickhouse().await;
+
+        // Create a datapoint so we have a valid dataset name.
+        let datapoint_id = Uuid::now_v7();
+        let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+            dataset_name: dataset_name.clone(),
+            function_name: "basic_test".to_string(),
+            name: None,
+            id: datapoint_id,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![StoredInputMessage {
+                    role: Role::User,
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test".to_string(),
+                    })],
+                }],
+            },
+            output: Some(vec![
+                tensorzero_core::inference::types::ContentBlockChatOutput::Text(Text {
+                    text: "Original output".to_string(),
+                }),
+            ]),
+            tool_params: None,
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: true,
+            snapshot_hash: None,
+        });
+
+        clickhouse
+            .insert_datapoints(&[datapoint_insert])
+            .await
+            .unwrap();
+
+        tokio::time::sleep(Duration::from_millis(500)).await;
 
         let resp = http_client
-            .post(get_gateway_endpoint("/v1/datasets/get_datapoints"))
+            .post(get_gateway_endpoint(&format!(
+                "/v1/datasets/{dataset_name}/get_datapoints"
+            )))
             .json(&json!({
                 "ids": ["not-a-valid-uuid"]
             }))

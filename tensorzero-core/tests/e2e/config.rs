@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+<<<<<<< HEAD
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     ClientBuilder, ClientInferenceParams, ClientInput, ClientInputMessage,
@@ -12,6 +13,13 @@ use tensorzero_core::db::clickhouse::migration_manager::{self, RunMigrationManag
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, CLICKHOUSE_URL,
 };
+=======
+use tensorzero_core::config::snapshot::ConfigSnapshot;
+use tensorzero_core::config::{write_config_snapshot, Config, ConfigFileGlob};
+use tensorzero_core::db::clickhouse::migration_manager;
+use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+>>>>>>> 088d68627470d99d98aac67da83dee018dbdf0cf
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::ConfigQueries;
@@ -111,8 +119,6 @@ async fn test_from_components_basic() {
         .unwrap()
         .dangerous_into_config_without_writing(),
     );
-    let snapshot_hash = SnapshotHash::new_test();
-
     // Create components
     let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
     let postgres_connection_info = PostgresConnectionInfo::Disabled;
@@ -121,7 +127,6 @@ async fn test_from_components_basic() {
     // Build client using FromComponents mode
     let client = tensorzero::ClientBuilder::new(tensorzero::ClientBuilderMode::FromComponents {
         config,
-        snapshot_hash,
         clickhouse_connection_info,
         postgres_connection_info,
         http_client,
@@ -151,26 +156,24 @@ async fn test_write_config_snapshot() {
     .unwrap();
     let random_id = Uuid::now_v7();
 
-    // Create a test config snapshot
+    // Create a test config snapshot with minimal valid config
+    // Using a unique metric name to avoid conflicts between test runs
     let config_toml = format!(
         r#"
-[gateway]
-bind = "0.0.0.0:3000"
-
-[models.test_model{random_id}]
-routing = ["test_provider::gpt-4"]
+[metrics.test_metric_{random_id}]
+type = "boolean"
+level = "inference"
+optimize = "max"
 "#
     );
 
     let mut extra_templates = HashMap::new();
     extra_templates.insert("test_template".to_string(), "Hello {{name}}!".to_string());
 
-    let snapshot = ConfigSnapshot {
-        config: config_toml.to_string(),
-        extra_templates: extra_templates.clone(),
-    };
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
-    let hash = snapshot.hash();
+    let hash = snapshot.hash.clone();
     let hash_number = hash.to_string();
 
     // Write the config snapshot
@@ -192,7 +195,13 @@ routing = ["test_provider::gpt-4"]
     // Parse and verify the result
     let snapshot_row: serde_json::Value = serde_json::from_str(&response.response).unwrap();
 
-    assert_eq!(snapshot_row["config"].as_str().unwrap(), config_toml);
+    // Config is serialized from StoredConfig, so format may differ from original.
+    // Just verify it contains our metric definition.
+    let stored_config = snapshot_row["config"].as_str().unwrap();
+    assert!(
+        stored_config.contains(&format!("test_metric_{random_id}")),
+        "Config should contain our test metric"
+    );
     assert!(!snapshot_row["tensorzero_version"]
         .as_str()
         .unwrap()
@@ -206,10 +215,8 @@ routing = ["test_provider::gpt-4"]
     let last_used_1 = snapshot_row["last_used"].as_str().unwrap();
 
     // Test upsert behavior: write the same config again
-    let snapshot2 = ConfigSnapshot {
-        config: config_toml.to_string(),
-        extra_templates: extra_templates.clone(),
-    };
+    let snapshot2 =
+        ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
 
     write_config_snapshot(&clickhouse, snapshot2).await.unwrap();
 
@@ -238,8 +245,12 @@ routing = ["test_provider::gpt-4"]
         "last_used should be updated on upsert"
     );
 
-    // Verify the data is still correct
-    assert_eq!(snapshot_row2["config"].as_str().unwrap(), config_toml);
+    // Verify the data is still correct (config contains our metric)
+    let stored_config2 = snapshot_row2["config"].as_str().unwrap();
+    assert!(
+        stored_config2.contains(&format!("test_metric_{random_id}")),
+        "Config should still contain our test metric after upsert"
+    );
     assert_eq!(
         snapshot_row2["hash"].as_str().unwrap().to_lowercase(),
         hash_number
