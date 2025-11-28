@@ -18,12 +18,13 @@ import type {
   DeleteDatapointsResponse,
   GetDatapointsRequest,
   GetDatapointsResponse,
-  UpdateDatapointsMetadataRequest,
-  UpdateDatapointsRequest,
-  UpdateDatapointRequest,
-  UpdateDatapointsResponse,
   GetInferenceBoundsResponse,
   InternalListInferencesByIdResponse,
+  ListDatapointsRequest,
+  UpdateDatapointRequest,
+  UpdateDatapointsMetadataRequest,
+  UpdateDatapointsRequest,
+  UpdateDatapointsResponse,
 } from "~/types/tensorzero";
 
 /**
@@ -446,8 +447,14 @@ export class TensorZeroClient {
     return { id: body.ids[0] };
   }
 
-  async getDatapoint(datapointId: string): Promise<Datapoint | null> {
-    const endpoint = `/v1/datasets/get_datapoints`;
+  async getDatapoint(
+    datapointId: string,
+    datasetName?: string,
+  ): Promise<Datapoint | undefined> {
+    // We currently maintain 2 endpoints for getting a datapoint, with/without the dataset name.
+    const endpoint = datasetName
+      ? `/v1/datasets/${encodeURIComponent(datasetName)}/get_datapoints`
+      : `/v1/datasets/get_datapoints`;
     const requestBody: GetDatapointsRequest = {
       ids: [datapointId],
     };
@@ -463,38 +470,28 @@ export class TensorZeroClient {
     }
 
     const body = (await response.json()) as GetDatapointsResponse;
-    return body.datapoints[0] ?? null;
+    if (body.datapoints.length === 0) {
+      return undefined;
+    }
+    return body.datapoints[0];
   }
 
   async listDatapoints(
     dataset_name: string,
-    function_name?: string,
-    limit?: number,
-    offset?: number,
-  ): Promise<Datapoint[]> {
-    const params = new URLSearchParams();
-    if (function_name) {
-      params.append("function_name", function_name);
-    }
-    if (limit !== undefined) {
-      params.append("limit", limit.toString());
-    }
-    if (offset !== undefined) {
-      params.append("offset", offset.toString());
-    }
-
-    const queryString = params.toString();
-    const endpoint = `/datasets/${encodeURIComponent(dataset_name)}/datapoints${queryString ? `?${queryString}` : ""}`;
+    params: ListDatapointsRequest,
+  ): Promise<GetDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(dataset_name)}/list_datapoints`;
 
     const response = await this.fetch(endpoint, {
-      method: "GET",
+      method: "POST",
+      body: JSON.stringify(params),
     });
     if (!response.ok) {
       const message = await this.getErrorText(response);
       this.handleHttpError({ message, response });
     }
-    const body = await response.json();
-    return body as Datapoint[];
+    const body = (await response.json()) as GetDatapointsResponse;
+    return body;
   }
 
   async updateDatapointsMetadata(

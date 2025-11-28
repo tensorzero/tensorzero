@@ -516,22 +516,21 @@ pub async fn run_evaluation_core_streaming(
             offset: Some(0),
             ..Default::default()
         };
-        list_datapoints(
-            &clients.clickhouse_client,
-            &args.config,
-            dataset_name.clone(),
-            request,
-        )
-        .await?
-        .datapoints
+        list_datapoints(&clients.clickhouse_client, dataset_name.clone(), request)
+            .await?
+            .datapoints
     } else {
         // Load by IDs
         let request = GetDatapointsRequest {
             ids: datapoint_ids.clone(),
         };
-        get_datapoints(&clients.clickhouse_client, &args.config, request)
-            .await?
-            .datapoints
+        get_datapoints(
+            &clients.clickhouse_client,
+            /*dataset_name=*/ None,
+            request,
+        )
+        .await?
+        .datapoints
     };
     info!(
         dataset_size = dataset.len(),

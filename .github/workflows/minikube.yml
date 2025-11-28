@@ -35,12 +35,16 @@ jobs:
             # We load this from the build-gateway-container job
             tag: sha-${{ github.sha }}
             pullPolicy: Never
+          service:
+            type: NodePort
         ui:
           image:
             repository: tensorzero/ui
             # We load this from the build-ui-container job
             tag: sha-${{ github.sha }}
             pullPolicy: Never
+          service:
+            type: NodePort
         EOF
         # Fix the extra indentation caused by inlining the yaml file in our workflow
         sed -i 's/^        //' helm-ci-overrides.yaml
@@ -68,18 +72,17 @@ jobs:
         helm upgrade --install tensorzero .  -f values.yaml -f helm-ci-overrides.yaml -n tensorzero
         kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=tensorzero -n tensorzero --timeout=60s
 
-    - name: Port forward the gateway and ui services
-      run: |
-        kubectl port-forward service/tensorzero-gateway -n tensorzero 3000:3000 &
-        kubectl port-forward service/tensorzero-ui -n tensorzero 4000:4000 &
-
     - name: Ping the gateway
       run: |
+        # Get the minikube service URL
+        GATEWAY_URL=$(minikube service tensorzero-gateway -n tensorzero --url)
+        echo "Gateway URL: $GATEWAY_URL"
+
         # TODO - add a 'startupProbe' to the gateway helm chart
         count=0
         max_attempts=40
-        while ! curl http://localhost:3000/health; do
-          echo "Waiting for gateway to be healthy..."
+        while ! curl ${GATEWAY_URL}/health; do
+          echo "Waiting for gateway to be healthy (attempt $count/$max_attempts)..."
           sleep 1
           count=$((count + 1))
           if [ $count -ge $max_attempts ]; then
@@ -87,6 +90,7 @@ jobs:
             exit 1
           fi
         done
+        echo "Gateway is healthy!"
 
     - name: Print pod statuses
       if: always()
