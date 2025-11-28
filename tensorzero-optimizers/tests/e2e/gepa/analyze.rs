@@ -731,7 +731,7 @@ async fn test_analyze_input_echo_helper(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_analyze_input_includes_system_template() {
-    let payload = test_analyze_input_echo_helper(
+    let payload = Box::pin(test_analyze_input_echo_helper(
         vec![create_test_evaluation_info(
             "test_function",
             "Test input",
@@ -740,7 +740,7 @@ async fn test_analyze_input_includes_system_template() {
         create_test_function_config(),
         None,
         create_test_evaluation_config(),
-    )
+    ))
     .await;
 
     let system_prompt = payload
@@ -955,12 +955,12 @@ async fn test_analyze_input_format_scenarios() {
     ];
 
     for scenario in scenarios {
-        let payload = test_analyze_input_echo_helper(
+        let payload = Box::pin(test_analyze_input_echo_helper(
             scenario.eval_infos,
             scenario.function_config,
             scenario.static_tools,
             scenario.eval_config,
-        )
+        ))
         .await;
 
         (scenario.assert_fn)(&payload);

@@ -171,7 +171,12 @@ impl GatewayHandle {
     pub async fn new(config: UnwrittenConfig) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
-        Self::new_with_databases(config, clickhouse_url, postgres_url).await
+        Box::pin(Self::new_with_databases(
+            config,
+            clickhouse_url,
+            postgres_url,
+        ))
+        .await
     }
 
     async fn new_with_databases(
@@ -493,8 +498,12 @@ pub async fn start_openai_compatible_gateway(
     } else {
         Config::new_empty().await?
     };
-    let gateway_handle =
-        GatewayHandle::new_with_databases(config_load_info, clickhouse_url, postgres_url).await?;
+    let gateway_handle = Box::pin(GatewayHandle::new_with_databases(
+        config_load_info,
+        clickhouse_url,
+        postgres_url,
+    ))
+    .await?;
 
     let router = Router::new()
         .register_openai_compatible_routes()
