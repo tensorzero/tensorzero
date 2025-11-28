@@ -485,7 +485,7 @@ impl ClientBuilder {
                 verify_credentials,
                 allow_batch_writes,
             } => {
-                let config_load_info = if let Some(config_file) = config_file {
+                let unwritten_config = if let Some(config_file) = config_file {
                     let glob = ConfigFileGlob::new(config_file.to_string_lossy().to_string())
                         .map_err(|e| {
                             ClientBuilderError::ConfigParsingPreGlob(TensorZeroError::Other {
@@ -508,14 +508,14 @@ impl ClientBuilder {
                         })?
                 };
                 let clickhouse_connection_info =
-                    setup_clickhouse(&config_load_info, clickhouse_url.clone(), true)
+                    setup_clickhouse(&unwritten_config, clickhouse_url.clone(), true)
                         .await
                         .map_err(|e| {
                             ClientBuilderError::Clickhouse(TensorZeroError::Other {
                                 source: e.into(),
                             })
                         })?;
-                let config = config_load_info
+                let config = unwritten_config
                     .into_config(&clickhouse_connection_info)
                     .await
                     .map_err(|e| {

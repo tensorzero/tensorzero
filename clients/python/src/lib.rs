@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 /// Implements a Python tensorzero client, using `pyo3` to wrap the existing Rust client.
 /// Overall structure of the crate:
 /// * `src/lib.rs` - the main entrypoint of the Python native module - the `#[pymodule]` function
@@ -2888,7 +2889,6 @@ impl AsyncTensorZeroGateway {
                 "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
             )
         })?;
-
         // Enter the Tokio runtime context while still holding the GIL
         // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
         // for JSON schema compilation
