@@ -270,7 +270,11 @@ async fn analyze_inference(
     // Conditionally include inference context based on config flag
     let inference = if gepa_config.include_inference_for_mutation {
         Some(Inference {
-            input: eval_info.datapoint.input().clone(),
+            input: eval_info
+                .datapoint
+                .input()
+                .clone()
+                .into_stored_input_without_file_handling()?,
             output: serialize_inference_output(&eval_info.response)?,
         })
     } else {
@@ -557,9 +561,7 @@ mod tests {
             name: None,
         };
 
-        // Convert StoredDatapoint to Datapoint
-        let function_config = create_test_function_config();
-        let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint(&function_config));
+        let datapoint = Datapoint::Chat(stored_datapoint.into_datapoint());
 
         EvaluationInfo {
             datapoint,

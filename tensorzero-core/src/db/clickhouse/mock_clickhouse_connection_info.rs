@@ -4,13 +4,13 @@ use uuid::Uuid;
 
 use crate::config::Config;
 use crate::db::datasets::{
-    CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetDetailRow, DatasetMetadata,
-    DatasetQueries, DatasetQueryParams, GetDatapointParams, GetDatapointsParams,
-    GetDatasetMetadataParams, GetDatasetRowsParams, MockDatasetQueries,
+    CountDatapointsForDatasetFunctionParams, DatapointInsert, DatasetMetadata, DatasetQueries,
+    DatasetQueryParams, GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams,
+    MockDatasetQueries,
 };
 use crate::db::inferences::{
-    GetInferenceBoundsParams, InferenceBounds, InferenceQueries, ListInferencesParams,
-    MockInferenceQueries,
+    GetInferenceBoundsParams, InferenceBounds, InferenceMetadata, InferenceQueries,
+    ListInferencesByIdParams, ListInferencesParams, MockInferenceQueries,
 };
 use crate::endpoints::datasets::StoredDatapoint;
 use crate::error::Error;
@@ -56,6 +56,13 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
     ) -> Result<InferenceBounds, Error> {
         self.inference_queries.get_inference_bounds(params).await
     }
+
+    async fn list_inferences_by_id(
+        &self,
+        params: ListInferencesByIdParams,
+    ) -> Result<Vec<InferenceMetadata>, Error> {
+        self.inference_queries.list_inferences_by_id(params).await
+    }
 }
 
 #[async_trait]
@@ -66,13 +73,6 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
 
     async fn insert_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error> {
         self.dataset_queries.insert_rows_for_dataset(params).await
-    }
-
-    async fn get_dataset_rows(
-        &self,
-        params: &GetDatasetRowsParams,
-    ) -> Result<Vec<DatasetDetailRow>, Error> {
-        self.dataset_queries.get_dataset_rows(params).await
     }
 
     async fn get_dataset_metadata(

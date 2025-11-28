@@ -716,12 +716,22 @@ impl<'a> GoogleAIStudioGeminiToolConfig<'a> {
                     allowed_function_names: None,
                 },
             },
-            ToolChoice::Auto => GoogleAIStudioGeminiToolConfig {
-                function_calling_config: GeminiFunctionCallingConfig {
-                    mode: GeminiFunctionCallingMode::Auto,
-                    allowed_function_names: tool_config.allowed_tools.as_dynamic_allowed_tools(),
-                },
-            },
+            ToolChoice::Auto => {
+                let allowed_function_names = tool_config.allowed_tools.as_dynamic_allowed_tools();
+                // If allowed_function_names is set, we need to use Any mode because
+                // Gemini's Auto mode with allowed_function_names errors
+                let mode = if allowed_function_names.is_some() {
+                    GeminiFunctionCallingMode::Any
+                } else {
+                    GeminiFunctionCallingMode::Auto
+                };
+                GoogleAIStudioGeminiToolConfig {
+                    function_calling_config: GeminiFunctionCallingConfig {
+                        mode,
+                        allowed_function_names,
+                    },
+                }
+            }
             ToolChoice::Required => GoogleAIStudioGeminiToolConfig {
                 function_calling_config: GeminiFunctionCallingConfig {
                     mode: GeminiFunctionCallingMode::Any,
@@ -1711,7 +1721,7 @@ mod tests {
             }
         );
 
-        // Test Auto mode with specific allowed tools (new behavior)
+        // Test Auto mode with specific allowed tools - should use Any mode
         let tool_call_config = ToolCallConfig {
             static_tools_available: vec![],
             dynamic_tools_available: vec![],
@@ -1729,7 +1739,7 @@ mod tests {
         let tool_config = GoogleAIStudioGeminiToolConfig::from_tool_config(&tool_call_config);
         assert_eq!(
             tool_config.function_calling_config.mode,
-            GeminiFunctionCallingMode::Auto
+            GeminiFunctionCallingMode::Any
         );
         let mut allowed_names = tool_config
             .function_calling_config

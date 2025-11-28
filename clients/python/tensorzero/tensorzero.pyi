@@ -55,6 +55,7 @@ from .generated_types import (
     GetDatapointsResponse,
     GetInferencesResponse,
     InferenceFilter,
+    Input,
     ListDatapointsRequest,
     ListInferencesRequest,
     StoredInference,
@@ -367,7 +368,7 @@ class LegacyDatapoint:
     @property
     def id(self) -> UUID: ...
     @property
-    def input(self) -> ResolvedInput: ...
+    def input(self) -> Input: ...
     @property
     def output(self) -> Any: ...
     @property
@@ -791,11 +792,14 @@ class TensorZeroGateway(BaseTensorZeroGateway):
     def get_datapoints(
         self,
         *,
+        dataset_name: str | None = ...,
         ids: Sequence[str],
     ) -> GetDatapointsResponse:
         """
         Get specific datapoints by their IDs.
 
+        :param dataset_name: Optional dataset name containing the datapoints. Including this improves
+            query performance because the dataset is part of the sorting key.
         :param ids: A sequence of datapoint IDs to retrieve. They should be in UUID format.
         :return: A `GetDatapointsResponse` object.
         """
@@ -968,7 +972,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         evaluation_name: str,
-        dataset_name: str,
+        dataset_name: Optional[str] = None,
+        datapoint_ids: Optional[List[str]] = None,
         variant_name: Optional[str] = None,
         concurrency: int = 1,
         inference_cache: str = "on",
@@ -977,11 +982,12 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         adaptive_stopping: Optional[Dict[str, Dict[str, float]]] = None,
     ) -> EvaluationJobHandler:
         """
-        Run an evaluation for a specific variant on a dataset.
+        Run an evaluation for a specific variant on a dataset or specific datapoints.
         This function is only available in EmbeddedGateway mode.
 
         :param evaluation_name: The name of the evaluation to run
-        :param dataset_name: The name of the dataset to use for evaluation
+        :param dataset_name: The name of the dataset to use for evaluation (mutually exclusive with datapoint_ids)
+        :param datapoint_ids: Specific datapoint IDs to evaluate (mutually exclusive with dataset_name)
         :param variant_name: The name of the variant to evaluate
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")
@@ -1333,11 +1339,14 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
     async def get_datapoints(
         self,
         *,
+        dataset_name: str | None = ...,
         ids: Sequence[str],
     ) -> GetDatapointsResponse:
         """
         Get specific datapoints by their IDs.
 
+        :param dataset_name: Optional dataset name containing the datapoints. Including this improves
+            query performance because the dataset is part of the sorting key.
         :param ids: A sequence of datapoint IDs to retrieve. They should be in UUID format.
         :return: A `GetDatapointsResponse` object.
         """
@@ -1509,7 +1518,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         self,
         *,
         evaluation_name: str,
-        dataset_name: str,
+        dataset_name: Optional[str] = None,
+        datapoint_ids: Optional[List[str]] = None,
         variant_name: Optional[str] = None,
         concurrency: int = 1,
         inference_cache: str = "on",
@@ -1518,11 +1528,12 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         adaptive_stopping: Optional[Dict[str, Dict[str, float]]] = None,
     ) -> AsyncEvaluationJobHandler:
         """
-        Run an evaluation for a specific variant on a dataset.
+        Run an evaluation for a specific variant on a dataset or specific datapoints.
         This function is only available in EmbeddedGateway mode.
 
         :param evaluation_name: The name of the evaluation to run
-        :param dataset_name: The name of the dataset to use for evaluation
+        :param dataset_name: The name of the dataset to use for evaluation (mutually exclusive with datapoint_ids)
+        :param datapoint_ids: Specific datapoint IDs to evaluate (mutually exclusive with dataset_name)
         :param variant_name: The name of the variant to evaluate
         :param concurrency: The number of concurrent evaluations to run
         :param inference_cache: Cache configuration for inference requests ("on", "off", "read_only", or "write_only")

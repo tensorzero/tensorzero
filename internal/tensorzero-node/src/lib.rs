@@ -45,7 +45,7 @@ pub struct EvaluationRunStartEvent {
     pub evaluation_run_id: Uuid,
     pub num_datapoints: usize,
     pub evaluation_name: String,
-    pub dataset_name: String,
+    pub dataset_name: Option<String>,
     pub variant_name: String,
 }
 
@@ -114,7 +114,8 @@ pub struct RunEvaluationStreamingParams {
     pub clickhouse_url: String,
     pub config_path: String,
     pub evaluation_name: String,
-    pub dataset_name: String,
+    pub dataset_name: Option<String>,
+    pub datapoint_ids: Option<Vec<String>>,
     pub variant_name: String,
     pub concurrency: u32,
     pub inference_cache: String,
@@ -185,6 +186,17 @@ pub async fn run_evaluation_streaming(
         ))
     })?;
 
+    let datapoint_ids: Vec<Uuid> = params
+        .datapoint_ids
+        .unwrap_or_default()
+        .iter()
+        .map(|s| {
+            Uuid::parse_str(s).map_err(|e| {
+                napi::Error::from_reason(format!("Invalid UUID in datapoint_ids: {e}"))
+            })
+        })
+        .collect::<Result<Vec<Uuid>, napi::Error>>()?;
+
     let evaluation_run_id = Uuid::now_v7();
 
     // Parse precision_targets from JSON string to HashMap
@@ -204,6 +216,7 @@ pub async fn run_evaluation_streaming(
         clickhouse_client: clickhouse_client.clone(),
         config: config.clone(),
         dataset_name: params.dataset_name.clone(),
+        datapoint_ids: Some(datapoint_ids.clone()),
         variant: EvaluationVariant::Name(params.variant_name.clone()),
         evaluation_name: params.evaluation_name.clone(),
         evaluation_run_id,

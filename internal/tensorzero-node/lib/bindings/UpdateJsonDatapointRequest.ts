@@ -5,12 +5,6 @@ import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
  * An update request for a JSON datapoint.
- * For any fields that are optional in JsonInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:
- * - If the field is omitted, it will be left unchanged.
- * - If the field is specified as `null`, it will be set to `null`.
- * - If the field has a value, it will be set to the provided value.
- *
- * In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
  */
 export type UpdateJsonDatapointRequest = {
   /**
@@ -23,8 +17,6 @@ export type UpdateJsonDatapointRequest = {
   input?: Input;
   /**
    * JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-   * This will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will
-   * also be stored, because we allow invalid outputs in datapoints by design.
    */
   output?: JsonDatapointOutputUpdate | null;
   /**

@@ -169,7 +169,7 @@ pub async fn inference_handler(
     api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
-    let inference_output = inference(
+    let inference_output = Box::pin(inference(
         config,
         &http_client,
         clickhouse_connection_info,
@@ -177,7 +177,7 @@ pub async fn inference_handler(
         deferred_tasks,
         params,
         api_key_ext,
-    )
+    ))
     .await?;
     match inference_output {
         InferenceOutput::NonStreaming(response) => Ok(Json(response).into_response()),
@@ -387,10 +387,11 @@ pub async fn inference(
         models: config.models.clone(),
         embedding_models: config.embedding_models.clone(),
     };
-    let resolved_input = Arc::new(params.input.into_lazy_resolved_input(FetchContext {
+    let fetch_context = FetchContext {
         client: http_client,
         object_store_info: &config.object_store_info,
-    })?);
+    };
+    let resolved_input = Arc::new(params.input.into_lazy_resolved_input(&fetch_context)?);
 
     // If we don't need sampling (pinned or dynamic variant), directly infer with the single variant
     if !needs_sampling {
