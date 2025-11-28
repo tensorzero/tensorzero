@@ -322,7 +322,7 @@ You can customize this behavior in the configuration:
 
 ```toml
 [gateway.auth.cache]
-enabled = true # boolean
+enabled = true  # boolean
 ttl_ms = 60_000 # one minute
 ```
 
@@ -349,17 +349,13 @@ For example, you can limit each API key to 100 model inferences per hour, but al
 [[rate_limiting.rules]]
 priority = 0
 model_inferences_per_hour = 100
-scope = [
-    { api_key_public_id = "tensorzero::each" }
-]
+scope = [{ api_key_public_id = "tensorzero::each" }]
 
 # But override the limit for a specific API key
 [[rate_limiting.rules]]
 priority = 1
 model_inferences_per_hour = 1000
-scope = [
-    { api_key_public_id = "xxxxxxxxxxxx" }
-]
+scope = [{ api_key_public_id = "xxxxxxxxxxxx" }]
 ```
 
 See [Enforce custom rate limits](/operations/enforce-custom-rate-limits) for more details on configuring rate limits with API keys.

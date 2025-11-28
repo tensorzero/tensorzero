@@ -34,7 +34,7 @@ By default, authentication results are cached for 1 second (1000 ms).
 ```toml title="tensorzero.toml"
 [gateway.auth.cache]
 enabled = true
-ttl_ms = 60_000  # Cache for one minute
+ttl_ms = 60_000 # Cache for one minute
 ```
 
 See [Set up auth for TensorZero](/operations/set-up-auth-for-tensorzero) for more details.
@@ -402,8 +402,8 @@ If TensorZero would normally send this request body to the provider...
 
 ```toml
 extra_body = [
-  { pointer = "/agi", value = true},
-  { pointer = "/safety_checks/no_agi", value = { bypass = "on" }}
+  { pointer = "/agi", value = true },
+  { pointer = "/safety_checks/no_agi", value = { bypass = "on" } },
 ]
 ```
 
@@ -462,8 +462,8 @@ Safety-Checks: on
 
 ```toml
 extra_headers = [
-  { name = "Safety-Checks", value = "off"},
-  { name = "Intelligence-Level", value = "AGI"}
+  { name = "Safety-Checks", value = "off" },
+  { name = "Intelligence-Level", value = "AGI" },
 ]
 ```
 
@@ -1328,7 +1328,9 @@ See the [Inference API Reference](/gateway/api-reference/inference/#provider_too
 # ...
 type = "openai"
 api_type = "responses"
-provider_tools = [{type = "web_search"}]  # Enable OpenAI's built-in web search tool
+provider_tools = [
+  { type = "web_search" },
+] # Enable OpenAI's built-in web search tool
 # ...
 ```
 
@@ -1659,7 +1661,7 @@ If all providers timeout or the model-level timeout is reached, an error will be
 ```toml title="tensorzero.toml"
 [embedding_models.model-name]
 routing = ["openai"]
-timeout_ms = 5000  # 5 second timeout
+timeout_ms = 5000    # 5 second timeout
 # ...
 ```
 
@@ -1710,9 +1712,7 @@ The values provided at inference-time take priority over the values in the confi
 ```toml title="tensorzero.toml"
 [embedding_models.openai-text-embedding-3-small.providers.openai]
 type = "openai"
-extra_body = [
-  { pointer = "/dimensions", value = 1536 }
-]
+extra_body = [{ pointer = "/dimensions", value = 1536 }]
 ```
 
 ### `timeout_ms`
@@ -1727,7 +1727,7 @@ If the provider times out, the next provider in the routing list will be attempt
 ```toml title="tensorzero.toml"
 [embedding_models.model-name.providers.openai]
 type = "openai"
-timeout_ms = 3000  # 3 second timeout for this provider
+timeout_ms = 3000 # 3 second timeout for this provider
 # ...
 ```
 
@@ -2324,14 +2324,13 @@ type = "chat"
 tool_choice = "auto"
 tools = [
   # ...
-  "run-python"
+  "run-python",
   # ...
 ]
 # ...
 
 [tools.run-python]
 # ...
-
 ```
 
 ```toml mark="query-database"
@@ -2342,7 +2341,7 @@ type = "chat"
 tool_choice = { specific = "query-database" }
 tools = [
   # ...
-  "query-database"
+  "query-database",
   # ...
 ]
 # ...
@@ -2367,7 +2366,7 @@ The supported tools are defined in `[tools.tool_name]` sections (see below).
 type = "chat"
 tools = [
   # ...
-  "query-database"
+  "query-database",
   # ...
 ]
 # ...
@@ -2546,8 +2545,8 @@ If TensorZero would normally send this request body to the provider...
 
 ```toml
 extra_body = [
-  { pointer = "/agi", value = true},
-  { pointer = "/safety_checks/no_agi", value = { bypass = "on" }}
+  { pointer = "/agi", value = true },
+  { pointer = "/safety_checks/no_agi", value = { bypass = "on" } },
 ]
 ```
 
@@ -2606,8 +2605,8 @@ Safety-Checks: on
 
 ```toml
 extra_headers = [
-  { name = "Safety-Checks", value = "off"},
-  { name = "Intelligence-Level", value = "AGI"}
+  { name = "Safety-Checks", value = "off" },
+  { name = "Intelligence-Level", value = "AGI" },
 ]
 ```
 
@@ -3293,8 +3292,8 @@ If TensorZero would normally send this request body to the provider...
 
 ```toml
 extra_body = [
-  { pointer = "/agi", value = true},
-  { pointer = "/safety_checks/no_agi", value = { bypass = "on" }}
+  { pointer = "/agi", value = true },
+  { pointer = "/safety_checks/no_agi", value = { bypass = "on" } },
 ]
 ```
 
@@ -3353,8 +3352,8 @@ Safety-Checks: on
 
 ```toml
 extra_headers = [
-  { name = "Safety-Checks", value = "off"},
-  { name = "Intelligence-Level", value = "AGI"}
+  { name = "Safety-Checks", value = "off" },
+  { name = "Intelligence-Level", value = "AGI" },
 ]
 ```
 
@@ -3694,7 +3693,7 @@ type = "chat"
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
 type = "uniform"
-candidate_variants = ["variant-a", "variant-b"]  # each has 1/2 probability
+candidate_variants = ["variant-a", "variant-b"] # each has 1/2 probability
 # `variant-c` will not be sampled
 ```
 
@@ -3703,8 +3702,8 @@ candidate_variants = ["variant-a", "variant-b"]  # each has 1/2 probability
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
 type = "uniform"
-candidate_variants = ["variant-a", "variant-b"]  # try these first, uniformly
-fallback_variants = ["variant-c"]  # use if both candidates fail
+candidate_variants = ["variant-a", "variant-b"] # try these first, uniformly
+fallback_variants = ["variant-c"]               # use if both candidates fail
 ```
 
 **Fallback-only mode:**
@@ -3712,7 +3711,7 @@ fallback_variants = ["variant-c"]  # use if both candidates fail
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
 type = "uniform"
-fallback_variants = ["variant-a", "variant-b", "variant-c"]  # sequential
+fallback_variants = ["variant-a", "variant-b", "variant-c"] # sequential
 ```
 
 </Accordion>
@@ -3737,7 +3736,7 @@ For example, weights of `{"variant-a" = 5.0, "variant-b" = 1.0}` result in sampl
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
 type = "static_weights"
-candidate_variants = {"prompt-v1" = 5.0, "prompt-v2" = 1.0}
+candidate_variants = { "prompt-v1" = 5.0, "prompt-v2" = 1.0 }
 # ...
 ```
 
@@ -3754,7 +3753,7 @@ If all candidate variants fail during inference, or if the total weight of activ
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
 type = "static_weights"
-candidate_variants = {"prompt-v1" = 2.0, "prompt-v2" = 1.0, "prompt-v3" = 0.5}
+candidate_variants = { "prompt-v1" = 2.0, "prompt-v2" = 1.0, "prompt-v3" = 0.5 }
 fallback_variants = ["fallback-prompt-a", "fallback-prompt-b"]
 ```
 
@@ -4055,7 +4054,7 @@ You can enable a tool for a function by adding it to the function's `tools` fiel
 type = "chat"
 tools = [
   # ...
-  "get-temperature"
+  "get-temperature",
   # ...
 ]
 # ...
@@ -4373,31 +4372,23 @@ For example:
 [[rate_limiting.rules]]
 priority = 0
 model_inferences_per_minute = 1
-scope = [
-    { tag_key = "user_id", tag_value = "tensorzero::each" }
-]
+scope = [{ tag_key = "user_id", tag_value = "tensorzero::each" }]
 
 # But override the individual limit for the CEO
 [[rate_limiting.rules]]
 priority = 1
 model_inferences_per_minute = 5
-scope = [
-    { tag_key = "user_id", tag_value = "ceo" }
-]
+scope = [{ tag_key = "user_id", tag_value = "ceo" }]
 
 # Each API key can make a maximum of 100 model inferences per hour
 [[rate_limiting.rules]]
 priority = 0
 model_inferences_per_hour = 100
-scope = [
-    { api_key_public_id = "tensorzero::each" }
-]
+scope = [{ api_key_public_id = "tensorzero::each" }]
 
 # But override the limit for a specific API key
 [[rate_limiting.rules]]
 priority = 1
 model_inferences_per_hour = 1000
-scope = [
-    { api_key_public_id = "xxxxxxxxxxxx" }
-]
+scope = [{ api_key_public_id = "xxxxxxxxxxxx" }]
 ```

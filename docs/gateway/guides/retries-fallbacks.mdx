@@ -116,7 +116,7 @@ If both of those variants fail, the gateway will try the fallback variants seque
 ```toml
 [functions.extract_data.experimentation]
 type = "static_weights"
-candidate_variants = {"gpt_5_mini" = 0.7, "claude_haiku_4_5" = 0.3}
+candidate_variants = { "gpt_5_mini" = 0.7, "claude_haiku_4_5" = 0.3 }
 fallback_variants = ["grok_4", "gemini_2_5_flash"]
 ```
 

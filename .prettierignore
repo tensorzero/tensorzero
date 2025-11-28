@@ -15,8 +15,9 @@ ui/
 clients/openai-node/
 internal/tensorzero-node/
 
-# Helm templates (contain Go template syntax)
+# Helm templates (contain Go template syntax) and generated schema
 examples/production-deployment-k8s-helm/templates/
+examples/production-deployment-k8s-helm/values.schema.json
 
 # Lock files
 pnpm-lock.yaml
