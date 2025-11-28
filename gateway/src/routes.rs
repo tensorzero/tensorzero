@@ -154,6 +154,10 @@ fn build_datasets_routes() -> Router<AppStateData> {
             "/v1/datasets/get_datapoints",
             post(endpoints::datasets::v1::get_datapoints_handler),
         )
+        .route(
+            "/v1/datasets/{dataset_name}/datapoints/clone",
+            post(endpoints::datasets::clone_datapoints_handler),
+        )
 }
 
 /// This function builds the public routes for optimization.

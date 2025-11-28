@@ -13,6 +13,8 @@ import {
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
 import type {
+  CreateDatapointsRequest,
+  CreateDatapointsResponse,
   Datapoint,
   DeleteDatapointsRequest,
   DeleteDatapointsResponse,
@@ -537,6 +539,52 @@ export class TensorZeroClient {
     }
     const body = (await response.json()) as DeleteDatapointsResponse;
     return body;
+  }
+
+  /**
+   * Creates new datapoints in a dataset using the v1 API.
+   * @param datasetName - The name of the dataset to create datapoints in
+   * @param request - The create datapoints request containing the array of datapoints
+   * @returns A promise that resolves with the response containing the new datapoint IDs
+   * @throws Error if the dataset name is invalid or the request fails
+   */
+  async createDatapoints(
+    datasetName: string,
+    request: CreateDatapointsRequest,
+  ): Promise<CreateDatapointsResponse> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}/datapoints`;
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as CreateDatapointsResponse;
+  }
+
+  /**
+   * Clones datapoints to a target dataset, preserving all fields except id and dataset_name.
+   * @param targetDatasetName - The name of the target dataset to clone datapoints to
+   * @param datapointIds - Array of datapoint UUIDs to clone
+   * @returns A promise that resolves with the response containing the new datapoint IDs (null if source not found)
+   * @throws Error if the dataset name is invalid or the request fails
+   */
+  async cloneDatapoints(
+    targetDatasetName: string,
+    datapointIds: string[],
+  ): Promise<{ ids: (string | null)[] }> {
+    const endpoint = `/v1/datasets/${encodeURIComponent(targetDatasetName)}/datapoints/clone`;
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify({ datapoint_ids: datapointIds }),
+    });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as { ids: (string | null)[] };
   }
 
   async getObject(storagePath: ZodStoragePath): Promise<string> {

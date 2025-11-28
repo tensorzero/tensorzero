@@ -6,6 +6,7 @@ import type {
   UpdateDatapointRequest,
   ContentBlockChatOutput,
   JsonInferenceOutput,
+  Datapoint,
 } from "~/types/tensorzero";
 import type { UpdateDatapointFormData } from "./formDataUtils";
 
@@ -127,4 +128,34 @@ export async function renameDatapoint(params: {
     datasetName,
     updateRequest,
   );
+}
+
+/**
+ * Clones a datapoint to a target dataset.
+ * Preserves all fields from the original datapoint (including source_inference_id),
+ * only changing the id and dataset_name.
+ *
+ * Arguments:
+ * - `targetDataset`: the name of the dataset to clone the datapoint to
+ * - `datapoint`: the full datapoint object to clone
+ *
+ * Returns the ID of the newly created datapoint.
+ * Throws an error if the source datapoint is not found.
+ */
+export async function cloneDatapoint(params: {
+  targetDataset: string;
+  datapoint: Datapoint;
+}): Promise<{ newId: string }> {
+  const { targetDataset, datapoint } = params;
+
+  const response = await getTensorZeroClient().cloneDatapoints(targetDataset, [
+    datapoint.id,
+  ]);
+
+  const newId = response.ids[0];
+  if (newId === null) {
+    throw new Error(`Source datapoint ${datapoint.id} not found`);
+  }
+
+  return { newId };
 }

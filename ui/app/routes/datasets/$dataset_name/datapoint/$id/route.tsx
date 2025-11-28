@@ -45,8 +45,10 @@ import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
   Input,
+  Datapoint,
 } from "~/types/tensorzero";
 import {
+  cloneDatapoint,
   deleteDatapoint,
   renameDatapoint,
   updateDatapoint,
@@ -56,6 +58,7 @@ import {
   serializeDeleteDatapointToFormData,
   serializeUpdateDatapointToFormData,
   serializeRenameDatapointToFormData,
+  type CloneDatapointFormData,
   type DeleteDatapointFormData,
   type UpdateDatapointFormData,
   type RenameDatapointFormData,
@@ -237,6 +240,35 @@ async function handleRenameAction(
   }
 }
 
+async function handleCloneAction(
+  actionData: CloneDatapointFormData,
+): Promise<
+  ReturnType<
+    typeof data<{ success: boolean; error?: string; redirectTo?: string }>
+  >
+> {
+  try {
+    const datapointData = JSON.parse(actionData.datapoint) as Datapoint;
+    const { newId } = await cloneDatapoint({
+      targetDataset: actionData.target_dataset,
+      datapoint: datapointData,
+    });
+    return data({
+      success: true,
+      redirectTo: toDatapointUrl(actionData.target_dataset, newId),
+    });
+  } catch (error) {
+    logger.error("Error cloning datapoint:", error);
+    return data(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
+  }
+}
+
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
 
@@ -270,6 +302,8 @@ export async function action({ request }: ActionFunctionArgs) {
       return handleUpdateAction(parsedAction);
     case "rename":
       return handleRenameAction(parsedAction);
+    case "clone":
+      return handleCloneAction(parsedAction);
   }
 }
 
@@ -573,6 +607,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             onReset={handleReset}
             showTryWithButton={datapoint.function_name !== DEFAULT_FUNCTION}
             isStale={!!datapoint.staled_at}
+            datapoint={datapoint}
           />
         </SectionLayout>
 
