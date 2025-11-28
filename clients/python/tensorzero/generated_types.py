@@ -617,10 +617,7 @@ OrderDirection = Literal["ascending", "descending"]
 @dataclass(kw_only=True)
 class ProviderToolScopeModelProvider:
     model_name: str
-    model_provider_name: str
-
-
-ProviderToolScope = ProviderToolScopeModelProvider | None
+    provider_name: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -1211,10 +1208,7 @@ class OrderBySearchRelevance:
 OrderBy = OrderByTimestamp | OrderByMetric | OrderBySearchRelevance
 
 
-@dataclass(kw_only=True)
-class ProviderTool:
-    tool: Any
-    scope: ProviderToolScope | None = None
+ProviderToolScope = ProviderToolScopeModelProvider | None
 
 
 @dataclass(kw_only=True)
@@ -1319,6 +1313,12 @@ class OpenAICustomToolFormatGrammar:
 
 
 OpenAICustomToolFormat = OpenAICustomToolFormatText | OpenAICustomToolFormatGrammar
+
+
+@dataclass(kw_only=True)
+class ProviderTool:
+    tool: Any
+    scope: ProviderToolScope | None = None
 
 
 @dataclass(kw_only=True)

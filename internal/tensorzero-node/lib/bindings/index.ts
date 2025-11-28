@@ -230,6 +230,7 @@ export * from "./PostgresConfig";
 export * from "./ProviderConfig";
 export * from "./ProviderTool";
 export * from "./ProviderToolScope";
+export * from "./ProviderToolScopeModelProvider";
 export * from "./ProviderTypesConfig";
 export * from "./QueryDemonstrationFeedbackByInferenceIdParams";
 export * from "./QueryEpisodeTableParams";
