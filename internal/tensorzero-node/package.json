@@ -27,6 +27,7 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@eslint/js": "^9.37.0",
+    "@typescript/native-preview": "^7.0.0-dev.20250601",
     "@napi-rs/cli": "^2.18.4",
     "@types/node": "^20.19.4",
     "eslint": "^9.37.0",

@@ -67,6 +67,7 @@
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^4.1.1",
+    "@typescript/native-preview": "^7.0.0-dev.20250601",
     "@playwright/test": "^1.56.1",
     "@react-router/dev": "^7.9.5",
     "@storybook/addon-docs": "^9.1.15",
