@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "lint": "eslint . --fix --max-warnings=0 --config eslint.config.js --cache",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json}\""
   },
