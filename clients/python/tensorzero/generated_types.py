@@ -43,17 +43,6 @@ class ContentBlockChatOutputText:
     type: Literal["text"] = "text"
 
 
-@dataclass(kw_only=True)
-class ContentBlockChatOutputUnknown:
-    """
-    Defines the types of content block that can come from a `chat` function
-    """
-
-    data: Any
-    type: Literal["unknown"] = "unknown"
-    model_provider_name: str | None = None
-
-
 CreateDatapointsFromInferenceOutputSource = str
 
 
@@ -552,28 +541,6 @@ class InputMessageContentRawText:
 
 
 @dataclass(kw_only=True)
-class InputMessageContentUnknown:
-    """
-    An unknown content block type, used to allow passing provider-specific
-    content blocks (e.g. Anthropic's `redacted_thinking`) in and out
-    of TensorZero.
-    The `data` field holds the original content block from the provider,
-    without any validation or transformation by TensorZero.
-    """
-
-    data: Any
-    """
-    The underlying content block to be passed to the model provider.
-    """
-    type: Literal["unknown"] = "unknown"
-    model_provider_name: str | None = None
-    """
-    A fully-qualified name specifying when this content block should
-    be included in the model provider input.
-    """
-
-
-@dataclass(kw_only=True)
 class JsonDatapointOutputUpdate:
     """
     A request to update the output of a JSON datapoint.
@@ -755,25 +722,6 @@ class StoredInputMessageContentFile:
     source_url: str | None = None
 
 
-@dataclass(kw_only=True)
-class StoredInputMessageContentUnknown:
-    """
-    Struct that represents an unknown provider-specific content block.
-    We pass this along as-is without any validation or transformation.
-    """
-
-    data: Any
-    """
-    The underlying content block to be passed to the model provider.
-    """
-    type: Literal["unknown"] = "unknown"
-    model_provider_name: str | None = None
-    """
-    A fully-qualified name specifying when this content block should
-    be included in the model provider input.
-    """
-
-
 System = str | dict[str, Any]
 
 
@@ -903,10 +851,13 @@ class Unknown:
     """
     The underlying content block to be passed to the model provider.
     """
-    model_provider_name: str | None = None
+    model_name: str | None = None
     """
-    A fully-qualified name specifying when this content block should
-    be included in the model provider input.
+    A model name in your configuration (e.g. `my_gpt_5`) or a short-hand model name (e.g. `openai::gpt-5`)
+    """
+    provider_name: str | None = None
+    """
+    A provider name for the model you specified (e.g. `my_openai`)
     """
 
 
@@ -987,6 +938,15 @@ class ContentBlockChatOutputToolCall(InferenceResponseToolCall):
     """
 
     type: Literal["tool_call"] = "tool_call"
+
+
+@dataclass(kw_only=True)
+class ContentBlockChatOutputUnknown(Unknown):
+    """
+    Defines the types of content block that can come from a `chat` function
+    """
+
+    type: Literal["unknown"] = "unknown"
 
 
 @dataclass(kw_only=True)
@@ -1107,6 +1067,19 @@ class InputMessageContentToolCall:
 
 
 @dataclass(kw_only=True)
+class InputMessageContentUnknown(Unknown):
+    """
+    An unknown content block type, used to allow passing provider-specific
+    content blocks (e.g. Anthropic's `redacted_thinking`) in and out
+    of TensorZero.
+    The `data` field holds the original content block from the provider,
+    without any validation or transformation by TensorZero.
+    """
+
+    type: Literal["unknown"] = "unknown"
+
+
+@dataclass(kw_only=True)
 class ObjectStorageError:
     """
     A file that we failed to read from object storage.
@@ -1214,6 +1187,11 @@ ProviderToolScope = ProviderToolScopeModelProvider | None
 @dataclass(kw_only=True)
 class StoredInputMessageContentToolCall(ToolCall):
     type: Literal["tool_call"] = "tool_call"
+
+
+@dataclass(kw_only=True)
+class StoredInputMessageContentUnknown(Unknown):
+    type: Literal["unknown"] = "unknown"
 
 
 @dataclass(kw_only=True)

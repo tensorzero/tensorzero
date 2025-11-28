@@ -9,7 +9,7 @@ use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     ContentBlockChunk, File, InferenceOutput, InferenceResponse, InferenceResponseChunk, Input,
-    InputMessage, InputMessageContent, Role, Unknown, UnknownChunk, UrlFile,
+    InputMessage, InputMessageContent, Role, UnknownChunk, UrlFile,
 };
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::provider_types::ProviderTypesConfig;
@@ -2397,8 +2397,10 @@ model = "test-model"
         .content
         .iter()
         .filter(|block| {
-            if let ContentBlockChatOutput::Unknown { data, .. } = block {
-                data.get("type")
+            if let ContentBlockChatOutput::Unknown(unknown) = block {
+                unknown
+                    .data
+                    .get("type")
                     .and_then(|t| t.as_str())
                     .map(|t| t == "web_search_call")
                     .unwrap_or(false)
@@ -2456,13 +2458,9 @@ model = "test-model"
             ContentBlockChatOutput::Thought(thought) => {
                 ClientInputMessageContent::Thought(thought.clone())
             }
-            ContentBlockChatOutput::Unknown {
-                data,
-                model_provider_name,
-            } => ClientInputMessageContent::Unknown(Unknown {
-                data: data.clone(),
-                model_provider_name: model_provider_name.clone(),
-            }),
+            ContentBlockChatOutput::Unknown(unknown) => {
+                ClientInputMessageContent::Unknown(unknown.clone())
+            }
         })
         .collect();
 
@@ -2786,8 +2784,10 @@ model = "test-model"
         .content
         .iter()
         .filter(|block| {
-            if let ContentBlockChatOutput::Unknown { data, .. } = block {
-                data.get("type")
+            if let ContentBlockChatOutput::Unknown(unknown) = block {
+                unknown
+                    .data
+                    .get("type")
                     .and_then(|t| t.as_str())
                     .map(|t| t == "web_search_call")
                     .unwrap_or(false)
@@ -2845,13 +2845,9 @@ model = "test-model"
             ContentBlockChatOutput::Thought(thought) => {
                 ClientInputMessageContent::Thought(thought.clone())
             }
-            ContentBlockChatOutput::Unknown {
-                data,
-                model_provider_name,
-            } => ClientInputMessageContent::Unknown(Unknown {
-                data: data.clone(),
-                model_provider_name: model_provider_name.clone(),
-            }),
+            ContentBlockChatOutput::Unknown(unknown) => {
+                ClientInputMessageContent::Unknown(unknown.clone())
+            }
         })
         .collect();
 
