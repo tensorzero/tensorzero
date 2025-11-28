@@ -3342,4 +3342,40 @@ mod tests {
         assert_eq!(usage_mixed.input_tokens, None); // None propagates
         assert_eq!(usage_mixed.output_tokens, Some(25)); // 0 (cached) + 25
     }
+
+    #[test]
+    fn test_unknown_deserialize() {
+        // New format
+        let u: Unknown =
+            serde_json::from_value(json!({"data": {}, "model_name": "m", "provider_name": "p"}))
+                .unwrap();
+        assert_eq!(u.model_name.as_deref(), Some("m"));
+        assert_eq!(u.provider_name.as_deref(), Some("p"));
+
+        // Provider-agnostic (no targeting)
+        let u: Unknown = serde_json::from_value(json!({"data": {}})).unwrap();
+        assert!(u.model_name.is_none() && u.provider_name.is_none());
+
+        // Legacy FQN - simple
+        let u: Unknown = serde_json::from_value(json!({"data": {}, "model_provider_name": "tensorzero::model_name::m::provider_name::p"})).unwrap();
+        assert_eq!(u.model_name.as_deref(), Some("m"));
+        assert_eq!(u.provider_name.as_deref(), Some("p"));
+
+        // Legacy FQN - model with colons (e.g. dummy::echo)
+        let u: Unknown = serde_json::from_value(json!({"data": {}, "model_provider_name": "tensorzero::model_name::dummy::echo::provider_name::p"})).unwrap();
+        assert_eq!(u.model_name.as_deref(), Some("dummy::echo"));
+
+        // Invalid legacy FQN - errors
+        assert!(serde_json::from_value::<Unknown>(
+            json!({"data": {}, "model_provider_name": "bad"})
+        )
+        .is_err());
+        assert!(serde_json::from_value::<Unknown>(
+            json!({"data": {}, "model_provider_name": "tensorzero::model_name::m"})
+        )
+        .is_err());
+
+        // Conflict: both old and new fields
+        assert!(serde_json::from_value::<Unknown>(json!({"data": {}, "model_provider_name": "tensorzero::model_name::m::provider_name::p", "model_name": "x"})).is_err());
+    }
 }
