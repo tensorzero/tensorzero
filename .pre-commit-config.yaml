@@ -129,8 +129,8 @@ repos:
           - "@typescript-eslint/eslint-plugin"
         pass_filenames: false
 
-      - id: "tsgo: ui"
-        name: "tsgo: ui"
+      - id: "tsc: ui"
+        name: "tsc: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run typecheck'
         language: node
         language_version: "24.11.0"
@@ -139,8 +139,8 @@ repos:
           - typescript
         pass_filenames: false
 
-      - id: "tsgo: openai-node"
-        name: "tsgo: openai-node"
+      - id: "tsc: openai-node"
+        name: "tsc: openai-node"
         entry: bash -c 'pnpm --filter=openai-node run typecheck'
         language: node
         language_version: "24.11.0"
@@ -149,8 +149,8 @@ repos:
           - typescript
         pass_filenames: false
 
-      - id: "tsgo: tensorzero-node"
-        name: "tsgo: tensorzero-node"
+      - id: "tsc: tensorzero-node"
+        name: "tsc: tensorzero-node"
         entry: bash -c 'pnpm --filter=tensorzero-node run typecheck'
         language: node
         language_version: "24.11.0"
