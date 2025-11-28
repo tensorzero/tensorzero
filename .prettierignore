@@ -1,0 +1,32 @@
+# Build outputs
+**/dist/
+**/build/
+**/target/
+
+# Generated files
+**/*.generated.*
+**/index.d.ts
+
+# Dependencies
+**/node_modules/
+
+# Package-specific (handled by their own configs)
+ui/
+clients/openai-node/
+internal/tensorzero-node/
+
+# Helm templates (contain Go template syntax)
+examples/production-deployment-k8s-helm/templates/
+
+# Lock files
+pnpm-lock.yaml
+
+# SQLx
+**/.sqlx/
+
+# Other
+**/.mypy_cache/
+**/.venv/
+**/playwright-report/
+**/.react-router/
+**/test-results/

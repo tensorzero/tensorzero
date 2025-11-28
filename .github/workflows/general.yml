@@ -706,6 +706,9 @@ jobs:
       - name: "Node.js: Run prettier"
         run: pnpm --filter=openai-node run format
 
+      - name: Run Prettier on Markdown, JSON, and YAML files
+        run: pnpm run format:check
+
       - name: "Node.js: OpenAI Client: typecheck"
         run: pnpm --filter=openai-node run typecheck
 
