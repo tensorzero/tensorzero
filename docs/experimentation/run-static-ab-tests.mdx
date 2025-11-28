@@ -53,7 +53,7 @@ model = "anthropic::claude-haiku-4-5"
 
 [functions.draft_email.experimentation] // [!code ++:3]
 type = "static_weights"
-candidate_variants = { "gpt_5_mini" = 0.9, "claude_haiku_4_5" = 0.1 }
+candidate_variants = {"gpt_5_mini" = 0.9, "claude_haiku_4_5" = 0.1}
 ```
 
 In this example, 90% of episodes will be sampled from the `gpt_5_mini` variant and 10% will be sampled from the `claude_haiku_4_5` variant.
@@ -86,8 +86,9 @@ type = "chat_completion"
 model = "xai::grok-4-0709"
 
 [functions.draft_email.experimentation]
-fallback_variants = ["grok_4"] // [!code ++]type = "static_weights"
-candidate_variants = { "gpt_5_mini" = 0.9, "claude_haiku_4_5" = 0.1 }
+type = "static_weights"
+candidate_variants = {"gpt_5_mini" = 0.9, "claude_haiku_4_5" = 0.1}
+fallback_variants = ["grok_4"] // [!code ++]
 ```
 
 The gateway will first sample among the `candidate_variants`.

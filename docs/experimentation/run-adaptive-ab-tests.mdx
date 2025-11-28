@@ -63,10 +63,10 @@ json_mode = "strict"
 
 # Define the experiment configuration
 [functions.extract_entities.experimentation]
-type = "track_and_stop"                                                  # the experimentation algorithm
+type = "track_and_stop" # the experimentation algorithm
 candidate_variants = ["gpt-5-mini-good-prompt", "gpt-5-mini-bad-prompt"]
 metric = "exact_match"
-update_period_s = 60                                                     # low for the sake of the demo (recommended: 300)
+update_period_s = 60  # low for the sake of the demo (recommended: 300)
 
 # Define the metric we're optimizing for
 [metrics.exact_match]

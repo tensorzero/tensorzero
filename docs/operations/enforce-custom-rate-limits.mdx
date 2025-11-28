@@ -71,7 +71,9 @@ For example, the following rule would only apply to inference requests with the 
 ```toml title="tensorzero.toml"
 [[rate_limiting.rules]]
 # ...
-scope = [{ tag_key = "user_id", tag_value = "intern" }]
+scope = [
+    { tag_key = "user_id", tag_value = "intern" }
+]
 #...
 ```
 
@@ -83,8 +85,8 @@ For example, the following rule would only apply to inference requests with the 
 [[rate_limiting.rules]]
 # ...
 scope = [
-  { tag_key = "user_id", tag_value = "intern" },
-  { tag_key = "env", tag_value = "production" },
+    { tag_key = "user_id", tag_value = "intern" },
+    { tag_key = "env", tag_value = "production" }
 ]
 #...
 ```
@@ -99,7 +101,9 @@ For example, the following rule would apply to each value of the `user_id` tag i
 ```toml title="tensorzero.toml"
 [[rate_limiting.rules]]
 # ...
-scope = [{ tag_key = "user_id", tag_value = "tensorzero::each" }]
+scope = [
+    { tag_key = "user_id", tag_value = "tensorzero::each" },
+]
 #...
 ```
 
@@ -108,7 +112,9 @@ Conversely, the following rule would apply to all users collectively:
 ```toml title="tensorzero.toml"
 [[rate_limiting.rules]]
 # ...
-scope = [{ tag_key = "user_id", tag_value = "tensorzero::total" }]
+scope = [
+    { tag_key = "user_id", tag_value = "tensorzero::total" },
+]
 #...
 ```
 
@@ -130,7 +136,9 @@ For example, the following rule would apply to each API key individually (i.e. e
 ```toml title="tensorzero.toml"
 [[rate_limiting.rules]]
 # ...
-scope = [{ api_key_public_id = "tensorzero::each" }]
+scope = [
+    { api_key_public_id = "tensorzero::each" },
+]
 #...
 ```
 
@@ -139,7 +147,9 @@ You can also target a specific API key by providing its 12-character public ID:
 ```toml title="tensorzero.toml"
 [[rate_limiting.rules]]
 # ...
-scope = [{ api_key_public_id = "xxxxxxxxxxxx" }]
+scope = [
+    { api_key_public_id = "xxxxxxxxxxxx" },
+]
 #...
 ```
 
@@ -174,13 +184,17 @@ For example, the configuration below would enforce the first rule for requests w
 ```toml title="tensorzero.toml"
 [[rate_limiting.rules]]
 # ...
-scope = [{ tag_key = "user_id", tag_value = "intern" }]
+scope = [
+    { tag_key = "user_id", tag_value = "intern" },
+]
 priority = 1
 #...
 
 [[rate_limiting.rules]]
 # ...
-scope = [{ tag_key = "user_id", tag_value = "tensorzero::each" }]
+scope = [
+    { tag_key = "user_id", tag_value = "tensorzero::each" },
+]
 priority = 0
 #...
 ```
@@ -217,19 +231,25 @@ Add to your TensorZero configuration:
 always = true
 model_inferences_per_hour = 1_000
 tokens_per_day = 10_000_000
-scope = [{ tag_key = "user_id", tag_value = "tensorzero::total" }]
+scope = [
+    { tag_key = "user_id", tag_value = "tensorzero::total" }
+]
 
 # [B] Each individual user can make a maximum of 1 model inference per minute
 [[rate_limiting.rules]]
 priority = 0
 model_inferences_per_minute = 1
-scope = [{ tag_key = "user_id", tag_value = "tensorzero::each" }]
+scope = [
+    { tag_key = "user_id", tag_value = "tensorzero::each" }
+]
 
 # [C] But override the individual limit for the CEO
 [[rate_limiting.rules]]
 priority = 1
 model_inferences_per_minute = 5
-scope = [{ tag_key = "user_id", tag_value = "ceo" }]
+scope = [
+    { tag_key = "user_id", tag_value = "ceo" }
+]
 
 # [D] The entire system (i.e. without restricting the scope) can make a maximum of 10M tokens per hour
 [[rate_limiting.rules]]

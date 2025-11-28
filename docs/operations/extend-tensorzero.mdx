@@ -62,12 +62,12 @@ type = "chat_completion"
 model = "anthropic::claude-3-7-sonnet-20250219"
 max_tokens = 2048
 extra_body = [
-  { pointer = "/tools", value = [
-    { type = "bash_20250124", name = "bash" },
-  ] },
-  { pointer = "/ultrathinking", value = { type = "enabled", budget_tokens = 1024 } }, # made-up parameter
+    { pointer = "/tools", value = [{ type = "bash_20250124", name = "bash" }] },
+    { pointer = "/ultrathinking", value = { type = "enabled", budget_tokens = 1024 } }, # made-up parameter
 ]
-extra_headers = [{ name = "anthropic-beta", value = "computer-use-2025-01-24" }]
+extra_headers = [
+    { name = "anthropic-beta", value = "computer-use-2025-01-24" },
+]
 ```
 
 This example illustrates how you should be able to use the vast majority of features supported by the model provider even if TensorZero doesn't have explicit support for them yet.

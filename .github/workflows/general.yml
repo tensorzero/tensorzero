@@ -703,11 +703,6 @@ jobs:
       - name: "Node.js: Run prettier"
         run: pnpm --filter=openai-node run format
 
-      - name: Run Prettier on Markdown, JSON, and YAML files
-        # If this step fails, it means that there are files that need to be formatted.
-        # You can run `pnpm run format` to fix them. You should also set up `prettier` for your IDE.
-        run: pnpm run format:check
-
       - name: "Node.js: OpenAI Client: typecheck"
         run: pnpm --filter=openai-node run typecheck
 

@@ -54,9 +54,7 @@ user_template = "functions/draft_email/best_of_n/user.minijinja"
 
 [functions.draft_email.experimentation]
 type = "uniform"
-candidate_variants = [
-  "best_of_n",
-] # so we don't sample `promptA` or `promptB` directly
+candidate_variants = ["best_of_n"]  # so we don't sample `promptA` or `promptB` directly
 ```
 
 In this configuration:
@@ -129,7 +127,7 @@ model = "gpt-4o-mini"
 embedding_model = "text-embedding-3-small"
 system_instructions = "functions/draft_email/dicl/system.txt"
 k = 5
-max_distance = 0.5                                            # Optional: filter examples by cosine distance
+max_distance = 0.5  # Optional: filter examples by cosine distance
 
 [embedding_models.text-embedding-3-small]
 routing = ["openai"]
@@ -213,9 +211,7 @@ user_template = "functions/draft_email/mixture_of_n/user.minijinja"
 
 [functions.draft_email.experimentation]
 type = "uniform"
-candidate_variants = [
-  "mixture_of_n",
-] # so we don't sample `promptA` or `promptB` directly
+candidate_variants = ["mixture_of_n"]  # so we don't sample `promptA` or `promptB` directly
 ```
 
 In this configuration:
