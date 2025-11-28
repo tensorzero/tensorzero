@@ -154,10 +154,6 @@ fn build_datasets_routes() -> Router<AppStateData> {
             "/v1/datasets/get_datapoints",
             post(endpoints::datasets::v1::get_datapoints_handler),
         )
-        .route(
-            "/v1/datasets/{dataset_name}/datapoints/clone",
-            post(endpoints::datasets::clone_datapoints_handler),
-        )
 }
 
 /// This function builds the public routes for optimization.
@@ -217,6 +213,10 @@ fn build_internal_routes() -> Router<AppStateData> {
         .route(
             "/internal/datasets/{dataset_name}/datapoints",
             post(endpoints::datasets::insert_from_existing_datapoint_handler),
+        )
+        .route(
+            "/internal/datasets/{dataset_name}/datapoints/clone",
+            post(endpoints::datasets::internal::clone_datapoints_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",

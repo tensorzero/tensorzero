@@ -152,7 +152,7 @@ export async function cloneDatapoint(params: {
     datapoint.id,
   ]);
 
-  const newId = response.ids[0];
+  const newId = response.datapoint_ids[0];
   if (newId === null) {
     throw new Error(`Source datapoint ${datapoint.id} not found`);
   }

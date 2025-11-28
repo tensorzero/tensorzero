@@ -34,6 +34,7 @@ export * from "./ClientInferenceParams";
 export * from "./ClientInput";
 export * from "./ClientInputMessage";
 export * from "./ClientInputMessageContent";
+export * from "./CloneDatapointsResponse";
 export * from "./CommentFeedbackRow";
 export * from "./CommentTargetType";
 export * from "./Config";

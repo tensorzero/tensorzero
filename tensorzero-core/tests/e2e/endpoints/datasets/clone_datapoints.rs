@@ -19,7 +19,7 @@ use tensorzero_core::stored_inference::StoredSample;
 /// Response from the clone datapoints endpoint
 #[derive(Debug, Deserialize)]
 struct CloneDatapointsResponse {
-    ids: Vec<Option<Uuid>>,
+    datapoint_ids: Vec<Option<Uuid>>,
 }
 
 use crate::common::get_gateway_endpoint;
@@ -106,7 +106,7 @@ async fn test_clone_datapoint_preserves_source_inference_id() {
 
     let clone_response = client
         .post(get_gateway_endpoint(&format!(
-            "/v1/datasets/{target_dataset}/datapoints/clone"
+            "/internal/datasets/{target_dataset}/datapoints/clone"
         )))
         .json(&clone_request)
         .send()
@@ -115,8 +115,8 @@ async fn test_clone_datapoint_preserves_source_inference_id() {
 
     assert_eq!(clone_response.status(), 200);
     let clone_result: CloneDatapointsResponse = clone_response.json().await.unwrap();
-    assert_eq!(clone_result.ids.len(), 1);
-    let cloned_datapoint_id = clone_result.ids[0].expect("Clone should succeed");
+    assert_eq!(clone_result.datapoint_ids.len(), 1);
+    let cloned_datapoint_id = clone_result.datapoint_ids[0].expect("Clone should succeed");
 
     // Step 5: Verify the cloned datapoint preserves source_inference_id
     let cloned_datapoint = clickhouse
@@ -190,7 +190,7 @@ async fn test_clone_chat_datapoint_success() {
 
     let clone_response = client
         .post(get_gateway_endpoint(&format!(
-            "/v1/datasets/{target_dataset}/datapoints/clone"
+            "/internal/datasets/{target_dataset}/datapoints/clone"
         )))
         .json(&clone_request)
         .send()
@@ -199,8 +199,8 @@ async fn test_clone_chat_datapoint_success() {
 
     assert_eq!(clone_response.status(), 200);
     let clone_result: CloneDatapointsResponse = clone_response.json().await.unwrap();
-    assert_eq!(clone_result.ids.len(), 1);
-    let cloned_datapoint_id = clone_result.ids[0].expect("Clone should succeed");
+    assert_eq!(clone_result.datapoint_ids.len(), 1);
+    let cloned_datapoint_id = clone_result.datapoint_ids[0].expect("Clone should succeed");
 
     // Step 3: Verify the cloned datapoint
     let cloned_datapoint = clickhouse
@@ -266,7 +266,7 @@ async fn test_clone_to_same_dataset() {
 
     let clone_response = client
         .post(get_gateway_endpoint(&format!(
-            "/v1/datasets/{dataset_name}/datapoints/clone"
+            "/internal/datasets/{dataset_name}/datapoints/clone"
         )))
         .json(&clone_request)
         .send()
@@ -275,8 +275,8 @@ async fn test_clone_to_same_dataset() {
 
     assert_eq!(clone_response.status(), 200);
     let clone_result: CloneDatapointsResponse = clone_response.json().await.unwrap();
-    assert_eq!(clone_result.ids.len(), 1);
-    let cloned_datapoint_id = clone_result.ids[0].expect("Clone should succeed");
+    assert_eq!(clone_result.datapoint_ids.len(), 1);
+    let cloned_datapoint_id = clone_result.datapoint_ids[0].expect("Clone should succeed");
 
     // Step 3: Verify both datapoints exist
     let source_datapoint = clickhouse
@@ -364,7 +364,7 @@ async fn test_clone_multiple_datapoints() {
 
     let clone_response = client
         .post(get_gateway_endpoint(&format!(
-            "/v1/datasets/{target_dataset}/datapoints/clone"
+            "/internal/datasets/{target_dataset}/datapoints/clone"
         )))
         .json(&clone_request)
         .send()
@@ -373,11 +373,11 @@ async fn test_clone_multiple_datapoints() {
 
     assert_eq!(clone_response.status(), 200);
     let clone_result: CloneDatapointsResponse = clone_response.json().await.unwrap();
-    assert_eq!(clone_result.ids.len(), 2);
+    assert_eq!(clone_result.datapoint_ids.len(), 2);
 
     // Step 3: Verify the cloned datapoints exist
     let cloned_ids: Vec<Uuid> = clone_result
-        .ids
+        .datapoint_ids
         .iter()
         .map(|id| id.expect("Clone should succeed"))
         .collect();
@@ -414,7 +414,7 @@ async fn test_clone_nonexistent_datapoint_returns_null() {
 
     let clone_response = client
         .post(get_gateway_endpoint(&format!(
-            "/v1/datasets/{target_dataset}/datapoints/clone"
+            "/internal/datasets/{target_dataset}/datapoints/clone"
         )))
         .json(&clone_request)
         .send()
@@ -425,9 +425,9 @@ async fn test_clone_nonexistent_datapoint_returns_null() {
     let clone_result: CloneDatapointsResponse = clone_response.json().await.unwrap();
 
     // Should return a list with one null entry
-    assert_eq!(clone_result.ids.len(), 1);
+    assert_eq!(clone_result.datapoint_ids.len(), 1);
     assert!(
-        clone_result.ids[0].is_none(),
+        clone_result.datapoint_ids[0].is_none(),
         "Should return null for nonexistent datapoint"
     );
 }
