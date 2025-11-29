@@ -7,19 +7,21 @@ import {
   FileText,
   FileAudio,
 } from "lucide-react";
+import { type ReactNode } from "react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
 import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
 import type { File } from "~/types/tensorzero";
 
 interface FileContentBlockProps {
   block: File;
+  actionBar?: ReactNode;
 }
 
 /**
  * Main component for rendering file content blocks.
  * Dispatches to specific renderers based on MIME type.
  */
-export function FileContentBlock({ block }: FileContentBlockProps) {
+export function FileContentBlock({ block, actionBar }: FileContentBlockProps) {
   switch (block.file_type) {
     case "object_storage":
       break; // handled below
@@ -39,7 +41,9 @@ export function FileContentBlock({ block }: FileContentBlockProps) {
         "The UI should never receive an object storage pointer. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
       );
     case "object_storage_error":
-      return <FileErrorContentBlock error={block.error} />;
+      return (
+        <FileErrorContentBlock error={block.error} actionBar={actionBar} />
+      );
   }
 
   // If we got here, we know that block.file_type is "object_storage"
@@ -51,6 +55,7 @@ export function FileContentBlock({ block }: FileContentBlockProps) {
       <ImageContentBlock
         imageUrl={block.data}
         filePath={block.storage_path.path}
+        actionBar={actionBar}
       />
     );
   }
@@ -61,6 +66,7 @@ export function FileContentBlock({ block }: FileContentBlockProps) {
         base64Data={block.data}
         mimeType={block.mime_type}
         filePath={block.storage_path.path}
+        actionBar={actionBar}
       />
     );
   }
@@ -70,6 +76,7 @@ export function FileContentBlock({ block }: FileContentBlockProps) {
       base64Data={block.data}
       mimeType={block.mime_type}
       filePath={block.storage_path.path}
+      actionBar={actionBar}
     />
   );
 }
@@ -78,15 +85,23 @@ interface ImageContentBlockProps {
   /** HTTP or data URL for the image */
   imageUrl: string;
   filePath: string;
+  actionBar?: ReactNode;
 }
 
 /**
  * Renders image files with preview and download link.
  */
-function ImageContentBlock({ imageUrl, filePath }: ImageContentBlockProps) {
+function ImageContentBlock({
+  imageUrl,
+  filePath,
+  actionBar,
+}: ImageContentBlockProps) {
   return (
     <div className="flex flex-col gap-1">
-      <ContentBlockLabel icon={<ImageIcon className="text-fg-muted h-3 w-3" />}>
+      <ContentBlockLabel
+        icon={<ImageIcon className="text-fg-muted h-3 w-3" />}
+        actionBar={actionBar}
+      >
         File
       </ContentBlockLabel>
       <Link
@@ -107,6 +122,7 @@ interface AudioContentBlockProps {
   base64Data: string;
   mimeType: string;
   filePath: string;
+  actionBar?: ReactNode;
 }
 
 /**
@@ -117,12 +133,16 @@ function AudioContentBlock({
   base64Data,
   mimeType,
   filePath,
+  actionBar,
 }: AudioContentBlockProps) {
   const blobUrl = useBase64UrlToBlobUrl(base64Data, mimeType);
 
   return (
     <div className="flex flex-col gap-1">
-      <ContentBlockLabel icon={<FileAudio className="text-fg-muted h-3 w-3" />}>
+      <ContentBlockLabel
+        icon={<FileAudio className="text-fg-muted h-3 w-3" />}
+        actionBar={actionBar}
+      >
         File
       </ContentBlockLabel>
 
@@ -141,6 +161,7 @@ interface GenericFileContentBlockProps {
   base64Data: string;
   mimeType: string;
   filePath: string;
+  actionBar?: ReactNode;
 }
 
 /**
@@ -151,12 +172,16 @@ function GenericFileContentBlock({
   base64Data,
   filePath,
   mimeType,
+  actionBar,
 }: GenericFileContentBlockProps) {
   const blobUrl = useBase64UrlToBlobUrl(base64Data, mimeType);
 
   return (
     <div className="flex flex-col gap-1">
-      <ContentBlockLabel icon={<FileText className="text-fg-muted h-3 w-3" />}>
+      <ContentBlockLabel
+        icon={<FileText className="text-fg-muted h-3 w-3" />}
+        actionBar={actionBar}
+      >
         File
       </ContentBlockLabel>
       <div className="border-border flex w-80 flex-row gap-3 rounded-md border p-3">
@@ -187,15 +212,22 @@ function GenericFileContentBlock({
 
 interface FileErrorContentBlockProps {
   error?: string;
+  actionBar?: ReactNode;
 }
 
 /**
  * Renders an error state when file cannot be loaded.
  */
-function FileErrorContentBlock({ error }: FileErrorContentBlockProps) {
+function FileErrorContentBlock({
+  error,
+  actionBar,
+}: FileErrorContentBlockProps) {
   return (
     <div className="flex flex-col gap-1">
-      <ContentBlockLabel icon={<FileText className="text-fg-muted h-3 w-3" />}>
+      <ContentBlockLabel
+        icon={<FileText className="text-fg-muted h-3 w-3" />}
+        actionBar={actionBar}
+      >
         File
       </ContentBlockLabel>
       <div className="border-border bg-bg-tertiary relative aspect-video w-60 min-w-60 rounded-md border">

@@ -94,7 +94,7 @@ export function ContentBlockElement({
     }
 
     case "file": {
-      return <FileContentBlock block={block} />;
+      return <FileContentBlock block={block} actionBar={actionBar} />;
     }
 
     case "unknown": {
