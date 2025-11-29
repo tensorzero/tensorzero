@@ -127,6 +127,15 @@ function AddContentBlockButtons({
         text: "",
       },
     },
+    {
+      label: "File URL",
+      emptyBlock: {
+        type: "file" as const,
+        file_type: "url" as const,
+        url: "",
+        mime_type: null,
+      },
+    },
   ];
 
   return (

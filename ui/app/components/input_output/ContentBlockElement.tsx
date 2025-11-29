@@ -94,7 +94,23 @@ export function ContentBlockElement({
     }
 
     case "file": {
-      return <FileContentBlock block={block} actionBar={actionBar} />;
+      return (
+        <FileContentBlock
+          block={block}
+          isEditing={isEditing}
+          onChange={
+            isEditing
+              ? (updatedBlock) => {
+                  onChange?.({
+                    ...block,
+                    ...updatedBlock,
+                  });
+                }
+              : undefined
+          }
+          actionBar={actionBar}
+        />
+      );
     }
 
     case "unknown": {

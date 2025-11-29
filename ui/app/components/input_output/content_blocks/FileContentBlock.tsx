@@ -6,6 +6,7 @@ import {
   ExternalLink,
   FileText,
   FileAudio,
+  Link as LinkIcon,
 } from "lucide-react";
 import { type ReactNode } from "react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
@@ -15,25 +16,50 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
-import type { File } from "~/types/tensorzero";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "~/components/ui/accordion";
+import { Input } from "~/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import type { File, Detail } from "~/types/tensorzero";
 
 interface FileContentBlockProps {
   block: File;
   actionBar?: ReactNode;
+  isEditing?: boolean;
+  onChange?: (updatedBlock: File) => void;
 }
 
 /**
  * Main component for rendering file content blocks.
  * Dispatches to specific renderers based on MIME type.
  */
-export function FileContentBlock({ block, actionBar }: FileContentBlockProps) {
+export function FileContentBlock({
+  block,
+  actionBar,
+  isEditing,
+  onChange,
+}: FileContentBlockProps) {
   switch (block.file_type) {
     case "object_storage":
       break; // handled below
     case "url":
-      // TODO (#4407): we'll need to support this to allow CRUD on file content blocks
-      throw new Error(
-        "The UI should never receive a URL file. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
+      return (
+        <UrlFileContentBlock
+          block={block}
+          actionBar={actionBar}
+          isEditing={isEditing}
+          onChange={onChange}
+        />
       );
     case "base64":
       // TODO (#4407): we'll need to support this to allow CRUD on file content blocks
@@ -251,6 +277,153 @@ function FileErrorContentBlock({
             </TooltipContent>
           </Tooltip>
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface UrlFileContentBlockProps {
+  block: Extract<File, { file_type: "url" }>;
+  actionBar?: ReactNode;
+  isEditing?: boolean;
+  onChange?: (updatedBlock: File) => void;
+}
+
+/**
+ * Renders URL-based file content blocks with editing support.
+ */
+function UrlFileContentBlock({
+  block,
+  actionBar,
+  isEditing,
+  onChange,
+}: UrlFileContentBlockProps) {
+  const handleUrlChange = (url: string) => {
+    onChange?.({ ...block, url });
+  };
+
+  const handleMimeTypeChange = (mime_type: string) => {
+    onChange?.({
+      ...block,
+      mime_type: mime_type.trim() === "" ? null : mime_type,
+    });
+  };
+
+  const handleDetailChange = (detail: string) => {
+    onChange?.({
+      ...block,
+      detail: detail === "none" ? undefined : (detail as Detail),
+    });
+  };
+
+  const handleFilenameChange = (filename: string) => {
+    onChange?.({
+      ...block,
+      filename: filename.trim() === "" ? undefined : filename,
+    });
+  };
+
+  if (isEditing) {
+    return (
+      <div className="flex max-w-240 min-w-80 flex-col gap-1">
+        <ContentBlockLabel
+          icon={<LinkIcon className="text-fg-muted h-3 w-3" />}
+          actionBar={actionBar}
+        >
+          File URL
+        </ContentBlockLabel>
+        <div className="border-border bg-bg-tertiary/50 flex flex-col gap-2 rounded-sm px-3 py-2">
+          <Input
+            type="url"
+            placeholder="https://example.com/image.png"
+            value={block.url}
+            onChange={(e) => handleUrlChange(e.target.value)}
+            className="text-xs"
+          />
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="advanced" className="border-none">
+              <AccordionTrigger className="text-fg-tertiary hover:text-fg-secondary [&>svg]:text-fg-tertiary [&:hover>svg]:text-fg-secondary cursor-pointer justify-start gap-1 py-1 text-xs hover:no-underline [&>svg]:order-first [&>svg]:mr-0 [&>svg]:ml-0">
+                Advanced
+              </AccordionTrigger>
+              <AccordionContent className="pb-1">
+                <div className="flex flex-col gap-2 px-0.5 pt-0.5">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-fg-tertiary text-xs">
+                      MIME Type
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="image/png"
+                      value={block.mime_type ?? ""}
+                      onChange={(e) => handleMimeTypeChange(e.target.value)}
+                      className="text-xs"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-fg-tertiary text-xs">Detail</label>
+                    <Select
+                      value={block.detail ?? "none"}
+                      onValueChange={handleDetailChange}
+                    >
+                      <SelectTrigger className="text-xs">
+                        <SelectValue placeholder="Select detail level" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="auto">Auto</SelectItem>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-fg-tertiary text-xs">Filename</label>
+                    <Input
+                      type="text"
+                      placeholder="image.png"
+                      value={block.filename ?? ""}
+                      onChange={(e) => handleFilenameChange(e.target.value)}
+                      className="text-xs"
+                    />
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
+      </div>
+    );
+  }
+
+  // Read-only view
+  return (
+    <div className="flex max-w-240 min-w-80 flex-col gap-1">
+      <ContentBlockLabel
+        icon={<LinkIcon className="text-fg-muted h-3 w-3" />}
+        actionBar={actionBar}
+      >
+        File URL
+      </ContentBlockLabel>
+      <div className="border-border bg-bg-tertiary/50 rounded-sm px-3 py-2">
+        <Link
+          to={block.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-fg-primary text-xs break-all underline"
+        >
+          {block.url || "(empty URL)"}
+        </Link>
+        {(block.mime_type || block.filename || block.detail) && (
+          <div className="text-fg-tertiary mt-1 text-xs">
+            {block.filename && <span>{block.filename}</span>}
+            {block.filename && block.mime_type && <span> · </span>}
+            {block.mime_type && <span>{block.mime_type}</span>}
+            {(block.filename || block.mime_type) && block.detail && (
+              <span> · </span>
+            )}
+            {block.detail && <span>detail: {block.detail}</span>}
+          </div>
+        )}
       </div>
     </div>
   );
