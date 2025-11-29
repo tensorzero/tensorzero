@@ -857,8 +857,6 @@ impl Config {
         // Deserialize the TOML table into UninitializedConfig
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
-        let mut templates = TemplateConfig::new();
-
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
 
         let gateway_config = uninitialized_config
@@ -866,9 +864,6 @@ impl Config {
             .load(object_store_info.as_ref())?;
 
         let http_client = TensorzeroHttpClient::new(gateway_config.global_outbound_http_timeout)?;
-
-        // Load built-in functions first
-        let mut functions = built_in::get_all_built_in_functions()?;
 
         // Load user-defined functions and ensure they don't use tensorzero:: prefix
         let user_functions = uninitialized_config
@@ -888,9 +883,6 @@ impl Config {
                     .map(|c| (name, Arc::new(c)))
             })
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
-
-        // Merge user functions into the functions map
-        functions.extend(user_functions);
 
         let tools = uninitialized_config
             .tools
@@ -967,7 +959,7 @@ impl Config {
         })?;
 
         // Initialize the templates
-        let template_paths = Config::get_templates(&functions);
+        let user_template_paths = Config::get_templates(&user_functions);
         if gateway_config.template_filesystem_access.enabled {
             deprecation_warning("The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.");
         }
@@ -976,9 +968,21 @@ impl Config {
             .base_path
             .as_ref()
             .map(|x| x.get_real_path());
+        let mut templates = TemplateConfig::new();
+        // IMPORTANT: we grab the `extra_templates` only from user-configured functions so that
+        // we only depend on user configuration in the snapshot.
         let extra_templates = templates
-            .initialize(template_paths, template_fs_path)
+            .initialize(user_template_paths, template_fs_path)
             .await?;
+
+        // Add built in functions
+        let built_in_functions = built_in::get_all_built_in_functions()?;
+        let built_in_templates = Config::get_templates(&built_in_functions);
+        templates.add_templates(built_in_templates)?;
+        let functions = built_in_functions
+            .into_iter()
+            .chain(user_functions.into_iter())
+            .collect::<HashMap<String, Arc<FunctionConfig>>>();
         let snapshot = ConfigSnapshot::new(table_for_snapshot, extra_templates)?;
         let mut config = Config {
             gateway: gateway_config,
@@ -997,8 +1001,6 @@ impl Config {
             http_client,
             hash: snapshot.hash.clone(),
         };
-
-        config.templates = Arc::new(templates.clone());
 
         // Validate the config
         config.validate().await?;
