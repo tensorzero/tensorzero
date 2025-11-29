@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { File, ObjectStorageFile } from "~/types/tensorzero";
 import mp3Url from "./FileContentBlock.stories.fixture.mp3?url";
 import pdfUrl from "./FileContentBlock.stories.fixture.pdf?url";
+import { TooltipProvider } from "~/components/ui/tooltip";
 
 const meta = {
   title: "Input Output/Content Blocks/FileContentBlock",
@@ -12,7 +13,9 @@ const meta = {
     (Story) => (
       <div className="w-[80vw] bg-orange-100 p-8">
         <div className="bg-white p-4">
-          <Story />
+          <TooltipProvider>
+            <Story />
+          </TooltipProvider>
         </div>
       </div>
     ),
@@ -135,6 +138,28 @@ export const Error: Story = {
     block: {
       file_type: "object_storage_error",
       error: "You are not authorized to access this file.",
+      mime_type: "image/png",
+      storage_path: {
+        kind: {
+          type: "s3_compatible",
+          bucket_name: "tensorzero-e2e-test-images",
+          region: "us-east-1",
+          endpoint: null,
+          allow_http: null,
+        },
+        path: "observability/files/failed_to_retrieve.png",
+      },
+    },
+  },
+};
+
+export const ErrorLong: Story = {
+  name: "Error (Long)",
+  args: {
+    block: {
+      file_type: "object_storage_error",
+      error:
+        "You are not authorized to access this file. Code: " + "01".repeat(100),
       mime_type: "image/png",
       storage_path: {
         kind: {

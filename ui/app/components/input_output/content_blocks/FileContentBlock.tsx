@@ -10,6 +10,11 @@ import {
 import { type ReactNode } from "react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
 import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import type { File } from "~/types/tensorzero";
 
 interface FileContentBlockProps {
@@ -222,6 +227,8 @@ function FileErrorContentBlock({
   error,
   actionBar,
 }: FileErrorContentBlockProps) {
+  const errorMessage = error || "Failed to retrieve file";
+
   return (
     <div className="flex flex-col gap-1">
       <ContentBlockLabel
@@ -233,9 +240,16 @@ function FileErrorContentBlock({
       <div className="border-border bg-bg-tertiary relative aspect-video w-60 min-w-60 rounded-md border">
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-2">
           <ImageOff className="text-fg-muted h-4 w-4" />
-          <span className="text-fg-tertiary text-center text-xs font-medium text-balance">
-            {error || "Failed to retrieve file"}
-          </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-fg-tertiary line-clamp-2 w-full cursor-default text-center text-xs font-medium break-all">
+                {errorMessage}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-md break-words">
+              {errorMessage}
+            </TooltipContent>
+          </Tooltip>
         </div>
       </div>
     </div>
