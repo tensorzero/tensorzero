@@ -240,6 +240,19 @@ pub async fn mutate_variant(
         })
     })?;
 
+    // Check for duplicate template names before converting to HashMap
+    let template_names: Vec<&str> = response.templates.iter().map(|t| t.name.as_str()).collect();
+    let unique_names: std::collections::HashSet<&str> = template_names.iter().copied().collect();
+    if template_names.len() != unique_names.len() {
+        return Err(Error::new(ErrorDetails::Inference {
+            message: format!(
+                "Mutate function returned duplicate template names. Expected {} unique templates, got {} entries",
+                unique_names.len(),
+                template_names.len()
+            ),
+        }));
+    }
+
     // Convert the array of template entries into a HashMap
     let templates: HashMap<String, String> = response
         .templates
