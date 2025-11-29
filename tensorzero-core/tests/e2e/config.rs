@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-<<<<<<< HEAD
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     ClientBuilder, ClientInferenceParams, ClientInput, ClientInputMessage,
@@ -9,17 +8,13 @@ use tensorzero::{
 };
 use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::{write_config_snapshot, Config, ConfigFileGlob};
+use tensorzero_core::db::clickhouse::migration_manager;
+use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
 use tensorzero_core::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_chat_inference_clickhouse, CLICKHOUSE_URL,
 };
-=======
-use tensorzero_core::config::snapshot::ConfigSnapshot;
-use tensorzero_core::config::{write_config_snapshot, Config, ConfigFileGlob};
-use tensorzero_core::db::clickhouse::migration_manager;
-use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
->>>>>>> 088d68627470d99d98aac67da83dee018dbdf0cf
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::db::ConfigQueries;
@@ -287,10 +282,7 @@ routing = ["test_provider::gpt-4"]
     let mut extra_templates = HashMap::new();
     extra_templates.insert("test_template".to_string(), "Hello {{name}}!".to_string());
 
-    let snapshot = ConfigSnapshot {
-        config: config_toml.clone(),
-        extra_templates: extra_templates.clone(),
-    };
+    let snapshot = ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates);
 
     let hash = snapshot.hash();
 
@@ -380,10 +372,7 @@ routing = ["test_provider::gpt-4"]
         "Assistant responds: {{response}}".to_string(),
     );
 
-    let snapshot = ConfigSnapshot {
-        config: config_toml.clone(),
-        extra_templates: extra_templates.clone(),
-    };
+    let snapshot = ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone());
 
     let hash = snapshot.hash();
 

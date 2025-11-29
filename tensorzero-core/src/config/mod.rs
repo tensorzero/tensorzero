@@ -867,7 +867,15 @@ impl Config {
     /// let config = unwritten_config.into_config(&clickhouse).await?;
     /// ```
     async fn load_from_toml(input: ConfigInput) -> Result<UnwrittenConfig, Error> {
-        let (uninitialized_config, extra_templates, snapshot) = match input {
+        let mut templates = TemplateConfig::new();
+        let (
+            uninitialized_config,
+            extra_templates,
+            snapshot,
+            user_functions,
+            gateway_config,
+            object_store_info,
+        ) = match input {
             ConfigInput::Fresh(table) => {
                 if table.is_empty() {
                     tracing::info!(
@@ -882,76 +890,92 @@ impl Config {
 
                 // Clone the table before consumption - we need it for ConfigSnapshot creation
                 let table_for_snapshot = table.clone();
-
-                // Initialize the templates
-                // TODO: figure out merge conflicts here
-                // The solution is to go back down the stack and make sure that all the artifacts for the snapshot are created exactly from
-                // the `UninitializedConfig` struct so that there is exactly one place where we either start from a snapshot or store the snapshot from fresh data.
-                let extra_templates = match extra_templates {
-                    Some(extra_templates) => extra_templates,
-                    None => {
-                        let template_paths = Config::get_templates(&functions);
-                        if gateway_config.template_filesystem_access.enabled {
-                            deprecation_warning("The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.");
-                        }
-                        let template_fs_path = gateway_config
-                            .template_filesystem_access
-                            .base_path
-                            .as_ref()
-                            .map(|x| x.get_real_path());
-                        templates
-                            .initialize(template_paths, template_fs_path)
-                            .await?
-                    }
-                };
-
                 // Deserialize the TOML table into UninitializedConfig
                 let uninitialized_config = UninitializedConfig::try_from(table)?;
+
+                // Load user-defined functions and ensure they don't use tensorzero:: prefix
+                let user_functions = uninitialized_config
+                    .functions
+                    .into_iter()
+                    .map(|(name, config)| {
+                        // Prevent user functions from using tensorzero:: prefix
+                        if name.starts_with("tensorzero::") {
+                            return Err(Error::new(ErrorDetails::Config {
+                                message: format!(
+                                    "User-defined function name cannot start with 'tensorzero::': {name}"
+                                ),
+                            }));
+                        }
+                        config
+                            .load(&name, &uninitialized_config.metrics)
+                            .map(|c| (name, Arc::new(c)))
+                    })
+                    .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
+                let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
+                let gateway_config = uninitialized_config
+                    .gateway
+                    .load(object_store_info.as_ref())?;
+                // Initialize the templates
+                let user_template_paths = Config::get_templates(&user_functions);
+                if gateway_config.template_filesystem_access.enabled {
+                    deprecation_warning("The `gateway.template_filesystem_access.enabled` flag is deprecated. We now enable filesystem access if and only if `gateway.template_file_system_access.base_path` is set. We will stop allowing this flag in the future.");
+                }
+                let template_fs_path = gateway_config
+                    .template_filesystem_access
+                    .base_path
+                    .as_ref()
+                    .map(|x| x.get_real_path());
+                // IMPORTANT: we grab the `extra_templates` only from user-configured functions so that
+                // we only depend on user configuration in the snapshot.
+                let extra_templates = templates
+                    .initialize(user_template_paths, template_fs_path)
+                    .await?;
+
                 (
                     uninitialized_config,
                     extra_templates,
                     ConfigSnapshot::new(table_for_snapshot, extra_templates)?,
+                    user_functions,
+                    gateway_config,
+                    object_store_info,
                 )
             }
             ConfigInput::Snapshot(snapshot) => {
-                (snapshot.config.into(), snapshot.extra_templates, snapshot)
+                let uninitialized_config: UninitializedConfig = snapshot.config.into();
+                // Load user-defined functions and ensure they don't use tensorzero:: prefix
+                let user_functions = uninitialized_config
+                    .functions
+                    .into_iter()
+                    .map(|(name, config)| {
+                        // Prevent user functions from using tensorzero:: prefix
+                        if name.starts_with("tensorzero::") {
+                            return Err(Error::new(ErrorDetails::Config {
+                                message: format!(
+                                    "User-defined function name cannot start with 'tensorzero::': {name}"
+                                ),
+                            }));
+                        }
+                        config
+                            .load(&name, &uninitialized_config.metrics)
+                            .map(|c| (name, Arc::new(c)))
+                    })
+                    .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
+                let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
+                let gateway_config = uninitialized_config
+                    .gateway
+                    .load(object_store_info.as_ref())?;
+                (
+                    uninitialized_config,
+                    snapshot.extra_templates,
+                    snapshot,
+                    user_functions,
+                    gateway_config,
+                    object_store_info,
+                )
             }
         };
 
-        let mut templates = TemplateConfig::new();
-
-        let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
-
-        let gateway_config = uninitialized_config
-            .gateway
-            .load(object_store_info.as_ref())?;
-
         let http_client = TensorzeroHttpClient::new(gateway_config.global_outbound_http_timeout)?;
-
-        // Load built-in functions first
-        let mut functions = built_in::get_all_built_in_functions()?;
-
-        // Load user-defined functions and ensure they don't use tensorzero:: prefix
-        let user_functions = uninitialized_config
-            .functions
-            .into_iter()
-            .map(|(name, config)| {
-                // Prevent user functions from using tensorzero:: prefix
-                if name.starts_with("tensorzero::") {
-                    return Err(Error::new(ErrorDetails::Config {
-                        message: format!(
-                            "User-defined function name cannot start with 'tensorzero::': {name}"
-                        ),
-                    }));
-                }
-                config
-                    .load(&name, &uninitialized_config.metrics)
-                    .map(|c| (name, Arc::new(c)))
-            })
-            .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
-
-        // Merge user functions into the functions map
-        functions.extend(user_functions);
 
         let tools = uninitialized_config
             .tools
@@ -1027,6 +1051,14 @@ impl Config {
             })
         })?;
 
+        // Add built in functions
+        let built_in_functions = built_in::get_all_built_in_functions()?;
+        let built_in_templates = Config::get_templates(&built_in_functions);
+        templates.add_templates(built_in_templates)?;
+        let functions = built_in_functions
+            .into_iter()
+            .chain(user_functions.into_iter())
+            .collect::<HashMap<String, Arc<FunctionConfig>>>();
         let mut config = Config {
             gateway: gateway_config,
             models: Arc::new(models),

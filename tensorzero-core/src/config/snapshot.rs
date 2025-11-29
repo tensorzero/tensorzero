@@ -107,6 +107,13 @@ impl Default for SnapshotHash {
     }
 }
 
+#[cfg(any(test, feature = "e2e_tests"))]
+impl Default for SnapshotHash {
+    fn default() -> Self {
+        SnapshotHash::new_test()
+    }
+}
+
 impl ConfigSnapshot {
     pub fn new(
         sorted_config_toml: toml::Table,
