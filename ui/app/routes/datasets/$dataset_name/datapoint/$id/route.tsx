@@ -12,7 +12,7 @@ import {
 } from "react-router";
 import { toDatapointUrl, toDatasetUrl } from "~/utils/urls";
 import { InputElement } from "~/components/input_output/InputElement";
-import { Output } from "~/components/inference/Output";
+import { OutputElement } from "~/components/input_output/OutputElement";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import {
   PageHeader,
@@ -586,20 +586,19 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           />
         </SectionLayout>
 
-        {output && (
-          <SectionLayout>
-            <SectionHeader heading="Output" />
-            <Output
-              output={output}
-              isEditing={isEditing}
-              onOutputChange={(output) => {
-                setOutput(output);
-                // Clear validation error when output changes
-                setValidationError(null);
-              }}
-            />
-          </SectionLayout>
-        )}
+        <SectionLayout>
+          <SectionHeader heading="Output" />
+          <OutputElement
+            type={datapoint.type}
+            output={output}
+            isEditing={isEditing}
+            onOutputChange={(output) => {
+              setOutput(output);
+              // Clear validation error when output changes
+              setValidationError(null);
+            }}
+          />
+        </SectionLayout>
 
         <SectionLayout>
           <SectionHeader heading="Tags" />
