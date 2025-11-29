@@ -59,6 +59,8 @@ pub fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router
 }
 
 /// This function builds the public routes for observability.
+///
+/// IMPORTANT: Add internal routes to `internal.rs` instead.
 fn build_observability_routes() -> Router<AppStateData> {
     Router::new()
         .route(
@@ -72,6 +74,8 @@ fn build_observability_routes() -> Router<AppStateData> {
 }
 
 /// This function builds the public routes for datasets.
+///
+/// IMPORTANT: Add internal routes to `internal.rs` instead.
 fn build_datasets_routes() -> Router<AppStateData> {
     Router::new()
         .route(
@@ -135,6 +139,8 @@ fn build_datasets_routes() -> Router<AppStateData> {
 }
 
 /// This function builds the public routes for optimization.
+///
+/// IMPORTANT: Add internal routes to `internal.rs` instead.
 fn build_optimization_routes() -> Router<AppStateData> {
     Router::new()
         .route(
@@ -148,6 +154,8 @@ fn build_optimization_routes() -> Router<AppStateData> {
 }
 
 /// This function builds the public routes for evaluations.
+///
+/// IMPORTANT: Add internal routes to `internal.rs` instead.
 fn build_evaluations_routes() -> Router<AppStateData> {
     Router::new()
         // Workflow evaluation endpoints (new)
@@ -171,6 +179,8 @@ fn build_evaluations_routes() -> Router<AppStateData> {
 }
 
 /// This function builds the public routes for meta-observability (e.g. gateway health).
+///
+/// IMPORTANT: Add internal routes to `internal.rs` instead.
 fn build_meta_observability_routes(metrics_handle: PrometheusHandle) -> Router<AppStateData> {
     Router::new()
         .route(
