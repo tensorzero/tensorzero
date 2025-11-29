@@ -658,6 +658,101 @@ test.describe("User Message - Thought Blocks", () => {
   });
 });
 
+test.describe("User Message - File URL Blocks", () => {
+  test("should add, edit, and delete file URL block with advanced fields", async ({
+    page,
+  }) => {
+    // Create datapoint from inference without user_schema (answer_question function)
+    await createDatapointFromInference(page, {
+      inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
+    });
+
+    // Enter edit mode
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    await expandShowMoreIfPresent(page);
+
+    // Find user message section
+    const userSection = page.getByTestId("message-user").first();
+
+    // Add File URL content block
+    const addFileUrlButton = userSection
+      .getByRole("button", { name: "File URL" })
+      .last();
+    await expect(addFileUrlButton).toBeVisible();
+    await addFileUrlButton.click();
+
+    // Fill URL field with a real image that exists
+    const testUrl =
+      "https://raw.githubusercontent.com/tensorzero/tensorzero/eac2a230d4a4db1ea09e9c876e45bdb23a300364/tensorzero-core/tests/e2e/providers/ferris.png";
+    const urlInput = userSection.locator('input[type="url"]').last();
+    await urlInput.fill(testUrl);
+
+    // Expand Advanced accordion
+    await userSection.getByText("Advanced").click();
+
+    // Fill advanced fields
+    const mimeType = "image/png";
+    const filename = "test-file-" + v7() + ".png";
+
+    // Use exact placeholder match to avoid ambiguity
+    const filenameInput = userSection.getByRole("textbox", {
+      name: "image.png",
+      exact: true,
+    });
+    await filenameInput.fill(filename);
+
+    const mimeTypeInput = userSection.getByRole("textbox", {
+      name: "image/png",
+      exact: true,
+    });
+    await mimeTypeInput.fill(mimeType);
+
+    const detailSelect = userSection.locator('button[role="combobox"]').last();
+    await detailSelect.click();
+    await page.getByRole("option", { name: "High" }).click();
+
+    // Save
+    await saveAndWaitForRedirect(page);
+
+    // Step 1: Verify file was added (URL files are converted to object_storage with image display)
+    // After save, the URL file becomes an object_storage image
+    // Need to expand "Show more" first since the content might be collapsed
+    await expandShowMoreIfPresent(page);
+    await expect(userSection.locator('img[alt="Image"]')).toBeVisible();
+
+    // Expand Advanced accordion and verify fields were persisted
+    await userSection.getByText("Advanced").click();
+    await expect(userSection.getByText("Filename:")).toBeVisible();
+    await expect(userSection.getByText(filename)).toBeVisible();
+    await expect(userSection.getByText("Detail:")).toBeVisible();
+    await expect(userSection.getByText("high")).toBeVisible();
+
+    // Step 2: Delete the file block
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    await expandShowMoreIfPresent(page);
+
+    const deleteButton = userSection
+      .getByRole("button", { name: "Delete content block" })
+      .last();
+    await deleteButton.click();
+
+    await saveAndWaitForRedirect(page);
+
+    // Verify file block was deleted (image no longer present)
+    await expect(userSection.locator('img[alt="Image"]')).not.toBeVisible();
+
+    // Reload and verify deletion persists
+    await page.reload();
+    await page.waitForLoadState("networkidle", { timeout: 5000 });
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
+    await expect(userSection.locator('img[alt="Image"]')).not.toBeVisible();
+  });
+});
+
 // ============================================================================
 // Assistant Message Content Block Tests
 // ============================================================================

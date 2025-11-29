@@ -32,6 +32,138 @@ import {
 } from "~/components/ui/select";
 import type { File, Detail } from "~/types/tensorzero";
 
+interface FileAdvancedAccordionProps {
+  filename?: string;
+  mimeType?: string | null;
+  detail?: Detail;
+  isEditing?: boolean;
+  onFilenameChange?: (filename: string | undefined) => void;
+  onMimeTypeChange?: (mimeType: string | null) => void;
+  onDetailChange?: (detail: Detail | undefined) => void;
+}
+
+/**
+ * Shared accordion component for advanced file properties.
+ * Shows filename, MIME type, and detail level.
+ */
+function FileAdvancedAccordion({
+  filename,
+  mimeType,
+  detail,
+  isEditing,
+  onFilenameChange,
+  onMimeTypeChange,
+  onDetailChange,
+}: FileAdvancedAccordionProps) {
+  const handleMimeTypeChange = (value: string) => {
+    onMimeTypeChange?.(value.trim() === "" ? null : value);
+  };
+
+  const handleDetailChange = (value: string) => {
+    onDetailChange?.(value === "none" ? undefined : (value as Detail));
+  };
+
+  const handleFilenameChange = (value: string) => {
+    onFilenameChange?.(value.trim() === "" ? undefined : value);
+  };
+
+  if (isEditing) {
+    return (
+      <Accordion type="single" collapsible className="w-full">
+        <AccordionItem value="advanced" className="border-none">
+          <AccordionTrigger className="text-fg-tertiary hover:text-fg-secondary [&>svg]:text-fg-tertiary [&:hover>svg]:text-fg-secondary cursor-pointer justify-start gap-1 py-1 text-xs hover:no-underline [&>svg]:order-first [&>svg]:mr-0 [&>svg]:ml-0">
+            Advanced
+          </AccordionTrigger>
+          <AccordionContent className="pb-1">
+            <div className="flex flex-col gap-2 px-0.5 pt-0.5">
+              <div className="flex flex-col gap-1">
+                <label className="text-fg-tertiary text-xs">Filename</label>
+                <Input
+                  type="text"
+                  placeholder="image.png"
+                  value={filename ?? ""}
+                  onChange={(e) => handleFilenameChange(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-fg-tertiary text-xs">MIME Type</label>
+                <Input
+                  type="text"
+                  placeholder="image/png"
+                  value={mimeType ?? ""}
+                  onChange={(e) => handleMimeTypeChange(e.target.value)}
+                  className="text-xs"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-fg-tertiary text-xs">Detail</label>
+                <Select
+                  value={detail ?? "none"}
+                  onValueChange={handleDetailChange}
+                >
+                  <SelectTrigger className="text-xs">
+                    <SelectValue placeholder="Select detail level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="auto">Auto</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    );
+  }
+
+  // Read-only view: show accordion with summary if any values exist
+  if (!filename && !mimeType && !detail) {
+    return null;
+  }
+
+  return (
+    <Accordion type="single" collapsible className="w-full">
+      <AccordionItem value="advanced" className="border-none">
+        <AccordionTrigger className="text-fg-tertiary hover:text-fg-secondary [&>svg]:text-fg-tertiary [&:hover>svg]:text-fg-secondary cursor-pointer justify-start gap-1 py-1 text-xs hover:no-underline [&>svg]:order-first [&>svg]:mr-0 [&>svg]:ml-0">
+          Advanced
+        </AccordionTrigger>
+        <AccordionContent className="pb-1">
+          <div className="flex flex-col gap-1 px-0.5 pt-0.5 text-xs">
+            {filename && (
+              <div>
+                <span className="text-fg-tertiary">Filename:</span>{" "}
+                <span className="text-fg-tertiary font-mono text-xs">
+                  {filename}
+                </span>
+              </div>
+            )}
+            {mimeType && (
+              <div>
+                <span className="text-fg-tertiary">MIME Type:</span>{" "}
+                <span className="text-fg-tertiary font-mono text-xs">
+                  {mimeType}
+                </span>
+              </div>
+            )}
+            {detail && (
+              <div>
+                <span className="text-fg-tertiary">Detail:</span>{" "}
+                <span className="text-fg-tertiary font-mono text-xs">
+                  {detail}
+                </span>
+              </div>
+            )}
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  );
+}
+
 interface FileContentBlockProps {
   block: File;
   actionBar?: ReactNode;
@@ -73,7 +205,12 @@ export function FileContentBlock({
       );
     case "object_storage_error":
       return (
-        <FileErrorContentBlock error={block.error} actionBar={actionBar} />
+        <FileErrorContentBlock
+          block={block}
+          actionBar={actionBar}
+          isEditing={isEditing}
+          onChange={onChange}
+        />
       );
   }
 
@@ -84,9 +221,10 @@ export function FileContentBlock({
   if (block.mime_type?.startsWith("image/")) {
     return (
       <ImageContentBlock
-        imageUrl={block.data}
-        filePath={block.storage_path.path}
+        block={block}
         actionBar={actionBar}
+        isEditing={isEditing}
+        onChange={onChange}
       />
     );
   }
@@ -94,38 +232,39 @@ export function FileContentBlock({
   if (block.mime_type?.startsWith("audio/")) {
     return (
       <AudioContentBlock
-        base64Data={block.data}
-        mimeType={block.mime_type}
-        filePath={block.storage_path.path}
+        block={block}
         actionBar={actionBar}
+        isEditing={isEditing}
+        onChange={onChange}
       />
     );
   }
 
   return (
     <GenericFileContentBlock
-      base64Data={block.data}
-      mimeType={block.mime_type}
-      filePath={block.storage_path.path}
+      block={block}
       actionBar={actionBar}
+      isEditing={isEditing}
+      onChange={onChange}
     />
   );
 }
 
 interface ImageContentBlockProps {
-  /** HTTP or data URL for the image */
-  imageUrl: string;
-  filePath: string;
+  block: Extract<File, { file_type: "object_storage" }>;
   actionBar?: ReactNode;
+  isEditing?: boolean;
+  onChange?: (updatedBlock: File) => void;
 }
 
 /**
  * Renders image files with preview and download link.
  */
 function ImageContentBlock({
-  imageUrl,
-  filePath,
+  block,
   actionBar,
+  isEditing,
+  onChange,
 }: ImageContentBlockProps) {
   return (
     <div className="flex flex-col gap-1">
@@ -135,25 +274,37 @@ function ImageContentBlock({
       >
         File
       </ContentBlockLabel>
-      <Link
-        to={imageUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        download={`tensorzero_${filePath}`}
-        className="border-border bg-bg-tertiary text-fg-tertiary flex min-h-20 w-60 items-center justify-center rounded border p-2 text-xs"
-      >
-        <img src={imageUrl} alt="Image" />
-      </Link>
+      <div className="flex flex-col">
+        <Link
+          to={block.data}
+          target="_blank"
+          rel="noopener noreferrer"
+          download={`tensorzero_${block.storage_path.path}`}
+          className="border-border bg-bg-tertiary text-fg-tertiary flex min-h-20 w-60 items-center justify-center rounded border p-2 text-xs"
+        >
+          <img src={block.data} alt="Image" />
+        </Link>
+        <FileAdvancedAccordion
+          filename={block.filename}
+          mimeType={block.mime_type}
+          detail={block.detail}
+          isEditing={isEditing}
+          onFilenameChange={(filename) => onChange?.({ ...block, filename })}
+          onMimeTypeChange={(mime_type) =>
+            onChange?.({ ...block, mime_type: mime_type ?? block.mime_type })
+          }
+          onDetailChange={(detail) => onChange?.({ ...block, detail })}
+        />
+      </div>
     </div>
   );
 }
 
 interface AudioContentBlockProps {
-  /** Base64-encoded data URL (data:audio/...) */
-  base64Data: string;
-  mimeType: string;
-  filePath: string;
+  block: Extract<File, { file_type: "object_storage" }>;
   actionBar?: ReactNode;
+  isEditing?: boolean;
+  onChange?: (updatedBlock: File) => void;
 }
 
 /**
@@ -161,12 +312,12 @@ interface AudioContentBlockProps {
  * Converts base64 data URL to blob URL for audio playback.
  */
 function AudioContentBlock({
-  base64Data,
-  mimeType,
-  filePath,
+  block,
   actionBar,
+  isEditing,
+  onChange,
 }: AudioContentBlockProps) {
-  const blobUrl = useBase64UrlToBlobUrl(base64Data, mimeType);
+  const blobUrl = useBase64UrlToBlobUrl(block.data, block.mime_type);
 
   return (
     <div className="flex flex-col gap-1">
@@ -178,21 +329,34 @@ function AudioContentBlock({
       </ContentBlockLabel>
 
       <div className="border-border flex w-80 flex-col gap-4 rounded-md border p-3">
-        <FileMetadata mimeType={mimeType} filePath={filePath} />
+        <FileMetadata
+          mimeType={block.mime_type}
+          filePath={block.storage_path.path}
+        />
         <audio controls preload="none" className="w-full">
-          <source src={blobUrl} type={mimeType} />
+          <source src={blobUrl} type={block.mime_type} />
         </audio>
+        <FileAdvancedAccordion
+          filename={block.filename}
+          mimeType={block.mime_type}
+          detail={block.detail}
+          isEditing={isEditing}
+          onFilenameChange={(filename) => onChange?.({ ...block, filename })}
+          onMimeTypeChange={(mime_type) =>
+            onChange?.({ ...block, mime_type: mime_type ?? block.mime_type })
+          }
+          onDetailChange={(detail) => onChange?.({ ...block, detail })}
+        />
       </div>
     </div>
   );
 }
 
 interface GenericFileContentBlockProps {
-  /** Base64-encoded data URL (data:...) */
-  base64Data: string;
-  mimeType: string;
-  filePath: string;
+  block: Extract<File, { file_type: "object_storage" }>;
   actionBar?: ReactNode;
+  isEditing?: boolean;
+  onChange?: (updatedBlock: File) => void;
 }
 
 /**
@@ -200,12 +364,12 @@ interface GenericFileContentBlockProps {
  * Converts base64 data URL to blob URL for browser preview.
  */
 function GenericFileContentBlock({
-  base64Data,
-  filePath,
-  mimeType,
+  block,
   actionBar,
+  isEditing,
+  onChange,
 }: GenericFileContentBlockProps) {
-  const blobUrl = useBase64UrlToBlobUrl(base64Data, mimeType);
+  const blobUrl = useBase64UrlToBlobUrl(block.data, block.mime_type);
 
   return (
     <div className="flex flex-col gap-1">
@@ -215,45 +379,65 @@ function GenericFileContentBlock({
       >
         File
       </ContentBlockLabel>
-      <div className="border-border flex w-80 flex-row gap-3 rounded-md border p-3">
-        <div className="flex-1">
-          <FileMetadata filePath={filePath} mimeType={mimeType} />
+      <div className="border-border flex w-80 flex-col gap-3 rounded-md border p-3">
+        <div className="flex flex-row gap-3">
+          <div className="flex-1">
+            <FileMetadata
+              filePath={block.storage_path.path}
+              mimeType={block.mime_type}
+            />
+          </div>
+
+          <Link
+            to={block.data}
+            download={`tensorzero_${block.storage_path.path}`}
+            aria-label={`Download ${block.storage_path.path}`}
+          >
+            <Download className="h-5 w-5" />
+          </Link>
+
+          <Link
+            to={blobUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open ${block.storage_path.path} in new tab`}
+          >
+            <ExternalLink className="h-5 w-5" />
+          </Link>
         </div>
-
-        <Link
-          to={base64Data}
-          download={`tensorzero_${filePath}`}
-          aria-label={`Download ${filePath}`}
-        >
-          <Download className="h-5 w-5" />
-        </Link>
-
-        <Link
-          to={blobUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`Open ${filePath} in new tab`}
-        >
-          <ExternalLink className="h-5 w-5" />
-        </Link>
+        <FileAdvancedAccordion
+          filename={block.filename}
+          mimeType={block.mime_type}
+          detail={block.detail}
+          isEditing={isEditing}
+          onFilenameChange={(filename) => onChange?.({ ...block, filename })}
+          onMimeTypeChange={(mime_type) =>
+            onChange?.({ ...block, mime_type: mime_type ?? block.mime_type })
+          }
+          onDetailChange={(detail) => onChange?.({ ...block, detail })}
+        />
       </div>
     </div>
   );
 }
 
 interface FileErrorContentBlockProps {
-  error?: string;
+  block: Extract<File, { file_type: "object_storage_error" }>;
   actionBar?: ReactNode;
+  isEditing?: boolean;
+  onChange?: (updatedBlock: File) => void;
 }
 
 /**
  * Renders an error state when file cannot be loaded.
  */
 function FileErrorContentBlock({
-  error,
+  block,
   actionBar,
+  isEditing,
+  onChange,
 }: FileErrorContentBlockProps) {
-  const errorMessage = error || "Failed to retrieve file";
+  const errorMessage = block.error || "Failed to retrieve file";
 
   return (
     <div className="flex flex-col gap-1">
@@ -263,20 +447,33 @@ function FileErrorContentBlock({
       >
         File
       </ContentBlockLabel>
-      <div className="border-border bg-bg-tertiary relative aspect-video w-60 min-w-60 rounded-md border">
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-2">
-          <ImageOff className="text-fg-muted h-4 w-4" />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-fg-tertiary line-clamp-2 w-full cursor-default text-center text-xs font-medium break-all">
+      <div className="flex flex-col">
+        <div className="border-border bg-bg-tertiary relative aspect-video w-60 min-w-60 rounded-md border">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-2">
+            <ImageOff className="text-fg-muted h-4 w-4" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-fg-tertiary line-clamp-2 w-full cursor-default text-center text-xs font-medium break-all">
+                  {errorMessage}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-md break-words">
                 {errorMessage}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-md break-words">
-              {errorMessage}
-            </TooltipContent>
-          </Tooltip>
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
+        <FileAdvancedAccordion
+          filename={block.filename}
+          mimeType={block.mime_type}
+          detail={block.detail}
+          isEditing={isEditing}
+          onFilenameChange={(filename) => onChange?.({ ...block, filename })}
+          onMimeTypeChange={(mime_type) =>
+            onChange?.({ ...block, mime_type: mime_type ?? block.mime_type })
+          }
+          onDetailChange={(detail) => onChange?.({ ...block, detail })}
+        />
       </div>
     </div>
   );
@@ -302,27 +499,6 @@ function UrlFileContentBlock({
     onChange?.({ ...block, url });
   };
 
-  const handleMimeTypeChange = (mime_type: string) => {
-    onChange?.({
-      ...block,
-      mime_type: mime_type.trim() === "" ? null : mime_type,
-    });
-  };
-
-  const handleDetailChange = (detail: string) => {
-    onChange?.({
-      ...block,
-      detail: detail === "none" ? undefined : (detail as Detail),
-    });
-  };
-
-  const handleFilenameChange = (filename: string) => {
-    onChange?.({
-      ...block,
-      filename: filename.trim() === "" ? undefined : filename,
-    });
-  };
-
   if (isEditing) {
     return (
       <div className="flex max-w-240 min-w-80 flex-col gap-1">
@@ -340,56 +516,17 @@ function UrlFileContentBlock({
             onChange={(e) => handleUrlChange(e.target.value)}
             className="text-xs"
           />
-          <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value="advanced" className="border-none">
-              <AccordionTrigger className="text-fg-tertiary hover:text-fg-secondary [&>svg]:text-fg-tertiary [&:hover>svg]:text-fg-secondary cursor-pointer justify-start gap-1 py-1 text-xs hover:no-underline [&>svg]:order-first [&>svg]:mr-0 [&>svg]:ml-0">
-                Advanced
-              </AccordionTrigger>
-              <AccordionContent className="pb-1">
-                <div className="flex flex-col gap-2 px-0.5 pt-0.5">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-fg-tertiary text-xs">
-                      MIME Type
-                    </label>
-                    <Input
-                      type="text"
-                      placeholder="image/png"
-                      value={block.mime_type ?? ""}
-                      onChange={(e) => handleMimeTypeChange(e.target.value)}
-                      className="text-xs"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-fg-tertiary text-xs">Detail</label>
-                    <Select
-                      value={block.detail ?? "none"}
-                      onValueChange={handleDetailChange}
-                    >
-                      <SelectTrigger className="text-xs">
-                        <SelectValue placeholder="Select detail level" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        <SelectItem value="auto">Auto</SelectItem>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-fg-tertiary text-xs">Filename</label>
-                    <Input
-                      type="text"
-                      placeholder="image.png"
-                      value={block.filename ?? ""}
-                      onChange={(e) => handleFilenameChange(e.target.value)}
-                      className="text-xs"
-                    />
-                  </div>
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          </Accordion>
+          <FileAdvancedAccordion
+            filename={block.filename}
+            mimeType={block.mime_type}
+            detail={block.detail}
+            isEditing={true}
+            onFilenameChange={(filename) => onChange?.({ ...block, filename })}
+            onMimeTypeChange={(mime_type) =>
+              onChange?.({ ...block, mime_type })
+            }
+            onDetailChange={(detail) => onChange?.({ ...block, detail })}
+          />
         </div>
       </div>
     );
@@ -413,17 +550,11 @@ function UrlFileContentBlock({
         >
           {block.url || "(empty URL)"}
         </Link>
-        {(block.mime_type || block.filename || block.detail) && (
-          <div className="text-fg-tertiary mt-1 text-xs">
-            {block.filename && <span>{block.filename}</span>}
-            {block.filename && block.mime_type && <span> · </span>}
-            {block.mime_type && <span>{block.mime_type}</span>}
-            {(block.filename || block.mime_type) && block.detail && (
-              <span> · </span>
-            )}
-            {block.detail && <span>detail: {block.detail}</span>}
-          </div>
-        )}
+        <FileAdvancedAccordion
+          filename={block.filename}
+          mimeType={block.mime_type}
+          detail={block.detail}
+        />
       </div>
     </div>
   );
