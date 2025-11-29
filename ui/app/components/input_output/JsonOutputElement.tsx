@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { JsonInferenceOutput } from "~/types/tensorzero";
+import type { JsonInferenceOutput, JsonValue } from "~/types/tensorzero";
 import { EmptyMessage } from "./ContentBlockElement";
 import { AddButton } from "~/components/ui/AddButton";
 import {
@@ -13,7 +13,7 @@ import { DeleteButton } from "~/components/ui/DeleteButton";
 
 interface JsonOutputElementProps {
   output?: JsonInferenceOutput;
-  // TODO: add output schema
+  outputSchema: JsonValue;
   isEditing?: boolean;
   onOutputChange?: (output?: JsonInferenceOutput) => void;
   maxHeight?: number | "Content";
@@ -21,6 +21,7 @@ interface JsonOutputElementProps {
 
 export function JsonOutputElement({
   output,
+  outputSchema,
   isEditing,
   onOutputChange,
   maxHeight,
@@ -102,6 +103,10 @@ export function JsonOutputElement({
       id: "raw",
       label: "Raw Output",
     },
+    {
+      id: "schema",
+      label: "Schema",
+    },
   ];
 
   // Set default tab to "Raw" when editing, otherwise "Parsed" if it has content
@@ -135,9 +140,14 @@ export function JsonOutputElement({
             )}
           </>
         );
-      // TODO: render schema tab
-      // case "schema":
-      //   return <CodeEditor allowedLanguages={["json"]} value={"{}"} readOnly />;
+      case "schema":
+        return (
+          <CodeEditor
+            allowedLanguages={["json"]}
+            value={outputSchema ? JSON.stringify(outputSchema, null, 2) : ""}
+            readOnly
+          />
+        );
       default:
         // This should never happen
         return <EmptyMessage message="Error" />;

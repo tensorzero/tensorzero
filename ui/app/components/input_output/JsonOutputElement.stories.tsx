@@ -20,9 +20,15 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const TRIVIAL_OUTPUT_SCHEMA = {
+  $schema: "http://json-schema.org/draft-07/schema#",
+  type: "object",
+};
+
 export const None: Story = {
   args: {
     output: undefined,
+    outputSchema: TRIVIAL_OUTPUT_SCHEMA,
     isEditing: false,
   },
   render: function Component(args) {
@@ -38,6 +44,7 @@ export const NoneEditing: Story = {
   name: "None (Editing)",
   args: {
     output: undefined,
+    outputSchema: TRIVIAL_OUTPUT_SCHEMA,
     isEditing: true,
   },
   render: function Component(args) {
@@ -62,6 +69,7 @@ export const Trivial: Story = {
       parsed: {},
       raw: "{}",
     },
+    outputSchema: TRIVIAL_OUTPUT_SCHEMA,
     isEditing: false,
   },
   render: function Component(args) {
@@ -80,6 +88,7 @@ export const TrivialEditing: Story = {
       parsed: {},
       raw: "{}",
     },
+    outputSchema: TRIVIAL_OUTPUT_SCHEMA,
     isEditing: true,
   },
   render: function Component(args) {
@@ -99,12 +108,43 @@ export const TrivialEditing: Story = {
 };
 
 const COMPLEX_JSON = {
-  key1: "value1",
-  key2: {
-    subkey1: "subvalue1",
-    subkey2: "subvalue2",
+  person: ["Gabriel Bianconi", "Megumin"],
+  organization: ["TensorZero", "Crunchyroll"],
+  location: ["San Francisco", "Seattle", "New York"],
+  miscellaneous: ["AI", "Technology", "Anime"],
+};
+
+const COMPLEX_OUTPUT_SCHEMA = {
+  $schema: "http://json-schema.org/draft-07/schema#",
+  type: "object",
+  properties: {
+    person: {
+      type: "array",
+      items: {
+        type: "string",
+      },
+    },
+    organization: {
+      type: "array",
+      items: {
+        type: "string",
+      },
+    },
+    location: {
+      type: "array",
+      items: {
+        type: "string",
+      },
+    },
+    miscellaneous: {
+      type: "array",
+      items: {
+        type: "string",
+      },
+    },
   },
-  key3: ["array1", "array2", "array3"],
+  required: ["person", "organization", "location", "miscellaneous"],
+  additionalProperties: false,
 };
 
 export const Complex: Story = {
@@ -113,6 +153,7 @@ export const Complex: Story = {
       parsed: COMPLEX_JSON,
       raw: JSON.stringify(COMPLEX_JSON),
     },
+    outputSchema: COMPLEX_OUTPUT_SCHEMA,
     isEditing: false,
   },
   render: function Component(args) {
@@ -131,6 +172,7 @@ export const ComplexEditing: Story = {
       parsed: COMPLEX_JSON,
       raw: JSON.stringify(COMPLEX_JSON),
     },
+    outputSchema: COMPLEX_OUTPUT_SCHEMA,
     isEditing: true,
   },
   render: function Component(args) {
@@ -155,6 +197,7 @@ export const Invalid: Story = {
       parsed: null,
       raw: JSON.stringify(COMPLEX_JSON).slice(0, -1),
     },
+    outputSchema: COMPLEX_OUTPUT_SCHEMA,
     isEditing: false,
   },
   render: function Component(args) {
@@ -173,6 +216,7 @@ export const InvalidEditing: Story = {
       parsed: null,
       raw: JSON.stringify(COMPLEX_JSON).slice(0, -1),
     },
+    outputSchema: COMPLEX_OUTPUT_SCHEMA,
     isEditing: true,
   },
   render: function Component(args) {

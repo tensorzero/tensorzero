@@ -12,7 +12,8 @@ import {
 } from "react-router";
 import { toDatapointUrl, toDatasetUrl } from "~/utils/urls";
 import { InputElement } from "~/components/input_output/InputElement";
-import { OutputElement } from "~/components/input_output/OutputElement";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import {
   PageHeader,
@@ -46,7 +47,29 @@ import type {
   ContentBlockChatOutput,
   Input,
   Datapoint,
+  JsonValue,
 } from "~/types/tensorzero";
+
+// Discriminated union for type-safe output state
+type OutputState =
+  | { type: "chat"; value?: ContentBlockChatOutput[] }
+  | { type: "json"; value?: JsonInferenceOutput; outputSchema: JsonValue };
+
+function createOutputState(datapoint: Datapoint): OutputState {
+  switch (datapoint.type) {
+    case "chat":
+      return {
+        type: "chat",
+        value: datapoint.output as ContentBlockChatOutput[] | undefined,
+      };
+    case "json":
+      return {
+        type: "json",
+        value: datapoint.output as JsonInferenceOutput | undefined,
+        outputSchema: datapoint.output_schema,
+      };
+  }
+}
 import {
   cloneDatapoint,
   deleteDatapoint,
@@ -349,8 +372,12 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const [originalInput, setOriginalInput] = useState(resolvedInput);
   const [input, setInput] = useState<Input>(resolvedInput);
 
-  const [originalOutput, setOriginalOutput] = useState(datapoint.output);
-  const [output, setOutput] = useState(datapoint.output);
+  const [originalOutput, setOriginalOutput] = useState<OutputState>(() =>
+    createOutputState(datapoint),
+  );
+  const [output, setOutput] = useState<OutputState>(() =>
+    createOutputState(datapoint),
+  );
 
   const [originalTags, setOriginalTags] = useState(datapoint.tags || {});
   const [tags, setTags] = useState(datapoint.tags || {});
@@ -362,8 +389,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     setInput(resolvedInput);
     setOriginalInput(resolvedInput);
-    setOutput(datapoint.output);
-    setOriginalOutput(datapoint.output);
+    const newOutputState = createOutputState(datapoint);
+    setOutput(newOutputState);
+    setOriginalOutput(newOutputState);
     setTags(datapoint.tags || {});
     setOriginalTags(datapoint.tags || {});
     setIsEditing(false);
@@ -376,8 +404,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
       hasDatapointChanged({
         currentInput: input,
         originalInput,
-        currentOutput: output,
-        originalOutput,
+        currentOutput: output.value,
+        originalOutput: originalOutput.value,
         currentTags: tags,
         originalTags,
       })
@@ -385,10 +413,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   }, [
     isEditing,
     input,
-    output,
+    output.value,
     tags,
     originalInput,
-    originalOutput,
+    originalOutput.value,
     originalTags,
   ]);
 
@@ -396,7 +424,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
   const handleReset = () => {
     setInput(resolvedInput);
-    setOutput(datapoint.output);
+    setOutput(createOutputState(datapoint));
     setTags(datapoint.tags || {});
   };
 
@@ -419,7 +447,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const handleUpdate = () => {
     setValidationError(null);
 
-    const validation = validateJsonOutput(output);
+    const validation = validateJsonOutput(output.value);
     if (!validation.valid) {
       setValidationError(validation.error);
       return;
@@ -432,7 +460,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         id: datapoint.id,
         episode_id: datapoint.episode_id,
         input,
-        output,
+        output: output.value,
         tags,
       });
       fetcher.submit(formData, { method: "post", action: "." });
@@ -623,16 +651,37 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Output" />
-          <OutputElement
-            type={datapoint.type}
-            output={output}
-            isEditing={isEditing}
-            onOutputChange={(output) => {
-              setOutput(output);
-              // Clear validation error when output changes
-              setValidationError(null);
-            }}
-          />
+          {(() => {
+            switch (output.type) {
+              case "chat":
+                return (
+                  <ChatOutputElement
+                    output={output.value}
+                    isEditing={isEditing}
+                    onOutputChange={(value) => {
+                      setOutput({ type: "chat", value });
+                      setValidationError(null);
+                    }}
+                  />
+                );
+              case "json":
+                return (
+                  <JsonOutputElement
+                    output={output.value}
+                    outputSchema={output.outputSchema}
+                    isEditing={isEditing}
+                    onOutputChange={(value) => {
+                      setOutput({
+                        type: "json",
+                        value,
+                        outputSchema: output.outputSchema,
+                      });
+                      setValidationError(null);
+                    }}
+                  />
+                );
+            }
+          })()}
         </SectionLayout>
 
         <SectionLayout>
