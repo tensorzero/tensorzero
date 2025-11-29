@@ -241,6 +241,7 @@ fn get_gepa_mutate_function() -> Result<Arc<FunctionConfig>, Error> {
                             "description": "The input and output of the LLM inference analyzed",
                             "properties": {
                                 "input": {
+                                    "type": "object",
                                     "description": "The inference input"
                                 },
                                 "output": {

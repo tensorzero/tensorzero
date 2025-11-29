@@ -1,9 +1,15 @@
-//! Template mutation functions for GEPA optimization
+//! Template mutation for GEPA optimization.
 //!
-//! This module provides functions for:
-//! - Generating improved templates using the mutate function
-//! - Creating mutated variant configurations
-//! - Parsing mutation responses
+//! This module implements the mutation step of the GEPA optimization algorithm.
+//!
+//! The sole public function is [`mutate_variant`], which:
+//! - Takes aggregated analyses from the GEPA analyze step
+//! - Calls the built-in `tensorzero::optimization::gepa::mutate` function to generate improved templates
+//! - Validates that returned templates exactly match the parent's template structure
+//! - Returns a new child variant with the improved templates
+//!
+//! The child variant inherits the parent's configuration but with improved templates based on
+//! the analyses. Template validation ensures the LLM doesn't hallucinate missing or extra templates.
 
 use std::collections::HashMap;
 
@@ -75,15 +81,16 @@ fn create_mutate_variant_config(gepa_config: &GEPAConfig) -> UninitializedChatCo
     mutate_config
 }
 
-/// Builds input JSON for the mutate function.
+/// Builds input Arguments for the mutate function.
 ///
-/// Passes high-level objects to the template for serialization.
+/// Constructs an Arguments struct containing high-level objects that will be serialized
+/// to JSON during template rendering.
 ///
 /// Returns Arguments with template variables: function_config, static_tools, evaluation_config,
 /// templates_map, and analyses.
 ///
 /// Returns error if serialization fails.
-pub fn build_mutate_input(
+fn build_mutate_input(
     analyses: &[Analysis],
     function_context: &FunctionContext,
     variant_config: &UninitializedChatCompletionConfig,
@@ -224,6 +231,19 @@ pub async fn mutate_variant(
             message: format!("Failed to deserialize mutate output: {e}"),
         })
     })?;
+
+    // Check for duplicate template names before converting to HashMap
+    let template_names: Vec<&str> = response.templates.iter().map(|t| t.name.as_str()).collect();
+    let unique_names: std::collections::HashSet<&str> = template_names.iter().copied().collect();
+    if template_names.len() != unique_names.len() {
+        return Err(Error::new(ErrorDetails::Inference {
+            message: format!(
+                "Mutate function returned duplicate template names. Expected {} unique templates, got {} entries",
+                unique_names.len(),
+                template_names.len()
+            ),
+        }));
+    }
 
     // Convert the array of template entries into a HashMap
     let templates: HashMap<String, String> = response
