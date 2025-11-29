@@ -6632,7 +6632,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
     let first = output.first().unwrap();
     match first {
-        StoredContentBlock::Text(_) | StoredContentBlock::Unknown { .. } => {}
+        StoredContentBlock::Text(_) | StoredContentBlock::Unknown(_) => {}
         _ => {
             panic!("Expected a text or unknown block, got {first:?}");
         }

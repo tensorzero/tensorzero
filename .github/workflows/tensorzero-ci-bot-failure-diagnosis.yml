@@ -2,7 +2,7 @@ name: TensorZero CI Bot Failure Diagnosis
 
 on:
   workflow_run:
-    workflows: ['General Checks']
+    workflows: ["General Checks"]
     types:
       - completed
 
@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: tensorzero/experimental-ci-bot
-          ref: 'v0.1-pre-agent'
+          ref: "v0.1-pre-agent"
           sparse-checkout: |
             tensorzero
 
@@ -62,7 +62,7 @@ jobs:
           cat /tmp/tensorzero-for-gateway/prompt.minijinja
 
       - name: Call LLM to generate PR revision
-        uses: 'tensorzero/experimental-ci-bot/generate-pr-patch@v0.1-pre-agent'
+        uses: "tensorzero/experimental-ci-bot/generate-pr-patch@v0.1-pre-agent"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

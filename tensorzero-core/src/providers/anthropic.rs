@@ -26,7 +26,7 @@ use crate::inference::types::chat_completion_inference_params::{
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
-    FunctionType, Latency, ModelInferenceRequestJsonMode, ObjectStorageFile, Role, Text,
+    FunctionType, Latency, ModelInferenceRequestJsonMode, ObjectStorageFile, Role, Text, Unknown,
 };
 use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
@@ -36,7 +36,7 @@ use crate::inference::types::{
     UnknownChunk, Usage,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{fully_qualified_name, Credential, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
@@ -678,10 +678,9 @@ impl<'a> AnthropicMessageContent<'a> {
                     Ok(None)
                 }
             }
-            ContentBlock::Unknown {
-                data,
-                model_provider_name: _,
-            } => Ok(Some(FlattenUnknown::Unknown(Cow::Borrowed(data)))),
+            ContentBlock::Unknown(Unknown { data, .. }) => {
+                Ok(Some(FlattenUnknown::Unknown(Cow::Borrowed(data))))
+            }
         }
     }
 }
@@ -935,6 +934,7 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
         || model_name == "claude-sonnet-4-0"
         || model_name.starts_with("claude-haiku-4-5")
         || model_name.starts_with("claude-sonnet-4-5")
+        || model_name.starts_with("claude-opus-4-5")
     {
         Ok(64_000)
     } else if model_name.starts_with("claude-opus-4-202")
@@ -1117,10 +1117,11 @@ fn convert_to_output(
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             }))
         }
-        FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown {
+        FlattenUnknown::Unknown(data) => Ok(ContentBlockOutput::Unknown(Unknown {
             data: data.into_owned(),
-            model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
-        }),
+            model_name: Some(model_name.to_string()),
+            provider_name: Some(provider_name.to_string()),
+        })),
     }
 }
 
@@ -1510,7 +1511,8 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                 vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: delta.into_owned(),
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
                 })],
                 None,
                 raw_message,
@@ -1530,7 +1532,8 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                 vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: content_block.into_owned(),
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
                 })],
                 None,
                 raw_message,
@@ -1550,7 +1553,8 @@ pub(super) fn anthropic_to_tensorzero_stream_message(
                 vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: "message_delta".to_string(),
                     data: delta.into_owned(),
-                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                    model_name: Some(model_name.to_string()),
+                    provider_name: Some(provider_name.to_string()),
                 })],
                 None,
                 raw_message,

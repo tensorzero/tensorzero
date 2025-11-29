@@ -28,8 +28,6 @@ import type {
   CountFeedbackByTargetIdParams,
   QueryDemonstrationFeedbackByInferenceIdParams,
   DemonstrationFeedbackRow,
-  GetDatapointParams,
-  Datapoint,
   GetCumulativeFeedbackTimeseriesParams,
   KeyInfo,
 } from "./bindings";
@@ -237,12 +235,6 @@ export class DatabaseClient {
     return new DatabaseClient(
       await NativeDatabaseClient.fromClickhouseUrl(url),
     );
-  }
-
-  async getDatapoint(params: GetDatapointParams): Promise<Datapoint> {
-    const paramsString = safeStringify(params);
-    const result = await this.nativeDatabaseClient.getDatapoint(paramsString);
-    return JSON.parse(result) as Datapoint;
   }
 
   async getModelUsageTimeseries(

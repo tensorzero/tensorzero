@@ -23,6 +23,7 @@ use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata,
     chat_completion_inference_params::{ChatCompletionInferenceParamsV2, ServiceTier},
     ContentBlock, InferenceResultStream, ModelInferenceRequest, RequestMessage, Role, System, Text,
+    Unknown,
 };
 use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
 use crate::jsonschema_util::StaticJSONSchema;
@@ -536,10 +537,11 @@ pub async fn prepare_request_message(
                 content.push(ContentBlock::Thought(thought.clone()));
             }
             LazyResolvedInputMessageContent::Unknown(unknown) => {
-                content.push(ContentBlock::Unknown {
+                content.push(ContentBlock::Unknown(Unknown {
                     data: unknown.data.clone(),
-                    model_provider_name: unknown.model_provider_name.clone(),
-                });
+                    model_name: unknown.model_name.clone(),
+                    provider_name: unknown.provider_name.clone(),
+                }));
             }
         }
     }
