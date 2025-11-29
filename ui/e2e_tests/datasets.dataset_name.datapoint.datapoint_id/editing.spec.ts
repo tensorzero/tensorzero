@@ -675,9 +675,9 @@ test.describe("User Message - File URL Blocks", () => {
     // Find user message section
     const userSection = page.getByTestId("message-user").first();
 
-    // Add File URL content block
+    // Add File (URL) content block
     const addFileUrlButton = userSection
-      .getByRole("button", { name: "File URL" })
+      .getByRole("button", { name: "File (URL)" })
       .last();
     await expect(addFileUrlButton).toBeVisible();
     await addFileUrlButton.click();
@@ -750,6 +750,175 @@ test.describe("User Message - File URL Blocks", () => {
       .getByRole("button", { name: "Edit" })
       .waitFor({ state: "visible" });
     await expect(userSection.locator('img[alt="Image"]')).not.toBeVisible();
+  });
+});
+
+test.describe("User Message - File Base64 Blocks", () => {
+  // Tiny 1x1 pixel PNG for testing
+  const TEST_BASE64 =
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdj+O/P8B8ABe0CTsv8mHgAAAAASUVORK5CYII=";
+
+  test("should add, edit, and delete file base64 block by pasting data", async ({
+    page,
+  }) => {
+    // Create datapoint from inference without user_schema (answer_question function)
+    await createDatapointFromInference(page, {
+      inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
+    });
+
+    // Enter edit mode
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    await expandShowMoreIfPresent(page);
+
+    // Find user message section
+    const userSection = page.getByTestId("message-user").first();
+
+    // Add File (Base64) content block
+    const addFileBase64Button = userSection
+      .getByRole("button", { name: "File (Base64)" })
+      .last();
+    await expect(addFileBase64Button).toBeVisible();
+    await addFileBase64Button.click();
+
+    // Fill the base64 textarea with test data
+    const base64Textarea = userSection
+      .getByPlaceholder("Or paste base64-encoded file data...")
+      .last();
+    await base64Textarea.fill(TEST_BASE64);
+
+    // Expand Advanced accordion
+    await userSection.getByText("Advanced").click();
+
+    // Fill advanced fields
+    const mimeType = "image/png";
+    const filename = "test-base64-" + v7() + ".png";
+
+    const filenameInput = userSection.getByRole("textbox", {
+      name: "image.png",
+      exact: true,
+    });
+    await filenameInput.fill(filename);
+
+    const mimeTypeInput = userSection.getByRole("textbox", {
+      name: "image/png",
+      exact: true,
+    });
+    await mimeTypeInput.fill(mimeType);
+
+    const detailSelect = userSection.locator('button[role="combobox"]').last();
+    await detailSelect.click();
+    await page.getByRole("option", { name: "High" }).click();
+
+    // Save
+    await saveAndWaitForRedirect(page);
+
+    // Verify file was added - base64 images should display
+    await expandShowMoreIfPresent(page);
+    await expect(userSection.locator('img[alt="Image"]')).toBeVisible();
+
+    // Expand Advanced accordion and verify fields were persisted
+    await userSection.getByText("Advanced").click();
+    await expect(userSection.getByText("Filename:")).toBeVisible();
+    await expect(userSection.getByText(filename)).toBeVisible();
+    await expect(userSection.getByText("Detail:")).toBeVisible();
+    await expect(userSection.getByText("high")).toBeVisible();
+
+    // Reload and verify persistence
+    await page.reload();
+    await page.waitForLoadState("networkidle", { timeout: 5000 });
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
+    await expandShowMoreIfPresent(page);
+    await expect(userSection.locator('img[alt="Image"]')).toBeVisible();
+
+    // Delete the file block
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    await expandShowMoreIfPresent(page);
+
+    const deleteButton = userSection
+      .getByRole("button", { name: "Delete content block" })
+      .last();
+    await deleteButton.click();
+
+    await saveAndWaitForRedirect(page);
+
+    // Verify file block was deleted (image no longer present)
+    await expect(userSection.locator('img[alt="Image"]')).not.toBeVisible();
+
+    // Reload and verify deletion persists
+    await page.reload();
+    await page.waitForLoadState("networkidle", { timeout: 5000 });
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
+    await expect(userSection.locator('img[alt="Image"]')).not.toBeVisible();
+  });
+
+  test("should add file base64 block via file upload", async ({ page }) => {
+    // Create datapoint from inference without user_schema (answer_question function)
+    await createDatapointFromInference(page, {
+      inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
+    });
+
+    // Enter edit mode
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    await expandShowMoreIfPresent(page);
+
+    // Find user message section
+    const userSection = page.getByTestId("message-user").first();
+
+    // Add File (Base64) content block
+    const addFileBase64Button = userSection
+      .getByRole("button", { name: "File (Base64)" })
+      .last();
+    await expect(addFileBase64Button).toBeVisible();
+    await addFileBase64Button.click();
+
+    // Convert base64 to buffer and upload via file input
+    const buffer = Buffer.from(TEST_BASE64, "base64");
+    const uploadFilename = "uploaded-test-" + v7() + ".png";
+
+    // Find the hidden file input and set files
+    const fileInput = userSection.locator('input[type="file"]').last();
+    await fileInput.setInputFiles({
+      name: uploadFilename,
+      mimeType: "image/png",
+      buffer: buffer,
+    });
+
+    // Verify filename is shown after upload
+    await expect(userSection.getByText(uploadFilename)).toBeVisible();
+
+    // Verify base64 data was populated in textarea
+    const base64Textarea = userSection
+      .getByPlaceholder("Or paste base64-encoded file data...")
+      .last();
+    await expect(base64Textarea).toHaveValue(TEST_BASE64);
+
+    // Save
+    await saveAndWaitForRedirect(page);
+
+    // Verify file was added - base64 images should display
+    await expandShowMoreIfPresent(page);
+    await expect(userSection.locator('img[alt="Image"]')).toBeVisible();
+
+    // Expand Advanced accordion and verify filename was auto-populated
+    await userSection.getByText("Advanced").click();
+    await expect(userSection.getByText("Filename:")).toBeVisible();
+    await expect(userSection.getByText(uploadFilename)).toBeVisible();
+
+    // Reload and verify persistence
+    await page.reload();
+    await page.waitForLoadState("networkidle", { timeout: 5000 });
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
+    await expandShowMoreIfPresent(page);
+    await expect(userSection.locator('img[alt="Image"]')).toBeVisible();
   });
 });
 

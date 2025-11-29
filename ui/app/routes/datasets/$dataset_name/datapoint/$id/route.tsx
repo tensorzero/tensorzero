@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { ActionFunctionArgs, RouteHandle } from "react-router";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
+import { isInvalidJsonMarker } from "~/components/input_output/content_blocks/UnknownContentBlock";
 import {
   data,
   isRouteErrorResponse,
@@ -79,6 +80,24 @@ export function validateJsonOutput(
         error:
           "Invalid JSON in output. Please fix the JSON format before saving.",
       };
+    }
+  }
+  return { valid: true };
+}
+
+export function validateInput(
+  input: Input,
+): { valid: true } | { valid: false; error: string } {
+  // Check all messages for unknown content blocks with invalid JSON
+  for (const message of input.messages) {
+    for (const block of message.content) {
+      if (block.type === "unknown" && isInvalidJsonMarker(block.data)) {
+        return {
+          valid: false,
+          error:
+            "Invalid JSON in Unknown content block. Please fix the JSON format before saving.",
+        };
+      }
     }
   }
   return { valid: true };
@@ -419,9 +438,15 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const handleUpdate = () => {
     setValidationError(null);
 
-    const validation = validateJsonOutput(output);
-    if (!validation.valid) {
-      setValidationError(validation.error);
+    const outputValidation = validateJsonOutput(output);
+    if (!outputValidation.valid) {
+      setValidationError(outputValidation.error);
+      return;
+    }
+
+    const inputValidation = validateInput(input);
+    if (!inputValidation.valid) {
+      setValidationError(inputValidation.error);
       return;
     }
 

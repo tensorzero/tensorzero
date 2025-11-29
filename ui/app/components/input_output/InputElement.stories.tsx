@@ -342,6 +342,22 @@ const COMPLEX_INPUT: Input = {
           })),
         },
         {
+          type: "file",
+          file_type: "url",
+          url: "https://example.com/document.pdf",
+          mime_type: "application/pdf",
+          filename: "report.pdf",
+          detail: "high",
+        },
+        {
+          type: "file",
+          file_type: "base64",
+          data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          mime_type: "image/png",
+          filename: "pixel.png",
+          detail: "auto",
+        },
+        {
           type: "template",
           name: "location_context",
           arguments: {

@@ -7,8 +7,10 @@ import {
   FileText,
   FileAudio,
   Link as LinkIcon,
+  FileCode,
+  Upload,
 } from "lucide-react";
-import { type ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
 import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
 import {
@@ -23,6 +25,8 @@ import {
   AccordionTrigger,
 } from "~/components/ui/accordion";
 import { Input } from "~/components/ui/input";
+import { Textarea } from "~/components/ui/textarea";
+import { Button } from "~/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -194,9 +198,13 @@ export function FileContentBlock({
         />
       );
     case "base64":
-      // TODO (#4407): we'll need to support this to allow CRUD on file content blocks
-      throw new Error(
-        "The UI should never receive a base64 file. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
+      return (
+        <Base64FileContentBlock
+          block={block}
+          actionBar={actionBar}
+          isEditing={isEditing}
+          onChange={onChange}
+        />
       );
     case "object_storage_pointer":
       // TODO: should we handle this better?
@@ -550,6 +558,129 @@ function UrlFileContentBlock({
         >
           {block.url || "(empty URL)"}
         </Link>
+        <FileAdvancedAccordion
+          filename={block.filename}
+          mimeType={block.mime_type}
+          detail={block.detail}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface Base64FileContentBlockProps {
+  block: Extract<File, { file_type: "base64" }>;
+  actionBar?: ReactNode;
+  isEditing?: boolean;
+  onChange?: (updatedBlock: File) => void;
+}
+
+/**
+ * Renders base64-encoded file content blocks with editing support.
+ */
+function Base64FileContentBlock({
+  block,
+  actionBar,
+  isEditing,
+  onChange,
+}: Base64FileContentBlockProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDataChange = (data: string) => {
+    onChange?.({ ...block, data });
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // result is like "data:image/png;base64,xxxxx"
+      // Extract just the base64 part
+      const base64Data = result.split(",")[1] ?? "";
+      onChange?.({
+        ...block,
+        data: base64Data,
+        mime_type: file.type || block.mime_type,
+        filename: block.filename || file.name,
+      });
+    };
+    reader.readAsDataURL(file);
+    // Reset input so the same file can be selected again
+    e.target.value = "";
+  };
+
+  if (isEditing) {
+    return (
+      <div className="flex max-w-240 min-w-80 flex-col gap-1">
+        <ContentBlockLabel
+          icon={<FileCode className="text-fg-muted h-3 w-3" />}
+          actionBar={actionBar}
+        >
+          File (Base64)
+        </ContentBlockLabel>
+        <div className="border-border bg-bg-tertiary/50 flex flex-col gap-2 rounded-sm px-3 py-2">
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-xs"
+            >
+              <Upload className="mr-1 h-3 w-3" />
+              {block.data ? "Replace File" : "Choose File"}
+            </Button>
+            {block.filename && (
+              <span className="text-fg-tertiary text-xs">{block.filename}</span>
+            )}
+          </div>
+          <Textarea
+            placeholder="Or paste base64-encoded file data..."
+            value={block.data}
+            onChange={(e) => handleDataChange(e.target.value)}
+            className="min-h-20 font-mono text-xs"
+          />
+          <FileAdvancedAccordion
+            filename={block.filename}
+            mimeType={block.mime_type}
+            detail={block.detail}
+            isEditing={true}
+            onFilenameChange={(filename) => onChange?.({ ...block, filename })}
+            onMimeTypeChange={(mime_type) =>
+              onChange?.({ ...block, mime_type: mime_type ?? block.mime_type })
+            }
+            onDetailChange={(detail) => onChange?.({ ...block, detail })}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Read-only view - show truncated base64 data
+  const truncatedData =
+    block.data.length > 100 ? `${block.data.slice(0, 100)}...` : block.data;
+
+  return (
+    <div className="flex max-w-240 min-w-80 flex-col gap-1">
+      <ContentBlockLabel
+        icon={<FileCode className="text-fg-muted h-3 w-3" />}
+        actionBar={actionBar}
+      >
+        File (Base64)
+      </ContentBlockLabel>
+      <div className="border-border bg-bg-tertiary/50 rounded-sm px-3 py-2">
+        <div className="text-fg-tertiary font-mono text-xs break-all">
+          {truncatedData || "(empty)"}
+        </div>
         <FileAdvancedAccordion
           filename={block.filename}
           mimeType={block.mime_type}

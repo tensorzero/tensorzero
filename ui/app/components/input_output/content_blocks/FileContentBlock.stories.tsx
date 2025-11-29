@@ -174,3 +174,93 @@ export const ErrorLong: Story = {
     },
   },
 };
+
+export const FileUrl: Story = {
+  name: "File URL",
+  args: {
+    block: {
+      file_type: "url",
+      url: "https://example.com/image.png",
+      mime_type: "image/png",
+      filename: "example-image.png",
+      detail: "high",
+    },
+  },
+};
+
+export const FileUrlEmpty: Story = {
+  name: "File URL (Empty)",
+  args: {
+    block: {
+      file_type: "url",
+      url: "",
+      mime_type: null,
+    },
+  },
+};
+
+export const FileUrlEditing: Story = {
+  name: "File URL (Editing)",
+  args: {
+    block: {
+      file_type: "url",
+      url: "https://example.com/image.png",
+      mime_type: "image/png",
+      filename: "example-image.png",
+      detail: "high",
+    },
+    isEditing: true,
+  },
+};
+
+export const FileBase64: Story = {
+  name: "File Base64",
+  args: {
+    block: {
+      file_type: "base64",
+      data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      mime_type: "image/png",
+      filename: "pixel.png",
+      detail: "auto",
+    },
+  },
+};
+
+export const FileBase64Empty: Story = {
+  name: "File Base64 (Empty)",
+  args: {
+    block: {
+      file_type: "base64",
+      data: "",
+      mime_type: "",
+    },
+  },
+};
+
+export const FileBase64Editing: Story = {
+  name: "File Base64 (Editing)",
+  args: {
+    block: {
+      file_type: "base64",
+      data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      mime_type: "image/png",
+      filename: "pixel.png",
+      detail: "auto",
+    },
+    isEditing: true,
+  },
+};
+
+export const FileBase64Long: Story = {
+  name: "File Base64 (Long Data)",
+  args: {
+    block: {
+      file_type: "base64",
+      data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk".repeat(
+        10,
+      ),
+      mime_type: "image/png",
+      filename: "large-image.png",
+    },
+  },
+};

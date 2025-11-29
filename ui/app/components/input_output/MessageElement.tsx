@@ -3,12 +3,6 @@ import { ContentBlockElement } from "./ContentBlockElement";
 import { MessageWrapper } from "./MessageWrapper";
 import { AddButton } from "~/components/ui/AddButton";
 import { DeleteButton } from "~/components/ui/DeleteButton";
-import { Info } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
 
 export function MessageElement({
   message,
@@ -134,12 +128,28 @@ function AddContentBlockButtons({
       },
     },
     {
-      label: "File URL",
+      label: "File (URL)",
       emptyBlock: {
         type: "file" as const,
         file_type: "url" as const,
         url: "",
         mime_type: null,
+      },
+    },
+    {
+      label: "File (Base64)",
+      emptyBlock: {
+        type: "file" as const,
+        file_type: "base64" as const,
+        mime_type: "",
+        data: "",
+      },
+    },
+    {
+      label: "Unknown",
+      emptyBlock: {
+        type: "unknown" as const,
+        data: {},
       },
     },
   ];
@@ -153,15 +163,6 @@ function AddContentBlockButtons({
           onAdd={() => onAdd(button.emptyBlock)}
         />
       ))}
-      {/* TODO: we need to support adding other kinds of content blocks */}
-      <Tooltip>
-        <TooltipTrigger>
-          <Info className="text-fg-muted h-4 w-4 cursor-help" />
-        </TooltipTrigger>
-        <TooltipContent>
-          Please use the API or SDK for other content block types.
-        </TooltipContent>
-      </Tooltip>
     </div>
   );
 }
