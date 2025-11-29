@@ -20,7 +20,10 @@ use tensorzero_core::{
     variant::chat_completion::UninitializedChatCompletionConfig,
 };
 
-use crate::gepa::evaluate::{DatapointId, EvaluatorName, VariantName, VariantScores};
+use crate::gepa::{
+    evaluate::{DatapointId, EvaluatorName, VariantName, VariantScores},
+    GEPAVariant,
+};
 
 /// Threshold for warning about high missing score rates
 ///
@@ -255,7 +258,7 @@ impl ParetoFrontier {
         Ok(())
     }
 
-    /// Sample a single variant using frequency weights and return it as a one-item map
+    /// Sample a single variant using frequency weights
     ///
     /// Frequencies must be non-empty and contain at least one non-zero count. Unknown
     /// variant names (not present in `self.variant_configs`) are ignored. Errors if:
@@ -264,9 +267,7 @@ impl ParetoFrontier {
     /// - no weighted entries correspond to existing variants.
     /// Uses the frontier's internally maintained RNG (seedable via `new`) to allow deterministic
     /// sampling in tests.
-    pub fn sample_by_frequency(
-        &self,
-    ) -> Result<HashMap<VariantName, UninitializedChatCompletionConfig>, Error> {
+    pub fn sample_by_frequency(&self) -> Result<GEPAVariant, Error> {
         if self.variant_frequencies.is_empty() {
             return Err(Error::new(ErrorDetails::InternalError {
                 message: "Cannot sample from empty frequency map".to_string(),
@@ -303,7 +304,7 @@ impl ParetoFrontier {
                 })
             })?;
 
-        let variant = self
+        let config = self
             .variant_configs
             .get(&sampled_name)
             .cloned()
@@ -315,9 +316,10 @@ impl ParetoFrontier {
                 })
             })?;
 
-        let mut result = HashMap::new();
-        result.insert(sampled_name, variant);
-        Ok(result)
+        Ok(GEPAVariant {
+            name: sampled_name,
+            config,
+        })
     }
 
     /// Validate that incoming candidates do not collide with existing frontier variant names
@@ -1188,8 +1190,7 @@ mod tests {
         let sampled = frontier
             .sample_by_frequency()
             .expect("sampling should succeed");
-        assert_eq!(sampled.len(), 1);
-        assert!(sampled.contains_key("variant_a"));
+        assert_eq!(sampled.name, "variant_a");
     }
 
     #[test]
