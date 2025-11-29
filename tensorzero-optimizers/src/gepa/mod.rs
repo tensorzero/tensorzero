@@ -1,7 +1,4 @@
 //! GEPA optimizer implementation
-//!
-//! This module provides the trait implementations for the GEPA optimizer.
-//! The actual GEPA algorithm will be implemented here.
 
 use async_trait::async_trait;
 use futures::future::join_all;
