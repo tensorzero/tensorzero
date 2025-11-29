@@ -4,10 +4,18 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { Input, Role } from "~/types/tensorzero";
 import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";
 import { getBase64File } from "./content_blocks/FileContentBlock.stories";
+import { GlobalToastProvider } from "~/providers/global-toast-provider";
 
 const meta = {
   title: "Input Output/InputElement",
   component: InputElement,
+  decorators: [
+    (Story) => (
+      <GlobalToastProvider>
+        <Story />
+      </GlobalToastProvider>
+    ),
+  ],
 } satisfies Meta<typeof InputElement>;
 
 export default meta;

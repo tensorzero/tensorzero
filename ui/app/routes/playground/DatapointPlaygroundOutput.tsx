@@ -1,5 +1,6 @@
 import { Loader2, RefreshCw } from "lucide-react";
-import { Output } from "~/components/inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import { Button } from "~/components/ui/button";
 import { CodeEditor } from "~/components/ui/code-editor";
 import {
@@ -75,9 +76,6 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
       );
     }
 
-    const output =
-      "content" in query.data ? query.data.content : query.data.output;
-
     return (
       <div
         className="flex flex-col gap-2"
@@ -118,7 +116,11 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
           )}
         </div>
         <div>
-          <Output output={output} maxHeight={480} />
+          {"content" in query.data ? (
+            <ChatOutputElement output={query.data.content} maxHeight={480} />
+          ) : (
+            <JsonOutputElement output={query.data.output} maxHeight={480} />
+          )}
         </div>
       </div>
     );

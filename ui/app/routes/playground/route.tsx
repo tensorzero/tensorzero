@@ -27,7 +27,8 @@ import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
 import Input from "~/components/inference/Input";
-import { Output } from "~/components/inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
 import { safeParseInt, symmetricDifference } from "~/utils/common";
@@ -467,7 +468,14 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                               Reference Output
                             </h3>
                             {datapoint.output ? (
-                              <Output output={datapoint.output} />
+                              datapoint.type === "json" ? (
+                                <JsonOutputElement
+                                  output={datapoint.output}
+                                  outputSchema={datapoint.output_schema}
+                                />
+                              ) : (
+                                <ChatOutputElement output={datapoint.output} />
+                              )
                             ) : (
                               <div className="text-sm text-gray-500">None</div>
                             )}

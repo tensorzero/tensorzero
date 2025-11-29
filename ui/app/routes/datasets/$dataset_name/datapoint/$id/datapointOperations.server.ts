@@ -29,6 +29,7 @@ function convertUpdateDatapointFormDataToUpdateDatapointRequest(
         id: formData.id,
         input: formData.input,
         output: formData.output as JsonInferenceOutput | undefined,
+        output_schema: formData.output_schema,
         tags: formData.tags,
       };
     }
