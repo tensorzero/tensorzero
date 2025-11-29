@@ -130,13 +130,18 @@ export function useInferenceActionFetcher() {
           state: fetcher.state,
           data: {
             raw: inferenceOutput,
-            info: {
-              output:
-                "content" in inferenceOutput
-                  ? inferenceOutput.content
-                  : inferenceOutput.output,
-              usage: inferenceOutput.usage,
-            },
+            info:
+              "content" in inferenceOutput
+                ? {
+                    type: "chat" as const,
+                    output: inferenceOutput.content,
+                    usage: inferenceOutput.usage,
+                  }
+                : {
+                    type: "json" as const,
+                    output: inferenceOutput.output,
+                    usage: inferenceOutput.usage,
+                  },
           },
           error: null,
         } satisfies InferenceActionContext;
@@ -454,10 +459,17 @@ function prepareDefaultFunctionRequest(
   };
 }
 
-export interface VariantResponseInfo {
-  output?: JsonInferenceOutput | ContentBlockChatOutput[];
-  usage?: InferenceUsage;
-}
+export type VariantResponseInfo =
+  | {
+      type: "chat";
+      output?: ContentBlockChatOutput[];
+      usage?: InferenceUsage;
+    }
+  | {
+      type: "json";
+      output?: JsonInferenceOutput;
+      usage?: InferenceUsage;
+    };
 
 export function resolvedInputToClientInput(
   input: ZodDisplayInput,

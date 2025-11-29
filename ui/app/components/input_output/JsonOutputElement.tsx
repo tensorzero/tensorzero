@@ -13,7 +13,7 @@ import { DeleteButton } from "~/components/ui/DeleteButton";
 
 interface JsonOutputElementProps {
   output?: JsonInferenceOutput;
-  outputSchema: JsonValue;
+  outputSchema?: JsonValue;
   isEditing?: boolean;
   onOutputChange?: (output?: JsonInferenceOutput) => void;
   onOutputSchemaChange?: (schema: JsonValue) => void;
@@ -37,7 +37,7 @@ export function JsonOutputElement({
 
   // Schema editing state
   const [schemaDisplayValue, setSchemaDisplayValue] = useState<string>(
-    JSON.stringify(outputSchema, null, 2),
+    outputSchema !== undefined ? JSON.stringify(outputSchema, null, 2) : "",
   );
   const [schemaJsonError, setSchemaJsonError] = useState<string | null>(null);
 
@@ -48,7 +48,9 @@ export function JsonOutputElement({
 
   useEffect(() => {
     // Update schema display value when outputSchema changes externally
-    setSchemaDisplayValue(JSON.stringify(outputSchema, null, 2));
+    setSchemaDisplayValue(
+      outputSchema !== undefined ? JSON.stringify(outputSchema, null, 2) : "",
+    );
   }, [outputSchema]);
 
   useEffect(() => {
@@ -131,11 +133,15 @@ export function JsonOutputElement({
       id: "raw",
       label: "Raw Output",
     },
-    {
+  ];
+
+  // Only show Schema tab if outputSchema is provided
+  if (outputSchema !== undefined) {
+    tabs.push({
       id: "schema",
       label: "Schema",
-    },
-  ];
+    });
+  }
 
   // Set default tab to "Raw" when editing, otherwise "Parsed" if it has content
   const defaultTab = isEditing ? "raw" : output.parsed ? "parsed" : "raw";
@@ -169,6 +175,7 @@ export function JsonOutputElement({
           </>
         );
       case "schema":
+        // Schema tab is only shown when outputSchema is defined (see tabs array)
         return (
           <>
             <CodeEditor
