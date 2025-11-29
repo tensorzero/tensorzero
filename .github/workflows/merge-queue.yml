@@ -435,12 +435,7 @@ jobs:
   check-all-tests-passed:
     permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
-    needs:
-      [
-        ui-tests-e2e-regen-model-inference-cache,
-        client-tests,
-        live-tests,
-      ]
+    needs: [ui-tests-e2e-regen-model-inference-cache, client-tests, live-tests]
     runs-on: ubuntu-latest
     steps:
       # When running in the merge queue, jobs should never be skipped.

@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: tensorzero/experimental-ci-bot
-          ref: 'v0.1-pre-agent'
+          ref: "v0.1-pre-agent"
           sparse-checkout: |
             tensorzero
 
@@ -41,7 +41,7 @@ jobs:
           exit 1
 
       - name: Send PR Feedback
-        uses: 'tensorzero/experimental-ci-bot/create-pr-feedback@v0.1-pre-agent'
+        uses: "tensorzero/experimental-ci-bot/create-pr-feedback@v0.1-pre-agent"
         with:
           tensorzero-base-url: http://localhost:3000
           tensorzero-pr-merged-metric-name: tensorzero_github_ci_bot_pr_merged

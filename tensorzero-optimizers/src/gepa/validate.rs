@@ -200,7 +200,7 @@ fn validate_stored_output(stored_output: &Option<StoredOutput>) -> Result<(), St
                     }
                 }
                 // Unknown is fine (we'll let it through)
-                ContentBlockChatOutput::Unknown { .. } => {}
+                ContentBlockChatOutput::Unknown(_) => {}
             }
         }
     }
@@ -448,7 +448,7 @@ mod tests {
         function::{FunctionConfig, FunctionConfigChat},
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text, Unknown,
         },
         optimization::gepa::GEPAConfig,
         stored_inference::{RenderedSample, StoredOutput},
@@ -779,10 +779,13 @@ mod tests {
 
     #[test]
     fn test_validate_stored_output_chat_unknown_block() {
-        let output = Some(StoredOutput::Chat(vec![ContentBlockChatOutput::Unknown {
-            data: serde_json::Value::Null,
-            model_provider_name: None,
-        }]));
+        let output = Some(StoredOutput::Chat(vec![ContentBlockChatOutput::Unknown(
+            Unknown {
+                data: serde_json::Value::Null,
+                model_name: None,
+                provider_name: None,
+            },
+        )]));
 
         // Unknown blocks should be accepted
         let result = validate_stored_output(&output);

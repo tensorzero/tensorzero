@@ -283,7 +283,7 @@ impl<'a> TryFrom<&'a Vec<ContentBlockChatOutput>> for OpenAIReinforcementOutput<
                 ContentBlockChatOutput::Thought(_) => {
                     // Thoughts are not included in OpenAI reinforcement output
                 }
-                ContentBlockChatOutput::Unknown { .. } => {
+                ContentBlockChatOutput::Unknown(_) => {
                     // Unknown blocks are skipped
                 }
             }
