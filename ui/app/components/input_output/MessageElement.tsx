@@ -155,7 +155,7 @@ function AddContentBlockButtons({
   ];
 
   return (
-    <div className="flex items-center gap-2 py-2">
+    <div className="flex flex-wrap items-center gap-2 py-2">
       {buttons.map((button) => (
         <AddButton
           key={button.label}
