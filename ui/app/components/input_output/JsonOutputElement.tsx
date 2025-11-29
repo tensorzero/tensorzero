@@ -16,6 +16,7 @@ interface JsonOutputElementProps {
   outputSchema: JsonValue;
   isEditing?: boolean;
   onOutputChange?: (output?: JsonInferenceOutput) => void;
+  onOutputSchemaChange?: (schema: JsonValue) => void;
   maxHeight?: number | "Content";
 }
 
@@ -24,6 +25,7 @@ export function JsonOutputElement({
   outputSchema,
   isEditing,
   onOutputChange,
+  onOutputSchemaChange,
   maxHeight,
 }: JsonOutputElementProps) {
   const [displayValue, setDisplayValue] = useState<string | undefined>(
@@ -33,10 +35,21 @@ export function JsonOutputElement({
   const [activeTab, setActiveTab] = useState<string | undefined>();
   const [hasEdited, setHasEdited] = useState<boolean>(false);
 
+  // Schema editing state
+  const [schemaDisplayValue, setSchemaDisplayValue] = useState<string>(
+    JSON.stringify(outputSchema, null, 2),
+  );
+  const [schemaJsonError, setSchemaJsonError] = useState<string | null>(null);
+
   useEffect(() => {
     // Update display value when output.raw changes externally
     setDisplayValue(output?.raw ?? undefined);
   }, [output?.raw]);
+
+  useEffect(() => {
+    // Update schema display value when outputSchema changes externally
+    setSchemaDisplayValue(JSON.stringify(outputSchema, null, 2));
+  }, [outputSchema]);
 
   useEffect(() => {
     // Switch to raw tab when entering edit mode
@@ -66,6 +79,21 @@ export function JsonOutputElement({
           raw: value,
           parsed: null,
         });
+      }
+    }
+  };
+
+  const handleSchemaChange = (value: string) => {
+    if (onOutputSchemaChange) {
+      setSchemaDisplayValue(value);
+
+      try {
+        const parsedSchema = JSON.parse(value);
+        setSchemaJsonError(null);
+        onOutputSchemaChange(parsedSchema);
+      } catch {
+        setSchemaJsonError("Invalid JSON format");
+        // Don't call onOutputSchemaChange with invalid JSON
       }
     }
   };
@@ -142,11 +170,21 @@ export function JsonOutputElement({
         );
       case "schema":
         return (
-          <CodeEditor
-            allowedLanguages={["json"]}
-            value={outputSchema ? JSON.stringify(outputSchema, null, 2) : ""}
-            readOnly
-          />
+          <>
+            <CodeEditor
+              allowedLanguages={["json"]}
+              value={
+                isEditing
+                  ? schemaDisplayValue
+                  : JSON.stringify(outputSchema, null, 2)
+              }
+              readOnly={!isEditing}
+              onChange={isEditing ? handleSchemaChange : undefined}
+            />
+            {isEditing && schemaJsonError && (
+              <div className="text-xs text-red-600">{schemaJsonError}</div>
+            )}
+          </>
         );
       default:
         // This should never happen

@@ -471,6 +471,122 @@ test.describe("Output - Full Deletion", () => {
 });
 
 // ============================================================================
+// JSON Output Schema Editing Tests
+// ============================================================================
+
+test.describe("JSON Output - Schema Editing", () => {
+  test("should edit output schema and persist changes", async ({ page }) => {
+    // Create datapoint from JSON inference (extract_entities function)
+    await createDatapointFromInference(page, {
+      inferenceId: "0196368f-1ae8-7551-b5df-9a61593eb307",
+    });
+
+    // Enter edit mode
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+
+    // Find Output section
+    const outputSection = page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { name: "Output" }) });
+
+    // Click on Schema tab
+    const schemaTab = outputSection.getByRole("tab", { name: "Schema" });
+    await expect(schemaTab).toBeVisible();
+    await schemaTab.click();
+
+    // Edit the schema - add a new property
+    const schemaEditor = outputSection
+      .locator("div[contenteditable='true']")
+      .last();
+    await schemaEditor.waitFor({ state: "visible" });
+
+    const uniqueValue = v7();
+    // Create a modified schema with a unique description
+    const newSchema = JSON.stringify(
+      {
+        type: "object",
+        properties: {
+          test_field: {
+            type: "string",
+            description: `Test description ${uniqueValue}`,
+          },
+        },
+      },
+      null,
+      2,
+    );
+    await schemaEditor.fill(newSchema);
+
+    // Save
+    await saveAndWaitForRedirect(page);
+
+    // Click on Schema tab to verify changes persisted
+    const schemaTabAfterSave = outputSection.getByRole("tab", {
+      name: "Schema",
+    });
+    await schemaTabAfterSave.click();
+
+    // Verify unique value is visible in the schema
+    await expect(page.getByText(uniqueValue)).toBeVisible();
+
+    // Reload and verify persistence
+    await page.reload();
+    await page.waitForLoadState("networkidle", { timeout: 5000 });
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
+
+    // Click on Schema tab again after reload
+    const schemaTabAfterReload = outputSection.getByRole("tab", {
+      name: "Schema",
+    });
+    await schemaTabAfterReload.click();
+
+    // Verify unique value is still visible
+    await expect(page.getByText(uniqueValue)).toBeVisible();
+
+    // Step 2: Edit schema again to verify edits continue to work
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+
+    const schemaEditor2 = outputSection
+      .locator("div[contenteditable='true']")
+      .last();
+    await schemaEditor2.waitFor({ state: "visible" });
+
+    const uniqueValue2 = v7();
+    const newSchema2 = JSON.stringify(
+      {
+        type: "object",
+        properties: {
+          updated_field: {
+            type: "number",
+            description: `Updated description ${uniqueValue2}`,
+          },
+        },
+      },
+      null,
+      2,
+    );
+    await schemaEditor2.fill(newSchema2);
+
+    // Save
+    await saveAndWaitForRedirect(page);
+
+    // Click on Schema tab
+    const schemaTabAfterEdit = outputSection.getByRole("tab", {
+      name: "Schema",
+    });
+    await schemaTabAfterEdit.click();
+
+    // Verify new value is visible and old value is gone
+    await expect(page.getByText(uniqueValue2)).toBeVisible();
+    await expect(page.getByText(uniqueValue)).not.toBeVisible();
+  });
+});
+
+// ============================================================================
 // JSON Output Editing Tests
 // ============================================================================
 

@@ -107,11 +107,27 @@ export function validateJsonOutput(
   return { valid: true };
 }
 
+export function validateJsonSchema(
+  schema: JsonValue,
+): { valid: true } | { valid: false; error: string } {
+  // Schema must be valid JSON (which it always is since it's JsonValue)
+  // But we still validate it's a proper object for a JSON schema
+  if (typeof schema !== "object" || schema === null || Array.isArray(schema)) {
+    return {
+      valid: false,
+      error: "Output schema must be a JSON object.",
+    };
+  }
+  return { valid: true };
+}
+
 export function hasDatapointChanged(params: {
   currentInput: Input;
   originalInput: Input;
   currentOutput?: ContentBlockChatOutput[] | JsonInferenceOutput;
   originalOutput?: ContentBlockChatOutput[] | JsonInferenceOutput;
+  currentOutputSchema?: JsonValue;
+  originalOutputSchema?: JsonValue;
   currentTags: Record<string, string>;
   originalTags: Record<string, string>;
 }): boolean {
@@ -120,6 +136,8 @@ export function hasDatapointChanged(params: {
     originalInput,
     currentOutput,
     originalOutput,
+    currentOutputSchema,
+    originalOutputSchema,
     currentTags,
     originalTags,
   } = params;
@@ -139,10 +157,18 @@ export function hasDatapointChanged(params: {
 
   const hasOutputChanged =
     JSON.stringify(currentOutput) !== JSON.stringify(originalOutput);
+  const hasOutputSchemaChanged =
+    JSON.stringify(currentOutputSchema) !==
+    JSON.stringify(originalOutputSchema);
   const hasTagsChanged =
     JSON.stringify(currentTags) !== JSON.stringify(originalTags);
 
-  return hasInputChanged || hasOutputChanged || hasTagsChanged;
+  return (
+    hasInputChanged ||
+    hasOutputChanged ||
+    hasOutputSchemaChanged ||
+    hasTagsChanged
+  );
 }
 
 async function handleDeleteAction(
@@ -222,6 +248,7 @@ async function handleUpdateAction(
         episode_id: actionData.episode_id,
         input: actionData.input,
         output: actionData.output,
+        output_schema: actionData.output_schema,
         tags: actionData.tags,
       },
       functionType,
@@ -399,6 +426,11 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   }, [resolvedInput, datapoint]);
 
   const canSave = useMemo(() => {
+    const currentOutputSchema =
+      output.type === "json" ? output.outputSchema : undefined;
+    const origOutputSchema =
+      originalOutput.type === "json" ? originalOutput.outputSchema : undefined;
+
     return (
       isEditing &&
       hasDatapointChanged({
@@ -406,6 +438,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         originalInput,
         currentOutput: output.value,
         originalOutput: originalOutput.value,
+        currentOutputSchema,
+        originalOutputSchema: origOutputSchema,
         currentTags: tags,
         originalTags,
       })
@@ -413,10 +447,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   }, [
     isEditing,
     input,
-    output.value,
+    output,
     tags,
     originalInput,
-    originalOutput.value,
+    originalOutput,
     originalTags,
   ]);
 
@@ -447,10 +481,19 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const handleUpdate = () => {
     setValidationError(null);
 
-    const validation = validateJsonOutput(output.value);
-    if (!validation.valid) {
-      setValidationError(validation.error);
+    const outputValidation = validateJsonOutput(output.value);
+    if (!outputValidation.valid) {
+      setValidationError(outputValidation.error);
       return;
+    }
+
+    // Validate schema for JSON output
+    if (output.type === "json") {
+      const schemaValidation = validateJsonSchema(output.outputSchema);
+      if (!schemaValidation.valid) {
+        setValidationError(schemaValidation.error);
+        return;
+      }
     }
 
     try {
@@ -461,6 +504,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         episode_id: datapoint.episode_id,
         input,
         output: output.value,
+        output_schema: output.type === "json" ? output.outputSchema : undefined,
         tags,
       });
       fetcher.submit(formData, { method: "post", action: "." });
@@ -675,6 +719,14 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
                         type: "json",
                         value,
                         outputSchema: output.outputSchema,
+                      });
+                      setValidationError(null);
+                    }}
+                    onOutputSchemaChange={(outputSchema) => {
+                      setOutput({
+                        type: "json",
+                        value: output.value,
+                        outputSchema,
                       });
                       setValidationError(null);
                     }}

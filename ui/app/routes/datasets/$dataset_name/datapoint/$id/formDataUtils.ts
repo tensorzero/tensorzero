@@ -3,6 +3,7 @@ import type { Input } from "~/types/tensorzero";
 import {
   contentBlockChatOutputSchema,
   jsonInferenceOutputSchema,
+  ZodJsonValueSchema,
 } from "~/utils/clickhouse/common";
 
 // ============================================================================
@@ -65,6 +66,7 @@ export const UpdateDatapointFormDataSchema = z.object({
     message: "Input must be a valid object",
   }),
   output: OutputSchema.optional().nullable(),
+  output_schema: ZodJsonValueSchema.optional(),
   tags: z.record(z.string(), z.string()).optional(),
   action: z.literal("update"),
 });
@@ -205,6 +207,7 @@ export function parseDatapointAction(formData: FormData): DatapointAction {
   } else if (action === "update") {
     const inputStr = formData.get("input") as string | null;
     const outputStr = formData.get("output") as string | null;
+    const outputSchemaStr = formData.get("output_schema") as string | null;
     const tagsStr = formData.get("tags") as string | null;
 
     rawData = {
@@ -224,6 +227,10 @@ export function parseDatapointAction(formData: FormData): DatapointAction {
 
     if (outputStr) {
       rawData.output = safeJsonParse(outputStr, "output");
+    }
+
+    if (outputSchemaStr) {
+      rawData.output_schema = safeJsonParse(outputSchemaStr, "output_schema");
     }
 
     if (tagsStr) {
@@ -286,6 +293,12 @@ export function serializeUpdateDatapointToFormData(
   formData.append("output", JSON.stringify(validatedData.output ?? null));
   if (validatedData.episode_id) {
     formData.append("episode_id", validatedData.episode_id);
+  }
+  if (validatedData.output_schema !== undefined) {
+    formData.append(
+      "output_schema",
+      JSON.stringify(validatedData.output_schema),
+    );
   }
   if (validatedData.tags) {
     formData.append("tags", JSON.stringify(validatedData.tags));
