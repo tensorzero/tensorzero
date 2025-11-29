@@ -88,12 +88,27 @@ export type RenameDatapointFormData = z.infer<
 >;
 
 /**
+ * Schema for `"clone"` form action.
+ * The datapoint field is a JSON string containing the full datapoint data to clone.
+ */
+export const CloneDatapointFormDataSchema = z.object({
+  target_dataset: z.string().min(1, "Target dataset name is required"),
+  datapoint: z.string().min(1, "Datapoint data is required"),
+  action: z.literal("clone"),
+});
+
+export type CloneDatapointFormData = z.infer<
+  typeof CloneDatapointFormDataSchema
+>;
+
+/**
  * Discriminated union of all datapoint actions.
  */
 export const DatapointActionSchema = z.discriminatedUnion("action", [
   DeleteDatapointFormDataSchema,
   UpdateDatapointFormDataSchema,
   RenameDatapointFormDataSchema,
+  CloneDatapointFormDataSchema,
 ]);
 
 export type DatapointAction = z.infer<typeof DatapointActionSchema>;
@@ -218,6 +233,12 @@ export function parseDatapointAction(formData: FormData): DatapointAction {
     rawData = {
       ...baseData,
       name: formData.get("name"),
+    };
+  } else if (action === "clone") {
+    rawData = {
+      target_dataset: formData.get("target_dataset"),
+      datapoint: formData.get("datapoint"),
+      action,
     };
   } else {
     rawData = baseData;

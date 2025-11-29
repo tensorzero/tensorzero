@@ -215,6 +215,10 @@ fn build_internal_routes() -> Router<AppStateData> {
             post(endpoints::datasets::insert_from_existing_datapoint_handler),
         )
         .route(
+            "/internal/datasets/{dataset_name}/datapoints/clone",
+            post(endpoints::datasets::internal::clone_datapoints_handler),
+        )
+        .route(
             "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
             put(endpoints::datasets::update_datapoint_handler),
         )

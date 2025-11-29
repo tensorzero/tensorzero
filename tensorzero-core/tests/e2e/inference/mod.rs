@@ -34,7 +34,7 @@ use tensorzero_core::{
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
         Base64File, ContentBlockOutput, File, RawText, Role, StoredContentBlock,
-        StoredInputMessageContent, StoredRequestMessage, Text, TextKind,
+        StoredInputMessageContent, StoredRequestMessage, Text, TextKind, Unknown,
     },
     providers::dummy::{
         DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
@@ -109,9 +109,8 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "unknown", "model_provider_name": "bad_model_provider", "data": {} },
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"my": "custom data"}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"my": "custom data"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
                         {"type": "unknown", "data": "Non-provider-specific unknown block"}
                     ]
                 }
@@ -170,10 +169,9 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "unknown", "model_provider_name": "bad_model_provider", "data": {} },
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"my": "custom data"}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
-                        {"type": "unknown", "model_provider_name": null, "data": "Non-provider-specific unknown block"}
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"my": "custom data"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
+                        {"type": "unknown", "data": "Non-provider-specific unknown block"}
                     ]
                 }
             ]
@@ -221,16 +219,16 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
             StoredRequestMessage {
                 role: Role::User,
                 content: vec![
-                    StoredContentBlock::Unknown {
-                        model_provider_name: Some(
-                            "tensorzero::model_name::test::provider_name::good".to_string()
-                        ),
+                    StoredContentBlock::Unknown(Unknown {
+                        model_name: Some("test".to_string()),
+                        provider_name: Some("good".to_string()),
                         data: json!({"my": "custom data"})
-                    },
-                    StoredContentBlock::Unknown {
-                        model_provider_name: None,
+                    }),
+                    StoredContentBlock::Unknown(Unknown {
+                        model_name: None,
+                        provider_name: None,
                         data: "Non-provider-specific unknown block".into()
-                    }
+                    })
                 ]
             },
         ]
@@ -252,9 +250,8 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "unknown", "model_provider_name": "bad_model_provider", "data": {} },
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"my": "custom data"}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"my": "custom data"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
                         {"type": "unknown", "data": "Non-provider-specific unknown block"}
                     ]
                 }
@@ -318,10 +315,9 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "unknown", "model_provider_name": "bad_model_provider", "data": {} },
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"my": "custom data"}},
-                        {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
-                        {"type": "unknown", "model_provider_name": null, "data": "Non-provider-specific unknown block"}
+                        {"type": "unknown", "model_name": "test", "provider_name": "good", "data": {"my": "custom data"}},
+                        {"type": "unknown", "model_name": "test", "provider_name": "wrong_model_name", "data": {"SHOULD NOT": "SHOW UP"}},
+                        {"type": "unknown", "data": "Non-provider-specific unknown block"}
                     ]
                 }
             ]
@@ -372,16 +368,16 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
             StoredRequestMessage {
                 role: Role::User,
                 content: vec![
-                    StoredContentBlock::Unknown {
-                        model_provider_name: Some(
-                            "tensorzero::model_name::test::provider_name::good".to_string()
-                        ),
+                    StoredContentBlock::Unknown(Unknown {
+                        model_name: Some("test".to_string()),
+                        provider_name: Some("good".to_string()),
                         data: json!({"my": "custom data"})
-                    },
-                    StoredContentBlock::Unknown {
-                        model_provider_name: None,
+                    }),
+                    StoredContentBlock::Unknown(Unknown {
+                        model_name: None,
+                        provider_name: None,
                         data: "Non-provider-specific unknown block".into()
-                    }
+                    })
                 ]
             },
         ]
