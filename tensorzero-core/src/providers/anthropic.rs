@@ -934,6 +934,7 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
         || model_name == "claude-sonnet-4-0"
         || model_name.starts_with("claude-haiku-4-5")
         || model_name.starts_with("claude-sonnet-4-5")
+        || model_name.starts_with("claude-opus-4-5")
     {
         Ok(64_000)
     } else if model_name.starts_with("claude-opus-4-202")
