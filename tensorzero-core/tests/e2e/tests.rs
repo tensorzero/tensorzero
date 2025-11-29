@@ -30,6 +30,7 @@ mod inference_evaluation_human_feedback;
 mod mixture_of_n;
 mod object_storage;
 mod openai_compatible;
+mod openai_spec_compliance;
 mod otel;
 mod otel_config_headers;
 mod otel_export;
