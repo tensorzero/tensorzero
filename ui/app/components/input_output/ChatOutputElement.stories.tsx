@@ -218,7 +218,6 @@ const COMPLEX_OUTPUT: ContentBlockChatOutput[] = [
   {
     type: "unknown",
     data: "{}",
-    model_provider_name: null,
   },
 ];
 
