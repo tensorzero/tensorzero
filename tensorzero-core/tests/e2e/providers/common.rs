@@ -781,6 +781,18 @@ model = "claude-sonnet-4-5-gcp-vertex"
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
 
+[functions.pdf_test.variants.tensorzero-relay-dummy]
+type = "chat_completion"
+model = "tensorzero-relay-dummy"
+
+[models."tensorzero-relay-dummy"]
+routing = ["tensorzero_relay"]
+
+[models."tensorzero-relay-dummy".providers."tensorzero_relay"]
+type = "tensorzero_relay"
+gateway_base_url = "http://localhost:3000"
+model_name = "openai::gpt-4o-mini"
+
 [models.claude-sonnet-4-5-gcp-vertex]
 routing = ["gcp_vertex_anthropic"]
 
@@ -833,6 +845,18 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 [functions.image_test.variants.gcp_vertex]
 type = "chat_completion"
 model = "gcp-gemini-2.5-pro"
+
+[functions.image_test.variants.tensorzero-relay-dummy]
+type = "chat_completion"
+model = "tensorzero-relay-dummy"
+
+[models."tensorzero-relay-dummy"]
+routing = ["tensorzero_relay"]
+
+[models."tensorzero-relay-dummy".providers."tensorzero_relay"]
+type = "tensorzero_relay"
+model_name = "openai::gpt-4o-mini"
+gateway_base_url = "http://localhost:3000"
 
 [models."gcp-gemini-2.5-pro"]
 routing = ["gcp_vertex_gemini"]
@@ -2527,8 +2551,13 @@ pub async fn test_warn_ignored_thought_block_with_provider(
         let _ = res.unwrap();
     }
 
-    if ["anthropic", "aws-bedrock", "gcp_vertex_anthropic"]
-        .contains(&provider.model_provider_name.as_str())
+    if [
+        "anthropic",
+        "aws-bedrock",
+        "gcp_vertex_anthropic",
+        "tensorzero_relay",
+    ]
+    .contains(&provider.model_provider_name.as_str())
         || ["openai-responses"].contains(&provider.variant_name.as_str())
     {
         assert!(
@@ -3820,7 +3849,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
 
     // Check if raw_response is valid JSONL
     for line in raw_response.lines() {
-        assert!(serde_json::from_str::<Value>(line).is_ok());
+        serde_json::from_str::<Value>(line).unwrap();
     }
 
     let input_tokens = result.get("input_tokens").unwrap();
@@ -9056,6 +9085,7 @@ pub async fn test_stop_sequences_inference_request_with_provider(
                 "azure",
                 "groq",
                 "hyperbolic",
+                "tensorzero_relay",
             ];
             if MISSING_STOP_SEQUENCE_PROVIDERS.contains(&provider.model_provider_name.as_str())
                 || provider.model_name == "gemma-3-1b-aws-sagemaker-openai"
@@ -9071,7 +9101,10 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             {
                 let json = serde_json::to_string(&response).unwrap();
                 assert!(
-                    !json.to_lowercase().contains("tensorzero"),
+                    !serde_json::to_string(&response.content)
+                        .unwrap()
+                        .to_lowercase()
+                        .contains("tensorzero"),
                     "TensorZero should not be in the response: `{json}`"
                 );
             }

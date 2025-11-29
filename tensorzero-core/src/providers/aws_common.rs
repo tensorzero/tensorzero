@@ -112,7 +112,8 @@ impl Intercept for TensorZeroInterceptor {
             self.model_provider_info.clone(),
             &self.model_name,
             &mut body_json,
-        )?;
+        )?
+        .headers;
         // Get a consistent order for use with the provider-proxy cache
         if cfg!(feature = "e2e_tests") {
             body_json.sort_all_objects();

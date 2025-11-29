@@ -1733,6 +1733,7 @@ pub(super) async fn prepare_file_message(
                     mime_type,
                     url,
                     detail,
+                    filename: _,
                 },
             future: _,
         } if !messages_config.fetch_and_encode_input_files_before_inference
@@ -4420,6 +4421,7 @@ mod tests {
                     url: url.clone(),
                     mime_type: None,
                     detail: None,
+                    filename: None,
                 },
                 future: async move {
                     Ok(ObjectStorageFile {
@@ -4477,6 +4479,7 @@ mod tests {
                     url: url.clone(),
                     mime_type: None,
                     detail: None,
+                    filename: None,
                 },
                 future: async move {
                     Ok(ObjectStorageFile {
@@ -4526,6 +4529,7 @@ mod tests {
                     url: url.clone(),
                     mime_type: Some(mime::IMAGE_JPEG),
                     detail: None,
+                    filename: None,
                 },
                 future: async { panic!("File future should not be resolved") }
                     .boxed()
@@ -4564,6 +4568,7 @@ mod tests {
                     url: url.clone(),
                     mime_type: Some(mime::IMAGE_JPEG),
                     detail: Some(Detail::Low),
+                    filename: None,
                 },
                 future: async { panic!("File future should not be resolved") }
                     .boxed()
@@ -4599,6 +4604,7 @@ mod tests {
                     url: url.clone(),
                     mime_type: Some(mime::IMAGE_JPEG),
                     detail: Some(Detail::High),
+                    filename: None,
                 },
                 future: async { panic!("File future should not be resolved") }
                     .boxed()
@@ -4634,6 +4640,7 @@ mod tests {
                     url: url.clone(),
                     mime_type: Some(mime::IMAGE_JPEG),
                     detail: Some(Detail::Auto),
+                    filename: None,
                 },
                 future: async { panic!("File future should not be resolved") }
                     .boxed()
@@ -4671,6 +4678,7 @@ mod tests {
                     // By specifying a non-image mime type, we should end up using a 'file' content block
                     mime_type: Some(mime::APPLICATION_PDF),
                     detail: None,
+                    filename: None,
                 },
                 future: async {
                     Ok(ObjectStorageFile {

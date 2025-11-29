@@ -177,7 +177,8 @@ pub async fn inject_extra_request_data_and_send(
         model_provider_data,
         model_name,
         &mut body,
-    )?;
+    )?
+    .headers;
     let raw_request = body.to_string();
     // Apply the headers as the very last step, so that they can overwrite all
     // other headers (including things like `Authorization` and `Content-Type`)
@@ -218,7 +219,8 @@ pub async fn inject_extra_request_data_and_send_eventsource(
         model_provider_data,
         model_name,
         &mut body,
-    )?;
+    )?
+    .headers;
     let raw_request = body.to_string();
     // Apply the headers as the very last step, so that they can overwrite all
     // other headers (including things like `Authorization` and `Content-Type`)
@@ -241,6 +243,13 @@ pub async fn inject_extra_request_data_and_send_eventsource(
     ))
 }
 
+#[cfg_attr(any(test, feature = "e2e_tests"), derive(Debug))]
+pub struct InjectedData {
+    pub headers: http::HeaderMap,
+    /// If `true`, we tried to apply at least one matching extra_body/extra_header replacement rule.
+    pub matched_any_headers_or_body: bool,
+}
+
 /// A helper method to inject extra_body fields into a request, and
 /// construct the `HeaderMap` for the applicable extra_headers.
 ///
@@ -255,7 +264,8 @@ pub fn inject_extra_request_data(
     model_provider_data: impl Into<ModelProviderRequestInfo>,
     model_name: &str,
     body: &mut serde_json::Value,
-) -> Result<http::HeaderMap, Error> {
+) -> Result<InjectedData, Error> {
+    let mut matched_any_headers_or_body = false;
     if !body.is_object() {
         return Err(Error::new(ErrorDetails::Serialization {
             message: "Body is not a map".to_string(),
@@ -271,6 +281,7 @@ pub fn inject_extra_request_data(
         .flat_map(|c| &c.data)
         .chain(model_provider.extra_body.iter().flat_map(|c| &c.data))
     {
+        matched_any_headers_or_body = true;
         match &replacement.kind {
             ExtraBodyReplacementKind::Value(value) => {
                 write_json_pointer_with_parent_creation(body, &replacement.pointer, value.clone())?;
@@ -296,9 +307,11 @@ pub fn inject_extra_request_data(
                 value,
                 ..
             } => {
+                matched_any_headers_or_body = true;
                 write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
             }
             DynamicExtraBody::VariantDelete { pointer, .. } => {
+                matched_any_headers_or_body = true;
                 delete_json_pointer(body, pointer)?;
             }
             #[expect(deprecated)]
@@ -308,6 +321,7 @@ pub fn inject_extra_request_data(
                 value,
             } => {
                 if *model_provider_name == expected_provider_name_fully_qualified {
+                    matched_any_headers_or_body = true;
                     write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
                 }
             }
@@ -332,6 +346,7 @@ pub fn inject_extra_request_data(
                         .as_deref()
                         .is_none_or(|name| name == expected_provider_name_plain.as_ref())
                 {
+                    matched_any_headers_or_body = true;
                     write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
                 }
             }
@@ -346,13 +361,16 @@ pub fn inject_extra_request_data(
                         .as_deref()
                         .is_none_or(|name| name == expected_provider_name_plain.as_ref())
                 {
+                    matched_any_headers_or_body = true;
                     delete_json_pointer(body, pointer)?;
                 }
             }
             DynamicExtraBody::Always { pointer, value } => {
+                matched_any_headers_or_body = true;
                 write_json_pointer_with_parent_creation(body, pointer, value.clone())?;
             }
             DynamicExtraBody::AlwaysDelete { pointer, .. } => {
+                matched_any_headers_or_body = true;
                 delete_json_pointer(body, pointer)?;
             }
         }
@@ -370,6 +388,7 @@ pub fn inject_extra_request_data(
     .flatten()
     {
         for ExtraHeader { name, kind } in &extra_headers.data {
+            matched_any_headers_or_body = true;
             let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -402,6 +421,7 @@ pub fn inject_extra_request_data(
     for extra_header in &extra_headers_config.inference_extra_headers.data {
         match extra_header {
             DynamicExtraHeader::Variant { name, value, .. } => {
+                matched_any_headers_or_body = true;
                 // We're iterating over a 'FilteredInferenceExtraHeaders', so we've already removed any non-matching variant names.
                 // Any remaining `InferenceExtraHeader::Variant` values should be applied to the current request
                 let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
@@ -425,6 +445,7 @@ pub fn inject_extra_request_data(
                 );
             }
             DynamicExtraHeader::VariantDelete { name, .. } => {
+                matched_any_headers_or_body = true;
                 let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
@@ -442,6 +463,7 @@ pub fn inject_extra_request_data(
                 value,
             } => {
                 if *model_provider_name == expected_provider_name_fully_qualified {
+                    matched_any_headers_or_body = true;
                     let name =
                         http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                             Error::new(ErrorDetails::Serialization {
@@ -471,6 +493,7 @@ pub fn inject_extra_request_data(
                 ..
             } => {
                 if *model_provider_name == expected_provider_name_fully_qualified {
+                    matched_any_headers_or_body = true;
                     let name =
                         http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                             Error::new(ErrorDetails::Serialization {
@@ -494,6 +517,7 @@ pub fn inject_extra_request_data(
                         .as_deref()
                         .is_none_or(|name| name == expected_provider_name_plain.as_ref())
                 {
+                    matched_any_headers_or_body = true;
                     let name =
                         http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                             Error::new(ErrorDetails::Serialization {
@@ -527,6 +551,7 @@ pub fn inject_extra_request_data(
                         .as_deref()
                         .is_none_or(|name| name == expected_provider_name_plain.as_ref())
                 {
+                    matched_any_headers_or_body = true;
                     let name =
                         http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                             Error::new(ErrorDetails::Serialization {
@@ -540,6 +565,7 @@ pub fn inject_extra_request_data(
                 }
             }
             DynamicExtraHeader::Always { name, value } => {
+                matched_any_headers_or_body = true;
                 let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
@@ -561,6 +587,7 @@ pub fn inject_extra_request_data(
                 );
             }
             DynamicExtraHeader::AlwaysDelete { name, .. } => {
+                matched_any_headers_or_body = true;
                 let name = http::header::HeaderName::from_bytes(name.as_bytes()).map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
                         message: format!(
@@ -573,7 +600,10 @@ pub fn inject_extra_request_data(
             }
         }
     }
-    Ok(headers)
+    Ok(InjectedData {
+        headers,
+        matched_any_headers_or_body,
+    })
 }
 
 // Copied from serde_json (MIT-licensed): https://github.com/serde-rs/json/blob/400eaa977f1f0a1c9ad5e35d634ed2226bf1218c/src/value/mod.rs#L259
@@ -981,7 +1011,8 @@ mod tests {
             "dummy_model",
             &mut body,
         )
-        .unwrap();
+        .unwrap()
+        .headers;
         assert_eq!(body, serde_json::json!({}));
         assert_eq!(headers.len(), 0);
     }
@@ -1077,7 +1108,8 @@ mod tests {
             "dummy_model",
             &mut serde_json::json!({}),
         )
-        .unwrap();
+        .unwrap()
+        .headers;
         assert_eq!(
             headers.get("X-My-Overridden").unwrap(),
             "My model provider value"
@@ -1692,7 +1724,12 @@ mod tests {
 
         // Should have applied the header
         assert_eq!(
-            headers.get("X-Custom-Header-2").unwrap().to_str().unwrap(),
+            headers
+                .headers
+                .get("X-Custom-Header-2")
+                .unwrap()
+                .to_str()
+                .unwrap(),
             "test-value-2"
         );
     }

@@ -109,6 +109,7 @@ class ImageUrl(ContentBlock):
     url: str
     mime_type: Optional[str] = None
     detail: Optional[Detail] = None
+    filename: Optional[str] = None
     type: str = "image"
 
 

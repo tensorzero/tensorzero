@@ -92,4 +92,12 @@ export type UninitializedProviderConfig =
       api_key_location: string | null;
     }
   | { type: "deepseek"; model_name: string; api_key_location: string | null }
+  | {
+      type: "tensorzero_relay";
+      gateway_base_url: string;
+      function_name: string | null;
+      model_name: string | null;
+      variant_name: string | null;
+      api_key_location: string | null;
+    }
   | { type: "dummy"; model_name: string; api_key_location: string | null };
