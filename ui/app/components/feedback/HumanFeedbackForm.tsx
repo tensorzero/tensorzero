@@ -5,7 +5,8 @@ import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
 } from "~/types/tensorzero";
-import { Output } from "../inference/Output";
+import { ChatOutputElement } from "~/components/input_output/ChatOutputElement";
+import { JsonOutputElement } from "~/components/input_output/JsonOutputElement";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
@@ -110,18 +111,33 @@ export function HumanFeedbackForm({
         selectedMetricType === "demonstration" &&
         (demonstrationValue ? (
           <div className="mt-4">
-            <Output
-              output={demonstrationValue}
-              isEditing={true}
-              onOutputChange={(updatedOutput) => {
-                if (updatedOutput === null) {
-                  setDemonstrationIsValid(false);
-                } else {
-                  setDemonstrationValue(updatedOutput);
-                  setDemonstrationIsValid(true);
-                }
-              }}
-            />
+            {Array.isArray(demonstrationValue) ? (
+              <ChatOutputElement
+                output={demonstrationValue}
+                isEditing={true}
+                onOutputChange={(updatedOutput) => {
+                  if (updatedOutput === undefined) {
+                    setDemonstrationIsValid(false);
+                  } else {
+                    setDemonstrationValue(updatedOutput);
+                    setDemonstrationIsValid(true);
+                  }
+                }}
+              />
+            ) : (
+              <JsonOutputElement
+                output={demonstrationValue}
+                isEditing={true}
+                onOutputChange={(updatedOutput) => {
+                  if (updatedOutput === undefined) {
+                    setDemonstrationIsValid(false);
+                  } else {
+                    setDemonstrationValue(updatedOutput);
+                    setDemonstrationIsValid(true);
+                  }
+                }}
+              />
+            )}
 
             <input
               type="hidden"

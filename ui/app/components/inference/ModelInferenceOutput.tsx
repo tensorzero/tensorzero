@@ -3,6 +3,8 @@ import { SnippetLayout } from "../layout/SnippetLayout";
 import { EmptyMessage } from "../layout/SnippetContent";
 import { TextMessage, ToolCallMessage } from "../layout/SnippetContent";
 
+// TODO: can we unify this with `OutputElement.tsx`?
+
 interface ModelInferenceOutputProps {
   output: ZodModelInferenceOutputContentBlock[];
 }
