@@ -6099,6 +6099,7 @@ dependencies = [
  "async-stream",
  "async-trait",
  "aws-config",
+ "aws-credential-types",
  "aws-sdk-bedrockruntime",
  "aws-sdk-sagemakerruntime",
  "aws-smithy-runtime-api",
