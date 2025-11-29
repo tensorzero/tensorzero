@@ -423,6 +423,14 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const updateError =
     fetcher.data?.success === false ? fetcher.data.error : null;
 
+  // Determine which action is being performed by checking the form data
+  // Include both "submitting" and "loading" states to keep spinner visible until page updates
+  const pendingAction = fetcher.formData?.get("action") as string | null;
+  const isSubmittingOrLoading =
+    fetcher.state === "submitting" || fetcher.state === "loading";
+  const isSaving = isSubmittingOrLoading && pendingAction === "update";
+  const isDeleting = isSubmittingOrLoading && pendingAction === "delete";
+
   const handleDelete = () => {
     try {
       const formData = serializeDeleteDatapointToFormData({
@@ -624,10 +632,11 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             onVariantSelect={onVariantSelect}
             variantInferenceIsLoading={variantInferenceIsLoading}
             onDelete={handleDelete}
-            isDeleting={fetcher.state === "submitting" && !updateError}
+            isDeleting={isDeleting}
             toggleEditing={toggleEditing}
             isEditing={isEditing}
             canSave={canSave}
+            isSaving={isSaving}
             onSave={handleUpdate}
             onReset={handleReset}
             showTryWithButton={datapoint.function_name !== DEFAULT_FUNCTION}
