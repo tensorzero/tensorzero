@@ -22,15 +22,14 @@ use tensorzero_core::optimization::gepa::GEPAConfig;
 use tensorzero_core::stored_inference::{RenderedSample, StoredOutput};
 
 use tensorzero_core::utils::retries::RetryConfig;
-use tensorzero_core::variant::VariantConfig;
 use tensorzero_optimizers::gepa::{
     analyze::analyze_inferences,
     evaluate::{
         create_evaluation_dataset, evaluate_variant, EvaluateVariantParams, EvaluationResults,
     },
-    validate::FunctionContext,
+    mutate::mutate_variant,
+    validate::{initialize_pareto_frontier, validate_gepa_config},
 };
-use uuid::Uuid;
 
 pub mod analyze;
 
@@ -82,8 +81,8 @@ fn create_test_chat_rendered_sample(input: &str, output: &str) -> RenderedSample
         },
         output: Some(output_vec.clone()),
         stored_output: Some(StoredOutput::Chat(output_vec)),
-        episode_id: Some(Uuid::now_v7()),
-        inference_id: Some(Uuid::now_v7()),
+        episode_id: None,
+        inference_id: None,
         tool_params: DynamicToolParams::default(),
         output_schema: None,
         dispreferred_outputs: vec![],
@@ -133,8 +132,8 @@ fn create_test_json_rendered_sample(input: &str, output: &str) -> RenderedSample
         },
         output: None, // JSON functions don't have chat output
         stored_output: Some(StoredOutput::Json(json_output)),
-        episode_id: Some(Uuid::now_v7()),
-        inference_id: Some(Uuid::now_v7()),
+        episode_id: None,
+        inference_id: None,
         tool_params: DynamicToolParams::default(),
         output_schema: Some(serde_json::json!({
             "type": "object",
@@ -221,12 +220,12 @@ fn assert_evaluation_results_valid(evaluation_results: &EvaluationResults, expec
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_gepa_chat() {
+async fn test_gepa_step_chat() {
     let gepa_config = GEPAConfig {
         function_name: "basic_test".to_string(),
         evaluation_name: "test_evaluation".to_string(),
-        initial_variants: None,
-        variant_prefix: None,
+        initial_variants: Some(vec!["openai".to_string()]),
+        variant_prefix: Some("gepa_test_chat".to_string()),
         batch_size: 5,
         max_iterations: 1,
         max_concurrency: 5,
@@ -243,36 +242,25 @@ async fn test_gepa_chat() {
     let http_client = TensorzeroHttpClient::new_testing().unwrap();
     let config = get_e2e_config().await;
 
-    // Get the test_evaluation config
-    let evaluation_config = config
-        .evaluations
-        .get(&gepa_config.evaluation_name)
-        .expect("test_evaluation should exist in config");
+    let function_context = validate_gepa_config(&gepa_config, &config)
+        .expect("validate_gepa_config should succeed in test");
 
-    // Get the variant from the loaded config
-    let variant_name = "openai";
-    let function_config = config
-        .functions
-        .get(&gepa_config.function_name)
-        .expect("basic_test function should exist in config");
-    let variant_info = function_config
-        .variants()
-        .get(variant_name)
-        .expect("openai variant should exist in basic_test function");
-    let internal_dynamic_variant_name = "test_variant";
-    let internal_dynamic_variant_config = match &variant_info.inner {
-        VariantConfig::ChatCompletion(chat_config) => chat_config.as_uninitialized(),
-        _ => panic!("Expected ChatCompletion variant"),
-    };
+    // Initialize baseline variants using the same function as the GEPA optimizer
+    let initial_variants = initialize_pareto_frontier(&gepa_config, &function_context)
+        .expect("initialize_pareto_frontier should succeed in test");
 
-    let function_context = FunctionContext {
-        function_config: Arc::clone(function_config),
-        static_tools: None,
-        evaluation_config: Arc::clone(evaluation_config),
-    };
+    // Get the first variant to use for testing
+    let (internal_dynamic_variant_name, internal_dynamic_variant_config) = initial_variants
+        .iter()
+        .next()
+        .expect("Should have at least one variant");
 
-    // Generate unique dataset name to ensure test isolation
-    let dataset_name = format!("test_eval_dataset_chat_{}", Uuid::now_v7());
+    // Use deterministic dataset name for cache effectiveness
+    let dataset_name = "test_eval_dataset_chat_e2e".to_string();
+
+    // Clean up any leftover data from previous failed test runs
+    let _ = delete_dataset(&clickhouse, &dataset_name).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     // Create test samples
     let samples = vec![
@@ -292,7 +280,7 @@ async fn test_gepa_chat() {
     );
 
     // Give ClickHouse a moment to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     // Verify the datapoints were created in ClickHouse
     let datapoints = select_chat_dataset_clickhouse(&clickhouse, &dataset_name)
@@ -311,7 +299,6 @@ async fn test_gepa_chat() {
     assert_eq!(first_datapoint.dataset_name, dataset_name);
     assert_eq!(first_datapoint.function_name, "basic_test");
     assert!(!first_datapoint.is_deleted);
-    assert!(first_datapoint.episode_id.is_some());
 
     // Verify tags are preserved
     assert!(first_datapoint.tags.is_some());
@@ -393,7 +380,7 @@ async fn test_gepa_chat() {
         &gateway_client,
         &evaluation_results.evaluation_infos,
         &function_context,
-        &internal_dynamic_variant_config,
+        internal_dynamic_variant_config,
         &gepa_config,
     )
     .await;
@@ -430,15 +417,86 @@ async fn test_gepa_chat() {
             "Analysis should contain one of: <report_error>, <report_improvement>, or <report_optimal>"
         );
     }
+
+    // Test mutate_variant function
+    let parent_name = internal_dynamic_variant_name.to_string();
+    let mut parent = HashMap::new();
+    parent.insert(&parent_name, internal_dynamic_variant_config);
+
+    let mutate_result = mutate_variant(
+        &gateway_client,
+        &analyses,
+        &function_context,
+        parent,
+        &gepa_config,
+        0, // iteration
+    )
+    .await;
+
+    // Assert mutate_variant succeeded
+    assert!(
+        mutate_result.is_ok(),
+        "mutate_variant should succeed: {:?}",
+        mutate_result.err()
+    );
+
+    let child_variants = mutate_result.unwrap();
+
+    // Validate returned HashMap has exactly 1 entry
+    assert_eq!(
+        child_variants.len(),
+        1,
+        "Expected exactly 1 child variant, got {}",
+        child_variants.len()
+    );
+
+    // Get the child variant
+    let (child_name, child_config) = child_variants.iter().next().unwrap();
+
+    // Verify child variant name format uses the configured prefix
+    let expected_prefix = format!(
+        "{}-iter-0-",
+        gepa_config.variant_prefix.as_deref().unwrap_or("gepa")
+    );
+    assert!(
+        child_name.starts_with(&expected_prefix),
+        "Child variant name '{child_name}' should start with '{expected_prefix}'"
+    );
+
+    // Verify templates are non-empty
+    assert!(
+        !child_config.templates.inner.is_empty(),
+        "Child variant should have non-empty templates"
+    );
+
+    // Verify all templates have non-empty content
+    for (template_name, template_config) in &child_config.templates.inner {
+        let content = template_config.path.data();
+        assert!(
+            !content.is_empty(),
+            "Template '{template_name}' should have non-empty content"
+        );
+    }
+
+    // Verify system template contains the expected variable
+    let system_template = child_config
+        .templates
+        .inner
+        .get("system")
+        .expect("Child should have system template");
+    assert!(
+        system_template.path.data().contains("{{ assistant_name }}"),
+        "Child system template should preserve {{ assistant_name }} variable"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_gepa_json() {
+async fn test_gepa_step_json() {
     let gepa_config = GEPAConfig {
         function_name: "json_success".to_string(),
         evaluation_name: "json_evaluation".to_string(),
-        initial_variants: None,
-        variant_prefix: None,
+        initial_variants: Some(vec!["openai".to_string()]),
+        variant_prefix: Some("gepa_test_json".to_string()),
         batch_size: 5,
         max_iterations: 1,
         max_concurrency: 5,
@@ -455,36 +513,25 @@ async fn test_gepa_json() {
     let http_client = TensorzeroHttpClient::new_testing().unwrap();
     let config = get_e2e_config().await;
 
-    // Get the json_evaluation config
-    let evaluation_config = config
-        .evaluations
-        .get(&gepa_config.evaluation_name)
-        .expect("json_evaluation should exist in config");
+    let function_context = validate_gepa_config(&gepa_config, &config)
+        .expect("validate_gepa_config should succeed in test");
 
-    // Get the variant from the loaded config
-    let variant_name = "openai";
-    let function_config = config
-        .functions
-        .get(&gepa_config.function_name)
-        .expect("json_success function should exist in config");
-    let variant_info = function_config
-        .variants()
-        .get(variant_name)
-        .expect("openai variant should exist in json_success function");
-    let internal_dynamic_variant_name = "test_variant";
-    let internal_dynamic_variant_config = match &variant_info.inner {
-        VariantConfig::ChatCompletion(chat_config) => chat_config.as_uninitialized(),
-        _ => panic!("Expected ChatCompletion variant"),
-    };
+    // Initialize baseline variants using the same function as the GEPA optimizer
+    let initial_variants = initialize_pareto_frontier(&gepa_config, &function_context)
+        .expect("initialize_pareto_frontier should succeed in test");
 
-    let function_context = FunctionContext {
-        function_config: Arc::clone(function_config),
-        static_tools: None,
-        evaluation_config: Arc::clone(evaluation_config),
-    };
+    // Get the first variant to use for testing
+    let (internal_dynamic_variant_name, internal_dynamic_variant_config) = initial_variants
+        .iter()
+        .next()
+        .expect("Should have at least one variant");
 
-    // Generate unique dataset name to ensure test isolation
-    let dataset_name = format!("test_eval_dataset_json_{}", Uuid::now_v7());
+    // Use deterministic dataset name for cache effectiveness
+    let dataset_name = "test_eval_dataset_json_e2e".to_string();
+
+    // Clean up any leftover data from previous failed test runs
+    let _ = delete_dataset(&clickhouse, &dataset_name).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     // Create test samples for JSON function
     let samples = vec![
@@ -503,7 +550,7 @@ async fn test_gepa_json() {
     );
 
     // Give ClickHouse a moment to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     // Verify the datapoints were created in ClickHouse
     let datapoints = select_json_dataset_clickhouse(&clickhouse, &dataset_name)
@@ -522,7 +569,6 @@ async fn test_gepa_json() {
     assert_eq!(first_datapoint.dataset_name, dataset_name);
     assert_eq!(first_datapoint.function_name, "json_success");
     assert!(!first_datapoint.is_deleted);
-    assert!(first_datapoint.episode_id.is_some());
 
     // Verify tags are preserved
     assert!(first_datapoint.tags.is_some());
@@ -611,7 +657,7 @@ async fn test_gepa_json() {
         &gateway_client,
         &evaluation_results.evaluation_infos,
         &function_context,
-        &internal_dynamic_variant_config,
+        internal_dynamic_variant_config,
         &gepa_config,
     )
     .await;
@@ -658,4 +704,91 @@ async fn test_gepa_json() {
             "Analysis should contain one of: <report_error>, <report_improvement>, or <report_optimal>"
         );
     }
+
+    // Test mutate_variant function
+    let parent_name = internal_dynamic_variant_name.to_string();
+    let mut parent = HashMap::new();
+    parent.insert(&parent_name, internal_dynamic_variant_config);
+
+    let mutate_result = mutate_variant(
+        &gateway_client,
+        &analyses,
+        &function_context,
+        parent,
+        &gepa_config,
+        0, // iteration
+    )
+    .await;
+
+    // Assert mutate_variant succeeded
+    assert!(
+        mutate_result.is_ok(),
+        "mutate_variant should succeed: {:?}",
+        mutate_result.err()
+    );
+
+    let child_variants = mutate_result.unwrap();
+
+    // Validate returned HashMap has exactly 1 entry
+    assert_eq!(
+        child_variants.len(),
+        1,
+        "Expected exactly 1 child variant, got {}",
+        child_variants.len()
+    );
+
+    // Get the child variant
+    let (child_name, child_config) = child_variants.iter().next().unwrap();
+
+    // Verify child variant name format uses the configured prefix
+    let expected_prefix = format!(
+        "{}-iter-0-",
+        gepa_config.variant_prefix.as_deref().unwrap_or("gepa")
+    );
+    assert!(
+        child_name.starts_with(&expected_prefix),
+        "Child variant name '{child_name}' should start with '{expected_prefix}'"
+    );
+
+    // Verify templates are non-empty
+    assert!(
+        !child_config.templates.inner.is_empty(),
+        "Child variant should have non-empty templates"
+    );
+
+    // Verify all templates have non-empty content
+    for (template_name, template_config) in &child_config.templates.inner {
+        let content = template_config.path.data();
+        assert!(
+            !content.is_empty(),
+            "Template '{template_name}' should have non-empty content"
+        );
+    }
+
+    // Verify system template contains the expected variable
+    let system_template = child_config
+        .templates
+        .inner
+        .get("system")
+        .expect("Child should have system template");
+    let system_content = system_template.path.data();
+    assert!(
+        system_content.contains("{{ assistant_name }}"),
+        "Child system template should preserve {{ assistant_name }} variable"
+    );
+    assert!(
+        system_content.contains(r#""answer":"#) || system_content.contains("'answer':"),
+        "Child system template should reference output schema field 'answer'"
+    );
+
+    // Verify user template contains the expected variable
+    let user_template = child_config
+        .templates
+        .inner
+        .get("user")
+        .expect("Child should have user template");
+    assert!(
+        user_template.path.data().contains("{{ country }}"),
+        "Child user template should preserve {{ country }} variable"
+    );
 }
