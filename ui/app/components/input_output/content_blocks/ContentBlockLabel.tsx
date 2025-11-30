@@ -15,10 +15,10 @@ export function ContentBlockLabel({
     children && (
       <div className="flex min-w-0 flex-row items-center gap-1">
         {icon}
-        <div className="text-fg-tertiary min-w-0 flex-1 text-xs font-medium">
+        <div className="text-fg-tertiary min-w-0 text-xs font-medium">
           {children}
         </div>
-        <div>{actionBar}</div>
+        {actionBar}
       </div>
     )
   );
