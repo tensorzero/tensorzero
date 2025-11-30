@@ -15,9 +15,9 @@ import {
   TableItemText,
 } from "~/components/ui/TableItems";
 import { Button } from "~/components/ui/button";
-import { Trash } from "lucide-react";
+import { Filter, Trash } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useFetcher } from "react-router";
+import { useFetcher, useNavigate } from "react-router";
 import { toFunctionUrl, toDatapointUrl, toEpisodeUrl } from "~/utils/urls";
 import {
   Dialog,
@@ -27,20 +27,48 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "~/components/ui/sheet";
+import { FunctionSelector } from "~/components/function/FunctionSelector";
+import { useAllFunctionConfigs } from "~/context/config";
 import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 export default function DatasetRowTable({
   rows,
   dataset_name,
+  function_name,
 }: {
   rows: Datapoint[];
   dataset_name: string;
+  function_name: string | undefined;
 }) {
   const activeFetcher = useFetcher();
+  const navigate = useNavigate();
+  const functions = useAllFunctionConfigs();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
   const [datapointToDelete, setDatapointToDelete] = useState<Datapoint | null>(
     null,
   );
+
+  const handleFilterSelect = (functionName: string) => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("function_name", functionName);
+    searchParams.delete("offset");
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    setFilterOpen(false);
+  };
+
+  const handleClearFilter = () => {
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.delete("function_name");
+    searchParams.delete("offset");
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
 
   // Handle successful deletion
   useEffect(() => {
@@ -63,7 +91,17 @@ export default function DatasetRowTable({
             <TableHead>Name</TableHead>
             <TableHead>Function</TableHead>
             <TableHead>Updated</TableHead>
-            <TableHead className="w-[50px]"></TableHead>
+            <TableHead className="w-[50px]">
+              <div className="flex justify-end">
+                <Button
+                  variant={function_name ? "default" : "ghost"}
+                  size="iconSm"
+                  onClick={() => setFilterOpen(true)}
+                >
+                  <Filter className="h-4 w-4" />
+                </Button>
+              </div>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -174,6 +212,34 @@ export default function DatasetRowTable({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Sheet open={filterOpen} onOpenChange={setFilterOpen}>
+        <SheetContent side="right">
+          <SheetHeader>
+            <SheetTitle>Filter</SheetTitle>
+          </SheetHeader>
+
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="text-sm font-medium">Function</label>
+              <div className="mt-1 flex items-center gap-2">
+                <div className="flex-1">
+                  <FunctionSelector
+                    selected={function_name ?? null}
+                    onSelect={handleFilterSelect}
+                    functions={functions}
+                  />
+                </div>
+                {function_name && (
+                  <Button variant="outline" onClick={handleClearFilter}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

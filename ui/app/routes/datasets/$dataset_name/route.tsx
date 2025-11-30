@@ -30,6 +30,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const rowsAdded = rowsAddedParam !== null ? Number(rowsAddedParam) : null;
   const rowsSkipped =
     rowsSkippedParam !== null ? Number(rowsSkippedParam) : null;
+  const function_name = url.searchParams.get("function_name") || undefined;
 
   if (limit > 100) {
     throw data("Limit cannot exceed 100", { status: 400 });
@@ -37,7 +38,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const [counts, getDatapointsResponse] = await Promise.all([
     getDatasetMetadata({}),
-    getTensorZeroClient().listDatapoints(dataset_name, { limit, offset }),
+    getTensorZeroClient().listDatapoints(dataset_name, {
+      limit,
+      offset,
+      function_name,
+    }),
   ]);
   const count_info = counts.find(
     (count) => count.dataset_name === dataset_name,
@@ -46,7 +51,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Dataset not found", { status: 404 });
   }
   const rows = getDatapointsResponse.datapoints;
-  return { rows, count_info, limit, offset, rowsAdded, rowsSkipped };
+  return {
+    rows,
+    count_info,
+    limit,
+    offset,
+    rowsAdded,
+    rowsSkipped,
+    function_name,
+  };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -106,8 +119,15 @@ export async function action({ request, params }: Route.ActionArgs) {
 export default function DatasetDetailPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { rows, count_info, limit, offset, rowsAdded, rowsSkipped } =
-    loaderData;
+  const {
+    rows,
+    count_info,
+    limit,
+    offset,
+    rowsAdded,
+    rowsSkipped,
+    function_name,
+  } = loaderData;
   const { toast } = useToast();
   const isReadOnly = useReadOnly();
   const fetcher = useFetcher();
@@ -161,7 +181,11 @@ export default function DatasetDetailPage({
 
       <SectionLayout>
         <DatasetRowSearchBar dataset_name={count_info.dataset_name} />
-        <DatasetRowTable rows={rows} dataset_name={count_info.dataset_name} />
+        <DatasetRowTable
+          rows={rows}
+          dataset_name={count_info.dataset_name}
+          function_name={function_name}
+        />
         <PageButtons
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
