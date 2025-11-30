@@ -75,7 +75,7 @@ pub struct Args {
 }
 
 /// Parse a single precision target in format "evaluator_name=precision_target"
-pub fn parse_precision_target(s: &str) -> Result<(String, f32), String> {
+fn parse_precision_target(s: &str) -> Result<(String, f32), String> {
     let s = s.trim();
     if s.is_empty() {
         return Err("Precision target cannot be empty".to_string());

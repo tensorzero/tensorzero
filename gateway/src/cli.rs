@@ -24,7 +24,7 @@ pub struct GatewayArgs {
     #[clap(default_value_t = LogFormat::default())]
     pub log_format: LogFormat,
 
-    /// These commands trigger some workflow then exist without launching the gateway.
+    /// These commands trigger some workflow then exit without launching the gateway.
     #[command(flatten)]
     pub early_exit_commands: EarlyExitCommands,
 }
