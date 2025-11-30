@@ -19,7 +19,7 @@ use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
 use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
-use snapshot::{prepare_table_for_snapshot, SnapshotHash};
+use snapshot::SnapshotHash;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -793,9 +793,6 @@ impl Config {
     ///
     /// This function performs the following steps:
     ///
-    /// 1. **Prepare for Snapshot**: Sort the TOML table keys recursively to ensure deterministic
-    ///    hashing (order-independent). This sorted table is used for both parsing and snapshot creation.
-    ///
     /// 2. **Parse to UninitializedConfig**: Deserialize the TOML table into an `UninitializedConfig`,
     ///    which holds the raw config data before filesystem resources (schemas, templates) are loaded.
     ///
@@ -845,11 +842,6 @@ impl Config {
         if table.is_empty() {
             tracing::info!("Config file is empty, so only default functions will be available.");
         }
-
-        // Sort the table recursively for deterministic hashing.
-        // This ensures configs with the same content but different key ordering
-        // produce the same hash.
-        let table = prepare_table_for_snapshot(table);
 
         // Clone the table before consumption - we need it for ConfigSnapshot creation
         let table_for_snapshot = table.clone();
