@@ -63,7 +63,10 @@ export default function DatasetListPage({ loaderData }: Route.ComponentProps) {
     <PageLayout>
       <PageHeader heading="Datasets" count={numberOfDatasets} />
       <SectionLayout>
-        <DatasetsActions onBuildDataset={() => navigate("/datasets/builder")} />
+        <DatasetsActions
+          onBuildDataset={() => navigate("/datasets/builder")}
+          onNewDatapoint={() => navigate("/datapoints/new")}
+        />
         <DatasetTable counts={counts} />
         <PageButtons
           onPreviousPage={handlePreviousPage}
