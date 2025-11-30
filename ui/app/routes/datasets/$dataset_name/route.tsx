@@ -40,7 +40,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const [counts, getDatapointsResponse] = await Promise.all([
     getDatasetMetadata({}),
     getTensorZeroClient().listDatapoints(dataset_name, {
-      limit,
+      limit: limit + 1, // Request one extra to check if there are more
       offset,
       function_name,
       search_query_experimental:
@@ -53,9 +53,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!count_info) {
     throw data("Dataset not found", { status: 404 });
   }
-  const rows = getDatapointsResponse.datapoints;
+  const allRows = getDatapointsResponse.datapoints;
+  const hasMore = allRows.length > limit;
+  const rows = hasMore ? allRows.slice(0, limit) : allRows;
   return {
     rows,
+    hasMore,
     count_info,
     limit,
     offset,
@@ -125,6 +128,7 @@ export default function DatasetDetailPage({
 }: Route.ComponentProps) {
   const {
     rows,
+    hasMore,
     count_info,
     limit,
     offset,
@@ -196,7 +200,7 @@ export default function DatasetDetailPage({
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset === 0}
-          disableNext={offset + limit >= count_info.count}
+          disableNext={!hasMore}
         />
       </SectionLayout>
     </PageLayout>
