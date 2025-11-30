@@ -1,14 +1,23 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tensorzero_core::config::snapshot::ConfigSnapshot;
+use tensorzero::test_helpers::make_embedded_gateway_with_config;
+use tensorzero::{
+    ClientBuilder, ClientInferenceParams, ClientInput, ClientInputMessage,
+    ClientInputMessageContent, InferenceOutput, Role,
+};
+use tensorzero_core::config::snapshot::{ConfigSnapshot, SnapshotHash};
 use tensorzero_core::config::{write_config_snapshot, Config, ConfigFileGlob};
-use tensorzero_core::db::clickhouse::migration_manager;
-use tensorzero_core::db::clickhouse::migration_manager::RunMigrationManagerArgs;
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
+use tensorzero_core::db::clickhouse::test_helpers::{
+    get_clickhouse, select_chat_inference_clickhouse, CLICKHOUSE_URL,
+};
 use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
+use tensorzero_core::db::ConfigQueries;
+use tensorzero_core::error::ErrorDetails;
 use tensorzero_core::http::TensorzeroHttpClient;
+use tensorzero_core::inference::types::TextKind;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -238,4 +247,289 @@ optimize = "max"
         snapshot_row2["hash"].as_str().unwrap().to_lowercase(),
         hash_number
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_config_snapshot_success() {
+    // Get a clean ClickHouse instance
+    let clickhouse = get_clickhouse().await;
+
+    // Run migrations to set up the ConfigSnapshot table
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: true,
+        disable_automatic_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    let random_id = Uuid::now_v7();
+
+    // Create a test config snapshot
+    let config_toml = format!(
+        r#"
+[metrics.test_metric_{random_id}]
+type = "boolean"
+level = "inference"
+optimize = "max"
+"#
+    );
+
+    let mut extra_templates = HashMap::new();
+    extra_templates.insert("test_template".to_string(), "Hello {{name}}!".to_string());
+
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
+
+    let hash = snapshot.hash.clone();
+
+    // Write the config snapshot
+    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+
+    // Wait for the data to be committed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Read the config snapshot using get_config_snapshot
+    let retrieved_snapshot = clickhouse.get_config_snapshot(hash).await.unwrap();
+
+    // Verify the retrieved snapshot matches what we wrote
+    // Compare by serializing to TOML and checking it contains our model definition
+    let serialized_config = toml::to_string(&retrieved_snapshot.config).unwrap();
+    assert!(
+        serialized_config.contains(&format!("test_metric_{random_id}")),
+        "Config should contain our test metric"
+    );
+    assert_eq!(retrieved_snapshot.extra_templates, extra_templates);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_config_snapshot_not_found() {
+    // Get a clean ClickHouse instance
+    let clickhouse = get_clickhouse().await;
+
+    // Run migrations to set up the ConfigSnapshot table
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: true,
+        disable_automatic_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    // Create a test hash that doesn't exist in the database
+    let nonexistent_hash = SnapshotHash::new_test();
+
+    // Try to get a config snapshot that doesn't exist
+    let result = clickhouse.get_config_snapshot(nonexistent_hash).await;
+
+    // Verify we get a ConfigSnapshotNotFound error
+    let err = result.unwrap_err();
+    assert!(
+        matches!(
+            err.get_details(),
+            ErrorDetails::ConfigSnapshotNotFound { .. }
+        ),
+        "Expected ConfigSnapshotNotFound error, got: {err:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_config_snapshot_with_extra_templates() {
+    // Get a clean ClickHouse instance
+    let clickhouse = get_clickhouse().await;
+
+    // Run migrations to set up the ConfigSnapshot table
+    migration_manager::run(RunMigrationManagerArgs {
+        clickhouse: &clickhouse,
+        is_manual_run: true,
+        disable_automatic_migrations: false,
+    })
+    .await
+    .unwrap();
+
+    let random_id = Uuid::now_v7();
+
+    // Create a config snapshot with multiple extra templates
+    let config_toml = format!(
+        r#"
+[metrics.test_metric_{random_id}]
+type = "boolean"
+level = "inference"
+optimize = "max"
+"#
+    );
+
+    let mut extra_templates = HashMap::new();
+    extra_templates.insert(
+        "system_template".to_string(),
+        "You are a helpful assistant.".to_string(),
+    );
+    extra_templates.insert(
+        "user_template".to_string(),
+        "User said: {{message}}".to_string(),
+    );
+    extra_templates.insert(
+        "assistant_template".to_string(),
+        "Assistant responds: {{response}}".to_string(),
+    );
+
+    let snapshot =
+        ConfigSnapshot::new_from_toml_string(&config_toml, extra_templates.clone()).unwrap();
+
+    let hash = snapshot.hash.clone();
+
+    // Write the config snapshot
+    write_config_snapshot(&clickhouse, snapshot).await.unwrap();
+
+    // Wait for the data to be committed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Read the config snapshot
+    let retrieved_snapshot = clickhouse.get_config_snapshot(hash).await.unwrap();
+
+    // Verify all extra templates are correctly stored and retrieved
+    // Compare by serializing to TOML and checking it contains our model definition
+    let serialized_config = toml::to_string(&retrieved_snapshot.config).unwrap();
+    assert!(
+        serialized_config.contains(&format!("test_metric_{random_id}")),
+        "Config should contain our test metric"
+    );
+    assert_eq!(retrieved_snapshot.extra_templates.len(), 3);
+    assert_eq!(
+        retrieved_snapshot.extra_templates.get("system_template"),
+        Some(&"You are a helpful assistant.".to_string())
+    );
+    assert_eq!(
+        retrieved_snapshot.extra_templates.get("user_template"),
+        Some(&"User said: {{message}}".to_string())
+    );
+    assert_eq!(
+        retrieved_snapshot.extra_templates.get("assistant_template"),
+        Some(&"Assistant responds: {{response}}".to_string())
+    );
+}
+
+/// Test that we can:
+/// 1. Build a client from a config
+/// 2. Do an inference
+/// 3. Drop the client
+/// 4. Load the snapshot from ClickHouse
+/// 5. Build a new client from the snapshot
+/// 6. Do another inference
+/// 7. Assert both inferences have the same snapshot hash
+#[tokio::test(flavor = "multi_thread")]
+async fn test_config_snapshot_inference_roundtrip() {
+    // Create a unique config with randomness
+    let random_id = Uuid::now_v7();
+    let config = format!(
+        r#"
+[models.test_model_{random_id}]
+routing = ["good"]
+
+[models.test_model_{random_id}.providers.good]
+type = "dummy"
+model_name = "good"
+
+[functions.basic_test_{random_id}]
+type = "chat"
+
+[functions.basic_test_{random_id}.variants.test_variant]
+type = "chat_completion"
+model = "test_model_{random_id}"
+"#
+    );
+
+    // Build first client using make_embedded_gateway_with_config
+    // This automatically writes the snapshot to ClickHouse
+    let client = make_embedded_gateway_with_config(&config).await;
+
+    // Perform first inference
+    let params = ClientInferenceParams {
+        function_name: Some(format!("basic_test_{random_id}")),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "Hello, world!".to_string(),
+                })],
+            }],
+        },
+        ..Default::default()
+    };
+    let InferenceOutput::NonStreaming(response1) = client.inference(params).await.unwrap() else {
+        panic!("Expected a non-streaming response");
+    };
+    let inference_id_1 = response1.inference_id();
+
+    // Drop the first client
+    drop(client);
+
+    // Wait for the data to be committed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Get snapshot hash from ChatInference table
+    let clickhouse = get_clickhouse().await;
+    let inference_row = select_chat_inference_clickhouse(&clickhouse, inference_id_1)
+        .await
+        .unwrap();
+    let snapshot_hash_str = inference_row
+        .get("snapshot_hash")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let snapshot_hash: SnapshotHash = snapshot_hash_str.parse().unwrap();
+
+    // Load snapshot from ClickHouse
+    let retrieved_snapshot = clickhouse
+        .get_config_snapshot(snapshot_hash.clone())
+        .await
+        .unwrap();
+
+    // Build new client from snapshot
+    let new_client = Box::pin(ClientBuilder::from_config_snapshot(
+        retrieved_snapshot,
+        Some(CLICKHOUSE_URL.clone()),
+        None,  // No Postgres
+        false, // Don't verify credentials
+        Some(Duration::from_secs(60)),
+    ))
+    .await
+    .unwrap();
+
+    // Perform second inference with new client
+    let params2 = ClientInferenceParams {
+        function_name: Some(format!("basic_test_{random_id}")),
+        input: ClientInput {
+            system: None,
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                    text: "Hello again!".to_string(),
+                })],
+            }],
+        },
+        ..Default::default()
+    };
+    let InferenceOutput::NonStreaming(response2) = new_client.inference(params2).await.unwrap()
+    else {
+        panic!("Expected a non-streaming response");
+    };
+    let inference_id_2 = response2.inference_id();
+
+    // Wait for the data to be committed
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Verify both inferences have the same snapshot hash
+    let inference_row2 = select_chat_inference_clickhouse(&clickhouse, inference_id_2)
+        .await
+        .unwrap();
+    let stored_hash2 = inference_row2
+        .get("snapshot_hash")
+        .unwrap()
+        .as_str()
+        .unwrap();
+
+    // Both inferences should have the same snapshot hash
+    assert_eq!(snapshot_hash_str, stored_hash2);
 }

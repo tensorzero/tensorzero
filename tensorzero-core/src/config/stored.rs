@@ -29,7 +29,7 @@ use crate::rate_limiting::UninitializedRateLimitingConfig;
 ///
 /// Only fields with deprecations in their subtree use `Stored*` types.
 /// Other fields re-use `Uninitialized*` types directly.
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct StoredConfig {
     // Fields WITHOUT deprecations - reuse Uninitialized* types
